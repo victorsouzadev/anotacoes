@@ -1,0 +1,32 @@
+# Base do compose. Não expõe porta nenhuma por si só — use um dos overrides:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build   (teste local, :8080)
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build  (produção VPS, :8090)
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - ConnectionStrings__Db=Data Source=/data/db/notas.db
+    volumes:
+      - ./data/db:/data/db
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.angular/
+bin/
+obj/
+data/db/*.db
+data/db/*.db-*
+.env
+backups/

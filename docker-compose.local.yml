@@ -1,0 +1,7 @@
+# Teste local do compose:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+# Acesse http://localhost:8080
+services:
+  caddy:
+    ports:
+      - "8080:8080"

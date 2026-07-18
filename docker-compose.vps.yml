@@ -1,0 +1,23 @@
+# Deploy na VPS: exposição SÓ pelo IP, sem SSL (decisão do usuário — a porta 80/443
+# do host já pertence ao nginx-proxy-manager, que atende o convite-vps).
+# Publica a porta 8090 do host diretamente no Caddy desta app (sem passar pelo NPM).
+# O container entra também na rede "proxy" para manter o padrão dos demais apps e
+# facilitar uma migração futura para subdomínio + NPM + Let's Encrypt (bastaria
+# remover o "ports" abaixo e criar um Proxy Host apontando para "notas-caddy:8080").
+#
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+services:
+  api:
+    container_name: notas-api
+
+  caddy:
+    container_name: notas-caddy
+    ports:
+      - "8090:8080"
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
