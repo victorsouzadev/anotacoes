@@ -6,13 +6,14 @@ import { NotesRepoService } from '../../data/notes-repo.service';
 import { AuthService } from '../../core/auth.service';
 import { SyncService } from '../../data/sync.service';
 import { ThemeService } from '../../core/theme.service';
+import { FocusOnInitDirective } from '../../shared/focus-on-init.directive';
 
 type SortMode = 'updated' | 'created' | 'title';
 
 @Component({
   selector: 'app-notes-list-page',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, FocusOnInitDirective],
   template: `
     <div class="page">
       <aside class="sidebar">
@@ -27,11 +28,22 @@ type SortMode = 'updated' | 'created' | 'title';
           </button>
           @for (f of folders; track f.id) {
             <div class="folder-row">
-              <button class="folder-item" [class.active]="activeFolder === f.id" (click)="activeFolder = f.id">
-                <span class="icon">📁</span> {{ f.name }}
-              </button>
+              @if (editingFolderId === f.id) {
+                <input
+                  class="folder-name-input"
+                  appFocusOnInit
+                  [(ngModel)]="editingFolderName"
+                  (blur)="commitRenameFolder(f)"
+                  (keydown.enter)="$event.preventDefault(); commitRenameFolder(f)"
+                  (keydown.escape)="cancelRenameFolder()"
+                />
+              } @else {
+                <button class="folder-item" [class.active]="activeFolder === f.id" (click)="activeFolder = f.id">
+                  <span class="icon">📁</span> {{ f.name }}
+                </button>
+              }
               <div class="folder-actions">
-                <button (click)="renameFolder(f)" title="Renomear pasta">✏️</button>
+                <button (click)="startRenameFolder(f)" title="Renomear pasta">✏️</button>
                 <button (click)="removeFolder(f)" title="Excluir pasta">🗑️</button>
               </div>
             </div>
@@ -69,7 +81,19 @@ type SortMode = 'updated' | 'created' | 'title';
                 }
               </div>
               <div class="card-footer">
-                <span class="card-title">{{ note.title || 'Sem título' }}</span>
+                @if (editingNoteId === note.id) {
+                  <input
+                    class="card-title-input"
+                    appFocusOnInit
+                    [(ngModel)]="editingNoteTitle"
+                    (click)="$event.stopPropagation(); $event.preventDefault()"
+                    (blur)="commitRenameNote(note)"
+                    (keydown.enter)="$event.preventDefault(); commitRenameNote(note)"
+                    (keydown.escape)="cancelRenameNote()"
+                  />
+                } @else {
+                  <span class="card-title">{{ note.title || 'Sem título' }}</span>
+                }
                 <div class="card-actions" (click)="$event.stopPropagation(); $event.preventDefault()">
                   <select class="move-select" title="Mover para pasta" [ngModel]="note.folderId ?? ''" (ngModelChange)="moveNote(note, $event)">
                     <option value="">Sem pasta</option>
@@ -77,7 +101,7 @@ type SortMode = 'updated' | 'created' | 'title';
                       <option [value]="f.id">{{ f.name }}</option>
                     }
                   </select>
-                  <button (click)="rename(note)" title="Renomear">✏️</button>
+                  <button (click)="startRenameNote(note)" title="Renomear">✏️</button>
                   <button (click)="duplicate(note)" title="Duplicar">⧉</button>
                   <button (click)="remove(note)" title="Excluir">🗑️</button>
                 </div>
@@ -159,6 +183,17 @@ type SortMode = 'updated' | 'created' | 'title';
     .new-folder { display: flex; gap: 6px; }
     .new-folder input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 9px; background: var(--bg); font-size: 13px; }
     .new-folder input:focus { outline: none; border-color: var(--accent); }
+    .folder-name-input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      background: var(--bg);
+      font-size: 14px;
+      color: var(--text);
+    }
+    .folder-name-input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
     .new-folder button { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-weight: 600; }
     .new-folder button:hover { background: var(--bg); }
     .user-box { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); padding-top: 8px; border-top: 1px solid var(--border); }
@@ -209,6 +244,18 @@ type SortMode = 'updated' | 'created' | 'title';
     .thumb-empty { color: var(--text-muted); font-size: 12px; }
     .card-footer { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; gap: 6px; border-top: 1px solid var(--border); }
     .card-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-title-input {
+      font-size: 13px;
+      font-weight: 500;
+      min-width: 0;
+      flex: 1;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 2px 6px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .card-title-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
     .card-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .card-actions button { border: none; background: none; font-size: 13px; border-radius: 6px; padding: 4px 5px; opacity: 0.7; }
     .card-actions button:hover { opacity: 1; background: var(--bg); }
@@ -235,6 +282,10 @@ export class NotesListPageComponent implements OnInit {
   search = '';
   sortMode: SortMode = 'updated';
   newFolderName = '';
+  editingNoteId: string | null = null;
+  editingNoteTitle = '';
+  editingFolderId: string | null = null;
+  editingFolderName = '';
 
   constructor(
     private repo: NotesRepoService,
@@ -331,17 +382,26 @@ export class NotesListPageComponent implements OnInit {
     }
   }
 
-  async renameFolder(f: FolderRecord): Promise<void> {
-    const name = prompt('Novo nome da pasta:', f.name);
-    if (name === null) return;
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  startRenameFolder(f: FolderRecord): void {
+    this.editingFolderId = f.id;
+    this.editingFolderName = f.name;
+  }
+
+  async commitRenameFolder(f: FolderRecord): Promise<void> {
+    if (this.editingFolderId !== f.id) return;
+    this.editingFolderId = null;
+    const trimmed = this.editingFolderName.trim();
+    if (!trimmed || trimmed === f.name) return;
     try {
       await this.repo.renameFolder(f.id, trimmed);
       await this.reload();
     } catch {
       alert('Não foi possível renomear a pasta — verifique sua conexão.');
     }
+  }
+
+  cancelRenameFolder(): void {
+    this.editingFolderId = null;
   }
 
   async removeFolder(f: FolderRecord): Promise<void> {
@@ -361,12 +421,23 @@ export class NotesListPageComponent implements OnInit {
     this.sync.syncNow();
   }
 
-  async rename(note: NoteRecord): Promise<void> {
-    const title = prompt('Novo título da nota:', note.title);
-    if (title === null) return;
+  startRenameNote(note: NoteRecord): void {
+    this.editingNoteId = note.id;
+    this.editingNoteTitle = note.title;
+  }
+
+  async commitRenameNote(note: NoteRecord): Promise<void> {
+    if (this.editingNoteId !== note.id) return;
+    this.editingNoteId = null;
+    const title = this.editingNoteTitle;
+    if (title === note.title) return;
     await this.repo.renameNote(note.id, title);
     await this.reload();
     this.sync.syncNow();
+  }
+
+  cancelRenameNote(): void {
+    this.editingNoteId = null;
   }
 
   async duplicate(note: NoteRecord): Promise<void> {

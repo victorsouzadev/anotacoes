@@ -10,6 +10,10 @@ import { Renderer } from './engine/renderer';
 import { STICKY_FONT_SIZE, STICKY_MIN_H } from './engine/sticky-layout';
 
 const MAX_IMAGE_WORLD_DIM = 360;
+/** Abaixo desse deslocamento (em px de tela) entre pointerdown e pointerup, um gesto
+ * na área vazia do canvas conta como clique (não arraste) — usado pra decidir se um
+ * "marquee" que não moveu deve virar criação de texto em vez de só limpar a seleção. */
+const CLICK_DRAG_THRESHOLD = 4;
 
 type DragMode = 'none' | 'draw-stroke' | 'draw-shape' | 'draw-arrow' | 'marquee' | 'move' | 'resize' | 'rotate' | 'pan' | 'erase-area';
 
@@ -204,29 +208,10 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
         };
         break;
       }
-      case 'text': {
-        const el: TextElement = {
-          id: uuid(),
-          type: 'text',
-          x: world.x,
-          y: world.y,
-          w: 220,
-          content: '',
-          fontSize: 16,
-          bold: false,
-          italic: false,
-          underline: false,
-          align: 'left',
-          fontFamily: 'sans',
-          color: this.store.penColor(),
-          zIndex: this.store.nextZIndex(),
-          rotation: 0,
-        };
-        this.store.addElement(el);
-        this.requestTextEdit.emit(el);
+      case 'text':
+        this.createTextAt(world);
         this.store.tool.set('select');
         break;
-      }
       case 'sticky': {
         const el: StickyElement = {
           id: uuid(),
@@ -274,6 +259,28 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
 
   private pendingShape: ShapeElement | null = null;
   private pendingArrow: ArrowElement | null = null;
+
+  private createTextAt(world: Point): void {
+    const el: TextElement = {
+      id: uuid(),
+      type: 'text',
+      x: world.x,
+      y: world.y,
+      w: 220,
+      content: '',
+      fontSize: 16,
+      bold: false,
+      italic: false,
+      underline: false,
+      align: 'left',
+      fontFamily: 'sans',
+      color: this.store.penColor(),
+      zIndex: this.store.nextZIndex(),
+      rotation: 0,
+    };
+    this.store.addElement(el);
+    this.requestTextEdit.emit(el);
+  }
 
   private handleSelectPointerDown(screen: Point, world: Point, shiftKey: boolean): void {
     const checkboxHit = this.hitChecklistCheckbox(world);
@@ -685,7 +692,13 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
           const ids = this.store.elements()
             .filter((e) => bboxIntersectsRect(elementBBox(e), rect))
             .map((e) => e.id);
-          this.store.select(ids);
+          if (ids.length > 0) {
+            this.store.select(ids);
+          } else if (this.marquee.w < CLICK_DRAG_THRESHOLD && this.marquee.h < CLICK_DRAG_THRESHOLD && this.drawStart) {
+            // Clique simples (sem arrastar) em área vazia — deixa digitar na hora,
+            // sem precisar trocar pra ferramenta "Texto" na barra primeiro.
+            this.createTextAt(this.drawStart);
+          }
         }
         this.marquee = null;
         break;
