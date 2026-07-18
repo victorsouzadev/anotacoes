@@ -186,14 +186,14 @@ type SortMode = 'updated' | 'created' | 'title';
     .folder-name-input {
       flex: 1;
       min-width: 0;
-      border: 1px solid var(--accent);
-      border-radius: var(--radius-sm);
+      border: none;
+      outline: none;
       padding: 9px 10px;
-      background: var(--bg);
+      background: transparent;
       font-size: 14px;
       color: var(--text);
+      font-family: inherit;
     }
-    .folder-name-input:focus { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
     .new-folder button { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-weight: 600; }
     .new-folder button:hover { background: var(--bg); }
     .user-box { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); padding-top: 8px; border-top: 1px solid var(--border); }
@@ -249,13 +249,13 @@ type SortMode = 'updated' | 'created' | 'title';
       font-weight: 500;
       min-width: 0;
       flex: 1;
-      border: 1px solid var(--accent);
-      border-radius: 6px;
-      padding: 2px 6px;
-      background: var(--bg);
+      border: none;
+      outline: none;
+      padding: 0;
+      background: transparent;
       color: var(--text);
+      font-family: inherit;
     }
-    .card-title-input:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-soft); }
     .card-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .card-actions button { border: none; background: none; font-size: 13px; border-radius: 6px; padding: 4px 5px; opacity: 0.7; }
     .card-actions button:hover { opacity: 1; background: var(--bg); }

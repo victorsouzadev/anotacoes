@@ -49,10 +49,10 @@ import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } fro
       position: absolute;
       z-index: 10;
       background: transparent;
-      border: 1.5px dashed var(--accent, #6d5ef8);
-      border-radius: 6px;
+      /* Precisa bater com CHECKLIST_PADDING (engine/checklist-layout.ts) — é o mesmo
+         padding usado pra calcular a posição das linhas quando o elemento não está
+         sendo editado, senão o overlay fica desalinhado do desenho no canvas. */
       padding: 10px;
-      box-shadow: 0 8px 24px rgba(20,20,43,0.18);
     }
     .font-tools {
       display: flex;

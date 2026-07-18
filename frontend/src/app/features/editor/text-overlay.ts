@@ -89,8 +89,7 @@ import {
       background: transparent;
       resize: none;
       font-family: sans-serif;
-      outline: 1.5px dashed var(--accent, #6d5ef8);
-      outline-offset: 3px;
+      outline: none;
     }
     .text-tools {
       position: absolute;
