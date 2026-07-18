@@ -22,7 +22,7 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 | Banco | SQLite (EF Core 9), modo WAL |
 | Autenticação | JWT (access 15min + refresh 30d com rotação/detecção de reuso), senhas com BCrypt |
 | Proxy/servidor estático | Caddy 2 (build do Angular embutido na imagem) |
-| Deploy | Docker Compose, script Python (paramiko/SFTP) — sem CI/CD |
+| Deploy | Docker Compose; GitHub Actions builda e envia pra VPS a cada push em `main` via SSH/SCP (ver [DEPLOY.md](DEPLOY.md)), com script Python (paramiko/SFTP) como alternativa manual |
 
 ## Funcionalidades
 
