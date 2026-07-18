@@ -4,6 +4,11 @@ App web de notas manuscritas — desenho livre, texto, notas adesivas, checklist
 formas e setas num canvas por página, com várias páginas por nota, pastas, busca,
 exportação de imagem, sincronização entre dispositivos e uso offline.
 
+O editor é **focado em texto**: ao abrir uma nota (ou uma página vazia), ela já
+começa em modo de digitação — cursor pronto, sem precisar escolher ferramenta nem
+clicar em nada — como uma folha de documento. Formas, desenho livre, adesivos e
+checklist continuam disponíveis a qualquer momento pela barra de ferramentas.
+
 Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md](DEPLOY.md)).
 
 ## Stack
@@ -22,11 +27,21 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 ## Funcionalidades
 
 ### Editor (canvas por página)
+- **Abertura em modo documento**: nota nova (ou página nova/vazia) já entra com um
+  texto largo posicionado como uma folha, em edição, cursor piscando — sem precisar
+  clicar. Ferramenta padrão é "Selecionar", não a caneta.
 - **Caneta** com suavização (`perfect-freehand`) e sensibilidade a pressão (Pointer Events), cores e espessuras predefinidas.
 - **Borracha** por traço inteiro ou por área.
 - **Formas**: retângulo, elipse, linha — com preenchimento opcional.
 - **Setas**: retas ou curvas (arrasta um ponto do meio pra curvar), pontas *snapam* na borda do elemento mais próximo e **acompanham automaticamente** se esse elemento for movido.
 - **Texto**: negrito, itálico, sublinhado, alinhamento (esquerda/centro/direita), tamanho de fonte ajustável (botões A−/A+, 8–200px), fonte normal ou "manuscrita" (fonte cursiva do SO). A caixa de edição cresce junto com o conteúdo e reflete pixel a pixel o resultado final renderizado.
+- **Listas inline no texto**: digitar `- ` cria lista com marcadores, `1. ` cria lista
+  numerada (a numeração exibida é sempre recalculada pela posição no bloco) e `[ ] `
+  cria checklist — Enter continua o item (ou encerra a lista se o item estiver vazio,
+  como no Word), Tab/Shift+Tab indenta/desindenta até 4 níveis (glifo muda por nível:
+  `•` `◦` `▪` `‣`), e três botões na barra flutuante de formatação alternam o tipo de
+  lista na linha do cursor ou em toda a seleção. Um clique no quadradinho de um item
+  de checklist marca/desmarca sem precisar abrir o modo de edição.
 - **Notas adesivas**: cor à escolha, tamanho de fonte ajustável (mesmos controles do texto), crescem automaticamente para caber o conteúdo.
 - **Checklist**: itens marcáveis, tamanho de fonte ajustável, redimensionável manualmente (a altura não é mais sobrescrita ao digitar), fundo transparente durante a edição, marca de "✓" no item concluído.
 - **Imagens**: colar direto da área de transferência (Ctrl+V) — redimensionadas/comprimidas no cliente antes de salvar.
@@ -64,6 +79,11 @@ JSON (coluna `Elements`, até 8MB) — o backend não conhece a estrutura intern
 guarda e devolve o blob. Notas salvas antes do conceito de "páginas" existir (array
 plano de elementos) são migradas automaticamente na leitura, sem precisar de
 migração de banco.
+
+O `content` de um elemento `text` continua uma string simples multi-linha — listas
+inline não mudam o schema, só usam um prefixo por linha (`- `, `1. `, `[ ] `/`[x] `,
+opcionalmente com espaços de indentação antes) que o renderer interpreta na hora de
+desenhar. Uma linha sem esse prefixo é texto comum, exatamente como antes.
 
 ## Estrutura do projeto
 
