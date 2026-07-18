@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChecklistElement, ChecklistItem, NotePage, PaperStyle, StickyElement, TextElement } from '../../data/models';
@@ -218,6 +218,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     private repo: NotesRepoService,
     public syncService: SyncService,
     public theme: ThemeService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   themeIcon(): string {
@@ -248,7 +249,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.currentPageIndex = 0;
     this.store.paperStyle.set(note.paperStyle ?? 'blank');
     this.store.loadElements(this.pages[0].elements);
-    setTimeout(() => this.canvasHost?.fitToScreen(), 50);
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 50);
     // Um F5/fechar aba não passa pelo ngOnDestroy do Angular a tempo de terminar o
     // save assíncrono no IndexedDB — 'visibilitychange' dispara antes e de forma mais
     // confiável nesses casos (recomendado pelo próprio spec da Page Visibility API).
@@ -312,7 +313,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.captureCurrentPage();
     this.currentPageIndex = index;
     this.store.loadElements(this.pages[index].elements);
-    setTimeout(() => this.canvasHost?.fitToScreen(), 0);
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 0);
   }
 
   addPage(): void {
@@ -321,7 +322,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.currentPageIndex = this.pages.length - 1;
     this.store.loadElements([]);
     this.flushSave();
-    setTimeout(() => this.canvasHost?.fitToScreen(), 0);
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 0);
   }
 
   removePage(index: number): void {
@@ -400,6 +401,36 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.updateOverlayPosition(el.x, el.y, el.w);
   }
 
+  /** Página vazia (nota nova, página nova, ou trocou pra uma página sem conteúdo)
+   * já abre com um texto largo tipo "folha de documento" em edição, cursor piscando
+   * — sem precisar escolher a ferramenta texto e clicar no canvas. Roda dentro de um
+   * setTimeout (fora de qualquer evento do Angular), e essa app é zoneless — sem o
+   * markForCheck no final, o estado muda mas a tela só atualiza no próximo clique
+   * real do usuário. */
+  private maybeAutoStartText(): void {
+    if (this.store.elements().length > 0) return;
+    const el: TextElement = {
+      id: uuid(),
+      type: 'text',
+      x: 64,
+      y: 64,
+      w: 680,
+      content: '',
+      fontSize: 16,
+      bold: false,
+      italic: false,
+      underline: false,
+      align: 'left',
+      fontFamily: 'sans',
+      color: '#1d1d1d',
+      zIndex: this.store.nextZIndex(),
+      rotation: 0,
+    };
+    this.store.addElement(el);
+    this.onEditText(el);
+    this.cdr.markForCheck();
+  }
+
   onEditSticky(el: StickyElement): void {
     this.editingTarget = el;
     this.editingOriginalContent = el.content;
@@ -440,11 +471,17 @@ export class EditorPageComponent implements OnInit, OnDestroy {
       const originalContent = this.editingOriginalContent;
       const finalH = this.editingTarget.type === 'sticky' ? this.editingTarget.h : 0;
       const originalH = this.editingOriginalH;
+      // Texto criado (auto ou manualmente) e abandonado sem digitar nada não fica
+      // salvo pra sempre como um elemento fantasma invisível — remove em vez de
+      // deixar o array de elementos acumulando caixas de texto vazias.
+      const isEmptyText = this.editingTarget.type === 'text' && finalContent.trim() === '';
       // O conteúdo já foi aplicado ao vivo durante a digitação (commit:false a cada
       // tecla) — se déssemos commit:true aqui do jeito genérico, "antes" e "depois"
       // seriam iguais e o undo pareceria não fazer nada. Construímos o comando à mão
       // comparando com o conteúdo (e altura, no caso de sticky) capturados no início.
-      if (finalContent !== originalContent || finalH !== originalH) {
+      if (isEmptyText) {
+        this.store.removeElements([id]);
+      } else if (finalContent !== originalContent || finalH !== originalH) {
         const doPatch: any = { content: finalContent };
         const undoPatch: any = { content: originalContent };
         if (this.editingTarget.type === 'sticky') {

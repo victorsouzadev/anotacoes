@@ -9,7 +9,7 @@ import { STICKY_FONT_SIZE } from './sticky-layout';
 export class EditorStore {
   elements = signal<CanvasElement[]>([]);
   selectedIds = signal<Set<string>>(new Set());
-  tool = signal<ToolType>('pen');
+  tool = signal<ToolType>('select');
   penColor = signal('#1d1d1d');
   penThickness = signal(3);
   stickyColor = signal('#FAC775');

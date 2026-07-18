@@ -1,9 +1,18 @@
-import { Component, ElementRef, EventEmitter, Input, Output, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, AfterViewInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { StickyElement, TextAlign, TextElement, TextFontFamily, TEXT_FONT_STACKS } from '../../data/models';
 import { EditorStore } from './engine/editor-store';
 import { STICKY_PADDING, stickyContentHeight } from './engine/sticky-layout';
 import { textContentHeight } from './engine/text-layout';
+import {
+  INDENT_SPACES_PER_LEVEL,
+  MAX_LIST_INDENT,
+  ListMarkerKind,
+  markerPrefixFor,
+  parseListLine,
+  selectedLineRange,
+  textListLayout,
+} from './engine/text-list-layout';
 
 @Component({
   selector: 'app-text-overlay',
@@ -33,6 +42,10 @@ import { textContentHeight } from './engine/text-layout';
             <button [class.active]="align === 'center'" (click)="setAlign('center')" title="Centralizar">☰</button>
             <button [class.active]="align === 'right'" (click)="setAlign('right')" title="Alinhar à direita">⯈</button>
             <span class="sep"></span>
+            <button (click)="toggleList('bullet')" title="Lista com marcadores">•</button>
+            <button (click)="toggleList('number')" title="Lista numerada">1.</button>
+            <button (click)="toggleList('checklist')" title="Lista de verificação">☑</button>
+            <span class="sep"></span>
           }
           <button (click)="changeFontSize(-2)" title="Diminuir fonte">A−</button>
           <span class="size-label">{{ fontSize }}px</span>
@@ -50,6 +63,7 @@ import { textContentHeight } from './engine/text-layout';
           [value]="target.content"
           (input)="onInput(input.value)"
           (keydown.escape)="finish.emit()"
+          (keydown)="onKeydown($event)"
           (blur)="onTextareaBlur()"
           [style.fontSize.px]="fontSize"
           [style.fontWeight]="!isSticky && bold ? 'bold' : 'normal'"
@@ -109,7 +123,7 @@ import { textContentHeight } from './engine/text-layout';
     .text-tools select { border: 1px solid var(--border, #e8e8f0); border-radius: 6px; padding: 4px 6px; font-size: 12px; background: var(--bg, #f6f6fb); }
   `],
 })
-export class TextOverlayComponent implements AfterViewInit {
+export class TextOverlayComponent implements AfterViewInit, OnChanges {
   @Input() store!: EditorStore;
   @Input() target: TextElement | StickyElement | null = null;
   @Input() screenX = 0;
@@ -179,8 +193,128 @@ export class TextOverlayComponent implements AfterViewInit {
     setTimeout(() => this.inputRef?.nativeElement.focus(), 0);
   }
 
+  /** `<app-text-overlay>` é instanciado uma única vez, com `target` ainda `null` — ou
+   * seja, `ngAfterViewInit` roda antes da textarea sequer existir no DOM, e nunca é
+   * chamado de novo depois. É `ngOnChanges` (dispara toda vez que `target` muda,
+   * inclusive de null pra um elemento) quem garante o autofoco tanto pra criação
+   * manual quanto pro texto "documento" auto-criado ao abrir uma página vazia. O
+   * setTimeout ainda é necessário: `target` já mudou aqui, mas o Angular só cria a
+   * textarea no DOM (e resolve `inputRef`) depois que este hook retorna. */
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['target'] && this.target) {
+      setTimeout(() => this.inputRef?.nativeElement.focus(), 0);
+    }
+  }
+
   onInput(value: string): void {
     this.contentChange.emit(value);
+  }
+
+  /** Enter/Tab ganham comportamento "esperto" só dentro de uma linha de lista — em
+   * texto comum o navegador segue com o comportamento padrão (quebra de linha simples
+   * / mover foco). Os marcadores em si (ex.: "- ", "1. ", "[ ] ") continuam visíveis
+   * como texto puro na textarea enquanto edita — só viram bullet/número/checkbox
+   * quando o canvas repinta o elemento após terminar a edição. */
+  onKeydown(ev: KeyboardEvent): void {
+    if (this.target?.type !== 'text') return;
+    const textarea = ev.target as HTMLTextAreaElement;
+    if (ev.key === 'Enter' && !ev.shiftKey) this.handleEnterKey(ev, textarea);
+    else if (ev.key === 'Tab') this.handleTabKey(ev, textarea);
+  }
+
+  private handleEnterKey(ev: KeyboardEvent, textarea: HTMLTextAreaElement): void {
+    if (textarea.selectionStart !== textarea.selectionEnd) return;
+    const t = this.target as TextElement;
+    const value = textarea.value;
+    const caret = textarea.selectionStart;
+    const lineStart = value.lastIndexOf('\n', caret - 1) + 1;
+    const parsed = parseListLine(value.slice(lineStart, caret));
+    if (parsed.marker === 'none') return;
+
+    ev.preventDefault();
+    const indentSpaces = ' '.repeat(parsed.indent * INDENT_SPACES_PER_LEVEL);
+
+    if (parsed.text.trim() === '') {
+      // Enter numa linha de lista vazia encerra a lista (igual Word) em vez de
+      // continuar criando itens vazios.
+      const newValue = value.slice(0, lineStart) + value.slice(caret);
+      this.applyTextareaValue(textarea, newValue, lineStart);
+      return;
+    }
+
+    let prefix: string;
+    if (parsed.marker === 'number') {
+      const paragraphIndex = value.slice(0, lineStart).split('\n').length - 1;
+      const layout = textListLayout(value, 0, 0, t.w, t.fontSize, t.fontFamily, t.bold, t.italic);
+      const currentLine = layout.find((l) => l.paragraphIndex === paragraphIndex && l.isMarkerLine);
+      const currentNumber = currentLine?.numberLabel ? parseInt(currentLine.numberLabel, 10) : 0;
+      prefix = markerPrefixFor('number', { number: currentNumber + 1 });
+    } else if (parsed.marker === 'checklist') {
+      prefix = markerPrefixFor('checklist', { checked: false });
+    } else {
+      prefix = markerPrefixFor('bullet');
+    }
+    const insertion = `\n${indentSpaces}${prefix}`;
+    const newValue = value.slice(0, caret) + insertion + value.slice(caret);
+    this.applyTextareaValue(textarea, newValue, caret + insertion.length);
+  }
+
+  private handleTabKey(ev: KeyboardEvent, textarea: HTMLTextAreaElement): void {
+    const value = textarea.value;
+    const caretStart = textarea.selectionStart;
+    const caretEnd = textarea.selectionEnd;
+    const { startLine, endLine } = selectedLineRange(value, caretStart, caretEnd);
+    const lines = value.split('\n');
+    const parsedAt = lines.map(parseListLine);
+    const touchesList = Array.from({ length: endLine - startLine + 1 }, (_, i) => startLine + i).some(
+      (i) => parsedAt[i].marker !== 'none',
+    );
+    if (!touchesList) return; // fora de uma linha de lista, mantém o Tab padrão do navegador
+
+    ev.preventDefault();
+    const delta = ev.shiftKey ? -1 : 1;
+
+    // Offset (índice de caractere) de onde cada linha começa no valor ORIGINAL —
+    // necessário pra recalcular onde o cursor deve cair depois, já que reindentar
+    // insere/remove caracteres antes do texto de cada linha afetada.
+    const lineStartOffsets: number[] = [];
+    let acc = 0;
+    for (const l of lines) {
+      lineStartOffsets.push(acc);
+      acc += l.length + 1;
+    }
+
+    let shiftStart = 0;
+    let shiftEnd = 0;
+    for (let i = startLine; i <= endLine; i++) {
+      const p = parsedAt[i];
+      if (p.marker === 'none') continue;
+      const currentLevel = Math.floor(p.indentCharLen / INDENT_SPACES_PER_LEVEL);
+      const nextLevel = Math.max(0, Math.min(MAX_LIST_INDENT, currentLevel + delta));
+      const newIndentLen = nextLevel * INDENT_SPACES_PER_LEVEL;
+      const diff = newIndentLen - p.indentCharLen;
+      lines[i] = ' '.repeat(newIndentLen) + lines[i].slice(p.indentCharLen);
+      // Cursor depois do início dessa linha (o caso comum: Tab com o cursor no fim
+      // do que acabou de digitar) acompanha a mudança de tamanho da indentação.
+      if (lineStartOffsets[i] < caretStart) shiftStart += diff;
+      if (lineStartOffsets[i] < caretEnd) shiftEnd += diff;
+    }
+    const newValue = lines.join('\n');
+    this.applyTextareaValue(
+      textarea,
+      newValue,
+      Math.max(0, caretStart + shiftStart),
+      Math.max(0, caretEnd + shiftEnd),
+    );
+  }
+
+  /** Escreve direto no DOM (mutar `.value` reseta o cursor pro fim se não
+   * restaurarmos manualmente) e emite pelo mesmo caminho de `onInput`, pra cair no
+   * mesmo diff único de undo já feito ao terminar a edição. */
+  private applyTextareaValue(textarea: HTMLTextAreaElement, newValue: string, caretStart: number, caretEnd: number = caretStart): void {
+    textarea.value = newValue;
+    textarea.setSelectionRange(caretStart, caretEnd);
+    this.onInput(newValue);
   }
 
   /** Não fecha a edição se o foco só se moveu pra dentro da barra de ferramentas de
@@ -208,6 +342,31 @@ export class TextOverlayComponent implements AfterViewInit {
   toggle(prop: 'bold' | 'italic' | 'underline'): void {
     if (this.target?.type !== 'text') return;
     this.patchAndKeepFocus({ [prop]: !this.target[prop] } as Partial<TextElement>);
+  }
+
+  /** Aplica/remove um marcador de lista na linha do cursor ou em todas as linhas
+   * cobertas pela seleção — se todas já tiverem esse marcador, remove (toggle); caso
+   * contrário aplica (substituindo qualquer outro tipo de marcador presente). */
+  toggleList(kind: Exclude<ListMarkerKind, 'none'>): void {
+    if (this.target?.type !== 'text') return;
+    const textarea = this.inputRef?.nativeElement;
+    if (!textarea) return;
+    const value = this.target.content;
+    const { startLine, endLine } = selectedLineRange(value, textarea.selectionStart, textarea.selectionEnd);
+    const lines = value.split('\n');
+    const parsed = lines.map(parseListLine);
+    const range = Array.from({ length: endLine - startLine + 1 }, (_, i) => startLine + i);
+    const allAlready = range.every((i) => parsed[i].marker === kind);
+
+    let n = 1;
+    for (const i of range) {
+      const p = parsed[i];
+      const indentSpaces = ' '.repeat(p.indent * INDENT_SPACES_PER_LEVEL);
+      lines[i] = allAlready
+        ? indentSpaces + p.text
+        : indentSpaces + markerPrefixFor(kind, { number: n++, checked: false }) + p.text;
+    }
+    this.patchAndKeepFocus({ content: lines.join('\n') } as Partial<TextElement>);
   }
 
   setAlign(align: TextAlign): void {

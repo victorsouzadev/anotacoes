@@ -4,7 +4,7 @@ import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, Point, Sha
 import { arrowBendPoint, intersectRayWithBBox } from './engine/arrow-geometry';
 import { checklistHeight, checklistItemLayouts, CHECKLIST_DEFAULT_FONT_SIZE } from './engine/checklist-layout';
 import { EditorStore, translateElement } from './engine/editor-store';
-import { elementBBox, hitTestElement, distToSegment, bboxIntersectsRect, pointInBBox, HANDLE_HIT_SIZE } from './engine/hit-test';
+import { elementBBox, hitTestElement, distToSegment, bboxIntersectsRect, pointInBBox, hitTextCheckbox, HANDLE_HIT_SIZE } from './engine/hit-test';
 import { downscaleImageBlob } from './engine/image-utils';
 import { Renderer } from './engine/renderer';
 import { STICKY_FONT_SIZE, STICKY_MIN_H } from './engine/sticky-layout';
@@ -281,6 +281,11 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
       this.toggleChecklistItem(checkboxHit.elId, checkboxHit.itemId);
       return;
     }
+    const textChecklistHit = this.hitTextChecklistCheckbox(world);
+    if (textChecklistHit) {
+      this.toggleTextChecklistLine(textChecklistHit.elId, textChecklistHit.checkboxCharOffset);
+      return;
+    }
     const selected = this.store.selectedIds();
     if (selected.size > 0) {
       const handle = this.hitHandle(world);
@@ -339,6 +344,29 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
       }
     }
     return null;
+  }
+
+  private hitTextChecklistCheckbox(world: Point): { elId: string; checkboxCharOffset: number } | null {
+    const texts = [...this.store.elements()]
+      .filter((e): e is TextElement => e.type === 'text')
+      .sort((a, b) => b.zIndex - a.zIndex);
+    for (const el of texts) {
+      const hit = hitTextCheckbox(world, el);
+      if (hit) return { elId: el.id, checkboxCharOffset: hit.checkboxCharOffset };
+    }
+    return null;
+  }
+
+  /** Marca/desmarca uma linha de checklist inline reescrevendo só o token "[ ]"/"[x]"
+   * (3 caracteres) no offset conhecido — sem reabrir o modo de edição de texto. */
+  private toggleTextChecklistLine(elId: string, checkboxCharOffset: number): void {
+    const el = this.store.elements().find((e) => e.id === elId);
+    if (!el || el.type !== 'text') return;
+    const token = el.content.slice(checkboxCharOffset, checkboxCharOffset + 3);
+    const next = token[1] === ' ' ? '[x]' : '[ ]';
+    const content = el.content.slice(0, checkboxCharOffset) + next + el.content.slice(checkboxCharOffset + 3);
+    this.store.updateElement(elId, { content } as Partial<CanvasElement>, { commit: true });
+    this.requestImmediateSave.emit();
   }
 
   private toggleChecklistItem(elId: string, itemId: string): void {

@@ -4,6 +4,7 @@ import { arrowBendPoint, arrowControlPoint, arrowEndAngle } from './arrow-geomet
 import { checklistItemLayouts } from './checklist-layout';
 import { elementBBox, HANDLE_SIZE, unionBBox } from './hit-test';
 import { STICKY_PADDING, stickyLineHeight } from './sticky-layout';
+import { textListLayout } from './text-list-layout';
 import { Viewport } from './viewport';
 
 const CORNER_RADIUS = 10;
@@ -168,20 +169,45 @@ export class Renderer {
 
   private drawText(el: TextElement): void {
     const ctx = this.ctx;
-    ctx.fillStyle = el.color;
     ctx.font = `${el.italic ? 'italic ' : ''}${el.bold ? 'bold ' : ''}${el.fontSize}px ${TEXT_FONT_STACKS[el.fontFamily ?? 'sans']}`;
     ctx.textBaseline = 'top';
-    const lineHeight = el.fontSize * 1.3;
-    const lines = wrapLines(ctx, el.content, el.w);
-    let y = el.y;
+    const lines = textListLayout(el.content, el.x, el.y, el.w, el.fontSize, el.fontFamily ?? 'sans', el.bold, el.italic);
     for (const line of lines) {
-      const width = ctx.measureText(line).width;
-      let x = el.x;
-      if (el.align === 'center') x = el.x + (el.w - width) / 2;
-      else if (el.align === 'right') x = el.x + el.w - width;
-      ctx.fillText(line, x, y);
-      if (el.underline && line) {
-        const underlineY = y + el.fontSize * 1.05;
+      if (line.isMarkerLine) {
+        ctx.fillStyle = el.color;
+        if (line.marker === 'bullet' && line.bulletGlyph != null) {
+          ctx.fillText(line.bulletGlyph, line.markerX!, line.y);
+        } else if (line.marker === 'number' && line.numberLabel != null) {
+          ctx.fillText(line.numberLabel, line.markerX!, line.y);
+        } else if (line.marker === 'checklist' && line.checkbox) {
+          this.drawCheckboxGlyph(line.checkbox, !!line.checked);
+        }
+      }
+
+      // Linhas de lista sempre ficam à esquerda — combinar recuo pendurado com
+      // centralização/direita não compensa a complexidade pra um caso raro.
+      let x = line.x;
+      let width = 0;
+      if (line.marker === 'none') {
+        width = ctx.measureText(line.text).width;
+        if (el.align === 'center') x = el.x + (el.w - width) / 2;
+        else if (el.align === 'right') x = el.x + el.w - width;
+      }
+
+      ctx.fillStyle = line.checked ? 'rgba(29,29,29,0.45)' : el.color;
+      ctx.fillText(line.text, x, line.y);
+
+      if (line.checked && line.text) {
+        if (width === 0) width = ctx.measureText(line.text).width;
+        ctx.strokeStyle = 'rgba(29,29,29,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, line.y + el.fontSize / 2);
+        ctx.lineTo(x + width, line.y + el.fontSize / 2);
+        ctx.stroke();
+      } else if (el.underline && line.marker === 'none' && line.text) {
+        if (width === 0) width = ctx.measureText(line.text).width;
+        const underlineY = line.y + el.fontSize * 1.05;
         ctx.strokeStyle = el.color;
         ctx.lineWidth = Math.max(1, el.fontSize / 16);
         ctx.beginPath();
@@ -189,7 +215,6 @@ export class Renderer {
         ctx.lineTo(x + width, underlineY);
         ctx.stroke();
       }
-      y += lineHeight;
     }
   }
 
@@ -232,26 +257,7 @@ export class Renderer {
     ctx.font = `${el.fontSize}px sans-serif`;
     ctx.textBaseline = 'top';
     for (const { item, checkbox, textX, textY } of checklistItemLayouts(el)) {
-      ctx.beginPath();
-      ctx.roundRect(checkbox.x, checkbox.y, checkbox.w, checkbox.h, Math.max(3, checkbox.w * 0.3));
-      if (item.checked) {
-        ctx.fillStyle = ACCENT;
-        ctx.fill();
-        ctx.strokeStyle = ACCENT;
-      } else {
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-      }
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      if (item.checked) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = Math.max(1.2, checkbox.w * 0.12);
-        ctx.beginPath();
-        ctx.moveTo(checkbox.x + checkbox.w * 0.22, checkbox.y + checkbox.h * 0.55);
-        ctx.lineTo(checkbox.x + checkbox.w * 0.42, checkbox.y + checkbox.h * 0.75);
-        ctx.lineTo(checkbox.x + checkbox.w * 0.78, checkbox.y + checkbox.h * 0.28);
-        ctx.stroke();
-      }
+      this.drawCheckboxGlyph(checkbox, item.checked);
 
       ctx.fillStyle = item.checked ? 'rgba(29,29,29,0.45)' : '#1d1d1d';
       const text = item.text || (item.checked ? '' : '');
@@ -265,6 +271,33 @@ export class Renderer {
         ctx.lineTo(textX + width, textY + el.fontSize / 2);
         ctx.stroke();
       }
+    }
+  }
+
+  /** Quadradinho de checklist — reaproveitado tanto pelo ChecklistElement (bloco
+   * separado) quanto pelas linhas de checklist inline dentro de um TextElement, pra
+   * manter os dois com a mesma cara. */
+  private drawCheckboxGlyph(checkbox: { x: number; y: number; w: number; h: number }, checked: boolean): void {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.roundRect(checkbox.x, checkbox.y, checkbox.w, checkbox.h, Math.max(3, checkbox.w * 0.3));
+    if (checked) {
+      ctx.fillStyle = ACCENT;
+      ctx.fill();
+      ctx.strokeStyle = ACCENT;
+    } else {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    }
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (checked) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(1.2, checkbox.w * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(checkbox.x + checkbox.w * 0.22, checkbox.y + checkbox.h * 0.55);
+      ctx.lineTo(checkbox.x + checkbox.w * 0.42, checkbox.y + checkbox.h * 0.75);
+      ctx.lineTo(checkbox.x + checkbox.w * 0.78, checkbox.y + checkbox.h * 0.28);
+      ctx.stroke();
     }
   }
 
@@ -469,25 +502,6 @@ export class Renderer {
     if (elements.length === 0) return { minX: 0, minY: 0, maxX: 800, maxY: 600 };
     return unionBBox(elements.map(elementBBox));
   }
-}
-
-function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split('\n')) {
-    const words = paragraph.split(' ');
-    let line = '';
-    for (const word of words) {
-      const test = line ? `${line} ${word}` : word;
-      if (ctx.measureText(test).width > maxWidth && line) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = test;
-      }
-    }
-    lines.push(line);
-  }
-  return lines;
 }
 
 function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number): void {

@@ -1,6 +1,7 @@
-import { CanvasElement, Point } from '../../../data/models';
+import { CanvasElement, Point, TextElement } from '../../../data/models';
 import { arrowSamplePoints } from './arrow-geometry';
 import { textContentHeight } from './text-layout';
+import { textListLayout } from './text-list-layout';
 
 // Maior que o quadrado desenhado (ver Renderer.drawHandleSquare) só na área de
 // detecção de clique — alças de 8px eram fáceis de errar (arrastava o elemento
@@ -53,6 +54,26 @@ export function elementBBox(e: CanvasElement): BBox {
       };
     }
   }
+}
+
+/** Espelha hitChecklistCheckbox (canvas-host.ts), mas pra quadradinhos de checklist
+ * que vivem inline dentro do texto corrido de um TextElement, em vez de num
+ * ChecklistElement separado. Usado pra marcar/desmarcar por clique sem abrir o modo
+ * de edição — mesmo layout (textListLayout) que o renderer usa pra pintar, então
+ * nunca diverge de onde o quadradinho realmente aparece na tela. */
+export function hitTextCheckbox(p: Point, el: TextElement): { checkboxCharOffset: number; checked: boolean } | null {
+  const box = elementBBox(el);
+  if (!pointInBBox(p, box)) return null;
+  const lines = textListLayout(el.content, el.x, el.y, el.w, el.fontSize, el.fontFamily ?? 'sans', el.bold, el.italic);
+  for (const line of lines) {
+    if (line.checkbox && line.checkboxCharOffset !== undefined && pointInBBox(p, {
+      minX: line.checkbox.x, minY: line.checkbox.y,
+      maxX: line.checkbox.x + line.checkbox.w, maxY: line.checkbox.y + line.checkbox.h,
+    })) {
+      return { checkboxCharOffset: line.checkboxCharOffset, checked: !!line.checked };
+    }
+  }
+  return null;
 }
 
 export function unionBBox(boxes: BBox[]): BBox {
