@@ -161,6 +161,7 @@ export function translateElement(e: CanvasElement, dx: number, dy: number): void
     case 'sticky':
     case 'checklist':
     case 'image':
+    case 'pomodoro':
       e.x += dx;
       e.y += dy;
       break;

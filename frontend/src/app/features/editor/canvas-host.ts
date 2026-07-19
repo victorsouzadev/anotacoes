@@ -1,11 +1,13 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, Output, ViewChild, effect } from '@angular/core';
 import { uuid } from '../../core/uuid';
-import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, Point, ShapeElement, StickyElement, StrokeElement, TextElement } from '../../data/models';
+import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, Point, PomodoroElement, ShapeElement, StickyElement, StrokeElement, TextElement } from '../../data/models';
 import { arrowBendPoint, intersectRayWithBBox } from './engine/arrow-geometry';
 import { checklistHeight, checklistItemLayouts, CHECKLIST_DEFAULT_FONT_SIZE } from './engine/checklist-layout';
 import { EditorStore, translateElement } from './engine/editor-store';
 import { elementBBox, hitTestElement, distToSegment, bboxIntersectsRect, pointInBBox, hitTextCheckbox, HANDLE_HIT_SIZE } from './engine/hit-test';
 import { downscaleImageBlob } from './engine/image-utils';
+import { playPomodoroBeep } from './engine/pomodoro-sound';
+import { pomodoroButtonLayouts, pomodoroDisplaySec, POMODORO_BREAK_SEC, POMODORO_DEFAULT_H, POMODORO_DEFAULT_W, POMODORO_WORK_SEC } from './engine/pomodoro-layout';
 import { Renderer } from './engine/renderer';
 import { STICKY_FONT_SIZE, STICKY_MIN_H } from './engine/sticky-layout';
 
@@ -88,15 +90,19 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  private pomodoroTickInterval: ReturnType<typeof setInterval> | null = null;
+
   ngAfterViewInit(): void {
     this.renderer = new Renderer(this.canvasRef.nativeElement, this.store.viewport, () => this.scheduleRender());
     this.ro = new ResizeObserver(() => this.resizeAndRender());
     this.ro.observe(this.canvasRef.nativeElement.parentElement!);
     this.resizeAndRender();
+    this.pomodoroTickInterval = setInterval(() => this.tickPomodoros(), 1000);
   }
 
   ngOnDestroy(): void {
     this.ro?.disconnect();
+    if (this.pomodoroTickInterval) clearInterval(this.pomodoroTickInterval);
   }
 
   private resizeAndRender(): void {
@@ -250,6 +256,29 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
         this.store.tool.set('select');
         break;
       }
+      case 'pomodoro': {
+        const el: PomodoroElement = {
+          id: uuid(),
+          type: 'pomodoro',
+          x: world.x,
+          y: world.y,
+          w: POMODORO_DEFAULT_W,
+          h: POMODORO_DEFAULT_H,
+          workDurationSec: POMODORO_WORK_SEC,
+          breakDurationSec: POMODORO_BREAK_SEC,
+          phase: 'work',
+          running: false,
+          phaseEndAt: null,
+          remainingSec: POMODORO_WORK_SEC,
+          cyclesCompleted: 0,
+          zIndex: this.store.nextZIndex(),
+          rotation: 0,
+        };
+        this.store.addElement(el);
+        this.elementsChanged.emit();
+        this.store.tool.set('select');
+        break;
+      }
       case 'select':
         this.handleSelectPointerDown(screen, world, ev.shiftKey);
         break;
@@ -283,6 +312,12 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
   }
 
   private handleSelectPointerDown(screen: Point, world: Point, shiftKey: boolean): void {
+    const pomodoroButtonHit = this.hitPomodoroButton(world);
+    if (pomodoroButtonHit) {
+      if (pomodoroButtonHit.button === 'playPause') this.togglePomodoroRunning(pomodoroButtonHit.elId);
+      else this.resetPomodoro(pomodoroButtonHit.elId);
+      return;
+    }
     const checkboxHit = this.hitChecklistCheckbox(world);
     if (checkboxHit) {
       this.toggleChecklistItem(checkboxHit.elId, checkboxHit.itemId);
@@ -382,6 +417,75 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     const items = el.items.map((it) => (it.id === itemId ? { ...it, checked: !it.checked } : it));
     this.store.updateElement(elId, { items } as Partial<CanvasElement>, { commit: true });
     this.requestImmediateSave.emit();
+  }
+
+  private hitPomodoroButton(world: Point): { elId: string; button: 'playPause' | 'reset' } | null {
+    const pomodoros = [...this.store.elements()]
+      .filter((e): e is PomodoroElement => e.type === 'pomodoro')
+      .sort((a, b) => b.zIndex - a.zIndex);
+    for (const el of pomodoros) {
+      const { playPause, reset } = pomodoroButtonLayouts(el);
+      if (pointInBBox(world, { minX: playPause.x, minY: playPause.y, maxX: playPause.x + playPause.w, maxY: playPause.y + playPause.h })) {
+        return { elId: el.id, button: 'playPause' };
+      }
+      if (pointInBBox(world, { minX: reset.x, minY: reset.y, maxX: reset.x + reset.w, maxY: reset.y + reset.h })) {
+        return { elId: el.id, button: 'reset' };
+      }
+    }
+    return null;
+  }
+
+  private togglePomodoroRunning(elId: string): void {
+    const el = this.store.elements().find((e) => e.id === elId);
+    if (!el || el.type !== 'pomodoro') return;
+    const patch: Partial<PomodoroElement> = el.running
+      ? { running: false, remainingSec: pomodoroDisplaySec(el), phaseEndAt: null }
+      : { running: true, phaseEndAt: new Date(Date.now() + el.remainingSec * 1000).toISOString() };
+    this.store.updateElement(elId, patch as Partial<CanvasElement>, { commit: true });
+    this.requestImmediateSave.emit();
+  }
+
+  private resetPomodoro(elId: string): void {
+    const el = this.store.elements().find((e) => e.id === elId);
+    if (!el || el.type !== 'pomodoro') return;
+    const patch: Partial<PomodoroElement> = {
+      running: false,
+      phase: 'work',
+      remainingSec: el.workDurationSec,
+      phaseEndAt: null,
+      cyclesCompleted: 0,
+    };
+    this.store.updateElement(elId, patch as Partial<CanvasElement>, { commit: true });
+    this.requestImmediateSave.emit();
+  }
+
+  /** Roda a cada segundo: some com os elementos pomodoro em execução, e quando algum
+   * chega a zero troca de fase (foco↔pausa) e toca o beep — não passa pelo histórico
+   * de undo (o relógio chegar a zero não é uma ação do usuário) e salva na hora. */
+  private tickPomodoros(): void {
+    const pomodoros = this.store.elements().filter((e): e is PomodoroElement => e.type === 'pomodoro' && e.running);
+    if (pomodoros.length === 0) return;
+    let transitioned = false;
+    const patches = new Map<string, Partial<CanvasElement>>();
+    const now = Date.now();
+    for (const el of pomodoros) {
+      if (pomodoroDisplaySec(el, now) > 0) continue;
+      transitioned = true;
+      const nextPhase = el.phase === 'work' ? 'break' : 'work';
+      const nextDuration = nextPhase === 'work' ? el.workDurationSec : el.breakDurationSec;
+      patches.set(el.id, {
+        phase: nextPhase,
+        remainingSec: nextDuration,
+        phaseEndAt: new Date(now + nextDuration * 1000).toISOString(),
+        cyclesCompleted: el.phase === 'work' ? el.cyclesCompleted + 1 : el.cyclesCompleted,
+      } as Partial<CanvasElement>);
+    }
+    if (patches.size > 0) {
+      this.store.updateElements(patches, { commit: false });
+      this.requestImmediateSave.emit();
+    }
+    if (transitioned) playPomodoroBeep();
+    this.scheduleRender();
   }
 
   onDoubleClick(ev: MouseEvent): void {
@@ -576,7 +680,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     if (orig.type === 'stroke' || orig.type === 'arrow') return;
     const dx = world.x - this.dragStartWorld.x;
     const dy = world.y - this.dragStartWorld.y;
-    const clone = structuredClone(orig) as ShapeElement | TextElement | StickyElement | ChecklistElement | ImageElement;
+    const clone = structuredClone(orig) as ShapeElement | TextElement | StickyElement | ChecklistElement | ImageElement | PomodoroElement;
     const h = clone.type === 'text' ? 20 : clone.h;
     let { x, y, w } = clone;
     let newH = h;

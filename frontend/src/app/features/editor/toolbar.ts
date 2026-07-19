@@ -28,6 +28,7 @@ import { IconComponent } from '../../shared/icon';
       <button [class.active]="tool() === 'text'" (click)="setTool('text')" title="Texto"><app-icon name="text" /></button>
       <button [class.active]="tool() === 'sticky'" (click)="setTool('sticky')" title="Nota adesiva"><app-icon name="sticky" /></button>
       <button [class.active]="tool() === 'checklist'" (click)="setTool('checklist')" title="Lista de tarefas"><app-icon name="checklist" /></button>
+      <button [class.active]="tool() === 'pomodoro'" (click)="setTool('pomodoro')" title="Pomodoro"><app-icon name="pomodoro" /></button>
     </div>
   `,
   styles: [`

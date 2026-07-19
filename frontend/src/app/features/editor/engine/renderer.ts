@@ -1,8 +1,9 @@
 import { getStroke } from 'perfect-freehand';
-import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, PaperStyle, Point, ShapeElement, StickyElement, StrokeElement, TextElement, TEXT_FONT_STACKS } from '../../../data/models';
+import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, PaperStyle, Point, PomodoroElement, ShapeElement, StickyElement, StrokeElement, TextElement, TEXT_FONT_STACKS } from '../../../data/models';
 import { arrowBendPoint, arrowControlPoint, arrowEndAngle } from './arrow-geometry';
 import { checklistItemLayouts } from './checklist-layout';
 import { elementBBox, HANDLE_SIZE, unionBBox } from './hit-test';
+import { formatPomodoroTime, pomodoroButtonLayouts, pomodoroDisplaySec } from './pomodoro-layout';
 import { STICKY_PADDING, stickyLineHeight } from './sticky-layout';
 import { textListLayout } from './text-list-layout';
 import { Viewport } from './viewport';
@@ -141,6 +142,9 @@ export class Renderer {
         break;
       case 'image':
         this.drawImage(el);
+        break;
+      case 'pomodoro':
+        this.drawPomodoro(el);
         break;
     }
     ctx.restore();
@@ -298,6 +302,94 @@ export class Renderer {
       ctx.lineTo(checkbox.x + checkbox.w * 0.42, checkbox.y + checkbox.h * 0.75);
       ctx.lineTo(checkbox.x + checkbox.w * 0.78, checkbox.y + checkbox.h * 0.28);
       ctx.stroke();
+    }
+  }
+
+  /** Cartão do timer Pomodoro — cor de fundo indica a fase (foco/pausa), mm:ss grande
+   * centralizado e dois botões (play/pause, reiniciar) cujas posições vêm de
+   * pomodoroButtonLayouts, a mesma função usada pelo canvas-host pra testar clique. */
+  private drawPomodoro(el: PomodoroElement): void {
+    const ctx = this.ctx;
+    const isWork = el.phase === 'work';
+    ctx.save();
+    ctx.shadowColor = 'rgba(20, 20, 43, 0.18)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = isWork ? '#efecff' : '#e3f6e8';
+    ctx.beginPath();
+    ctx.roundRect(el.x, el.y, el.w, el.h, CORNER_RADIUS);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.strokeStyle = isWork ? 'rgba(109, 94, 248, 0.35)' : 'rgba(46, 168, 79, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(el.x, el.y, el.w, el.h, CORNER_RADIUS);
+    ctx.stroke();
+
+    const cx = el.x + el.w / 2;
+    const labelColor = isWork ? ACCENT : '#2ea84f';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = labelColor;
+    ctx.font = '600 12px sans-serif';
+    const label = isWork ? 'Foco' : 'Pausa';
+    const text = el.cyclesCompleted > 0 ? `${label} · ${el.cyclesCompleted} concluído${el.cyclesCompleted > 1 ? 's' : ''}` : label;
+    ctx.fillText(text, cx, el.y + 10);
+
+    ctx.fillStyle = '#1d1d1d';
+    ctx.font = '700 30px sans-serif';
+    ctx.fillText(formatPomodoroTime(pomodoroDisplaySec(el)), cx, el.y + 32);
+    ctx.textAlign = 'left';
+
+    const { playPause, reset } = pomodoroButtonLayouts(el);
+    this.drawPomodoroButton(playPause, labelColor, el.running ? 'pause' : 'play');
+    this.drawPomodoroButton(reset, 'rgba(29,29,29,0.55)', 'reset');
+  }
+
+  private drawPomodoroButton(box: { x: number; y: number; w: number; h: number }, color: string, kind: 'play' | 'pause' | 'reset'): void {
+    const ctx = this.ctx;
+    const cx = box.x + box.w / 2;
+    const cy = box.y + box.h / 2;
+    const r = box.w / 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    if (kind === 'play') {
+      const s = r * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - s * 0.5, cy - s);
+      ctx.lineTo(cx - s * 0.5, cy + s);
+      ctx.lineTo(cx + s, cy);
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === 'pause') {
+      const barW = r * 0.32;
+      const barH = r * 1.05;
+      ctx.fillRect(cx - r * 0.42 - barW / 2, cy - barH / 2, barW, barH);
+      ctx.fillRect(cx + r * 0.42 - barW / 2, cy - barH / 2, barW, barH);
+    } else {
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.55, 0.6, Math.PI * 1.7);
+      ctx.stroke();
+      const headAngle = Math.PI * 1.7;
+      const hx = cx + Math.cos(headAngle) * r * 0.55;
+      const hy = cy + Math.sin(headAngle) * r * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(hx - r * 0.28, hy - r * 0.05);
+      ctx.lineTo(hx - r * 0.05, hy + r * 0.28);
+      ctx.closePath();
+      ctx.fill();
     }
   }
 
