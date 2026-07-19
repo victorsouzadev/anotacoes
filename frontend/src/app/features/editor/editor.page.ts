@@ -7,6 +7,7 @@ import { SyncService } from '../../data/sync.service';
 import { ThemeService } from '../../core/theme.service';
 import { uuid } from '../../core/uuid';
 import { CanvasHostComponent } from './canvas-host';
+import { CanvasCornerControlsComponent } from './canvas-corner-controls';
 import { checklistHeight } from './engine/checklist-layout';
 import { EditorStore } from './engine/editor-store';
 import { exportNoteToPng } from './engine/export';
@@ -14,13 +15,19 @@ import { Renderer } from './engine/renderer';
 import { stickyContentHeight } from './engine/sticky-layout';
 import { Viewport } from './engine/viewport';
 import { ToolbarComponent } from './toolbar';
+import { PropertiesPanelComponent } from './properties-panel';
+import { MoreActionsMenuComponent } from './more-actions-menu';
 import { TextOverlayComponent } from './text-overlay';
 import { ChecklistOverlayComponent } from './checklist-overlay';
 
 @Component({
   selector: 'app-editor-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, CanvasHostComponent, ToolbarComponent, TextOverlayComponent, ChecklistOverlayComponent],
+  imports: [
+    RouterLink, FormsModule, CanvasHostComponent, ToolbarComponent,
+    PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
+    TextOverlayComponent, ChecklistOverlayComponent,
+  ],
   template: `
     <div class="editor-page">
       <header>
@@ -31,20 +38,6 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
         </span>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">{{ themeIcon() }}</button>
       </header>
-      <app-toolbar
-        [store]="store"
-        (undo)="onUndo()"
-        (redo)="onRedo()"
-        (duplicate)="store.duplicateSelection(); flushSave()"
-        (deleteSelection)="onDeleteSelection()"
-        (bringToFront)="onBringToFront()"
-        (sendToBack)="onSendToBack()"
-        (zoomIn)="zoom(1.2)"
-        (zoomOut)="zoom(1 / 1.2)"
-        (fitToScreen)="canvasHost.fitToScreen()"
-        (paperStyleChange)="onPaperStyleChange($event)"
-        (exportPng)="onExportPng($event)"
-      />
       <div class="pages-bar">
         @for (p of pages; track p.id; let i = $index) {
           <button class="page-tab" [class.active]="i === currentPageIndex" (click)="switchPage(i)" [title]="'Página ' + (i + 1)">
@@ -66,6 +59,26 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           (requestChecklistEdit)="onEditChecklist($event)"
           (elementsChanged)="scheduleSave()"
           (requestImmediateSave)="flushSave()"
+        />
+        <app-toolbar [store]="store" />
+        <app-properties-panel [store]="store" />
+        <app-canvas-corner-controls
+          #cornerControls
+          [store]="store"
+          (undo)="onUndo()"
+          (redo)="onRedo()"
+          (zoomIn)="zoom(1.2)"
+          (zoomOut)="zoom(1 / 1.2)"
+          (fitToScreen)="canvasHost.fitToScreen()"
+        />
+        <app-more-actions-menu
+          [store]="store"
+          (duplicate)="store.duplicateSelection(); flushSave()"
+          (deleteSelection)="onDeleteSelection()"
+          (bringToFront)="onBringToFront()"
+          (sendToBack)="onSendToBack()"
+          (paperStyleChange)="onPaperStyleChange($event)"
+          (exportPng)="onExportPng($event)"
         />
         <app-text-overlay
           [store]="store"
@@ -195,6 +208,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
 })
 export class EditorPageComponent implements OnInit, OnDestroy {
   @ViewChild('canvasHost') canvasHost!: CanvasHostComponent;
+  @ViewChild('cornerControls') cornerControls!: CanvasCornerControlsComponent;
 
   store = new EditorStore();
   noteId = '';
@@ -250,7 +264,11 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.currentPageIndex = 0;
     this.store.paperStyle.set(note.paperStyle ?? 'blank');
     this.store.loadElements(this.pages[0].elements);
-    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 50);
+    // Roda fora de qualquer evento do Angular (depois do await) — sem isso, numa nota
+    // recém-criada o título muda de '' pra 'Nova nota' sem repintar a tela a tempo,
+    // mesma classe de bug já tratada em maybeAutoStartText().
+    this.cdr.markForCheck();
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); this.maybeAutoStartText(); }, 50);
     // Um F5/fechar aba não passa pelo ngOnDestroy do Angular a tempo de terminar o
     // save assíncrono no IndexedDB — 'visibilitychange' dispara antes e de forma mais
     // confiável nesses casos (recomendado pelo próprio spec da Page Visibility API).
@@ -314,7 +332,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.captureCurrentPage();
     this.currentPageIndex = index;
     this.store.loadElements(this.pages[index].elements);
-    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 0);
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); this.maybeAutoStartText(); }, 0);
   }
 
   addPage(): void {
@@ -323,7 +341,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.currentPageIndex = this.pages.length - 1;
     this.store.loadElements([]);
     this.flushSave();
-    setTimeout(() => { this.canvasHost?.fitToScreen(); this.maybeAutoStartText(); }, 0);
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); this.maybeAutoStartText(); }, 0);
   }
 
   removePage(index: number): void {
