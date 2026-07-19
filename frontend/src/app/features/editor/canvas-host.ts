@@ -1,7 +1,7 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, Output, ViewChild, effect } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, Point, PomodoroElement, ShapeElement, StickyElement, StrokeElement, TextElement } from '../../data/models';
-import { arrowBendPoint, intersectRayWithBBox } from './engine/arrow-geometry';
+import { arrowBendPoint, bboxAnchorFor, bboxAnchorPoint, intersectRayWithBBox } from './engine/arrow-geometry';
 import { checklistHeight, checklistItemLayouts, CHECKLIST_DEFAULT_FONT_SIZE } from './engine/checklist-layout';
 import { EditorStore, translateElement } from './engine/editor-store';
 import { elementBBox, hitTestElement, distToSegment, bboxIntersectsRect, pointInBBox, hitTextCheckbox, HANDLE_HIT_SIZE } from './engine/hit-test';
@@ -207,6 +207,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
           from: start.point,
           to: start.point,
           fromId: start.elId ?? null,
+          fromAnchor: start.anchor ?? null,
           color: this.store.penColor(),
           thickness: this.store.penThickness(),
           startArrow: this.store.arrowStart(),
@@ -511,7 +512,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
   /** Onde uma seta deve "grudar" ao ser desenhada/arrastada sobre outro elemento —
    * encosta na borda voltada para o ponto de origem, não no centro (que ficaria por
    * baixo do conteúdo do elemento). Retorna o ponto puro se não há elemento sob ele. */
-  private resolveArrowEndpoint(world: Point, excludeId?: string): { point: Point; elId?: string } {
+  private resolveArrowEndpoint(world: Point, excludeId?: string): { point: Point; elId?: string; anchor?: Point } {
     const hit = [...this.store.elements()]
       .filter((e) => e.id !== excludeId && e.type !== 'arrow' && e.type !== 'stroke')
       .sort((a, b) => b.zIndex - a.zIndex)
@@ -519,7 +520,8 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     if (!hit) return { point: world };
     const box = elementBBox(hit);
     const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
-    return { point: intersectRayWithBBox(center, world, box), elId: hit.id };
+    const point = intersectRayWithBBox(center, world, box);
+    return { point, elId: hit.id, anchor: bboxAnchorFor(point, box) };
   }
 
   /** Depois de mover/redimensionar elementos, atualiza as pontas de qualquer seta
@@ -532,18 +534,23 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     for (const el of temp) {
       if (el.type !== 'arrow' || (!el.fromId && !el.toId)) continue;
       const patch: Partial<ArrowElement> = {};
-      if (el.fromId && byId.has(el.fromId)) patch.from = this.edgePointFor(el.fromId, el.to, byId);
-      if (el.toId && byId.has(el.toId)) patch.to = this.edgePointFor(el.toId, el.from, byId);
+      if (el.fromId && byId.has(el.fromId)) patch.from = this.edgePointFor(el.fromId, el.fromAnchor, el.to, byId);
+      if (el.toId && byId.has(el.toId)) patch.to = this.edgePointFor(el.toId, el.toAnchor, el.from, byId);
       if (Object.keys(patch).length > 0) {
         patches.set(el.id, { ...(patches.get(el.id) as object | undefined ?? {}), ...patch });
       }
     }
   }
 
-  private edgePointFor(targetId: string, otherPoint: Point, byId: Map<string, CanvasElement>): Point {
+  /** Ponto de contato de uma ponta "grudada" a `targetId`. Com anchor salvo, é fixo em
+   * relação ao bbox do alvo (não depende de para onde a outra ponta aponta); sem
+   * anchor (setas persistidas antes desse campo existir), cai no cálculo antigo por
+   * raio a partir do centro, pra não quebrar dados já salvos. */
+  private edgePointFor(targetId: string, anchor: Point | null | undefined, otherPoint: Point, byId: Map<string, CanvasElement>): Point {
     const target = byId.get(targetId);
     if (!target) return otherPoint;
     const box = elementBBox(target);
+    if (anchor) return bboxAnchorPoint(box, anchor);
     const center = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
     return intersectRayWithBBox(center, otherPoint, box);
   }
@@ -619,10 +626,10 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
       case 'draw-arrow':
         if (this.pendingArrow && this.drawStart) {
           if (ev.shiftKey) {
-            this.pendingArrow = { ...this.pendingArrow, to: snapAngle(this.drawStart, world), toId: null };
+            this.pendingArrow = { ...this.pendingArrow, to: snapAngle(this.drawStart, world), toId: null, toAnchor: null };
           } else {
             const end = this.resolveArrowEndpoint(world);
-            this.pendingArrow = { ...this.pendingArrow, to: end.point, toId: end.elId ?? null };
+            this.pendingArrow = { ...this.pendingArrow, to: end.point, toId: end.elId ?? null, toAnchor: end.anchor ?? null };
           }
         }
         break;
@@ -712,10 +719,12 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
       const resolved = this.resolveArrowEndpoint(world, id);
       patch.from = resolved.point;
       patch.fromId = resolved.elId ?? null;
+      patch.fromAnchor = resolved.anchor ?? null;
     } else if (this.resizeHandle === 'arrow-to') {
       const resolved = this.resolveArrowEndpoint(world, id);
       patch.to = resolved.point;
       patch.toId = resolved.elId ?? null;
+      patch.toAnchor = resolved.anchor ?? null;
     } else if (this.resizeHandle === 'arrow-bend') {
       patch.curve = world;
     }

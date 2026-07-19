@@ -47,6 +47,11 @@ export interface ArrowElement extends ElementBase {
    * move, a ponta correspondente da seta acompanha automaticamente. */
   fromId?: string | null;
   toId?: string | null;
+  /** Posição relativa (0..1 em cada eixo) dentro do bbox do elemento referenciado,
+   * capturada no momento em que a ponta foi conectada — garante que o ponto de
+   * contato fique fixo no local conectado, em vez de recalculado por ângulo. */
+  fromAnchor?: Point | null;
+  toAnchor?: Point | null;
   color: string;
   thickness: number;
   startArrow: boolean;

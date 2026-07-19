@@ -80,3 +80,25 @@ export function intersectRayWithBBox(center: Point, target: Point, box: BBox): P
   if (!isFinite(tMin)) return center;
   return { x: center.x + tMin * dx, y: center.y + tMin * dy };
 }
+
+/** Converte um ponto absoluto em posição relativa (0..1 por eixo) dentro de `box` —
+ * capturado no momento da conexão, esse anchor permite recompor o mesmo ponto
+ * "fixo" depois que o elemento se move/redimensiona, sem depender de para onde a
+ * outra ponta da seta está apontando. */
+export function bboxAnchorFor(point: Point, box: BBox): Point {
+  const w = box.maxX - box.minX;
+  const h = box.maxY - box.minY;
+  return {
+    x: w > 1e-6 ? (point.x - box.minX) / w : 0.5,
+    y: h > 1e-6 ? (point.y - box.minY) / h : 0.5,
+  };
+}
+
+/** Inverso de bboxAnchorFor: dado um anchor relativo e o bbox atual do elemento,
+ * devolve o ponto absoluto correspondente. */
+export function bboxAnchorPoint(box: BBox, anchor: Point): Point {
+  return {
+    x: box.minX + anchor.x * (box.maxX - box.minX),
+    y: box.minY + anchor.y * (box.maxY - box.minY),
+  };
+}
