@@ -451,13 +451,30 @@ export class Renderer {
     ctx.fillStyle = el.color;
     ctx.lineWidth = el.thickness;
     ctx.lineCap = 'round';
+
+    // Com lineCap 'round', o traço projeta uma meia-lua além do ponto final. Quando há
+    // farpa naquela ponta isso vaza para fora do triângulo, criando uma "bolha" na ponta
+    // da seta — por isso recuamos o traço em thickness/2 (o raio do cap) ao longo da
+    // tangente, fazendo a meia-lua terminar exatamente na ponta, coberta pela farpa.
+    const halfThick = el.thickness / 2;
+    let from = el.from;
+    let to = el.to;
+    if (el.endArrow) {
+      const a = arrowEndAngle(el);
+      to = { x: el.to.x - halfThick * Math.cos(a), y: el.to.y - halfThick * Math.sin(a) };
+    }
+    if (el.startArrow) {
+      const a = arrowStartAngle(el);
+      from = { x: el.from.x - halfThick * Math.cos(a), y: el.from.y - halfThick * Math.sin(a) };
+    }
+
     ctx.beginPath();
-    ctx.moveTo(el.from.x, el.from.y);
+    ctx.moveTo(from.x, from.y);
     const ctrl = arrowControlPoint(el);
     if (ctrl) {
-      ctx.quadraticCurveTo(ctrl.x, ctrl.y, el.to.x, el.to.y);
+      ctx.quadraticCurveTo(ctrl.x, ctrl.y, to.x, to.y);
     } else {
-      ctx.lineTo(el.to.x, el.to.y);
+      ctx.lineTo(to.x, to.y);
     }
     ctx.stroke();
 
