@@ -452,20 +452,22 @@ export class Renderer {
     ctx.lineWidth = el.thickness;
     ctx.lineCap = 'round';
 
-    // Com lineCap 'round', o traço projeta uma meia-lua além do ponto final. Quando há
-    // farpa naquela ponta isso vaza para fora do triângulo, criando uma "bolha" na ponta
-    // da seta — por isso recuamos o traço em thickness/2 (o raio do cap) ao longo da
-    // tangente, fazendo a meia-lua terminar exatamente na ponta, coberta pela farpa.
-    const halfThick = el.thickness / 2;
+    // Com lineCap 'round', o traço projeta um disco de raio thickness/2 além do ponto
+    // final. Perto da ponta o triângulo da farpa é bem fino (só ~26° de abertura), então
+    // um recuo pequeno não basta pra escondê-lo — ele só fica largo o bastante na base.
+    // Por isso recuamos o traço até a base da farpa, onde o disco cabe inteiro dentro
+    // do triângulo em vez de vazar pelos lados perto da ponta.
+    const headLen = 8 + el.thickness * 2;
+    const retract = headLen * Math.cos(Math.PI / 7);
     let from = el.from;
     let to = el.to;
     if (el.endArrow) {
       const a = arrowEndAngle(el);
-      to = { x: el.to.x - halfThick * Math.cos(a), y: el.to.y - halfThick * Math.sin(a) };
+      to = { x: el.to.x - retract * Math.cos(a), y: el.to.y - retract * Math.sin(a) };
     }
     if (el.startArrow) {
       const a = arrowStartAngle(el);
-      from = { x: el.from.x - halfThick * Math.cos(a), y: el.from.y - halfThick * Math.sin(a) };
+      from = { x: el.from.x - retract * Math.cos(a), y: el.from.y - retract * Math.sin(a) };
     }
 
     ctx.beginPath();
@@ -478,7 +480,6 @@ export class Renderer {
     }
     ctx.stroke();
 
-    const headLen = 8 + el.thickness * 2;
     if (el.endArrow) this.drawArrowhead(el.to, arrowEndAngle(el), headLen);
     if (el.startArrow) this.drawArrowhead(el.from, arrowStartAngle(el), headLen);
   }
