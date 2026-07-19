@@ -2,7 +2,8 @@ import { ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, Output, 
 import { FormsModule } from '@angular/forms';
 import { ChecklistElement, ChecklistItem } from '../../data/models';
 import { uuid } from '../../core/uuid';
-import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } from './engine/checklist-layout';
+import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE, CHECKLIST_PADDING } from './engine/checklist-layout';
+import { EditorStore } from './engine/editor-store';
 
 @Component({
   selector: 'app-checklist-overlay',
@@ -10,7 +11,7 @@ import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } fro
   imports: [FormsModule],
   template: `
     @if (target) {
-      <div #overlayRoot class="overlay" [style.left.px]="screenX" [style.top.px]="screenY" [style.width.px]="screenW">
+      <div #overlayRoot class="overlay" [style.left.px]="screenX" [style.top.px]="screenY" [style.width.px]="screenW" [style.padding.px]="overlayPadding">
         <div class="font-tools">
           <button (click)="changeFontSize(-2)" title="Diminuir fonte">A−</button>
           <span class="size-label">{{ target.fontSize }}px</span>
@@ -30,7 +31,7 @@ import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } fro
               #rowInput
               class="row-text"
               [class.checked]="item.checked"
-              [style.fontSize.px]="target.fontSize"
+              [style.fontSize.px]="target.fontSize * scale"
               [value]="item.text"
               (input)="onTextInput(i, $event)"
               (focus)="focusedIndex = i"
@@ -49,10 +50,6 @@ import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } fro
       position: absolute;
       z-index: 10;
       background: transparent;
-      /* Precisa bater com CHECKLIST_PADDING (engine/checklist-layout.ts) — é o mesmo
-         padding usado pra calcular a posição das linhas quando o elemento não está
-         sendo editado, senão o overlay fica desalinhado do desenho no canvas. */
-      padding: 10px;
     }
     .font-tools {
       display: flex;
@@ -82,6 +79,7 @@ import { checklistBoxSize, checklistRowHeight, CHECKLIST_DEFAULT_FONT_SIZE } fro
   `],
 })
 export class ChecklistOverlayComponent implements AfterViewInit, OnChanges {
+  @Input() store!: EditorStore;
   @Input() target: ChecklistElement | null = null;
   @Input() screenX = 0;
   @Input() screenY = 0;
@@ -118,12 +116,25 @@ export class ChecklistOverlayComponent implements AfterViewInit, OnChanges {
     this.rowInputs.get(index)?.nativeElement.focus();
   }
 
+  /** `target.fontSize`/`CHECKLIST_PADDING` são medidos em unidades de mundo;
+   * `screenX`/`screenY`/`screenW` já chegam multiplicados pelo zoom (ver
+   * `updateOverlayPosition` em editor.page.ts). Sem aplicar esse mesmo fator aqui, a
+   * caixa de edição acompanha o zoom mas a fonte/altura de linha dentro dela não —
+   * ficando desalinhada do que o canvas desenha depois de terminar a edição. */
+  get scale(): number {
+    return this.store?.viewport.scale ?? 1;
+  }
+
+  get overlayPadding(): number {
+    return CHECKLIST_PADDING * this.scale;
+  }
+
   rowHeight(): number {
-    return checklistRowHeight(this.target?.fontSize ?? CHECKLIST_DEFAULT_FONT_SIZE) + 2;
+    return (checklistRowHeight(this.target?.fontSize ?? CHECKLIST_DEFAULT_FONT_SIZE) + 2) * this.scale;
   }
 
   boxSize(): number {
-    return checklistBoxSize(this.target?.fontSize ?? CHECKLIST_DEFAULT_FONT_SIZE);
+    return checklistBoxSize(this.target?.fontSize ?? CHECKLIST_DEFAULT_FONT_SIZE) * this.scale;
   }
 
   changeFontSize(delta: number): void {

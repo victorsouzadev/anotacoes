@@ -78,6 +78,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           (finish)="onOverlayFinish()"
         />
         <app-checklist-overlay
+          [store]="store"
           [target]="editingChecklistTarget"
           [screenX]="overlayX"
           [screenY]="overlayY"

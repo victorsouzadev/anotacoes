@@ -65,15 +65,15 @@ import {
           (keydown.escape)="finish.emit()"
           (keydown)="onKeydown($event)"
           (blur)="onTextareaBlur()"
-          [style.fontSize.px]="fontSize"
+          [style.fontSize.px]="fontSize * scale"
           [style.fontWeight]="!isSticky && bold ? 'bold' : 'normal'"
           [style.fontStyle]="!isSticky && italic ? 'italic' : 'normal'"
           [style.textDecoration]="!isSticky && underline ? 'underline' : 'none'"
           [style.textAlign]="!isSticky ? align : 'left'"
           [style.fontFamily]="!isSticky ? fontStack : 'sans-serif'"
           [style.color]="isSticky ? '#1d1d1d' : color"
-          [style.lineHeight.px]="fontSize * 1.3"
-          [style.padding.px]="isSticky ? stickyPadding : 0"
+          [style.lineHeight.px]="fontSize * 1.3 * scale"
+          [style.padding.px]="isSticky ? stickyPadding * scale : 0"
           [style.minHeight.px]="minHeightPx()"
         ></textarea>
       </div>
@@ -143,6 +143,16 @@ export class TextOverlayComponent implements AfterViewInit, OnChanges {
 
   get fontSize(): number {
     return this.target ? this.target.fontSize : 14;
+  }
+
+  /** `fontSize`/`stickyPadding` são medidos em unidades de mundo (mesma unidade de
+   * `target.w`/`target.h`); `screenX`/`screenY`/`screenW` já chegam multiplicados pelo
+   * zoom (ver `updateOverlayPosition` em editor.page.ts). Sem aplicar esse mesmo fator
+   * aqui, a caixa de edição cresce/encolhe com o zoom mas a fonte dentro dela não —
+   * quebrando linha num ponto diferente do que o canvas desenha depois de terminar a
+   * edição (zoom quase nunca fica em 100% porque `fitToScreen()` roda ao abrir a nota). */
+  get scale(): number {
+    return this.store?.viewport.scale ?? 1;
   }
 
   get bold(): boolean {
