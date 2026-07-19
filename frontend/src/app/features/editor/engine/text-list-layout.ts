@@ -159,8 +159,13 @@ export function textListLayout(
 
     const hasMarker = parsed.marker !== 'none';
     const indentLevels = hasMarker ? parsed.indent + 1 : 0;
-    const textX = x + indentLevels * unit;
-    const availW = Math.max(10, w - indentLevels * unit);
+    // Bullets/números usam a unidade de indentação inteira antes do texto, mas isso
+    // deixa o quadradinho da checklist longe demais da palavra — aqui o texto cola
+    // logo depois do quadradinho, com um respiro pequeno proporcional à fonte.
+    const checklistGap = Math.round(boxSize * 0.5);
+    const checkboxX = x + parsed.indent * unit;
+    const textX = parsed.marker === 'checklist' ? checkboxX + boxSize + checklistGap : x + indentLevels * unit;
+    const availW = Math.max(10, w - (textX - x));
     const wrapped = wrapWords(ctx, parsed.text, availW);
     const checkboxCharOffset = parsed.marker === 'checklist' ? paragraphStart + parsed.indentCharLen : undefined;
 
@@ -183,7 +188,7 @@ export function textListLayout(
           line.numberLabel = `${resolvedNumber}.`;
         } else if (parsed.marker === 'checklist') {
           line.checkbox = {
-            x: x + parsed.indent * unit + (unit - boxSize) / 2,
+            x: checkboxX,
             y: curY + (lineHeight - boxSize) / 2,
             w: boxSize,
             h: boxSize,
