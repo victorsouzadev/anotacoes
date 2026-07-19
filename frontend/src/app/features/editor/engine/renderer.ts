@@ -1,6 +1,6 @@
 import { getStroke } from 'perfect-freehand';
 import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, PaperStyle, Point, PomodoroElement, ShapeElement, StickyElement, StrokeElement, TextElement, TEXT_FONT_STACKS } from '../../../data/models';
-import { arrowBendPoint, arrowControlPoint, arrowEndAngle } from './arrow-geometry';
+import { arrowBendPoint, arrowControlPoint, arrowEndAngle, arrowStartAngle } from './arrow-geometry';
 import { checklistItemLayouts } from './checklist-layout';
 import { elementBBox, HANDLE_SIZE, unionBBox } from './hit-test';
 import { formatPomodoroTime, pomodoroButtonLayouts, pomodoroDisplaySec } from './pomodoro-layout';
@@ -438,15 +438,10 @@ export class Renderer {
     const { x, y, w, h } = el;
     if (el.shape === 'rect') {
       el.fill ? ctx.fillRect(x, y, w, h) : ctx.strokeRect(x, y, w, h);
-    } else if (el.shape === 'ellipse') {
+    } else {
       ctx.beginPath();
       ctx.ellipse(x + w / 2, y + h / 2, Math.abs(w) / 2, Math.abs(h) / 2, 0, 0, Math.PI * 2);
       el.fill ? ctx.fill() : ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + w, y + h);
-      ctx.stroke();
     }
   }
 
@@ -466,17 +461,22 @@ export class Renderer {
     }
     ctx.stroke();
 
-    const angle = arrowEndAngle(el);
     const headLen = 8 + el.thickness * 2;
+    if (el.endArrow) this.drawArrowhead(el.to, arrowEndAngle(el), headLen);
+    if (el.startArrow) this.drawArrowhead(el.from, arrowStartAngle(el), headLen);
+  }
+
+  private drawArrowhead(tip: Point, angle: number, headLen: number): void {
+    const ctx = this.ctx;
     ctx.beginPath();
-    ctx.moveTo(el.to.x, el.to.y);
+    ctx.moveTo(tip.x, tip.y);
     ctx.lineTo(
-      el.to.x - headLen * Math.cos(angle - Math.PI / 7),
-      el.to.y - headLen * Math.sin(angle - Math.PI / 7),
+      tip.x - headLen * Math.cos(angle - Math.PI / 7),
+      tip.y - headLen * Math.sin(angle - Math.PI / 7),
     );
     ctx.lineTo(
-      el.to.x - headLen * Math.cos(angle + Math.PI / 7),
-      el.to.y - headLen * Math.sin(angle + Math.PI / 7),
+      tip.x - headLen * Math.cos(angle + Math.PI / 7),
+      tip.y - headLen * Math.sin(angle + Math.PI / 7),
     );
     ctx.closePath();
     ctx.fill();

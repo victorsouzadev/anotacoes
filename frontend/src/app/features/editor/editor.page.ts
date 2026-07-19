@@ -61,7 +61,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           (requestImmediateSave)="flushSave()"
         />
         <app-toolbar [store]="store" />
-        <app-properties-panel [store]="store" />
+        <app-properties-panel [store]="store" (elementsChanged)="scheduleSave()" />
         <app-canvas-corner-controls
           #cornerControls
           [store]="store"

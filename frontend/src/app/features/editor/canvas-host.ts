@@ -178,7 +178,6 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
         break;
       case 'rect':
       case 'ellipse':
-      case 'line':
         this.dragMode = 'draw-shape';
         this.drawStart = world;
         this.activeStroke = null;
@@ -197,6 +196,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
           rotation: 0,
         };
         break;
+      case 'line':
       case 'arrow': {
         this.dragMode = 'draw-arrow';
         this.drawStart = world;
@@ -209,6 +209,8 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
           fromId: start.elId ?? null,
           color: this.store.penColor(),
           thickness: this.store.penThickness(),
+          startArrow: this.store.arrowStart(),
+          endArrow: this.store.arrowEnd(),
           zIndex: this.store.nextZIndex(),
           rotation: 0,
         };
@@ -598,7 +600,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
         if (this.pendingShape && this.drawStart) {
           let w = world.x - this.drawStart.x;
           let h = world.y - this.drawStart.y;
-          if (ev.shiftKey && this.pendingShape.shape !== 'line') {
+          if (ev.shiftKey) {
             const side = Math.max(Math.abs(w), Math.abs(h));
             w = Math.sign(w || 1) * side;
             h = Math.sign(h || 1) * side;

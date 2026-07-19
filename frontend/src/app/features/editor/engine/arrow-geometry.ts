@@ -39,6 +39,14 @@ export function arrowEndAngle(el: ArrowElement): number {
   return Math.atan2(el.to.y - ctrl.y, el.to.x - ctrl.x);
 }
 
+/** Ângulo tangente no início da seta, já invertido pra apontar "pra fora" (mesma
+ * convenção de arrowEndAngle) — usado pra desenhar a farpa inicial quando startArrow. */
+export function arrowStartAngle(el: ArrowElement): number {
+  const ctrl = arrowControlPoint(el);
+  if (!ctrl) return Math.atan2(el.from.y - el.to.y, el.from.x - el.to.x);
+  return Math.atan2(el.from.y - ctrl.y, el.from.x - ctrl.x);
+}
+
 export function arrowBendPoint(el: ArrowElement): Point {
   return el.curve ?? { x: (el.from.x + el.to.x) / 2, y: (el.from.y + el.to.y) / 2 };
 }

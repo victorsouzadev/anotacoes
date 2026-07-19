@@ -22,7 +22,7 @@ import { IconComponent } from '../../shared/icon';
       <span class="divider"></span>
       <button [class.active]="tool() === 'rect'" (click)="setTool('rect')" title="Retângulo"><app-icon name="rect" /></button>
       <button [class.active]="tool() === 'ellipse'" (click)="setTool('ellipse')" title="Elipse"><app-icon name="ellipse" /></button>
-      <button [class.active]="tool() === 'line'" (click)="setTool('line')" title="Linha"><app-icon name="line" /></button>
+      <button [class.active]="tool() === 'line'" (click)="setTool('line')" title="Linha (segure Shift p/ ângulo)"><app-icon name="line" /></button>
       <button [class.active]="tool() === 'arrow'" (click)="setTool('arrow')" title="Seta (segure Shift p/ ângulo)"><app-icon name="arrow" /></button>
       <span class="divider"></span>
       <button [class.active]="tool() === 'text'" (click)="setTool('text')" title="Texto"><app-icon name="text" /></button>
@@ -79,5 +79,9 @@ export class ToolbarComponent {
 
   setTool(t: ToolType): void {
     this.store.tool.set(t);
+    // "Linha" e "Seta" são o mesmo elemento por baixo — só trocam o preset de farpas
+    // (nenhuma / farpa no fim); o usuário pode ajustar isso no painel de propriedades.
+    if (t === 'line') { this.store.arrowStart.set(false); this.store.arrowEnd.set(false); }
+    else if (t === 'arrow') { this.store.arrowStart.set(false); this.store.arrowEnd.set(true); }
   }
 }
