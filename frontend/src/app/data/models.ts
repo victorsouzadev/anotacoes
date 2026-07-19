@@ -23,7 +23,7 @@ export interface StrokeElement extends ElementBase {
 
 export interface ShapeElement extends ElementBase {
   type: 'shape';
-  shape: 'rect' | 'ellipse' | 'line';
+  shape: 'rect' | 'ellipse';
   x: number;
   y: number;
   w: number;
@@ -33,6 +33,9 @@ export interface ShapeElement extends ElementBase {
   fill: boolean;
 }
 
+/** Linha e seta são o mesmo elemento — diferem só em quais pontas exibem farpa —
+ * por trás de duas ferramentas separadas na barra por serem os dois presets mais
+ * usados (nenhuma farpa / farpa no fim), mas o estilo pode ser trocado livremente. */
 export interface ArrowElement extends ElementBase {
   type: 'arrow';
   from: Point;
@@ -46,6 +49,8 @@ export interface ArrowElement extends ElementBase {
   toId?: string | null;
   color: string;
   thickness: number;
+  startArrow: boolean;
+  endArrow: boolean;
 }
 
 export type TextAlign = 'left' | 'center' | 'right';

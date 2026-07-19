@@ -130,7 +130,7 @@ export function hitTestElement(p: Point, e: CanvasElement): boolean {
       return false;
     }
     case 'shape': {
-      if (e.fill || e.shape === 'line') return true;
+      if (e.fill) return true;
       // vazado: só a borda conta (aprox. com margem)
       const margin = Math.max(6, e.thickness);
       const insideOuter = pointInBBox(p, box);

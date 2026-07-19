@@ -14,6 +14,11 @@ export class EditorStore {
   penThickness = signal(3);
   stickyColor = signal('#FAC775');
   fillShape = signal(false);
+  /** Farpas da próxima linha/seta a ser desenhada — as ferramentas "Linha" e "Seta"
+   * só alternam esses dois defaults (nenhuma farpa / farpa no fim); o painel de
+   * propriedades permite trocar livremente antes de desenhar. */
+  arrowStart = signal(false);
+  arrowEnd = signal(true);
   paperStyle = signal<PaperStyle>('blank');
 
   viewport = new Viewport();
@@ -120,6 +125,11 @@ export class EditorStore {
     const normalized = elements.map((e) => {
       if (e.type === 'checklist' && e.fontSize == null) return { ...e, fontSize: CHECKLIST_DEFAULT_FONT_SIZE };
       if (e.type === 'sticky' && e.fontSize == null) return { ...e, fontSize: STICKY_FONT_SIZE };
+      const legacyLine = e as unknown as { type: string; shape?: string };
+      if (legacyLine.type === 'shape' && legacyLine.shape === 'line') return migrateLegacyLineShape(e as unknown as LegacyLineShape);
+      if (e.type === 'arrow' && (e.startArrow == null || e.endArrow == null)) {
+        return { ...e, startArrow: e.startArrow ?? false, endArrow: e.endArrow ?? true };
+      }
       return e;
     });
     this.setElements(normalized);
@@ -149,6 +159,41 @@ export class EditorStore {
     });
     this.select(copies.map((c) => c.id));
   }
+}
+
+interface LegacyLineShape {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  thickness: number;
+  zIndex: number;
+  rotation: number;
+}
+
+/** A ferramenta "Linha" costumava salvar um ShapeElement (shape: 'line') delimitado
+ * por um bbox x/y/w/h — que perdia a direção real do arraste (sempre renderizava do
+ * canto superior-esquerdo pro inferior-direito do bbox). Notas antigas ainda têm esse
+ * formato no JSON persistido; migra pra ArrowElement sem farpas, preservando a
+ * aparência visual que o usuário já salvou (mesmo canto-a-canto). */
+function migrateLegacyLineShape(s: LegacyLineShape): CanvasElement {
+  return {
+    id: s.id,
+    type: 'arrow',
+    from: { x: s.x, y: s.y },
+    to: { x: s.x + s.w, y: s.y + s.h },
+    curve: null,
+    fromId: null,
+    toId: null,
+    color: s.color,
+    thickness: s.thickness,
+    startArrow: false,
+    endArrow: false,
+    zIndex: s.zIndex,
+    rotation: s.rotation,
+  };
 }
 
 export function translateElement(e: CanvasElement, dx: number, dy: number): void {
