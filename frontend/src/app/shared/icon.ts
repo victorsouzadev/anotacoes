@@ -5,7 +5,9 @@ export type IconName =
   | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'sticky' | 'checklist'
   | 'undo' | 'redo' | 'zoom-in' | 'zoom-out' | 'fit-to-screen'
   | 'duplicate' | 'delete' | 'bring-to-front' | 'send-to-back'
-  | 'download' | 'more';
+  | 'download' | 'more'
+  | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
+  | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -45,14 +47,40 @@ export type IconName =
         @case ('send-to-back') { <rect x="3.2" y="7.7" width="9.5" height="9.5" rx="1.4" /><path d="M7.7 3.4A1.7 1.7 0 0 1 9.4 1.7H15a1.7 1.7 0 0 1 1.7 1.7v5.6" /> }
         @case ('download') { <path d="M10 3v9.4m0 0l-3.6-3.6M10 12.4l3.6-3.6" /><path d="M4 15.5h12" /> }
         @case ('more') { <circle cx="4.2" cy="10" r="1.3" /><circle cx="10" cy="10" r="1.3" /><circle cx="15.8" cy="10" r="1.3" /> }
+        @case ('folder') { <path d="M2.5 5.3a1.3 1.3 0 0 1 1.3-1.3h3.6l1.6 1.8h7.2a1.3 1.3 0 0 1 1.3 1.3v7.6a1.3 1.3 0 0 1-1.3 1.3H3.8a1.3 1.3 0 0 1-1.3-1.3z" /> }
+        @case ('search') { <circle cx="8.6" cy="8.6" r="5.4" /><path d="M12.6 12.6L17.5 17.5" /> }
+        @case ('edit') { <path d="M12.8 3.5l3.7 3.7L6.7 17H3v-3.7z" /><path d="M11.3 5l3.7 3.7" /> }
+        @case ('grid-view') {
+          <rect x="2.7" y="2.7" width="6" height="6" rx="1.1" />
+          <rect x="11.3" y="2.7" width="6" height="6" rx="1.1" />
+          <rect x="2.7" y="11.3" width="6" height="6" rx="1.1" />
+          <rect x="11.3" y="11.3" width="6" height="6" rx="1.1" />
+        }
+        @case ('list-view') {
+          <path d="M7 5h10M7 10h10M7 15h10" />
+          <path d="M3 5h.01M3 10h.01M3 15h.01" stroke-width="2.4" />
+        }
+        @case ('sun') {
+          <circle cx="10" cy="10" r="3.4" />
+          <path d="M10 2.3v2M10 15.7v2M17.7 10h-2M4.3 10h-2M15.4 4.6l-1.4 1.4M6 12.6l-1.4 1.4M15.4 15.4l-1.4-1.4M6 7.4L4.6 6" />
+        }
+        @case ('moon') { <path d="M16.5 12.3A6.8 6.8 0 0 1 7.7 3.5a6.8 6.8 0 1 0 8.8 8.8z" /> }
+        @case ('monitor') { <rect x="2.5" y="3.8" width="15" height="10" rx="1.4" /><path d="M7 17h6M10 13.8V17" /> }
+        @case ('plus') { <path d="M10 4v12M4 10h12" /> }
+        @case ('logout') { <path d="M8 3.5H4.7a1.2 1.2 0 0 0-1.2 1.2v10.6a1.2 1.2 0 0 0 1.2 1.2H8" /><path d="M8.5 10h8m0 0l-3-3m3 3l-3 3" /> }
       }
     </svg>
   `,
+  host: {
+    '[style.width.px]': 'size',
+    '[style.height.px]': 'size',
+  },
   styles: [`
-    :host { display: inline-flex; width: 20px; height: 20px; flex-shrink: 0; }
+    :host { display: inline-flex; flex-shrink: 0; }
     svg { width: 100%; height: 100%; }
   `],
 })
 export class IconComponent {
   @Input({ required: true }) name!: IconName;
+  @Input() size = 20;
 }
