@@ -2,7 +2,7 @@ import { Component, Input } from '@angular/core';
 
 export type IconName =
   | 'select' | 'pan' | 'pen' | 'eraser-stroke' | 'eraser-area'
-  | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'sticky' | 'checklist'
+  | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'sticky' | 'checklist' | 'pomodoro'
   | 'undo' | 'redo' | 'zoom-in' | 'zoom-out' | 'fit-to-screen'
   | 'duplicate' | 'delete' | 'bring-to-front' | 'send-to-back'
   | 'download' | 'more'
@@ -35,6 +35,12 @@ export type IconName =
         @case ('checklist') {
           <path d="M8.2 5.3h8M8.2 10h8M8.2 14.7h8" />
           <path d="M3 5.3l1 1 1.8-1.8M3 10l1 1 1.8-1.8M3 14.7l1 1 1.8-1.8" />
+        }
+        @case ('pomodoro') {
+          <path d="M8 2.5h4" />
+          <path d="M10 4.3V2.5" />
+          <circle cx="10" cy="11" r="7" />
+          <path d="M10 7.3V11l3 2" />
         }
         @case ('undo') { <path d="M6.2 5.3L3 8.5l3.2 3.2" /><path d="M3 8.5h9a4 4 0 0 1 0 8h-2.2" /> }
         @case ('redo') { <path d="M13.8 5.3L17 8.5l-3.2 3.2" /><path d="M17 8.5H8a4 4 0 0 0 0 8h2.2" /> }

@@ -34,6 +34,7 @@ export function elementBBox(e: CanvasElement): BBox {
     case 'sticky':
     case 'checklist':
     case 'image':
+    case 'pomodoro':
       return { minX: e.x, minY: e.y, maxX: e.x + (e.w ?? 0), maxY: e.y + ('h' in e ? e.h : 20) };
     case 'text': {
       // Sem isso, o "hit box" de um texto de várias linhas fica preso a uma faixa fixa
@@ -145,6 +146,7 @@ export function hitTestElement(p: Point, e: CanvasElement): boolean {
     case 'sticky':
     case 'checklist':
     case 'image':
+    case 'pomodoro':
       return true;
   }
 }

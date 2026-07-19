@@ -1,4 +1,4 @@
-export type ToolType = 'pen' | 'eraser-stroke' | 'eraser-area' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'sticky' | 'checklist' | 'select' | 'pan';
+export type ToolType = 'pen' | 'eraser-stroke' | 'eraser-area' | 'rect' | 'ellipse' | 'line' | 'arrow' | 'text' | 'sticky' | 'checklist' | 'pomodoro' | 'select' | 'pan';
 
 export type PaperStyle = 'blank' | 'ruled' | 'grid';
 
@@ -111,7 +111,28 @@ export interface ImageElement extends ElementBase {
   src: string;
 }
 
-export type CanvasElement = StrokeElement | ShapeElement | ArrowElement | TextElement | StickyElement | ChecklistElement | ImageElement;
+export type PomodoroPhase = 'work' | 'break';
+
+export interface PomodoroElement extends ElementBase {
+  type: 'pomodoro';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  workDurationSec: number;
+  breakDurationSec: number;
+  phase: PomodoroPhase;
+  running: boolean;
+  /** ISO — só setado enquanto running=true; null quando pausado/parado. */
+  phaseEndAt: string | null;
+  /** Segundos restantes na fase atual — fonte da verdade quando pausado; quando
+   * running=true, o tempo exibido é derivado de phaseEndAt - agora. */
+  remainingSec: number;
+  /** Quantos ciclos de foco foram concluídos (contador simples, sem pausa longa). */
+  cyclesCompleted: number;
+}
+
+export type CanvasElement = StrokeElement | ShapeElement | ArrowElement | TextElement | StickyElement | ChecklistElement | ImageElement | PomodoroElement;
 
 /** Uma nota é um caderno com uma ou mais páginas — cada página tem seu próprio
  * conjunto independente de elementos. */
