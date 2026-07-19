@@ -1,11 +1,12 @@
 import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { ChecklistElement, ChecklistItem, NotePage, PaperStyle, StickyElement, TextElement } from '../../data/models';
+import { ChecklistElement, ChecklistItem, NotePage, PAGE_COLORS, PaperStyle, StickyElement, TextElement } from '../../data/models';
 import { NotesRepoService } from '../../data/notes-repo.service';
 import { SyncService } from '../../data/sync.service';
 import { ThemeService } from '../../core/theme.service';
 import { uuid } from '../../core/uuid';
+import { FocusOnInitDirective } from '../../shared/focus-on-init.directive';
 import { CanvasHostComponent } from './canvas-host';
 import { CanvasCornerControlsComponent } from './canvas-corner-controls';
 import { checklistHeight } from './engine/checklist-layout';
@@ -24,7 +25,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
   selector: 'app-editor-page',
   standalone: true,
   imports: [
-    RouterLink, FormsModule, CanvasHostComponent, ToolbarComponent,
+    RouterLink, FormsModule, FocusOnInitDirective, CanvasHostComponent, ToolbarComponent,
     PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
     TextOverlayComponent, ChecklistOverlayComponent,
   ],
@@ -40,15 +41,50 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       </header>
       <div class="pages-bar">
         @for (p of pages; track p.id; let i = $index) {
-          <button class="page-tab" [class.active]="i === currentPageIndex" (click)="switchPage(i)" [title]="'Página ' + (i + 1)">
-            {{ i + 1 }}
+          <div class="page-tab" [class.active]="i === currentPageIndex" (click)="switchPage(i)">
+            <span
+              class="page-color-dot"
+              [style.background]="p.color || 'transparent'"
+              (click)="toggleColorPicker(i, $event)"
+              title="Cor da página"
+            ></span>
+            @if (editingPageId === p.id) {
+              <input
+                class="page-title-input"
+                appFocusOnInit
+                [(ngModel)]="editingPageTitle"
+                (click)="$event.stopPropagation()"
+                (blur)="commitRenamePage(i)"
+                (keydown.enter)="$event.preventDefault(); commitRenamePage(i)"
+                (keydown.escape)="cancelRenamePage()"
+              />
+            } @else {
+              <span
+                class="page-label"
+                (dblclick)="$event.stopPropagation(); startRenamePage(p)"
+                [title]="'Página ' + (i + 1) + ' — duplo clique para renomear'"
+              >{{ p.title || ('Página ' + (i + 1)) }}</span>
+            }
             @if (pages.length > 1) {
               <span class="page-close" (click)="$event.stopPropagation(); removePage(i)" title="Excluir página">×</span>
             }
-          </button>
+          </div>
         }
         <button class="page-add" (click)="addPage()" title="Nova página">+ Página</button>
       </div>
+      @if (colorPickerPage) {
+        <div
+          class="color-picker"
+          [style.top.px]="colorPickerPos.top"
+          [style.left.px]="colorPickerPos.left"
+          (click)="$event.stopPropagation()"
+        >
+          @for (c of pageColors; track c) {
+            <button class="swatch" [class.active]="colorPickerPage.color === c" [style.background]="c" (click)="setPageColor(colorPickerIndex!, c)"></button>
+          }
+          <button class="swatch swatch-none" [class.active]="!colorPickerPage.color" (click)="setPageColor(colorPickerIndex!, undefined)" title="Sem cor">✕</button>
+        </div>
+      }
       <div class="canvas-area">
         <app-canvas-host
           #canvasHost
@@ -164,19 +200,39 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       overflow-x: auto;
     }
     .page-tab {
+      position: relative;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       border: 1px solid var(--border);
       background: var(--bg);
       border-radius: var(--radius-sm);
-      padding: 5px 8px 5px 12px;
+      padding: 5px 8px 5px 10px;
       font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
       flex-shrink: 0;
+      cursor: pointer;
     }
     .page-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .page-color-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .page-tab.active .page-color-dot { border-color: rgba(255,255,255,0.6); }
+    .page-label { white-space: nowrap; }
+    .page-title-input {
+      width: 90px;
+      border: none;
+      background: var(--surface);
+      color: inherit;
+      font: inherit;
+      outline: none;
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
     .page-close {
       display: inline-flex;
       align-items: center;
@@ -188,6 +244,32 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       line-height: 1;
     }
     .page-close:hover { opacity: 1; background: rgba(0,0,0,0.15); }
+    .color-picker {
+      position: fixed;
+      z-index: 12;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px;
+      box-shadow: var(--shadow-lg);
+    }
+    .swatch {
+      width: 22px; height: 22px;
+      padding: 0;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+    .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+    .swatch-none {
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
     .page-add {
       border: 1px dashed var(--border);
       background: none;
@@ -215,6 +297,11 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   title = '';
   pages: NotePage[] = [];
   currentPageIndex = 0;
+  editingPageId: string | null = null;
+  editingPageTitle = '';
+  colorPickerIndex: number | null = null;
+  colorPickerPos = { top: 0, left: 0 };
+  pageColors = PAGE_COLORS;
   editingTarget: TextElement | StickyElement | null = null;
   editingChecklistTarget: ChecklistElement | null = null;
   private editingOriginalContent = '';
@@ -224,6 +311,10 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   overlayY = 0;
   overlayW = 200;
   overlayH = 0;
+
+  get colorPickerPage(): NotePage | null {
+    return this.colorPickerIndex !== null ? this.pages[this.colorPickerIndex] ?? null : null;
+  }
 
   private saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -352,6 +443,49 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     if (this.currentPageIndex >= this.pages.length) this.currentPageIndex = this.pages.length - 1;
     this.store.loadElements(this.pages[this.currentPageIndex].elements);
     this.flushSave();
+  }
+
+  startRenamePage(p: NotePage): void {
+    this.editingPageId = p.id;
+    this.editingPageTitle = p.title ?? '';
+  }
+
+  commitRenamePage(index: number): void {
+    const p = this.pages[index];
+    if (!p || this.editingPageId !== p.id) return;
+    this.editingPageId = null;
+    const title = this.editingPageTitle.trim();
+    if (title === (p.title ?? '')) return;
+    this.pages[index] = { ...p, title: title || undefined };
+    this.flushSave();
+  }
+
+  cancelRenamePage(): void {
+    this.editingPageId = null;
+  }
+
+  toggleColorPicker(index: number, ev: MouseEvent): void {
+    ev.stopPropagation();
+    if (this.colorPickerIndex === index) {
+      this.colorPickerIndex = null;
+      return;
+    }
+    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    this.colorPickerPos = { top: rect.bottom + 6, left: rect.left };
+    this.colorPickerIndex = index;
+  }
+
+  setPageColor(index: number, color: string | undefined): void {
+    const p = this.pages[index];
+    if (!p) return;
+    this.pages[index] = { ...p, color };
+    this.colorPickerIndex = null;
+    this.flushSave();
+  }
+
+  @HostListener('document:click')
+  closeColorPicker(): void {
+    this.colorPickerIndex = null;
   }
 
   onExportPng(transparent: boolean): void {

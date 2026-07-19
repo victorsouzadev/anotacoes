@@ -148,6 +148,8 @@ export type CanvasElement = StrokeElement | ShapeElement | ArrowElement | TextEl
  * conjunto independente de elementos. */
 export interface NotePage {
   id: string;
+  title?: string;
+  color?: string;
   elements: CanvasElement[];
 }
 
@@ -204,3 +206,4 @@ export interface FolderRecord {
 
 export const STICKY_COLORS = ['#FAC775', '#B7E4A0', '#F6A6C1', '#A8D8F0', '#E0C3F0'];
 export const PEN_COLORS = ['#1d1d1d', '#d85a30', '#2f6fed', '#2ea44f', '#8b5cf6'];
+export const PAGE_COLORS = ['#FAC775', '#B7E4A0', '#F6A6C1', '#A8D8F0', '#E0C3F0'];
