@@ -6,6 +6,10 @@
 /out-tsc
 /bazel-out
 
+# APK do app Android, colocado aqui pelo CI (job build-mobile) antes do build —
+# nunca comitado, ver .github/workflows/deploy.yml e mobile/README.md.
+/public/downloads/
+
 # Node
 /node_modules
 npm-debug.log

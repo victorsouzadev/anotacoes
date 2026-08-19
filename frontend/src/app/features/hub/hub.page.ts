@@ -9,12 +9,23 @@ interface ToolCard {
   icon: IconName;
   title: string;
   description: string;
+  downloadUrl?: string;
+  downloadFileName?: string;
+  downloadLabel?: string;
 }
 
 const TOOLS: ToolCard[] = [
   { path: '/notes', icon: 'pen', title: 'Notas', description: 'Notas manuscritas, texto, desenho e checklists num canvas por página.' },
   { path: '/financas', icon: 'wallet', title: 'Finanças', description: 'Lançamentos financeiros a partir de texto livre, com dashboard de receitas e despesas.' },
-  { path: '/tasks', icon: 'checklist', title: 'Tarefas', description: 'Tarefas com subtarefas, categorias, prioridade, recorrência, pomodoro e estatísticas — sincronizadas com o app Android.' },
+  {
+    path: '/tasks',
+    icon: 'checklist',
+    title: 'Tarefas',
+    description: 'Tarefas com subtarefas, categorias, prioridade, recorrência, pomodoro e estatísticas — sincronizadas com o app Android.',
+    downloadUrl: '/downloads/organizador.apk',
+    downloadFileName: 'organizador.apk',
+    downloadLabel: 'Baixar app Android (.apk)',
+  },
 ];
 
 @Component({
@@ -35,11 +46,18 @@ const TOOLS: ToolCard[] = [
       <main class="content">
         <div class="grid">
           @for (tool of tools; track tool.path) {
-            <a class="tool-card" [routerLink]="tool.path">
-              <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
-              <span class="tool-title">{{ tool.title }}</span>
-              <span class="tool-description">{{ tool.description }}</span>
-            </a>
+            <div class="tool-card-wrapper">
+              <a class="tool-card" [routerLink]="tool.path">
+                <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
+                <span class="tool-title">{{ tool.title }}</span>
+                <span class="tool-description">{{ tool.description }}</span>
+              </a>
+              @if (tool.downloadUrl) {
+                <a class="tool-download" [href]="tool.downloadUrl" [attr.download]="tool.downloadFileName">
+                  <app-icon name="download" [size]="13" /> {{ tool.downloadLabel }}
+                </a>
+              }
+            </div>
           }
         </div>
       </main>
@@ -79,7 +97,8 @@ const TOOLS: ToolCard[] = [
     .logout:hover { color: var(--danger); }
 
     .content { max-width: 900px; margin: 0 auto; padding: 48px 28px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; align-items: start; }
+    .tool-card-wrapper { display: flex; flex-direction: column; gap: 8px; }
     .tool-card {
       display: flex;
       flex-direction: column;
@@ -101,6 +120,20 @@ const TOOLS: ToolCard[] = [
     }
     .tool-title { font-size: 16px; font-weight: 700; }
     .tool-description { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+    .tool-download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .tool-download:hover { border-color: var(--accent); color: var(--accent); }
 
     @media (max-width: 760px) {
       .top-bar { padding: 12px 16px; }

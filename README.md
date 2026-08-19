@@ -122,6 +122,11 @@ mesmos dados.
   como tombstone de exclusão. Categorias não têm tombstone — excluir uma categoria
   enquanto outro dispositivo está offline faz ela reaparecer nele na sincronização
   seguinte; limitação aceita dado o uso pessoal da ferramenta.
+- **Download do APK**: o card "Tarefas" na tela inicial do hub tem um link
+  "Baixar app Android (.apk)" para `/downloads/organizador.apk`. O arquivo não
+  fica no git — o CI builda o APK a cada deploy (`.github/workflows/deploy.yml`,
+  job `build-mobile`) e o coloca em `frontend/public/downloads/` antes do build
+  do Angular, então ele acompanha automaticamente cada push em `main`.
 
 ## Modelo de dados (visão geral)
 
