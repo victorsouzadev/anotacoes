@@ -29,36 +29,38 @@
         <option value="created">Ordenar por criação</option>
       </select>
 
-      <button class="icon-btn" [class.active]="selectionMode" (click)="toggleSelectionMode()" title="Selecionar várias">
-        <app-icon name="check" [size]="15" />
-      </button>
-      <button class="icon-btn" (click)="exportCsv()" title="Exportar CSV"><app-icon name="download" [size]="15" /></button>
-      <button class="icon-btn" (click)="print()" title="Imprimir"><app-icon name="list-view" [size]="15" /></button>
-
-      @if (notifications.supported && notifications.permission() !== 'granted') {
-        <button class="icon-btn" (click)="notifications.requestPermission()" title="Ativar notificações de prazo">
-          <app-icon name="calendar" [size]="15" />
+      <div class="icon-actions">
+        <button class="icon-btn" [class.active]="selectionMode" (click)="toggleSelectionMode()" title="Selecionar várias">
+          <app-icon name="check" [size]="15" />
         </button>
-      }
+        <button class="icon-btn" (click)="exportCsv()" title="Exportar CSV"><app-icon name="download" [size]="15" /></button>
+        <button class="icon-btn" (click)="print()" title="Imprimir"><app-icon name="list-view" [size]="15" /></button>
 
-      <div class="templates-menu">
-        <button class="icon-btn" (click)="showTemplates = !showTemplates" title="Modelos de tarefa">
-          <app-icon name="duplicate" [size]="15" />
-        </button>
-        @if (showTemplates) {
-          <div class="templates-panel" (click)="$event.stopPropagation()">
-            @if (templatesService.templates().length === 0) {
-              <p class="templates-empty">Nenhum modelo salvo. Crie uma tarefa e use "Salvar como modelo".</p>
-            } @else {
-              @for (t of templatesService.templates(); track t.id) {
-                <div class="template-row">
-                  <button type="button" class="template-name" (click)="openCreateFromTemplate(t)">{{ t.name }}</button>
-                  <button type="button" class="remove" (click)="removeTemplate(t, $event)">✕</button>
-                </div>
-              }
-            }
-          </div>
+        @if (notifications.supported && notifications.permission() !== 'granted') {
+          <button class="icon-btn" (click)="notifications.requestPermission()" title="Ativar notificações de prazo">
+            <app-icon name="calendar" [size]="15" />
+          </button>
         }
+
+        <div class="templates-menu">
+          <button class="icon-btn" (click)="showTemplates = !showTemplates" title="Modelos de tarefa">
+            <app-icon name="duplicate" [size]="15" />
+          </button>
+          @if (showTemplates) {
+            <div class="templates-panel" (click)="$event.stopPropagation()">
+              @if (templatesService.templates().length === 0) {
+                <p class="templates-empty">Nenhum modelo salvo. Crie uma tarefa e use "Salvar como modelo".</p>
+              } @else {
+                @for (t of templatesService.templates(); track t.id) {
+                  <div class="template-row">
+                    <button type="button" class="template-name" (click)="openCreateFromTemplate(t)">{{ t.name }}</button>
+                    <button type="button" class="remove" (click)="removeTemplate(t, $event)">✕</button>
+                  </div>
+                }
+              }
+            </div>
+          }
+        </div>
       </div>
 
       <button class="new-task" (click)="openCreate()"><app-icon name="plus" [size]="16" /> Nova tarefa</button>

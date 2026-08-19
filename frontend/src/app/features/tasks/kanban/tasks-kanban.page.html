@@ -49,6 +49,14 @@
                       <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
                     </div>
                   </div>
+                  <select class="move-select" (click)="$event.stopPropagation()" (change)="onMoveSelect(task, $event)" title="Mover pra outra coluna (útil em telas de toque, onde arrastar não funciona)">
+                    <option value="" selected disabled>Mover…</option>
+                    @for (target of columns(); track columnKey(target.id)) {
+                      @if (columnKey(target.id) !== columnKey(col.id)) {
+                        <option [value]="columnKey(target.id)">{{ target.name }}</option>
+                      }
+                    }
+                  </select>
                 </div>
               } @empty {
                 <p class="empty-column">Nada por aqui</p>

@@ -337,3 +337,11 @@
 .actions .primary:hover {
   background: var(--accent-dark);
 }
+
+@media (max-width: 480px) {
+  .overlay { padding: 0; align-items: stretch; }
+  .modal { max-width: none; min-height: 100dvh; border-radius: 0; border: none; padding: 18px 16px; }
+  .actions { flex-wrap: wrap; }
+  .actions button { flex: 1; justify-content: center; }
+  .attachment-image img { max-height: 160px; }
+}
