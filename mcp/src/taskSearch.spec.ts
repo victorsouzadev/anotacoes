@@ -10,6 +10,7 @@ function task(overrides: Partial<TaskItem> = {}): TaskItem {
     dueDate: null,
     priority: 'Medium',
     categoryId: null,
+    kanbanLaneId: null,
     isRecurring: false,
     recurrenceRule: null,
     isCompleted: false,

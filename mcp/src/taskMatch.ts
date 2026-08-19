@@ -1,4 +1,4 @@
-import type { TaskCategory, TaskItem } from './tasksApi.js';
+import type { KanbanLane, TaskCategory, TaskItem } from './tasksApi.js';
 
 export interface TaskMatchResult {
   task: TaskItem | null;
@@ -37,4 +37,9 @@ export function findTaskMatch(
 export function findCategoryByName(categories: TaskCategory[], name: string): TaskCategory | undefined {
   const trimmed = name.trim().toLowerCase();
   return categories.find((c) => c.name.trim().toLowerCase() === trimmed);
+}
+
+export function findLaneByName(lanes: KanbanLane[], name: string): KanbanLane | undefined {
+  const trimmed = name.trim().toLowerCase();
+  return lanes.find((l) => l.name.trim().toLowerCase() === trimmed);
 }

@@ -5,12 +5,12 @@ import { z } from 'zod';
 import * as api from './tasksApi.js';
 import type { TaskItem } from './tasksApi.js';
 import { normalizePriority } from './priority.js';
-import { findCategoryByName, findTaskMatch } from './taskMatch.js';
+import { findCategoryByName, findLaneByName, findTaskMatch } from './taskMatch.js';
 import { searchTasks } from './taskSearch.js';
 
 const server = new McpServer({
   name: 'anotacoes-tasks',
-  version: '2.0.0',
+  version: '2.1.0',
 });
 
 function text(value: unknown) {
@@ -42,6 +42,7 @@ function summarize(t: TaskItem) {
     dueDate: t.dueDate,
     priority: t.priority,
     categoryId: t.categoryId,
+    kanbanLaneId: t.kanbanLaneId,
     isCompleted: t.isCompleted,
     isRecurring: t.isRecurring,
     deletedAt: t.deletedAt,
@@ -55,6 +56,16 @@ async function resolveCategoryId(categoryName: string | undefined): Promise<stri
   const existing = findCategoryByName(categories, trimmed);
   if (existing) return existing.id;
   const created = await api.createCategory(trimmed);
+  return created.id;
+}
+
+async function resolveLaneId(laneName: string | undefined): Promise<string | null> {
+  if (!laneName?.trim()) return null;
+  const trimmed = laneName.trim();
+  const lanes = await api.listKanbanLanes();
+  const existing = findLaneByName(lanes, trimmed);
+  if (existing) return existing.id;
+  const created = await api.createKanbanLane(trimmed);
   return created.id;
 }
 
@@ -192,6 +203,74 @@ server.tool(
 );
 
 server.tool(
+  'list_kanban_lanes',
+  'Lista as raias (colunas) do quadro Kanban do usuário, em ordem. Raia é independente de categoria — é a organização própria do board Kanban.',
+  {},
+  safe(async () => text(await api.listKanbanLanes())),
+);
+
+server.tool(
+  'add_kanban_lane',
+  'Cria uma nova raia (coluna) no Kanban, no fim da ordem atual.',
+  {
+    name: z.string().min(1).max(100).describe('Nome da raia (ex.: "A fazer", "Em andamento", "Feito").'),
+  },
+  safe(async ({ name }) => {
+    const lane = await api.createKanbanLane(name);
+    return text({ created: true, lane });
+  }),
+);
+
+server.tool(
+  'rename_kanban_lane',
+  'Renomeia uma raia do Kanban existente.',
+  {
+    name: z.string().min(1).max(100).describe('Nome atual da raia.'),
+    newName: z.string().min(1).max(100).describe('Novo nome.'),
+  },
+  safe(async ({ name, newName }) => {
+    const lanes = await api.listKanbanLanes();
+    const lane = findLaneByName(lanes, name);
+    if (!lane) return text({ renamed: false, error: `Raia "${name}" não encontrada.` });
+    const updated = await api.renameKanbanLane(lane, newName);
+    return text({ renamed: true, lane: updated });
+  }),
+);
+
+server.tool(
+  'delete_kanban_lane',
+  'Apaga uma raia do Kanban. As tarefas que estavam nela ficam sem raia (não são apagadas).',
+  {
+    name: z.string().min(1).max(100).describe('Nome da raia a apagar.'),
+  },
+  safe(async ({ name }) => {
+    const lanes = await api.listKanbanLanes();
+    const lane = findLaneByName(lanes, name);
+    if (!lane) return text({ deleted: false, error: `Raia "${name}" não encontrada.` });
+    await api.deleteKanbanLane(lane.id);
+    return text({ deleted: true, name });
+  }),
+);
+
+server.tool(
+  'move_task_to_lane',
+  'Move uma tarefa pra uma raia do Kanban (criada automaticamente se não existir), pelo id ou por um trecho do título.',
+  {
+    idOrTitle: z.string().min(1).describe('Id exato da tarefa, ou trecho do título para buscar.'),
+    lane: z.string().max(100).optional().describe('Nome da raia de destino. Se omitido, a tarefa fica sem raia.'),
+  },
+  safe(async ({ idOrTitle, lane }) => {
+    const all = await api.listTasks();
+    const match = findTaskMatch(all, idOrTitle, (t) => !t.deletedAt);
+    if (!match.task) return text({ moved: false, error: match.error, candidates: match.candidates });
+
+    const kanbanLaneId = await resolveLaneId(lane);
+    const updated = await api.updateTask(match.task, { kanbanLaneId });
+    return text({ moved: true, task: summarize(updated) });
+  }),
+);
+
+server.tool(
   'complete_task',
   'Marca uma tarefa como concluída, pelo id ou por um trecho do título (busca aproximada entre as pendentes).',
   {
@@ -237,8 +316,10 @@ server.tool(
     clearDueDate: z.boolean().optional().describe('Remove o prazo atual (ignora `dueDate` se true).'),
     priority: z.string().optional().describe('Nova prioridade: low/medium/high ou baixa/média/alta.'),
     category: z.string().max(100).optional().describe('Novo nome de categoria (criada se não existir).'),
+    lane: z.string().max(100).optional().describe('Nome da raia do Kanban (criada se não existir). Raia é independente de categoria.'),
+    clearLane: z.boolean().optional().describe('Remove a tarefa de qualquer raia do Kanban (ignora `lane` se true).'),
   },
-  safe(async ({ idOrTitle, title, description, dueDate, clearDueDate, priority, category }) => {
+  safe(async ({ idOrTitle, title, description, dueDate, clearDueDate, priority, category, lane, clearLane }) => {
     const all = await api.listTasks();
     const match = findTaskMatch(all, idOrTitle, (t) => !t.deletedAt);
     if (!match.task) return text({ updated: false, error: match.error, candidates: match.candidates });
@@ -250,6 +331,8 @@ server.tool(
     else if (dueDate !== undefined) changes.dueDate = dueDate;
     if (priority !== undefined) changes.priority = normalizePriority(priority);
     if (category !== undefined) changes.categoryId = await resolveCategoryId(category);
+    if (clearLane) changes.kanbanLaneId = null;
+    else if (lane !== undefined) changes.kanbanLaneId = await resolveLaneId(lane);
 
     const updated = await api.updateTask(match.task, changes);
     return text({ updated: true, task: summarize(updated) });
