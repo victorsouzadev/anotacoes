@@ -65,6 +65,11 @@ const CATEGORY_FALLBACK_COLOR = '#6b7280';
     .chart-card h2 { margin: 0 0 12px; font-size: 1.05rem; }
     .chart-card canvas { max-height: 300px; }
     .empty { color: var(--text-muted); font-size: 0.9rem; }
+
+    @media (max-width: 480px) {
+      .content { padding: 16px; }
+      .cards { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+    }
   `],
 })
 export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDestroy {

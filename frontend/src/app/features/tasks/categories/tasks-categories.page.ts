@@ -102,6 +102,13 @@ import { TasksStoreService } from '../services/tasks-store.service';
     .actions button { border: none; background: none; padding: 6px; border-radius: 6px; color: var(--text-muted); display: flex; }
     .actions button:hover { background: var(--bg); color: var(--text); }
     .actions button.danger:hover { color: var(--danger); }
+
+    @media (max-width: 480px) {
+      .content { padding: 16px; }
+      .row { flex-wrap: wrap; }
+      .count { margin-left: 0; flex-basis: 100%; order: 3; }
+      .actions { margin-left: auto; }
+    }
   `],
 })
 export class TasksCategoriesPageComponent implements OnInit {

@@ -113,16 +113,36 @@ export class TasksKanbanPageComponent implements OnInit {
     const targetColumnIds = this.tasksFor(columnId).map((t) => t.id);
     const reordered = reorderIds(targetColumnIds, id, targetTaskId);
 
-    const sameColumn = this.columnOf(task) === columnId;
-    if (!sameColumn) {
-      if (this.groupBy === 'status') {
-        await this.store.setCompleted(task, columnId === STATUS_DONE);
-      } else {
-        await this.store.updateTask(task, { categoryId: columnId });
-      }
-    }
+    await this.assignColumn(task, columnId);
     await this.store.reorder(reordered);
     this.cdr.markForCheck();
+  }
+
+  private async assignColumn(task: TaskItem, columnId: string | null): Promise<void> {
+    if (this.columnOf(task) === columnId) return;
+    if (this.groupBy === 'status') {
+      await this.store.setCompleted(task, columnId === STATUS_DONE);
+    } else {
+      await this.store.updateTask(task, { categoryId: columnId });
+    }
+  }
+
+  // Fallback pra quem não consegue arrastar (touch não dispara drag-and-drop HTML5) —
+  // o select por card move a tarefa direto pra outra coluna, indo pro fim dela.
+  async onMoveSelect(task: TaskItem, event: Event): Promise<void> {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value;
+    select.value = '';
+    if (!value) return;
+    const columnId = value === '__none__' ? null : value;
+    await this.assignColumn(task, columnId);
+    const targetColumnIds = [...this.tasksFor(columnId).map((t) => t.id), task.id];
+    await this.store.reorder(targetColumnIds);
+    this.cdr.markForCheck();
+  }
+
+  columnKey(id: string | null): string {
+    return id ?? '__none__';
   }
 
   isOverdue(task: TaskItem): boolean {
