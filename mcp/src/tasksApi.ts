@@ -10,6 +10,14 @@ export interface TaskCategory {
   updatedAt: string;
 }
 
+export interface KanbanLane {
+  id: string;
+  name: string;
+  colorHex: string;
+  position: number;
+  updatedAt: string;
+}
+
 export interface TaskItem {
   id: string;
   title: string;
@@ -17,6 +25,7 @@ export interface TaskItem {
   dueDate: string | null;
   priority: Priority;
   categoryId: string | null;
+  kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
   isCompleted: boolean;
@@ -84,6 +93,48 @@ export async function deleteCategory(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) {
     const body = await res.text().catch(() => '');
     throw new Error(`Apagar categoria falhou (HTTP ${res.status}): ${body}`);
+  }
+}
+
+export async function listKanbanLanes(): Promise<KanbanLane[]> {
+  const res = await authedFetch('/api/tasks/kanban-lanes');
+  return asJson<KanbanLane[]>(res, 'Listar raias');
+}
+
+export async function createKanbanLane(name: string): Promise<KanbanLane> {
+  const id = randomUUID();
+  const lanes = await listKanbanLanes();
+  const position = Math.max(-1, ...lanes.map((l) => l.position)) + 1;
+  const res = await authedFetch(`/api/tasks/kanban-lanes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name,
+      colorHex: '#6b7280',
+      position,
+      updatedAt: new Date().toISOString(),
+    }),
+  });
+  return asJson<KanbanLane>(res, 'Criar raia');
+}
+
+export async function renameKanbanLane(lane: KanbanLane, name: string): Promise<KanbanLane> {
+  const res = await authedFetch(`/api/tasks/kanban-lanes/${lane.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name,
+      colorHex: lane.colorHex,
+      position: lane.position,
+      updatedAt: new Date().toISOString(),
+    }),
+  });
+  return asJson<KanbanLane>(res, 'Renomear raia');
+}
+
+export async function deleteKanbanLane(id: string): Promise<void> {
+  const res = await authedFetch(`/api/tasks/kanban-lanes/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Apagar raia falhou (HTTP ${res.status}): ${body}`);
   }
 }
 

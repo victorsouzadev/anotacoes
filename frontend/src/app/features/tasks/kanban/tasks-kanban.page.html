@@ -4,28 +4,80 @@
   <main class="content">
     <div class="kanban-toolbar">
       <div class="group-tabs">
-        <button [class.active]="groupBy === 'category'" (click)="groupBy = 'category'">Por categoria</button>
+        <button [class.active]="groupBy === 'lanes'" (click)="groupBy = 'lanes'">Raias</button>
         <button [class.active]="groupBy === 'status'" (click)="groupBy = 'status'">Por status</button>
       </div>
+      @if (groupBy === 'lanes') {
+        <button class="new-lane-btn" (click)="showNewLane = !showNewLane">
+          <app-icon name="plus" [size]="14" /> Nova raia
+        </button>
+      }
     </div>
+
+    @if (showNewLane) {
+      <div class="new-lane-form">
+        <input [(ngModel)]="newLaneName" placeholder="Nome da raia (ex.: Em andamento)" (keydown.enter)="addLane()" autofocus />
+        <div class="color-picker">
+          @for (color of colors; track color) {
+            <button
+              type="button"
+              class="color-dot"
+              [class.selected]="newLaneColor === color"
+              [style.background]="color"
+              (click)="newLaneColor = color"
+            ></button>
+          }
+        </div>
+        <button class="primary" (click)="addLane()">Criar</button>
+        <button class="secondary" (click)="showNewLane = false">Cancelar</button>
+      </div>
+    }
 
     @if (store.loading()) {
       <p class="empty">Carregando…</p>
+    } @else if (groupBy === 'lanes' && store.kanbanLanes().length === 0) {
+      <p class="empty">Nenhuma raia criada ainda. Use "Nova raia" pra montar seu fluxo (ex.: A fazer / Em andamento / Feito).</p>
     } @else {
       <div class="board">
-        @for (col of columns(); track col.id ?? '__none__') {
+        @for (col of columns(); track col.id) {
           <div
             class="column"
-            [class.drag-over]="dragOverColumn === (col.id ?? '__none__') && !dragOverTaskId"
+            [class.drag-over]="dragOverColumn === col.id && !dragOverTaskId"
+            [class.lane-drag-over]="dragOverLaneId === col.id"
             (dragover)="onDragOverColumn(col.id, $event)"
             (drop)="onDropColumn(col.id, $event)"
           >
-            <div class="column-header">
+            <div
+              class="column-header"
+              [class.editable]="col.lane"
+              [draggable]="!!col.lane"
+              (dragstart)="col.lane && onLaneDragStart(col.lane, $event)"
+              (dragend)="onLaneDragEnd()"
+              (dragover)="col.lane && onLaneDragOver(col.lane, $event)"
+              (drop)="col.lane && onLaneDrop(col.lane, $event)"
+            >
               @if (col.colorHex) {
                 <span class="dot" [style.background]="col.colorHex"></span>
               }
-              <span class="name">{{ col.name }}</span>
+              @if (col.lane && editingLaneId === col.lane.id) {
+                <input
+                  class="lane-name-input"
+                  [(ngModel)]="editingLaneName"
+                  (click)="$event.stopPropagation()"
+                  (keydown.enter)="commitEditLane(col.lane)"
+                  (keydown.escape)="cancelEditLane()"
+                  (blur)="commitEditLane(col.lane)"
+                />
+              } @else {
+                <span class="name">{{ col.name }}</span>
+              }
               <span class="count">{{ tasksFor(col.id).length }}</span>
+              @if (col.lane) {
+                <div class="lane-actions" (click)="$event.stopPropagation()">
+                  <button (click)="startEditLane(col.lane, $event)" title="Renomear"><app-icon name="edit" [size]="12" /></button>
+                  <button (click)="removeLane(col.lane, $event)" title="Apagar raia"><app-icon name="delete" [size]="12" /></button>
+                </div>
+              }
             </div>
 
             <div class="cards">
@@ -51,9 +103,9 @@
                   </div>
                   <select class="move-select" (click)="$event.stopPropagation()" (change)="onMoveSelect(task, $event)" title="Mover pra outra coluna (útil em telas de toque, onde arrastar não funciona)">
                     <option value="" selected disabled>Mover…</option>
-                    @for (target of columns(); track columnKey(target.id)) {
-                      @if (columnKey(target.id) !== columnKey(col.id)) {
-                        <option [value]="columnKey(target.id)">{{ target.name }}</option>
+                    @for (target of columns(); track target.id) {
+                      @if (target.id !== col.id) {
+                        <option [value]="target.id">{{ target.name }}</option>
                       }
                     }
                   </select>

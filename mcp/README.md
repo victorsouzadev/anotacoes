@@ -13,7 +13,7 @@ já usam, então uma tarefa criada por aqui aparece em ambos.
 | `list_tasks` | Lista tarefas do usuário (por padrão só as pendentes). |
 | `search_tasks` | Busca tarefas por texto e/ou filtros de categoria, prioridade e prazo (`dueBefore`/`dueAfter`). |
 | `get_task` | Detalhe completo de uma tarefa — inclui subtarefas e comentários. |
-| `update_task` | Edita título, descrição, prazo, prioridade e/ou categoria de uma tarefa existente. |
+| `update_task` | Edita título, descrição, prazo, prioridade, categoria e/ou raia do Kanban de uma tarefa existente. |
 | `complete_task` | Marca uma tarefa como concluída, pelo id ou por um trecho do título. |
 | `reopen_task` | Desfaz `complete_task` — reabre uma tarefa concluída. |
 | `delete_task` | Move uma tarefa pra lixeira (reversível). |
@@ -21,8 +21,17 @@ já usam, então uma tarefa criada por aqui aparece em ambos.
 | `list_categories` | Lista as categorias existentes. |
 | `rename_category` | Renomeia uma categoria. |
 | `delete_category` | Apaga uma categoria (as tarefas nela ficam sem categoria, não são apagadas). |
+| `list_kanban_lanes` | Lista as raias (colunas) do Kanban do usuário, em ordem. |
+| `add_kanban_lane` | Cria uma raia (coluna) no Kanban, no fim da ordem atual. |
+| `rename_kanban_lane` | Renomeia uma raia do Kanban. |
+| `delete_kanban_lane` | Apaga uma raia (as tarefas nela ficam sem raia, não são apagadas). |
+| `move_task_to_lane` | Move uma tarefa pra uma raia do Kanban (criada automaticamente se não existir). |
 | `add_comment` | Adiciona um comentário a uma tarefa. |
 | `list_comments` | Lista os comentários de uma tarefa. |
+
+Raia do Kanban é **independente de categoria** — é a organização própria do quadro Kanban da
+ferramenta Tarefas (colunas como "A fazer"/"Em andamento"/"Feito", ou qualquer fluxo que o usuário
+tenha montado lá), não tem relação com as categorias usadas na lista e nos filtros.
 
 Todas as ferramentas que recebem `idOrTitle` aceitam tanto o id exato quanto um trecho do título
 (busca case-insensitive); se mais de uma tarefa corresponder, a ferramenta retorna erro com a lista

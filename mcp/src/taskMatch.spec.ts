@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TaskCategory, TaskItem } from './tasksApi.js';
-import { findCategoryByName, findTaskMatch } from './taskMatch.js';
+import type { KanbanLane, TaskCategory, TaskItem } from './tasksApi.js';
+import { findCategoryByName, findLaneByName, findTaskMatch } from './taskMatch.js';
 
 function task(overrides: Partial<TaskItem> = {}): TaskItem {
   return {
@@ -10,6 +10,7 @@ function task(overrides: Partial<TaskItem> = {}): TaskItem {
     dueDate: null,
     priority: 'Medium',
     categoryId: null,
+    kanbanLaneId: null,
     isRecurring: false,
     recurrenceRule: null,
     isCompleted: false,
@@ -79,5 +80,19 @@ describe('findCategoryByName', () => {
 
   it('retorna undefined se não existir', () => {
     expect(findCategoryByName(categories, 'Pessoal')).toBeUndefined();
+  });
+});
+
+describe('findLaneByName', () => {
+  const lanes: KanbanLane[] = [
+    { id: 'l1', name: 'Em andamento', colorHex: '#000', position: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
+  ];
+
+  it('encontra por nome exato, ignorando maiúsculas/minúsculas e espaços', () => {
+    expect(findLaneByName(lanes, '  EM ANDAMENTO  ')?.id).toBe('l1');
+  });
+
+  it('retorna undefined se não existir', () => {
+    expect(findLaneByName(lanes, 'Feito')).toBeUndefined();
   });
 });

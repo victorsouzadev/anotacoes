@@ -54,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
+    public DbSet<KanbanLane> KanbanLanes => Set<KanbanLane>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -122,6 +123,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        b.Entity<KanbanLane>(e =>
+        {
+            e.ToTable("tasks_kanban_lanes");
+            e.Property(l => l.Name).IsRequired().HasMaxLength(100);
+            e.Property(l => l.ColorHex).IsRequired().HasMaxLength(20);
+            e.HasIndex(l => new { l.UserId, l.Position });
+            e.HasOne<User>().WithMany().HasForeignKey(l => l.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<TaskItem>(e =>
         {
             e.ToTable("tasks_items");
@@ -133,6 +143,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(t => new { t.UserId, t.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<TaskCategory>().WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<KanbanLane>().WithMany().HasForeignKey(t => t.KanbanLaneId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<TaskComment>(e =>

@@ -16,7 +16,91 @@
 
 .kanban-toolbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 16px;
+}
+
+.new-lane-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.new-lane-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.new-lane-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.new-lane-form input {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.new-lane-form .color-picker {
+  display: flex;
+  gap: 5px;
+}
+
+.new-lane-form .color-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.new-lane-form .color-dot.selected {
+  border-color: var(--text);
+}
+
+.new-lane-form .primary {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.new-lane-form .primary:hover {
+  background: var(--accent-dark);
+}
+
+.new-lane-form .secondary {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .group-tabs {
@@ -66,6 +150,11 @@
   background: var(--accent-soft);
 }
 
+.column.lane-drag-over {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
 .column-header {
   display: flex;
   align-items: center;
@@ -73,6 +162,51 @@
   padding: 12px 12px 8px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.column-header.editable {
+  cursor: grab;
+}
+
+.column-header.editable:active {
+  cursor: grabbing;
+}
+
+.lane-name-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lane-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.column-header:hover .lane-actions {
+  opacity: 1;
+}
+
+.lane-actions button {
+  border: none;
+  background: none;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  display: flex;
+}
+
+.lane-actions button:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 
 .dot {

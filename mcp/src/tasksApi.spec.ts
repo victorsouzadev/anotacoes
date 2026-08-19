@@ -41,6 +41,7 @@ describe('tasksApi', () => {
       dueDate: null,
       priority: 'Medium',
       categoryId: null,
+      kanbanLaneId: null,
       isRecurring: false,
       recurrenceRule: null,
       isCompleted: false,
@@ -108,5 +109,46 @@ describe('tasksApi', () => {
     const api = await import('./tasksApi.js');
 
     await expect(api.deleteTaskForever('x')).resolves.toBeUndefined();
+  });
+
+  it('createKanbanLane coloca a nova raia no fim da posição atual', async () => {
+    authedFetch.mockImplementation(async (path: string) => {
+      if (path === '/api/tasks/kanban-lanes') {
+        return jsonResponse([
+          { id: 'a', name: 'A fazer', colorHex: '#000', position: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
+          { id: 'b', name: 'Feito', colorHex: '#000', position: 1, updatedAt: '2026-01-01T00:00:00.000Z' },
+        ]);
+      }
+      return jsonResponse({ id: 'c', name: 'Em andamento', colorHex: '#6b7280', position: 2, updatedAt: '2026-01-01T00:00:00.000Z' });
+    });
+    const api = await import('./tasksApi.js');
+
+    await api.createKanbanLane('Em andamento');
+
+    const putCall = authedFetch.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+    const body = JSON.parse((putCall![1] as RequestInit).body as string);
+    expect(body.name).toBe('Em andamento');
+    expect(body.position).toBe(2);
+  });
+
+  it('createKanbanLane usa posição 0 quando não há raias ainda', async () => {
+    authedFetch.mockImplementation(async (path: string) => {
+      if (path === '/api/tasks/kanban-lanes') return jsonResponse([]);
+      return jsonResponse({ id: 'a', name: 'A fazer', colorHex: '#6b7280', position: 0, updatedAt: '2026-01-01T00:00:00.000Z' });
+    });
+    const api = await import('./tasksApi.js');
+
+    await api.createKanbanLane('A fazer');
+
+    const putCall = authedFetch.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT');
+    const body = JSON.parse((putCall![1] as RequestInit).body as string);
+    expect(body.position).toBe(0);
+  });
+
+  it('deleteKanbanLane não lança erro em 404 (idempotente)', async () => {
+    authedFetch.mockResolvedValue(new Response(null, { status: 404 }));
+    const api = await import('./tasksApi.js');
+
+    await expect(api.deleteKanbanLane('x')).resolves.toBeUndefined();
   });
 });
