@@ -24,6 +24,16 @@ class OrganizadorApplication : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             container.taskRepository.purgeOldTrash()
         }
+
+        // Sincroniza com o hub ao abrir o app, se já houver login — sem isso, tarefas criadas em
+        // outro dispositivo só apareceriam depois de um toque manual em "Sincronizar agora" nas
+        // Configurações. Silencioso: falha de rede aqui não deve incomodar quem só quer usar o
+        // app offline.
+        if (container.authRepository.isLoggedIn.value) {
+            CoroutineScope(Dispatchers.IO).launch {
+                container.tasksSyncRepository.sync()
+            }
+        }
     }
 
     /**
