@@ -9,7 +9,7 @@ export type IconName =
   | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
   | 'grid' | 'wallet' | 'check' | 'x'
-  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye';
+  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -103,6 +103,11 @@ export type IconName =
         }
         @case ('paperclip') {
           <path d="M12.5 4.2l-6.8 6.8a3 3 0 0 0 4.2 4.2l6.1-6.1a1.9 1.9 0 0 0-2.7-2.7l-5.7 5.7a.8.8 0 0 0 1.1 1.1l5.1-5.1" />
+        }
+        @case ('help') {
+          <circle cx="10" cy="10" r="7.3" />
+          <path d="M7.7 7.7a2.3 2.3 0 1 1 3.3 2.1c-.7.4-1 .8-1 1.6v.3" />
+          <circle cx="10" cy="14" r=".4" fill="currentColor" />
         }
         @case ('eye') {
           <path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10z" />

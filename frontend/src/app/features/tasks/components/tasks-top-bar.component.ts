@@ -24,6 +24,7 @@ import { IconComponent, IconName } from '../../../shared/icon';
         <a routerLink="/tasks/lixeira" routerLinkActive="active">Lixeira</a>
       </nav>
       <div class="top-bar-actions">
+        <a class="theme-toggle" routerLink="/tasks/ajuda" routerLinkActive="active" title="Ajuda"><app-icon name="help" [size]="16" /></a>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
         <span class="user-email">{{ auth.user()?.email }}</span>
         <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>

@@ -66,5 +66,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/calendar/tasks-calendar.page').then((m) => m.TasksCalendarPageComponent),
   },
+  {
+    path: 'tasks/ajuda',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

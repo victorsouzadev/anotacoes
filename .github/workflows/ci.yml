@@ -66,3 +66,4 @@ jobs:
           cache-dependency-path: mcp/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
