@@ -21,8 +21,10 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -92,6 +94,14 @@ fun AllTasksScreen(
     val trashedMessage = stringResource(R.string.undo_task_trashed)
     val undoLabel = stringResource(R.string.undo_action)
     val dragHandleDescription = stringResource(R.string.all_tasks_manual_drag_handle)
+    val duplicatedMessage = stringResource(R.string.all_tasks_task_duplicated)
+
+    val onDuplicateWithFeedback: (TaskWithCategory) -> Unit = { item ->
+        viewModel.onDuplicate(item.task)
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(message = duplicatedMessage, duration = SnackbarDuration.Short)
+        }
+    }
 
     // Local optimistic order shown while dragging in TaskSortOption.MANUAL; re-keyed on
     // uiState.flatTasks so it only resets when the repository's order actually changes (i.e. once
@@ -189,6 +199,12 @@ fun AllTasksScreen(
                     allLabel = stringResource(R.string.all_tasks_filter_all),
                     modifier = Modifier.weight(1f),
                 )
+                FilterMenuButton(
+                    noCategory = uiState.filterNoCategory,
+                    noDate = uiState.filterNoDate,
+                    onNoCategoryChanged = viewModel::onFilterNoCategoryChanged,
+                    onNoDateChanged = viewModel::onFilterNoDateChanged,
+                )
                 SortMenuButton(
                     selected = uiState.sortOption,
                     onSelect = viewModel::onSortOptionSelected,
@@ -225,6 +241,7 @@ fun AllTasksScreen(
                                 onToggleSubtask = viewModel::onToggleSubtask,
                                 onStartPomodoro = { onStartPomodoro(item.task.id, item.task.title) },
                                 onSwipeToDelete = { onSwipeToDeleteWithUndo(item) },
+                                onDuplicate = { onDuplicateWithFeedback(item) },
                             )
                         }
                     }
@@ -298,11 +315,45 @@ fun AllTasksScreen(
                                 onToggleSubtask = viewModel::onToggleSubtask,
                                 onStartPomodoro = { onStartPomodoro(item.task.id, item.task.title) },
                                 onSwipeToDelete = { onSwipeToDeleteWithUndo(item) },
+                                onDuplicate = { onDuplicateWithFeedback(item) },
                             )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FilterMenuButton(
+    noCategory: Boolean,
+    noDate: Boolean,
+    onNoCategoryChanged: (Boolean) -> Unit,
+    onNoDateChanged: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = noCategory || noDate
+
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Filled.FilterAlt,
+                contentDescription = stringResource(R.string.all_tasks_filter_label),
+                tint = if (active) Accent else OnSurfaceSecondary,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.all_tasks_filter_no_category)) },
+                onClick = { onNoCategoryChanged(!noCategory) },
+                trailingIcon = { Checkbox(checked = noCategory, onCheckedChange = onNoCategoryChanged) },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.all_tasks_filter_no_date)) },
+                onClick = { onNoDateChanged(!noDate) },
+                trailingIcon = { Checkbox(checked = noDate, onCheckedChange = onNoDateChanged) },
+            )
         }
     }
 }

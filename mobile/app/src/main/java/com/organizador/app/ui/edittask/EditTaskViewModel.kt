@@ -4,12 +4,18 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizador.app.data.local.entity.Category
+import com.organizador.app.data.local.entity.KanbanLane
 import com.organizador.app.data.local.entity.Subtask
 import com.organizador.app.data.local.entity.Task
+import com.organizador.app.data.local.entity.TaskComment
+import com.organizador.app.data.local.entity.TaskTemplate
 import com.organizador.app.data.location.GeocodingHelper
 import com.organizador.app.data.photo.PhotoStorage
 import com.organizador.app.data.repository.CategoryRepository
+import com.organizador.app.data.repository.KanbanLaneRepository
+import com.organizador.app.data.repository.TaskCommentRepository
 import com.organizador.app.data.repository.TaskRepository
+import com.organizador.app.data.repository.TaskTemplateRepository
 import com.organizador.app.domain.model.Priority
 import com.organizador.app.domain.model.RecurrenceRule
 import com.organizador.app.domain.common.toEpochMillis
@@ -21,6 +27,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -42,6 +50,12 @@ data class EditTaskUiState(
     val priority: Priority = Priority.MEDIUM,
     val categoryId: Long? = null,
     val categories: List<Category> = emptyList(),
+    val kanbanLaneId: Long? = null,
+    val kanbanLanes: List<KanbanLane> = emptyList(),
+    val comments: List<TaskComment> = emptyList(),
+    val newCommentText: String = "",
+    val isSendingComment: Boolean = false,
+    val templateSaved: Boolean = false,
     val recurrence: RecurrenceRule? = null,
     val subtasks: List<SubtaskDraft> = emptyList(),
     val completedPomodoros: Int = 0,
@@ -73,6 +87,9 @@ class EditTaskViewModel(
     private val taskId: Long,
     private val taskRepository: TaskRepository,
     private val categoryRepository: CategoryRepository,
+    private val kanbanLaneRepository: KanbanLaneRepository,
+    private val taskTemplateRepository: TaskTemplateRepository,
+    private val taskCommentRepository: TaskCommentRepository,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -83,8 +100,9 @@ class EditTaskViewModel(
         viewModelScope.launch {
             val details = taskRepository.taskDetails(taskId).first()
             val categories = categoryRepository.categories.first()
+            val lanes = kanbanLaneRepository.lanes.first()
             if (details == null) {
-                _uiState.update { it.copy(isLoading = false, notFound = true, categories = categories) }
+                _uiState.update { it.copy(isLoading = false, notFound = true, categories = categories, kanbanLanes = lanes) }
                 return@launch
             }
             val task = details.task
@@ -101,6 +119,8 @@ class EditTaskViewModel(
                     priority = task.priority,
                     categoryId = task.categoryId,
                     categories = categories,
+                    kanbanLaneId = task.kanbanLaneId,
+                    kanbanLanes = lanes,
                     recurrence = task.recurrenceRule?.let { RecurrenceRule.decode(it) },
                     subtasks = details.subtasks.map { subtask ->
                         SubtaskDraft(id = subtask.id, title = subtask.title, isCompleted = subtask.isCompleted)
@@ -113,6 +133,10 @@ class EditTaskViewModel(
                     locationRadiusMeters = task.locationRadiusMeters ?: EditTaskUiState.DEFAULT_LOCATION_RADIUS_METERS,
                 )
             }
+            taskCommentRepository.commentsForTask(task.id)
+                .onEach { comments -> _uiState.update { it.copy(comments = comments) } }
+                .launchIn(viewModelScope)
+            viewModelScope.launch { taskCommentRepository.refresh(task) }
         }
     }
 
@@ -129,6 +153,51 @@ class EditTaskViewModel(
     fun onPrioritySelected(priority: Priority) = _uiState.update { it.copy(priority = priority) }
 
     fun onCategorySelected(categoryId: Long?) = _uiState.update { it.copy(categoryId = categoryId) }
+
+    fun onKanbanLaneSelected(laneId: Long?) = _uiState.update { it.copy(kanbanLaneId = laneId) }
+
+    fun onNewCommentTextChanged(text: String) = _uiState.update { it.copy(newCommentText = text) }
+
+    fun onSendComment() {
+        val state = _uiState.value
+        val task = state.originalTask ?: return
+        val text = state.newCommentText.trim()
+        if (text.isBlank() || state.isSendingComment) return
+        _uiState.update { it.copy(isSendingComment = true) }
+        viewModelScope.launch {
+            taskCommentRepository.post(task, text)
+            _uiState.update { it.copy(isSendingComment = false, newCommentText = "") }
+        }
+    }
+
+    fun onDeleteComment(comment: TaskComment) {
+        val task = _uiState.value.originalTask ?: return
+        viewModelScope.launch { taskCommentRepository.delete(task, comment) }
+    }
+
+    /** Salva o estado atual do formulário como template reutilizável, sem afetar a tarefa em si. */
+    fun onSaveAsTemplate(name: String) {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return
+        val state = _uiState.value
+        viewModelScope.launch {
+            taskTemplateRepository.save(
+                TaskTemplate(
+                    name = trimmedName,
+                    title = state.title.trim(),
+                    description = state.description.trim().ifBlank { null },
+                    priority = state.priority,
+                    categoryId = state.categoryId,
+                    isRecurring = state.recurrence != null,
+                    recurrenceRule = state.recurrence?.encode(),
+                    subtaskTitles = state.subtasks.mapNotNull { it.title.trim().ifBlank { null } }.joinToString("\n"),
+                ),
+            )
+            _uiState.update { it.copy(templateSaved = true) }
+        }
+    }
+
+    fun onTemplateSavedAcknowledged() = _uiState.update { it.copy(templateSaved = false) }
 
     fun onRecurrenceSelected(rule: RecurrenceRule?) = _uiState.update { it.copy(recurrence = rule) }
 
@@ -204,6 +273,7 @@ class EditTaskViewModel(
                 dueDate = dueDateTime?.toEpochMillis(),
                 priority = state.priority,
                 categoryId = state.categoryId,
+                kanbanLaneId = state.kanbanLaneId,
                 isRecurring = state.recurrence != null,
                 recurrenceRule = state.recurrence?.encode(),
                 photoPath = state.photoPath,

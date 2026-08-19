@@ -41,6 +41,7 @@ fun SwipeableTaskCard(
     modifier: Modifier = Modifier,
     onToggleSubtask: (subtaskId: Long, isCompleted: Boolean) -> Unit = { _, _ -> },
     onStartPomodoro: (() -> Unit)? = null,
+    onDuplicate: (() -> Unit)? = null,
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
@@ -64,6 +65,7 @@ fun SwipeableTaskCard(
             onClick = onClick,
             onToggleSubtask = onToggleSubtask,
             onStartPomodoro = onStartPomodoro,
+            onDuplicate = onDuplicate,
         )
     }
 }

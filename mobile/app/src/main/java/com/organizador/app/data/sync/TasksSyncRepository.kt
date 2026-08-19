@@ -1,12 +1,17 @@
 package com.organizador.app.data.sync
 
 import com.organizador.app.data.local.dao.CategoryDao
+import com.organizador.app.data.local.dao.KanbanLaneDao
 import com.organizador.app.data.local.dao.SubtaskDao
+import com.organizador.app.data.local.dao.TaskCommentDao
 import com.organizador.app.data.local.dao.TaskDao
 import com.organizador.app.data.local.entity.Category
+import com.organizador.app.data.local.entity.KanbanLane
 import com.organizador.app.data.local.entity.Subtask
 import com.organizador.app.data.local.entity.Task
+import com.organizador.app.data.local.entity.TaskComment
 import com.organizador.app.data.remote.RemoteCategory
+import com.organizador.app.data.remote.RemoteKanbanLane
 import com.organizador.app.data.remote.RemoteTaskItem
 import com.organizador.app.data.remote.SyncUnauthorizedException
 import com.organizador.app.data.remote.TasksSyncApi
@@ -15,6 +20,7 @@ import com.organizador.app.domain.location.LocationReminderScheduler
 import com.organizador.app.domain.model.Priority
 import com.organizador.app.domain.reminder.TaskReminderScheduler
 import com.organizador.app.domain.sync.RemoteCategoryDeleter
+import com.organizador.app.domain.sync.RemoteKanbanLaneDeleter
 import com.organizador.app.domain.widget.WidgetRefresher
 import java.time.Instant
 import java.util.UUID
@@ -35,13 +41,15 @@ import org.json.JSONObject
 class TasksSyncRepository(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
+    private val kanbanLaneDao: KanbanLaneDao,
+    private val taskCommentDao: TaskCommentDao,
     private val subtaskDao: SubtaskDao,
     private val api: TasksSyncApi,
     private val authRepository: AuthRepository,
     private val reminderScheduler: TaskReminderScheduler,
     private val locationReminderScheduler: LocationReminderScheduler,
     private val widgetRefresher: WidgetRefresher,
-) : RemoteCategoryDeleter {
+) : RemoteCategoryDeleter, RemoteKanbanLaneDeleter {
 
     suspend fun sync(): Result<Unit> = withContext(Dispatchers.IO) {
         val token = authRepository.currentAccessToken()
@@ -60,10 +68,80 @@ class TasksSyncRepository(
         runCatching { api.deleteCategory(token, remoteId) }
     }
 
+    override suspend fun deleteKanbanLane(remoteId: String) {
+        val token = authRepository.currentAccessToken() ?: return
+        runCatching { api.deleteKanbanLane(token, remoteId) }
+    }
+
+    /** Busca (e cacheia localmente) os comentários de uma tarefa. Chamado sob demanda ao abrir a
+     * tela de edição, não faz parte do [sync] periódico — comentário é só append/consulta, sem
+     * conflito a resolver. */
+    suspend fun fetchComments(localTaskId: Long, taskRemoteId: String): Result<Unit> = runCatching {
+        val token = authRepository.currentAccessToken() ?: throw IllegalStateException("Não conectado.")
+        val remote = runCatching { api.fetchComments(token, taskRemoteId) }
+            .recoverCatching { error ->
+                if (error !is SyncUnauthorizedException) throw error
+                val refreshed = authRepository.refreshAccessToken() ?: throw IllegalStateException("Sessão expirada.")
+                api.fetchComments(refreshed, taskRemoteId)
+            }
+            .getOrThrow()
+        taskCommentDao.clearSyncedForTask(localTaskId)
+        for (r in remote) {
+            taskCommentDao.insert(
+                TaskComment(taskId = localTaskId, text = r.text, createdAt = r.createdAt.toEpochMillis(), remoteId = r.id),
+            )
+        }
+    }
+
+    suspend fun postComment(localTaskId: Long, taskRemoteId: String, text: String): Result<TaskComment> = runCatching {
+        val token = authRepository.currentAccessToken() ?: throw IllegalStateException("Não conectado.")
+        val saved = runCatching { api.postComment(token, taskRemoteId, text) }
+            .recoverCatching { error ->
+                if (error !is SyncUnauthorizedException) throw error
+                val refreshed = authRepository.refreshAccessToken() ?: throw IllegalStateException("Sessão expirada.")
+                api.postComment(refreshed, taskRemoteId, text)
+            }
+            .getOrThrow()
+        val comment = TaskComment(taskId = localTaskId, text = saved.text, createdAt = saved.createdAt.toEpochMillis(), remoteId = saved.id)
+        val id = taskCommentDao.insert(comment)
+        comment.copy(id = id)
+    }
+
+    suspend fun deleteComment(taskRemoteId: String, comment: TaskComment) {
+        taskCommentDao.delete(comment)
+        val remoteId = comment.remoteId ?: return
+        val token = authRepository.currentAccessToken() ?: return
+        runCatching { api.deleteComment(token, taskRemoteId, remoteId) }
+    }
+
     private suspend fun runSync(token: String) {
         syncCategories(token)
+        syncKanbanLanes(token)
         syncTasks(token)
         widgetRefresher.refresh()
+    }
+
+    private suspend fun syncKanbanLanes(token: String) {
+        val remote = api.fetchKanbanLanes(token)
+        for (r in remote) {
+            val local = kanbanLaneDao.findByRemoteId(r.id)
+            val remoteMillis = r.updatedAt.toEpochMillis()
+            if (local == null) {
+                kanbanLaneDao.upsert(KanbanLane(name = r.name, colorHex = r.colorHex, position = r.position, remoteId = r.id, updatedAt = remoteMillis))
+            } else if (remoteMillis > local.updatedAt) {
+                kanbanLaneDao.upsert(local.copy(name = r.name, colorHex = r.colorHex, position = r.position, updatedAt = remoteMillis))
+            }
+        }
+
+        for (l in kanbanLaneDao.getAllLanesOnce()) {
+            val remoteId = l.remoteId ?: UUID.randomUUID().toString()
+            val saved = api.upsertKanbanLane(token, RemoteKanbanLane(remoteId, l.name, l.colorHex, l.position, l.updatedAt.toIso()))
+            if (l.remoteId == null) kanbanLaneDao.setRemoteId(l.id, remoteId)
+            val savedMillis = saved.updatedAt.toEpochMillis()
+            if (savedMillis > l.updatedAt) {
+                kanbanLaneDao.upsert(l.copy(remoteId = remoteId, name = saved.name, colorHex = saved.colorHex, position = saved.position, updatedAt = savedMillis))
+            }
+        }
     }
 
     private suspend fun syncCategories(token: String) {
@@ -100,17 +178,22 @@ class TasksSyncRepository(
         val categoriesByRemoteId = syncedCategories.associateBy { it.remoteId!! }
         val categoryRemoteIdByLocalId = syncedCategories.associateBy({ it.id }, { it.remoteId!! })
 
+        val syncedLanes = kanbanLaneDao.getAllLanesOnce().filter { it.remoteId != null }
+        val lanesByRemoteId = syncedLanes.associateBy { it.remoteId!! }
+        val laneRemoteIdByLocalId = syncedLanes.associateBy({ it.id }, { it.remoteId!! })
+
         val remote = api.fetchTasks(token)
         for (r in remote) {
             val local = taskDao.findByRemoteId(r.id)
             val remoteMillis = r.updatedAt.toEpochMillis()
             val categoryLocalId = r.categoryId?.let { categoriesByRemoteId[it]?.id }
+            val laneLocalId = r.kanbanLaneId?.let { lanesByRemoteId[it]?.id }
 
             val localId = when {
-                local == null -> taskDao.upsert(r.toLocalTask(id = 0, categoryId = categoryLocalId))
+                local == null -> taskDao.upsert(r.toLocalTask(id = 0, categoryId = categoryLocalId, kanbanLaneId = laneLocalId))
                 remoteMillis > local.updatedAt -> {
                     taskDao.upsert(
-                        r.toLocalTask(id = local.id, categoryId = categoryLocalId).copy(
+                        r.toLocalTask(id = local.id, categoryId = categoryLocalId, kanbanLaneId = laneLocalId).copy(
                             // Estado só-do-aparelho: cada dispositivo tem o seu, não vem do servidor.
                             calendarEventId = local.calendarEventId,
                             photoPath = local.photoPath,
@@ -138,6 +221,7 @@ class TasksSyncRepository(
                 dueDate = t.dueDate?.toIso(),
                 priority = t.priority.toWire(),
                 categoryId = t.categoryId?.let { categoryRemoteIdByLocalId[it] },
+                kanbanLaneId = t.kanbanLaneId?.let { laneRemoteIdByLocalId[it] },
                 isRecurring = t.isRecurring,
                 recurrenceRule = t.recurrenceRule,
                 isCompleted = t.isCompleted,
@@ -161,7 +245,8 @@ class TasksSyncRepository(
                 // Corrida rara: outro dispositivo sincronizou uma versão mais nova entre o pull e
                 // o push desta rodada — o servidor "venceu", reflete o resultado de volta.
                 val categoryLocalId = saved.categoryId?.let { categoriesByRemoteId[it]?.id }
-                taskDao.upsert(saved.toLocalTask(id = t.id, categoryId = categoryLocalId).copy(
+                val laneLocalId = saved.kanbanLaneId?.let { lanesByRemoteId[it]?.id }
+                taskDao.upsert(saved.toLocalTask(id = t.id, categoryId = categoryLocalId, kanbanLaneId = laneLocalId).copy(
                     calendarEventId = t.calendarEventId,
                     photoPath = t.photoPath,
                 ))
@@ -186,13 +271,14 @@ class TasksSyncRepository(
     }
 }
 
-private fun RemoteTaskItem.toLocalTask(id: Long, categoryId: Long?): Task = Task(
+private fun RemoteTaskItem.toLocalTask(id: Long, categoryId: Long?, kanbanLaneId: Long?): Task = Task(
     id = id,
     title = title,
     description = description,
     dueDate = dueDate?.toEpochMillisOrNull(),
     priority = priority.toPriority(),
     categoryId = categoryId,
+    kanbanLaneId = kanbanLaneId,
     isRecurring = isRecurring,
     recurrenceRule = recurrenceRule,
     isCompleted = isCompleted,

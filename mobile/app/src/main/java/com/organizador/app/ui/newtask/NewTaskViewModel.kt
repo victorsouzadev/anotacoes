@@ -3,8 +3,10 @@ package com.organizador.app.ui.newtask
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.organizador.app.data.local.entity.Task
+import com.organizador.app.data.local.entity.TaskTemplate
 import com.organizador.app.data.repository.CategoryRepository
 import com.organizador.app.data.repository.TaskRepository
+import com.organizador.app.data.repository.TaskTemplateRepository
 import com.organizador.app.domain.model.Priority
 import com.organizador.app.domain.model.RecurrenceRule
 import com.organizador.app.domain.nlp.NaturalLanguageTaskParser
@@ -15,6 +17,8 @@ import kotlin.math.absoluteValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -31,6 +35,7 @@ data class NewTaskUiState(
     val recurrence: RecurrenceRule? = null,
     val isSaving: Boolean = false,
     val savedSuccessfully: Boolean = false,
+    val templates: List<TaskTemplate> = emptyList(),
 ) {
     /** How many tasks "Salvar" will actually create: every parsed item, or a single manual task from the raw text when nothing parsed. */
     val taskCount: Int get() = if (parsedItems.isNotEmpty()) parsedItems.size else if (rawInput.isNotBlank()) 1 else 0
@@ -45,10 +50,35 @@ class NewTaskViewModel(
     private val taskRepository: TaskRepository,
     private val categoryRepository: CategoryRepository,
     private val aiTaskInterpreter: TaskInterpreter,
+    private val taskTemplateRepository: TaskTemplateRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NewTaskUiState())
     val uiState: StateFlow<NewTaskUiState> = _uiState.asStateFlow()
+
+    init {
+        taskTemplateRepository.templates
+            .onEach { templates -> _uiState.update { it.copy(templates = templates) } }
+            .launchIn(viewModelScope)
+    }
+
+    /** Cria a tarefa direto a partir de um template salvo, ignorando o texto livre/parser em uso — reaproveita [taskRepository.createTaskWithSubtasks]. */
+    fun onCreateFromTemplate(template: TaskTemplate) {
+        _uiState.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+            val task = Task(
+                title = template.title,
+                description = template.description,
+                priority = template.priority,
+                categoryId = template.categoryId,
+                isRecurring = template.isRecurring,
+                recurrenceRule = template.recurrenceRule,
+            )
+            val subtaskTitles = template.subtaskTitles.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+            taskRepository.createTaskWithSubtasks(task, subtaskTitles)
+            _uiState.update { it.copy(isSaving = false, savedSuccessfully = true) }
+        }
+    }
 
     fun onRawInputChanged(text: String) {
         val parsedItems = NaturalLanguageTaskParser.parseBatch(text)

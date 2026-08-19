@@ -21,7 +21,15 @@ fun rememberEditTaskViewModelFactory(taskId: Long): ViewModelProvider.Factory {
     val context = LocalContext.current
     return remember(context, taskId) {
         val container = (context.applicationContext as OrganizadorApplication).container
-        EditTaskViewModelFactory(taskId, container.taskRepository, container.categoryRepository, container.appContext)
+        EditTaskViewModelFactory(
+            taskId,
+            container.taskRepository,
+            container.categoryRepository,
+            container.kanbanLaneRepository,
+            container.taskTemplateRepository,
+            container.taskCommentRepository,
+            container.appContext,
+        )
     }
 }
 

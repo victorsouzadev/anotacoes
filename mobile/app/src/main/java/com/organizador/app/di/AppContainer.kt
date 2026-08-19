@@ -13,7 +13,10 @@ import com.organizador.app.data.remote.OpenRouterTaskInterpreter
 import com.organizador.app.data.remote.TasksSyncApi
 import com.organizador.app.data.repository.AuthRepository
 import com.organizador.app.data.repository.CategoryRepository
+import com.organizador.app.data.repository.KanbanLaneRepository
+import com.organizador.app.data.repository.TaskCommentRepository
 import com.organizador.app.data.repository.TaskRepository
+import com.organizador.app.data.repository.TaskTemplateRepository
 import com.organizador.app.data.sync.TasksSyncRepository
 import com.organizador.app.domain.calendar.CalendarSync
 import com.organizador.app.domain.location.LocationReminderScheduler
@@ -59,6 +62,8 @@ class AppContainer(context: Context) {
     val tasksSyncRepository: TasksSyncRepository = TasksSyncRepository(
         database.taskDao(),
         database.categoryDao(),
+        database.kanbanLaneDao(),
+        database.taskCommentDao(),
         database.subtaskDao(),
         tasksSyncApi,
         authRepository,
@@ -67,11 +72,14 @@ class AppContainer(context: Context) {
         widgetRefresher,
     )
     val categoryRepository: CategoryRepository = CategoryRepository(database.categoryDao(), tasksSyncRepository)
+    val kanbanLaneRepository: KanbanLaneRepository = KanbanLaneRepository(database.kanbanLaneDao(), tasksSyncRepository)
+    val taskCommentRepository: TaskCommentRepository = TaskCommentRepository(database.taskCommentDao(), tasksSyncRepository)
+    val taskTemplateRepository: TaskTemplateRepository = TaskTemplateRepository(database.taskTemplateDao())
 
     val viewModelFactory: ViewModelProvider.Factory by lazy {
         AppViewModelFactory(
             appContext, taskRepository, categoryRepository, settingsStore, aiTaskInterpreter,
-            backupRepository, authRepository, tasksSyncRepository,
+            backupRepository, authRepository, tasksSyncRepository, taskTemplateRepository,
         )
     }
 }

@@ -26,18 +26,21 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -86,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.organizador.app.R
+import com.organizador.app.data.local.entity.TaskComment
 import com.organizador.app.data.photo.PhotoStorage
 import com.organizador.app.ui.common.rememberEditTaskViewModelFactory
 import com.organizador.app.ui.components.CategoryFilterRow
@@ -128,14 +132,22 @@ fun EditTaskScreen(
     var showSkipConfirm by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var showSaveTemplateDialog by remember { mutableStateOf(false) }
     var newSubtaskText by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val deletingMessage = stringResource(R.string.undo_task_deleting)
     val undoLabel = stringResource(R.string.undo_action)
+    val templateSavedMessage = stringResource(R.string.task_template_saved)
 
     LaunchedEffect(uiState.savedSuccessfully) { if (uiState.savedSuccessfully) onSaved() }
     LaunchedEffect(uiState.isDeleted) { if (uiState.isDeleted) onDeleted() }
     LaunchedEffect(uiState.isSkipped) { if (uiState.isSkipped) onDeleted() }
+    LaunchedEffect(uiState.templateSaved) {
+        if (uiState.templateSaved) {
+            snackbarHostState.showSnackbar(message = templateSavedMessage, duration = SnackbarDuration.Short)
+            viewModel.onTemplateSavedAcknowledged()
+        }
+    }
     LaunchedEffect(uiState.isPendingDelete) {
         if (uiState.isPendingDelete) {
             val result = snackbarHostState.showSnackbar(
@@ -166,6 +178,12 @@ fun EditTaskScreen(
                 },
                 actions = {
                     if (canEdit) {
+                        IconButton(onClick = { showSaveTemplateDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.BookmarkAdd,
+                                contentDescription = stringResource(R.string.task_template_save),
+                            )
+                        }
                         IconButton(onClick = { shareTask(context, uiState) }) {
                             Icon(
                                 imageVector = Icons.Filled.Share,
@@ -368,6 +386,27 @@ fun EditTaskScreen(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.kanban_lane_label), style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        ActionChip(
+                            label = stringResource(R.string.kanban_lane_none),
+                            onClick = { viewModel.onKanbanLaneSelected(null) },
+                            isSelected = uiState.kanbanLaneId == null,
+                        )
+                        uiState.kanbanLanes.forEach { lane ->
+                            ActionChip(
+                                label = lane.name,
+                                onClick = { viewModel.onKanbanLaneSelected(lane.id) },
+                                isSelected = uiState.kanbanLaneId == lane.id,
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.new_task_recurrence_label), style = MaterialTheme.typography.titleSmall)
                     RecurrenceSelector(selected = uiState.recurrence, onSelect = viewModel::onRecurrenceSelected)
                     if (uiState.originalTask?.isRecurring == true) {
@@ -411,8 +450,47 @@ fun EditTaskScreen(
                         }
                     }
                 }
+
+                CommentsSection(
+                    comments = uiState.comments,
+                    newCommentText = uiState.newCommentText,
+                    isSending = uiState.isSendingComment,
+                    onTextChanged = viewModel::onNewCommentTextChanged,
+                    onSend = viewModel::onSendComment,
+                    onDelete = viewModel::onDeleteComment,
+                    loginRequired = uiState.originalTask?.remoteId == null,
+                )
             }
         }
+    }
+
+    if (showSaveTemplateDialog) {
+        var templateName by remember { mutableStateOf(uiState.title) }
+        AlertDialog(
+            onDismissRequest = { showSaveTemplateDialog = false },
+            containerColor = SurfaceColor,
+            title = { Text(stringResource(R.string.task_template_save_title)) },
+            text = {
+                OutlinedTextField(
+                    value = templateName,
+                    onValueChange = { templateName = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = fieldColors(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSaveTemplateDialog = false
+                        viewModel.onSaveAsTemplate(templateName)
+                    },
+                ) { Text(stringResource(R.string.task_template_save), color = Accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveTemplateDialog = false }) { Text(stringResource(R.string.common_cancel), color = OnSurfaceSecondary) }
+            },
+        )
     }
 
     if (showDatePicker) {
@@ -643,6 +721,80 @@ private fun LocationReminderSection(
                         color = PriorityHigh,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentsSection(
+    comments: List<TaskComment>,
+    newCommentText: String,
+    isSending: Boolean,
+    onTextChanged: (String) -> Unit,
+    onSend: () -> Unit,
+    onDelete: (TaskComment) -> Unit,
+    loginRequired: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.task_comments_title), style = MaterialTheme.typography.titleSmall)
+        if (loginRequired) {
+            Text(
+                text = stringResource(R.string.task_comments_login_required),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceSecondary,
+            )
+            return
+        }
+        if (comments.isEmpty()) {
+            Text(
+                text = stringResource(R.string.task_comments_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = OnSurfaceSecondary,
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                comments.forEach { comment -> CommentRow(comment = comment, onDelete = { onDelete(comment) }) }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newCommentText,
+                onValueChange = onTextChanged,
+                placeholder = { Text(stringResource(R.string.task_comments_hint), color = OnSurfaceSecondary) },
+                modifier = Modifier.weight(1f),
+                colors = fieldColors(),
+            )
+            IconButton(onClick = onSend, enabled = newCommentText.isNotBlank() && !isSending) {
+                Icon(
+                    imageVector = Icons.Filled.Send,
+                    contentDescription = stringResource(R.string.task_comments_send),
+                    tint = if (newCommentText.isNotBlank() && !isSending) Accent else OnSurfaceSecondary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentRow(comment: TaskComment, onDelete: () -> Unit) {
+    Surface(color = SurfaceVariant, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = comment.text,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.task_comments_delete),
+                    tint = OnSurfaceSecondary,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }

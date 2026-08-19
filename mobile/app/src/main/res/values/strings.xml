@@ -206,6 +206,30 @@
     <string name="all_tasks_sort_manual">Manual (arrastar)</string>
     <string name="all_tasks_manual_drag_handle">Arrastar para reordenar</string>
     <string name="all_tasks_sort_label">Ordenar tarefas</string>
+    <string name="all_tasks_filter_label">Filtros</string>
+    <string name="all_tasks_filter_no_category">Sem categoria</string>
+    <string name="all_tasks_filter_no_date">Sem data</string>
+    <string name="all_tasks_duplicate_task">Duplicar tarefa</string>
+    <string name="all_tasks_task_duplicated">Tarefa duplicada</string>
+
+    <string name="kanban_lane_label">Raia do Kanban</string>
+    <string name="kanban_lane_none">Sem raia</string>
+    <string name="kanban_lane_add">Nova raia</string>
+    <string name="kanban_lane_name_hint">Nome da raia</string>
+
+    <string name="task_comments_title">Comentários</string>
+    <string name="task_comments_hint">Escreva um comentário…</string>
+    <string name="task_comments_send">Enviar</string>
+    <string name="task_comments_delete">Apagar comentário</string>
+    <string name="task_comments_empty">Nenhum comentário ainda</string>
+    <string name="task_comments_login_required">Entre na sua conta pra usar comentários</string>
+
+    <string name="task_template_save">Salvar como template</string>
+    <string name="task_template_save_title">Nome do template</string>
+    <string name="task_template_pick">Usar um template</string>
+    <string name="task_template_none">Nenhum template salvo ainda</string>
+    <string name="task_template_saved">Template salvo</string>
+    <string name="task_template_delete">Apagar template</string>
 
     <string name="settings_backup_section_title">Dados</string>
     <string name="settings_backup_section_description">Exporte suas tarefas e categorias para um arquivo, ou importe um backup anterior.</string>

@@ -8,6 +8,7 @@ import com.organizador.app.data.local.SettingsStore
 import com.organizador.app.data.repository.AuthRepository
 import com.organizador.app.data.repository.CategoryRepository
 import com.organizador.app.data.repository.TaskRepository
+import com.organizador.app.data.repository.TaskTemplateRepository
 import com.organizador.app.data.sync.TasksSyncRepository
 import com.organizador.app.domain.nlp.TaskInterpreter
 import com.organizador.app.ui.alltasks.AllTasksViewModel
@@ -28,6 +29,7 @@ class AppViewModelFactory(
     private val backupRepository: BackupRepository,
     private val authRepository: AuthRepository,
     private val tasksSyncRepository: TasksSyncRepository,
+    private val taskTemplateRepository: TaskTemplateRepository,
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
@@ -40,7 +42,7 @@ class AppViewModelFactory(
             modelClass.isAssignableFrom(CalendarViewModel::class.java) ->
                 CalendarViewModel(taskRepository) as T
             modelClass.isAssignableFrom(NewTaskViewModel::class.java) ->
-                NewTaskViewModel(taskRepository, categoryRepository, aiTaskInterpreter) as T
+                NewTaskViewModel(taskRepository, categoryRepository, aiTaskInterpreter, taskTemplateRepository) as T
             modelClass.isAssignableFrom(CategoriesViewModel::class.java) ->
                 CategoriesViewModel(categoryRepository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) ->
