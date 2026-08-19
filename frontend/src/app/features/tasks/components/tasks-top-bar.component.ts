@@ -16,6 +16,8 @@ import { IconComponent, IconName } from '../../../shared/icon';
       </div>
       <nav class="tabs">
         <a routerLink="/tasks" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Lista</a>
+        <a routerLink="/tasks/kanban" routerLinkActive="active">Kanban</a>
+        <a routerLink="/tasks/calendario" routerLinkActive="active">Calendário</a>
         <a routerLink="/tasks/categorias" routerLinkActive="active">Categorias</a>
         <a routerLink="/tasks/pomodoro" routerLinkActive="active">Pomodoro</a>
         <a routerLink="/tasks/estatisticas" routerLinkActive="active">Estatísticas</a>

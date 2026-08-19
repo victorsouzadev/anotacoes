@@ -1,0 +1,114 @@
+<div class="overlay" (click)="close.emit()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="header">
+      <h2>{{ task.title }}</h2>
+      <button type="button" class="icon-close" (click)="close.emit()"><app-icon name="x" [size]="16" /></button>
+    </div>
+
+    @if (task.description) {
+      <p class="description">{{ task.description }}</p>
+    }
+
+    <div class="meta-grid">
+      @if (task.dueDate) {
+        <div class="meta-item">
+          <span class="label">Prazo</span>
+          <span>{{ formatDateTime(task.dueDate) }}</span>
+        </div>
+      }
+      <div class="meta-item">
+        <span class="label">Prioridade</span>
+        <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
+      </div>
+      @if (store.categoryFor(task); as cat) {
+        <div class="meta-item">
+          <span class="label">Categoria</span>
+          <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
+        </div>
+      }
+      @if (recurrenceLabel(); as rec) {
+        <div class="meta-item">
+          <span class="label">Repetição</span>
+          <span>↻ {{ rec }}</span>
+        </div>
+      }
+      @if (task.completedPomodoros > 0) {
+        <div class="meta-item">
+          <span class="label">Pomodoros</span>
+          <span><app-icon name="pomodoro" [size]="12" /> {{ task.completedPomodoros }}</span>
+        </div>
+      }
+    </div>
+
+    @if (task.subtasks.length > 0) {
+      <div class="section">
+        <span class="section-title">Subtarefas</span>
+        <ul class="subtask-list">
+          @for (s of task.subtasks; track $index) {
+            <li>
+              <button type="button" class="check" [class.done]="s.isCompleted" (click)="toggleSubtask($index)">
+                @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
+              </button>
+              <span [class.done]="s.isCompleted">{{ s.title }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    }
+
+    <div class="section">
+      <span class="section-title"><app-icon name="comment" [size]="13" /> Comentários</span>
+      @if (loadingComments) {
+        <p class="hint">Carregando…</p>
+      } @else if (comments.length > 0) {
+        <ul class="comment-list">
+          @for (c of comments; track c.id) {
+            <li>
+              <div class="comment-body">
+                <p>{{ c.text }}</p>
+                <span class="comment-date">{{ formatDateTime(c.createdAt) }}</span>
+              </div>
+              <button type="button" class="remove" (click)="removeComment(c)">✕</button>
+            </li>
+          }
+        </ul>
+      }
+      <div class="add-row">
+        <input [(ngModel)]="newCommentText" placeholder="Adicionar comentário…" (keydown.enter)="addComment()" />
+        <button type="button" (click)="addComment()">+</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <span class="section-title"><app-icon name="paperclip" [size]="13" /> Anexos</span>
+      @if (loadingAttachments) {
+        <p class="hint">Carregando…</p>
+      } @else if (attachments.length > 0) {
+        <ul class="attachment-list">
+          @for (a of attachments; track a.id) {
+            <li>
+              <button type="button" class="attachment-link" (click)="downloadAttachment(a)">
+                <app-icon name="download" [size]="13" />
+                <span class="attachment-name">{{ a.fileName }}</span>
+                <span class="attachment-size">{{ formatBytes(a.sizeBytes) }}</span>
+              </button>
+              <button type="button" class="remove" (click)="removeAttachment(a)">✕</button>
+            </li>
+          }
+        </ul>
+      }
+      @if (attachmentError) {
+        <p class="field-error">{{ attachmentError }}</p>
+      }
+      <label class="file-input-btn">
+        <app-icon name="paperclip" [size]="13" /> Anexar arquivo (até 5MB)
+        <input type="file" (change)="onAttachmentSelected($event)" hidden />
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="secondary" (click)="close.emit()">Fechar</button>
+      <button type="button" class="primary" (click)="edit.emit()"><app-icon name="edit" [size]="14" /> Editar</button>
+    </div>
+  </div>
+</div>

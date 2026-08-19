@@ -8,7 +8,8 @@ export type IconName =
   | 'download' | 'more'
   | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
-  | 'grid' | 'wallet' | 'check' | 'x';
+  | 'grid' | 'wallet' | 'check' | 'x'
+  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -88,6 +89,25 @@ export type IconName =
         }
         @case ('check') { <path d="M4 10.5l4 4 8-9" /> }
         @case ('x') { <path d="M5 5l10 10M15 5L5 15" /> }
+        @case ('calendar') {
+          <rect x="2.7" y="3.8" width="14.6" height="13.4" rx="1.6" />
+          <path d="M2.7 8h14.6M6.3 2.2v3M13.7 2.2v3" />
+        }
+        @case ('kanban') {
+          <rect x="2.7" y="3" width="4.6" height="14" rx="1.1" />
+          <rect x="7.7" y="3" width="4.6" height="9" rx="1.1" />
+          <rect x="12.7" y="3" width="4.6" height="11" rx="1.1" />
+        }
+        @case ('comment') {
+          <path d="M3 4.5h14v9.4H8.6L4.8 17V13.9H3z" />
+        }
+        @case ('paperclip') {
+          <path d="M12.5 4.2l-6.8 6.8a3 3 0 0 0 4.2 4.2l6.1-6.1a1.9 1.9 0 0 0-2.7-2.7l-5.7 5.7a.8.8 0 0 0 1.1 1.1l5.1-5.1" />
+        }
+        @case ('eye') {
+          <path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10z" />
+          <circle cx="10" cy="10" r="2.4" />
+        }
       }
     </svg>
   `,

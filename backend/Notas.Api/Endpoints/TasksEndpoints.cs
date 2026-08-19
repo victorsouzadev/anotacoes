@@ -77,6 +77,131 @@ public static class TasksEndpoints
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+
+        var comments = app.MapGroup("/api/tasks/items/{taskId}/comments").RequireAuthorization();
+
+        comments.MapGet("/", async (string taskId, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+            if (!await db.TaskItems.AnyAsync(t => t.Id == taskId && t.UserId == userId))
+                return Results.NotFound();
+            var list = await db.TaskComments.AsNoTracking()
+                .Where(c => c.TaskId == taskId && c.UserId == userId)
+                .OrderBy(c => c.CreatedAt)
+                .Select(c => ToDto(c))
+                .ToListAsync();
+            return Results.Ok(list);
+        });
+
+        comments.MapPost("/", async (string taskId, TaskCommentUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var text = req.Text?.Trim() ?? "";
+            if (text.Length is 0 or > 2000)
+                return Results.BadRequest(new { error = "Comentário inválido." });
+
+            var userId = user.UserId();
+            if (!await db.TaskItems.AnyAsync(t => t.Id == taskId && t.UserId == userId))
+                return Results.NotFound();
+
+            var now = DateTime.UtcNow;
+            var comment = new TaskComment
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = userId,
+                TaskId = taskId,
+                Text = text,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.TaskComments.Add(comment);
+            await db.SaveChangesAsync();
+            return Results.Ok(ToDto(comment));
+        });
+
+        comments.MapDelete("/{commentId}", async (string taskId, string commentId, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+            var comment = await db.TaskComments.FirstOrDefaultAsync(c => c.Id == commentId && c.TaskId == taskId && c.UserId == userId);
+            if (comment is null) return Results.NotFound();
+            db.TaskComments.Remove(comment);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        var attachments = app.MapGroup("/api/tasks/items/{taskId}/attachments").RequireAuthorization();
+        const int maxAttachmentBytes = 5 * 1024 * 1024;
+
+        attachments.MapGet("/", async (string taskId, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+            if (!await db.TaskItems.AnyAsync(t => t.Id == taskId && t.UserId == userId))
+                return Results.NotFound();
+            var list = await db.TaskAttachments.AsNoTracking()
+                .Where(a => a.TaskId == taskId && a.UserId == userId)
+                .OrderBy(a => a.CreatedAt)
+                .Select(a => ToDto(a))
+                .ToListAsync();
+            return Results.Ok(list);
+        });
+
+        attachments.MapPost("/", async (string taskId, TaskAttachmentUploadRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var fileName = req.FileName?.Trim() ?? "";
+            if (fileName.Length is 0 or > 255)
+                return Results.BadRequest(new { error = "Nome de arquivo inválido." });
+            if (string.IsNullOrWhiteSpace(req.DataBase64))
+                return Results.BadRequest(new { error = "Arquivo vazio." });
+
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(req.DataBase64);
+            }
+            catch (FormatException)
+            {
+                return Results.BadRequest(new { error = "Conteúdo inválido." });
+            }
+            if (bytes.Length == 0 || bytes.Length > maxAttachmentBytes)
+                return Results.BadRequest(new { error = "Arquivo deve ter até 5MB." });
+
+            var userId = user.UserId();
+            if (!await db.TaskItems.AnyAsync(t => t.Id == taskId && t.UserId == userId))
+                return Results.NotFound();
+
+            var attachment = new TaskAttachment
+            {
+                Id = Guid.NewGuid().ToString(),
+                UserId = userId,
+                TaskId = taskId,
+                FileName = fileName,
+                ContentType = string.IsNullOrWhiteSpace(req.ContentType) ? "application/octet-stream" : req.ContentType,
+                SizeBytes = bytes.Length,
+                DataBase64 = req.DataBase64,
+                CreatedAt = DateTime.UtcNow,
+            };
+            db.TaskAttachments.Add(attachment);
+            await db.SaveChangesAsync();
+            return Results.Ok(ToDto(attachment));
+        });
+
+        attachments.MapGet("/{attachmentId}/content", async (string taskId, string attachmentId, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+            var attachment = await db.TaskAttachments.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attachmentId && a.TaskId == taskId && a.UserId == userId);
+            if (attachment is null) return Results.NotFound();
+            return Results.File(Convert.FromBase64String(attachment.DataBase64), attachment.ContentType, attachment.FileName);
+        });
+
+        attachments.MapDelete("/{attachmentId}", async (string taskId, string attachmentId, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+            var attachment = await db.TaskAttachments.FirstOrDefaultAsync(a => a.Id == attachmentId && a.TaskId == taskId && a.UserId == userId);
+            if (attachment is null) return Results.NotFound();
+            db.TaskAttachments.Remove(attachment);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
     }
 
     // Upsert idempotente com last-write-wins por UpdatedAt — mesmo padrão de NotesEndpoints.Upsert.
@@ -160,4 +285,8 @@ public static class TasksEndpoints
         t.Id, t.Title, t.Description, t.DueDate, t.Priority, t.CategoryId, t.IsRecurring, t.RecurrenceRule,
         t.IsCompleted, t.CreatedAt, t.CompletedAt, t.DeletedAt, t.CompletedPomodoros, t.Position,
         t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.UpdatedAt);
+
+    private static TaskCommentDto ToDto(TaskComment c) => new(c.Id, c.TaskId, c.Text, c.CreatedAt, c.UpdatedAt);
+
+    private static TaskAttachmentDto ToDto(TaskAttachment a) => new(a.Id, a.TaskId, a.FileName, a.ContentType, a.SizeBytes, a.CreatedAt);
 }

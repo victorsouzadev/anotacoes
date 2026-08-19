@@ -1,0 +1,47 @@
+<div class="page">
+  <app-tasks-top-bar />
+
+  <main class="content">
+    @if (store.loading()) {
+      <p class="empty">Carregando…</p>
+    } @else {
+      <div class="board">
+        @for (col of columns(); track col.id ?? '__none__') {
+          <div
+            class="column"
+            [class.drag-over]="dragOverColumn === (col.id ?? '__none__')"
+            (dragover)="onDragOverColumn(col.id, $event)"
+            (drop)="onDropColumn(col.id, $event)"
+          >
+            <div class="column-header">
+              @if (col.colorHex) {
+                <span class="dot" [style.background]="col.colorHex"></span>
+              }
+              <span class="name">{{ col.name }}</span>
+              <span class="count">{{ tasksFor(col.id).length }}</span>
+            </div>
+
+            <div class="cards">
+              @for (task of tasksFor(col.id); track task.id) {
+                <div class="card" draggable="true" (dragstart)="onDragStart(task, $event)" (dragend)="onDragEnd()">
+                  <button class="check" (click)="toggleComplete(task, $event)"><app-icon name="check" [size]="11" /></button>
+                  <div class="card-body">
+                    <span class="title">{{ task.title }}</span>
+                    <div class="meta">
+                      @if (task.dueDate) {
+                        <span class="chip" [class.overdue]="isOverdue(task)">{{ task.dueDate | date: 'dd/MM' }}</span>
+                      }
+                      <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
+                    </div>
+                  </div>
+                </div>
+              } @empty {
+                <p class="empty-column">Nada por aqui</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </main>
+</div>

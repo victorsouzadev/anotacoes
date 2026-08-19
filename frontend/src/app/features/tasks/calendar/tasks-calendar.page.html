@@ -1,0 +1,67 @@
+<div class="page">
+  <app-tasks-top-bar />
+
+  <main class="content">
+    <div class="cal-toolbar">
+      <div class="nav">
+        <button (click)="prevMonth()">‹</button>
+        <span class="month">{{ monthLabel }}</span>
+        <button (click)="nextMonth()">›</button>
+      </div>
+      <button class="today-btn" (click)="goToday()">Hoje</button>
+    </div>
+
+    @if (store.loading()) {
+      <p class="empty">Carregando…</p>
+    } @else {
+      <div class="weekdays">
+        @for (w of weekdayLabels; track w) {
+          <span>{{ w }}</span>
+        }
+      </div>
+
+      <div class="grid">
+        @for (day of days(); track day.date.getTime()) {
+          <div
+            class="day"
+            [class.out]="!day.inMonth"
+            [class.today]="day.isToday"
+            [class.selected]="selectedDay?.toDateString() === day.date.toDateString()"
+            (click)="selectDay(day)"
+          >
+            <span class="day-number">{{ day.date.getDate() }}</span>
+            <div class="day-tasks">
+              @for (t of day.tasks.slice(0, 3); track t.id) {
+                <span class="pill" [class.completed]="t.isCompleted" [class.overdue]="isOverdue(t)">{{ t.title }}</span>
+              }
+              @if (day.tasks.length > 3) {
+                <span class="more">+{{ day.tasks.length - 3 }}</span>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (selectedDay) {
+        <div class="day-panel">
+          <h3>{{ formatSelectedDay() }}</h3>
+          @if (tasksForSelectedDay().length === 0) {
+            <p class="empty">Nenhuma tarefa nesse dia.</p>
+          } @else {
+            <ul>
+              @for (t of tasksForSelectedDay(); track t.id) {
+                <li>
+                  <button class="check" [class.done]="t.isCompleted" (click)="toggleComplete(t, $event)">
+                    @if (t.isCompleted) { <app-icon name="check" [size]="11" /> }
+                  </button>
+                  <span [class.done]="t.isCompleted" [class.overdue]="isOverdue(t)">{{ t.title }}</span>
+                  <span class="time">{{ formatTime(t.dueDate!) }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+    }
+  </main>
+</div>

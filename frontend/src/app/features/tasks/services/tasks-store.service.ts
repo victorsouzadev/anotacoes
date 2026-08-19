@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../../core/uuid';
-import { Subtask, TaskCategory, TaskItem } from '../models/task.model';
+import { Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem } from '../models/task.model';
 import { TaskUpsertInput, TasksService } from './tasks.service';
 
 type TaskDraft = Partial<
@@ -98,6 +98,63 @@ export class TasksStoreService {
   async deleteForever(task: TaskItem): Promise<void> {
     await this.api.deleteTaskForever(task.id);
     this.tasks.update((list) => list.filter((t) => t.id !== task.id));
+  }
+
+  async duplicateTask(task: TaskItem): Promise<TaskItem> {
+    return this.createTask({
+      title: `${task.title} (cópia)`,
+      description: task.description,
+      dueDate: task.dueDate,
+      priority: task.priority,
+      categoryId: task.categoryId,
+      isRecurring: task.isRecurring,
+      recurrenceRule: task.recurrenceRule,
+      locationLabel: task.locationLabel,
+      subtasks: task.subtasks.map((s) => ({ ...s, isCompleted: false })),
+    });
+  }
+
+  async bulkComplete(tasks: TaskItem[], isCompleted: boolean): Promise<void> {
+    await Promise.all(
+      tasks.map((t) => this.save(t, {}, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null })),
+    );
+  }
+
+  async bulkTrash(tasks: TaskItem[]): Promise<void> {
+    const deletedAt = new Date().toISOString();
+    await Promise.all(tasks.map((t) => this.save(t, {}, { deletedAt })));
+  }
+
+  async bulkSetCategory(tasks: TaskItem[], categoryId: string | null): Promise<void> {
+    await Promise.all(tasks.map((t) => this.save(t, { categoryId })));
+  }
+
+  listComments(taskId: string): Promise<TaskComment[]> {
+    return this.api.listComments(taskId);
+  }
+
+  addComment(taskId: string, text: string): Promise<TaskComment> {
+    return this.api.addComment(taskId, text);
+  }
+
+  deleteComment(taskId: string, commentId: string): Promise<void> {
+    return this.api.deleteComment(taskId, commentId);
+  }
+
+  listAttachments(taskId: string): Promise<TaskAttachment[]> {
+    return this.api.listAttachments(taskId);
+  }
+
+  addAttachment(taskId: string, fileName: string, contentType: string, dataBase64: string): Promise<TaskAttachment> {
+    return this.api.addAttachment(taskId, fileName, contentType, dataBase64);
+  }
+
+  deleteAttachment(taskId: string, attachmentId: string): Promise<void> {
+    return this.api.deleteAttachment(taskId, attachmentId);
+  }
+
+  downloadAttachment(taskId: string, attachmentId: string): Promise<Blob> {
+    return this.api.downloadAttachment(taskId, attachmentId);
   }
 
   async incrementPomodoro(task: TaskItem): Promise<void> {

@@ -44,3 +44,26 @@ public class TaskItem
     public string Subtasks { get; set; } = "[]";
     public DateTime UpdatedAt { get; set; }
 }
+
+public class TaskComment
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string TaskId { get; set; } = "";
+    public string Text { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class TaskAttachment
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string TaskId { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "application/octet-stream";
+    public int SizeBytes { get; set; }
+    // Conteúdo em base64 — escala pessoal, sem storage externo (mesmo raciocínio do SQLite único).
+    public string DataBase64 { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+}

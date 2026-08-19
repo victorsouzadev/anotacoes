@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { Subtask, TaskCategory, TaskItem, TaskItemWire } from '../models/task.model';
+import { Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskItemWire } from '../models/task.model';
 
 function toView(wire: TaskItemWire): TaskItem {
   let subtasks: Subtask[] = [];
@@ -66,5 +66,37 @@ export class TasksService {
 
   deleteTaskForever(id: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`/api/tasks/items/${id}`));
+  }
+
+  listComments(taskId: string): Promise<TaskComment[]> {
+    return firstValueFrom(this.http.get<TaskComment[]>(`/api/tasks/items/${taskId}/comments`));
+  }
+
+  addComment(taskId: string, text: string): Promise<TaskComment> {
+    return firstValueFrom(this.http.post<TaskComment>(`/api/tasks/items/${taskId}/comments`, { text }));
+  }
+
+  deleteComment(taskId: string, commentId: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/tasks/items/${taskId}/comments/${commentId}`));
+  }
+
+  listAttachments(taskId: string): Promise<TaskAttachment[]> {
+    return firstValueFrom(this.http.get<TaskAttachment[]>(`/api/tasks/items/${taskId}/attachments`));
+  }
+
+  addAttachment(taskId: string, fileName: string, contentType: string, dataBase64: string): Promise<TaskAttachment> {
+    return firstValueFrom(
+      this.http.post<TaskAttachment>(`/api/tasks/items/${taskId}/attachments`, { fileName, contentType, dataBase64 }),
+    );
+  }
+
+  deleteAttachment(taskId: string, attachmentId: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/tasks/items/${taskId}/attachments/${attachmentId}`));
+  }
+
+  downloadAttachment(taskId: string, attachmentId: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`/api/tasks/items/${taskId}/attachments/${attachmentId}/content`, { responseType: 'blob' }),
+    );
   }
 }

@@ -56,5 +56,15 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/trash/tasks-trash.page').then((m) => m.TasksTrashPageComponent),
   },
+  {
+    path: 'tasks/kanban',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/kanban/tasks-kanban.page').then((m) => m.TasksKanbanPageComponent),
+  },
+  {
+    path: 'tasks/calendario',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/calendar/tasks-calendar.page').then((m) => m.TasksCalendarPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

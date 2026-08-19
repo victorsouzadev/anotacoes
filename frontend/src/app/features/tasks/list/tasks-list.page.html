@@ -7,10 +7,17 @@
         <button [class.active]="viewFilter === 'all'" (click)="viewFilter = 'all'">Todas</button>
         <button [class.active]="viewFilter === 'today'" (click)="viewFilter = 'today'">Hoje</button>
         <button [class.active]="viewFilter === 'overdue'" (click)="viewFilter = 'overdue'">Atrasadas</button>
+        <button [class.active]="viewFilter === 'noDate'" (click)="viewFilter = 'noDate'">Sem prazo</button>
+      </div>
+
+      <div class="search-box">
+        <app-icon name="search" [size]="14" />
+        <input type="text" placeholder="Buscar por título ou descrição…" [(ngModel)]="searchTerm" />
       </div>
 
       <select class="category-select" [(ngModel)]="categoryFilter">
         <option [ngValue]="null">Todas as categorias</option>
+        <option [ngValue]="NO_CATEGORY">Sem categoria</option>
         @for (c of store.categories(); track c.id) {
           <option [ngValue]="c.id">{{ c.name }}</option>
         }
@@ -22,8 +29,31 @@
         <option value="created">Ordenar por criação</option>
       </select>
 
+      <button class="icon-btn" [class.active]="selectionMode" (click)="toggleSelectionMode()" title="Selecionar várias">
+        <app-icon name="check" [size]="15" />
+      </button>
+      <button class="icon-btn" (click)="exportCsv()" title="Exportar CSV"><app-icon name="download" [size]="15" /></button>
+      <button class="icon-btn" (click)="print()" title="Imprimir"><app-icon name="list-view" [size]="15" /></button>
+
       <button class="new-task" (click)="openCreate()"><app-icon name="plus" [size]="16" /> Nova tarefa</button>
     </div>
+
+    @if (selectionMode) {
+      <div class="bulk-bar">
+        <button (click)="selectAllVisible()">Selecionar/desmarcar todas</button>
+        <span class="bulk-count">{{ selectedIds.size }} selecionada(s)</span>
+        <button (click)="bulkComplete(true)" [disabled]="selectedIds.size === 0">Concluir</button>
+        <button (click)="bulkComplete(false)" [disabled]="selectedIds.size === 0">Reabrir</button>
+        <select (change)="bulkSetCategory($any($event.target).value); $any($event.target).value = ''" [disabled]="selectedIds.size === 0">
+          <option value="" disabled selected>Mudar categoria…</option>
+          <option value="">Sem categoria</option>
+          @for (c of store.categories(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+        <button class="danger" (click)="bulkTrash()" [disabled]="selectedIds.size === 0">Mover pra lixeira</button>
+      </div>
+    }
 
     @if (store.loading()) {
       <p class="empty">Carregando…</p>
@@ -32,13 +62,22 @@
     } @else {
       <div class="list">
         @for (task of visibleTasks(); track task.id) {
-          <div class="task-card" [class.completed]="task.isCompleted" (click)="toggleExpanded(task)">
-            <button class="check" [class.done]="task.isCompleted" (click)="toggleComplete(task, $event)">
-              @if (task.isCompleted) { <app-icon name="check" [size]="13" /> }
-            </button>
+          <div class="task-card" [class.completed]="task.isCompleted" [class.selected]="isSelected(task.id)" (click)="toggleExpanded(task)">
+            @if (selectionMode) {
+              <button class="check" [class.done]="isSelected(task.id)" (click)="toggleSelected(task.id); $event.stopPropagation()">
+                @if (isSelected(task.id)) { <app-icon name="check" [size]="13" /> }
+              </button>
+            } @else {
+              <button class="check" [class.done]="task.isCompleted" (click)="toggleComplete(task, $event)">
+                @if (task.isCompleted) { <app-icon name="check" [size]="13" /> }
+              </button>
+            }
 
             <div class="info">
-              <span class="title">{{ task.title }}</span>
+              <button type="button" class="title" (click)="openDetail(task, $event)">{{ task.title }}</button>
+              @if (task.description) {
+                <span class="description">{{ task.description }}</span>
+              }
               <div class="meta">
                 @if (task.dueDate) {
                   <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
@@ -53,14 +92,21 @@
                 @if (task.isRecurring) {
                   <span class="chip recurring">↻</span>
                 }
+                @if (task.completedPomodoros > 0) {
+                  <span class="chip pomodoros"><app-icon name="pomodoro" [size]="10" /> {{ task.completedPomodoros }}</span>
+                }
               </div>
             </div>
 
-            <div class="actions" (click)="$event.stopPropagation()">
-              <button (click)="startPomodoro(task, $event)" title="Iniciar pomodoro"><app-icon name="pomodoro" [size]="15" /></button>
-              <button (click)="openEdit(task, $event)" title="Editar"><app-icon name="edit" [size]="15" /></button>
-              <button (click)="moveToTrash(task, $event)" title="Mover pra lixeira"><app-icon name="delete" [size]="15" /></button>
-            </div>
+            @if (!selectionMode) {
+              <div class="actions" (click)="$event.stopPropagation()">
+                <button (click)="openDetail(task, $event)" title="Visualizar"><app-icon name="eye" [size]="15" /></button>
+                <button (click)="startPomodoro(task, $event)" title="Iniciar pomodoro"><app-icon name="pomodoro" [size]="15" /></button>
+                <button (click)="duplicateTask(task, $event)" title="Duplicar"><app-icon name="duplicate" [size]="15" /></button>
+                <button (click)="openEdit(task, $event)" title="Editar"><app-icon name="edit" [size]="15" /></button>
+                <button (click)="moveToTrash(task, $event)" title="Mover pra lixeira"><app-icon name="delete" [size]="15" /></button>
+              </div>
+            }
           </div>
 
           @if (expandedId === task.id && task.subtasks.length > 0) {
@@ -82,5 +128,9 @@
 
   @if (showForm) {
     <app-task-form [task]="formTask" (save)="onSave($event)" (cancel)="closeForm()" />
+  }
+
+  @if (detailTask) {
+    <app-task-detail [task]="detailTask" (close)="closeDetail()" (edit)="editFromDetail()" />
   }
 </div>
