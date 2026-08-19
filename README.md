@@ -127,6 +127,10 @@ mesmos dados.
   fica no git — o CI builda o APK a cada deploy (`.github/workflows/deploy.yml`,
   job `build-mobile`) e o coloca em `frontend/public/downloads/` antes do build
   do Angular, então ele acompanha automaticamente cada push em `main`.
+- **MCP para LLMs** ([mcp/](mcp/)): servidor MCP separado que expõe tarefas como
+  ferramentas (`add_task`, `list_tasks`, `complete_task`, `list_categories`) pra
+  um LLM (Claude Desktop, Claude Code etc.) usar direto, autenticando contra o
+  mesmo `/api/auth` e `/api/tasks` do web/Android — ver [mcp/README.md](mcp/README.md).
 
 ## Modelo de dados (visão geral)
 
@@ -184,6 +188,11 @@ notas-vps/
 │   │   ├── data/sync/                # sincronização completa com o backend (mesma conta do hub)
 │   │   ├── data/remote/AuthApi.kt    # login/registro/refresh contra /api/auth/*
 │   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
+│   └── README.md
+├── mcp/                               # servidor MCP (Node/TS) — expõe tarefas como tools pra um LLM
+│   ├── src/tasksApi.ts               # client REST contra /api/tasks/* (mesmo contrato do web/Android)
+│   ├── src/auth.ts                   # login/refresh contra /api/auth/*, token só em memória
+│   ├── src/index.ts                  # registro das tools (add_task, list_tasks, complete_task, list_categories)
 │   └── README.md
 ├── caddy/                            # Caddyfile + Dockerfile (build do Angular embutido)
 ├── scripts/

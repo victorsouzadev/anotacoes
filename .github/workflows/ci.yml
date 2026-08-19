@@ -49,3 +49,18 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
       - run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
+
+  mcp-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+      - run: npm ci
+      - run: npm run build
