@@ -131,10 +131,12 @@
   gap: 14px;
   align-items: flex-start;
   min-height: 60vh;
+  scroll-snap-type: x proximity;
 }
 
 .column {
   flex: 0 0 260px;
+  scroll-snap-align: start;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -258,6 +260,25 @@
   cursor: grabbing;
 }
 
+.move-select {
+  display: none;
+  align-self: flex-start;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  padding: 3px 4px;
+  max-width: 60px;
+}
+
+/* Drag-and-drop HTML5 não dispara em touch — mostra o select como alternativa
+ * sempre que o ponteiro primário do dispositivo não suportar hover/precisão de mouse. */
+@media (hover: none), (pointer: coarse) {
+  .move-select { display: block; }
+}
+
 .card.drag-over {
   border-color: var(--accent);
   box-shadow: 0 -2px 0 var(--accent);
@@ -318,21 +339,7 @@
 .chip.priority.medium { background: #fffbeb; color: #b45309; }
 .chip.priority.low { background: #f0fdf4; color: #16a34a; }
 
-.move-select {
-  display: none;
-  align-self: flex-start;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  padding: 3px 4px;
-  max-width: 60px;
-}
-
-/* Drag-and-drop HTML5 não dispara em touch — mostra o select como alternativa
- * sempre que o ponteiro primário do dispositivo não suportar hover/precisão de mouse. */
-@media (hover: none), (pointer: coarse) {
-  .move-select { display: block; }
+@media (max-width: 700px) {
+  .content { padding: 16px; }
+  .column { flex-basis: 82vw; }
 }

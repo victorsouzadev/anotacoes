@@ -65,6 +65,14 @@ const LONG_BREAK_SECONDS = 15 * 60;
     .controls .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
     .controls .secondary:hover { background: var(--bg); }
     .cycles { font-size: 12px; color: var(--text-muted); }
+
+    @media (max-width: 480px) {
+      .content { padding: 16px; }
+      .timer-card { padding: 28px 16px; }
+      .time { font-size: 42px; }
+      .controls { width: 100%; }
+      .controls button { flex: 1; }
+    }
   `],
 })
 export class TasksPomodoroPageComponent implements OnInit, OnDestroy {

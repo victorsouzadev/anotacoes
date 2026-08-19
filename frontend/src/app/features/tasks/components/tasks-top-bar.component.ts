@@ -12,7 +12,7 @@ import { IconComponent, IconName } from '../../../shared/icon';
     <header class="top-bar">
       <div class="brand">
         <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
-        <h1><span class="brand-mark"><app-icon name="checklist" [size]="14" /></span> Tarefas</h1>
+        <h1><span class="brand-mark"><app-icon name="checklist" [size]="14" /></span><span class="brand-text">Tarefas</span></h1>
       </div>
       <nav class="tabs">
         <a routerLink="/tasks" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Lista</a>
@@ -58,7 +58,7 @@ import { IconComponent, IconName } from '../../../shared/icon';
       background: var(--accent); color: #fff;
       flex-shrink: 0;
     }
-    .tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+    .tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; min-width: 0; }
     .tabs a {
       padding: 7px 12px;
       border-radius: var(--radius-sm);
@@ -66,6 +66,7 @@ import { IconComponent, IconName } from '../../../shared/icon';
       font-weight: 600;
       color: var(--text-muted);
       text-decoration: none;
+      white-space: nowrap;
     }
     .tabs a:hover { background: var(--bg); color: var(--text); }
     .tabs a.active { background: var(--accent-soft); color: var(--accent-dark); }
@@ -87,6 +88,22 @@ import { IconComponent, IconName } from '../../../shared/icon';
     @media (max-width: 900px) {
       .top-bar { padding: 12px 16px; }
       .user-email { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      .top-bar { gap: 10px; }
+      .tabs {
+        flex: 1 1 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        order: 3;
+        padding-bottom: 2px;
+      }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tabs a { flex-shrink: 0; }
+      .top-bar-actions { gap: 8px; }
     }
   `],
 })

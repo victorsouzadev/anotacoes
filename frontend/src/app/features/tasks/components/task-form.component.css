@@ -387,3 +387,12 @@ textarea {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (max-width: 480px) {
+  .overlay { padding: 0; align-items: stretch; }
+  .modal { max-width: none; min-height: 100dvh; border-radius: 0; border: none; padding: 18px 16px; }
+  .row { grid-template-columns: 1fr; }
+  .actions { flex-wrap: wrap; }
+  .actions button { flex: 1; }
+  .new-category { flex-direction: column; align-items: stretch; }
+}

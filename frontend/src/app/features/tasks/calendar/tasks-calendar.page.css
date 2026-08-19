@@ -225,3 +225,31 @@
   .content { padding: 16px; }
   .day { min-height: 64px; }
 }
+
+.day-dot {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .grid, .weekdays { gap: 3px; }
+  .day { min-height: 46px; padding: 4px; position: relative; }
+  .day-number { width: 16px; height: 16px; font-size: 11px; }
+  .day-tasks { display: none; }
+  .day-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .month { min-width: 0; font-size: 13px; }
+  .nav { gap: 6px; }
+}

@@ -38,6 +38,9 @@
                 <span class="more">+{{ day.tasks.length - 3 }}</span>
               }
             </div>
+            @if (day.tasks.length > 0) {
+              <span class="day-dot">{{ day.tasks.length }}</span>
+            }
           </div>
         }
       </div>
