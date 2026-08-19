@@ -90,3 +90,7 @@ app.MapFinancasEndpoints();
 app.MapTasksEndpoints();
 
 app.Run();
+
+// Torna a classe Program (implícita em top-level statements) acessível ao projeto de testes
+// via WebApplicationFactory<Program>.
+public partial class Program { }

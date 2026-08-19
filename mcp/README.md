@@ -11,8 +11,23 @@ já usam, então uma tarefa criada por aqui aparece em ambos.
 |---|---|
 | `add_task` | Cria uma tarefa (título, descrição, prazo, prioridade, categoria — categoria é criada automaticamente se ainda não existir). |
 | `list_tasks` | Lista tarefas do usuário (por padrão só as pendentes). |
+| `search_tasks` | Busca tarefas por texto e/ou filtros de categoria, prioridade e prazo (`dueBefore`/`dueAfter`). |
+| `get_task` | Detalhe completo de uma tarefa — inclui subtarefas e comentários. |
+| `update_task` | Edita título, descrição, prazo, prioridade e/ou categoria de uma tarefa existente. |
 | `complete_task` | Marca uma tarefa como concluída, pelo id ou por um trecho do título. |
+| `reopen_task` | Desfaz `complete_task` — reabre uma tarefa concluída. |
+| `delete_task` | Move uma tarefa pra lixeira (reversível). |
+| `restore_task` | Restaura uma tarefa da lixeira. |
 | `list_categories` | Lista as categorias existentes. |
+| `rename_category` | Renomeia uma categoria. |
+| `delete_category` | Apaga uma categoria (as tarefas nela ficam sem categoria, não são apagadas). |
+| `add_comment` | Adiciona um comentário a uma tarefa. |
+| `list_comments` | Lista os comentários de uma tarefa. |
+
+Todas as ferramentas que recebem `idOrTitle` aceitam tanto o id exato quanto um trecho do título
+(busca case-insensitive); se mais de uma tarefa corresponder, a ferramenta retorna erro com a lista
+de candidatas em vez de escolher uma arbitrariamente. Falhas de rede, HTTP ou validação voltam como
+resultado de erro do MCP (`isError: true`) em vez de derrubar o processo do servidor.
 
 ## Configuração
 
@@ -35,6 +50,17 @@ npm install
 npm run build
 ```
 
+## Testes
+
+```bash
+cd mcp
+npm test
+```
+
+Cobre a lógica pura (normalização de prioridade, resolução de tarefa/categoria por id-ou-título,
+filtros de busca) e o fluxo de autenticação (login/refresh/retry em 401) e os payloads HTTP da
+`tasksApi`, com `fetch` mockado — sem depender de um backend real rodando.
+
 ## Uso com Claude Desktop / Claude Code
 
 Adicione ao `claude_desktop_config.json` (ou configuração equivalente de servidores MCP):
@@ -54,5 +80,5 @@ Adicione ao `claude_desktop_config.json` (ou configuração equivalente de servi
 }
 ```
 
-Reinicie o cliente MCP depois de configurar. As ferramentas `add_task`, `list_tasks`,
-`complete_task` e `list_categories` ficam disponíveis para o LLM usar na conversa.
+Reinicie o cliente MCP depois de configurar. As ferramentas da tabela acima ficam disponíveis para
+o LLM usar na conversa.

@@ -115,6 +115,97 @@
 .bulk-bar button.danger { color: var(--danger, #dc2626); }
 .bulk-count { color: var(--text-muted); margin-right: auto; }
 
+.templates-menu {
+  position: relative;
+}
+
+.templates-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.templates-empty {
+  margin: 0;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.template-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-name:hover {
+  background: var(--bg);
+}
+
+.template-row .remove {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 6px;
+  flex-shrink: 0;
+}
+
+.template-row .remove:hover {
+  color: var(--danger);
+}
+
+.snackbar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+}
+
+.snackbar button {
+  border: none;
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+
 .new-task {
   display: flex;
   align-items: center;

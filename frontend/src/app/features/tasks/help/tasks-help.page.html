@@ -1,0 +1,130 @@
+<div class="page">
+  <app-tasks-top-bar />
+
+  <main class="content">
+    <h1>Guia da ferramenta de Tarefas</h1>
+    <p class="intro">
+      Referência rápida de tudo que dá pra fazer aqui — views, filtros, atalhos e as integrações
+      disponíveis.
+    </p>
+
+    <nav class="toc">
+      <a href="#views">Views</a>
+      <a href="#filtros">Busca e filtros</a>
+      <a href="#massa">Ações em massa</a>
+      <a href="#tarefa">Dentro de uma tarefa</a>
+      <a href="#templates">Templates</a>
+      <a href="#exportar">Exportar e imprimir</a>
+      <a href="#notificacoes">Notificações</a>
+      <a href="#atalhos">Atalhos de teclado</a>
+      <a href="#pomodoro">Pomodoro e tempo focado</a>
+      <a href="#mcp">Integração com LLM (MCP)</a>
+    </nav>
+
+    <section id="views">
+      <h2>Views</h2>
+      <dl>
+        <dt>Lista</dt>
+        <dd>Visão padrão. Cada tarefa é um card com prazo, prioridade, categoria, progresso de subtarefas e contagem de pomodoros.</dd>
+        <dt>Kanban</dt>
+        <dd>
+          Colunas arrastáveis. Alterne entre agrupar <strong>por categoria</strong> (cada categoria vira uma
+          coluna) ou <strong>por status</strong> (A fazer / Concluída). Arraste um card pra outra coluna pra
+          mudar a categoria (ou concluir/reabrir, no modo status) — e arraste entre cards da mesma coluna
+          pra reordenar manualmente.
+        </dd>
+        <dt>Calendário</dt>
+        <dd>Grade mensal com as tarefas posicionadas pelo prazo. Clique num dia pra ver a lista detalhada dele.</dd>
+      </dl>
+    </section>
+
+    <section id="filtros">
+      <h2>Busca e filtros</h2>
+      <ul>
+        <li><strong>Busca</strong> — filtra por título ou descrição, em tempo real.</li>
+        <li><strong>Todas / Hoje / Atrasadas / Sem prazo</strong> — filtro de visão rápida.</li>
+        <li><strong>Categoria</strong> — inclui a opção "Sem categoria" pra achar tarefas soltas.</li>
+        <li><strong>Ordenar por</strong> — prazo, prioridade ou data de criação.</li>
+      </ul>
+    </section>
+
+    <section id="massa">
+      <h2>Ações em massa</h2>
+      <p>
+        O botão de seleção (ícone de check na barra de ferramentas) liga o modo de seleção múltipla:
+        clique nos cards pra marcar várias tarefas e depois concluir, reabrir, trocar de categoria ou
+        mover pra lixeira todas de uma vez. Concluir/mover pra lixeira em massa mostra um aviso com
+        "Desfazer" por alguns segundos, caso seja engano.
+      </p>
+    </section>
+
+    <section id="tarefa">
+      <h2>Dentro de uma tarefa</h2>
+      <p>
+        Clicar no <strong>título</strong> de uma tarefa (ou no ícone de olho) abre um painel de
+        visualização — sem entrar no modo de edição — com todos os detalhes, subtarefas, comentários
+        e anexos. Anexos de imagem aparecem como miniatura; qualquer outro tipo de arquivo aparece como
+        link de download. Anexos têm limite de 5MB.
+      </p>
+      <p>Use o ícone de lápis pra editar os campos, ou o de duplicar pra criar uma cópia da tarefa.</p>
+    </section>
+
+    <section id="templates">
+      <h2>Templates de tarefa</h2>
+      <p>
+        Ao criar uma tarefa, o botão "Salvar como modelo" guarda os campos preenchidos (título,
+        descrição, prioridade, categoria, recorrência e subtarefas) como um template — guardado
+        localmente neste navegador. O menu "Modelos" na barra de ferramentas lista os templates salvos
+        pra começar uma tarefa nova já preenchida.
+      </p>
+    </section>
+
+    <section id="exportar">
+      <h2>Exportar e imprimir</h2>
+      <p>
+        O botão de download exporta a lista visível (já filtrada) como CSV. O botão de impressão abre o
+        diálogo de impressão do navegador com um layout enxuto, sem os controles da interface.
+      </p>
+    </section>
+
+    <section id="notificacoes">
+      <h2>Notificações</h2>
+      <p>
+        Ative pelo ícone de calendário na barra de ferramentas. Usa a Notification API do navegador:
+        a cada minuto, verifica tarefas com prazo nos próximos 15 minutos e dispara um aviso.
+        <strong>Só funciona com a aba aberta</strong> — não é push real em segundo plano (isso exigiria
+        um service worker e um servidor de push, fora do escopo atual).
+      </p>
+    </section>
+
+    <section id="atalhos">
+      <h2>Atalhos de teclado</h2>
+      <table class="shortcuts">
+        <tr><td><kbd>N</kbd></td><td>Nova tarefa</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Foca a busca</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Fecha o formulário, o painel de detalhes ou o menu de modelos aberto</td></tr>
+      </table>
+      <p class="hint">Não funcionam enquanto você estiver digitando num campo de texto.</p>
+    </section>
+
+    <section id="pomodoro">
+      <h2>Pomodoro e tempo focado</h2>
+      <p>
+        A página de Pomodoro roda ciclos de foco/descanso vinculados a uma tarefa; cada ciclo de foco
+        concluído soma 1 no contador de pomodoros da tarefa. O "tempo total" mostrado no painel de
+        detalhes e nas Estatísticas é uma estimativa: pomodoros concluídos × duração da sessão de foco.
+      </p>
+    </section>
+
+    <section id="mcp">
+      <h2>Integração com LLM (MCP)</h2>
+      <p>
+        O projeto tem um servidor <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a>
+        (em <code>mcp/</code>) que fala com essa mesma API — uma tarefa criada por um LLM (Claude Desktop,
+        Claude Code, etc.) aparece aqui, no app Android e vice-versa. Ele expõe ferramentas para
+        criar, buscar, editar, concluir/reabrir, apagar/restaurar tarefas, gerenciar categorias e
+        comentários. Veja <code>mcp/README.md</code> no repositório para configurar.
+      </p>
+    </section>
+  </main>
+</div>

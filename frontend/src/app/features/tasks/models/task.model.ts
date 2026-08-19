@@ -42,6 +42,20 @@ export interface TaskItem extends Omit<TaskItemWire, 'subtasks'> {
   subtasks: Subtask[];
 }
 
+export const POMODORO_WORK_SECONDS = 25 * 60;
+
+export function totalTimeSpent(completedPomodoros: number): number {
+  return completedPomodoros * POMODORO_WORK_SECONDS;
+}
+
+export function formatDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
+}
+
 export interface TaskComment {
   id: string;
   taskId: string;

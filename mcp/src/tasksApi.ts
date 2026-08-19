@@ -33,6 +33,14 @@ export interface TaskItem {
   updatedAt: string;
 }
 
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 async function asJson<T>(res: Response, action: string): Promise<T> {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -57,6 +65,26 @@ export async function createCategory(name: string): Promise<TaskCategory> {
     }),
   });
   return asJson<TaskCategory>(res, 'Criar categoria');
+}
+
+export async function renameCategory(category: TaskCategory, name: string): Promise<TaskCategory> {
+  const res = await authedFetch(`/api/tasks/categories/${category.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      name,
+      colorHex: category.colorHex,
+      updatedAt: new Date().toISOString(),
+    }),
+  });
+  return asJson<TaskCategory>(res, 'Renomear categoria');
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const res = await authedFetch(`/api/tasks/categories/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Apagar categoria falhou (HTTP ${res.status}): ${body}`);
+  }
 }
 
 // Todas as tarefas do usuário (o backend não pagina — escala pessoal), incluindo concluídas e
@@ -113,4 +141,34 @@ export async function updateTask(task: TaskItem, changes: Partial<TaskItem>): Pr
     body: JSON.stringify(merged),
   });
   return asJson<TaskItem>(res, 'Atualizar tarefa');
+}
+
+export async function moveToTrash(task: TaskItem): Promise<TaskItem> {
+  return updateTask(task, { deletedAt: new Date().toISOString() });
+}
+
+export async function restoreTask(task: TaskItem): Promise<TaskItem> {
+  return updateTask(task, { deletedAt: null });
+}
+
+// Diferente de moveToTrash: apaga de vez (fora da lixeira), sem volta.
+export async function deleteTaskForever(id: string): Promise<void> {
+  const res = await authedFetch(`/api/tasks/items/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Apagar tarefa falhou (HTTP ${res.status}): ${body}`);
+  }
+}
+
+export async function listComments(taskId: string): Promise<TaskComment[]> {
+  const res = await authedFetch(`/api/tasks/items/${taskId}/comments`);
+  return asJson<TaskComment[]>(res, 'Listar comentários');
+}
+
+export async function addComment(taskId: string, text: string): Promise<TaskComment> {
+  const res = await authedFetch(`/api/tasks/items/${taskId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+  return asJson<TaskComment>(res, 'Adicionar comentário');
 }
