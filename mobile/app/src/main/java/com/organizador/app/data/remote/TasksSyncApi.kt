@@ -10,6 +10,10 @@ import org.json.JSONObject
 
 data class RemoteCategory(val id: String, val name: String, val colorHex: String, val updatedAt: String)
 
+data class RemoteKanbanLane(val id: String, val name: String, val colorHex: String, val position: Int, val updatedAt: String)
+
+data class RemoteTaskComment(val id: String, val taskId: String, val text: String, val createdAt: String, val updatedAt: String)
+
 data class RemoteTaskItem(
     val id: String,
     val title: String,
@@ -17,6 +21,7 @@ data class RemoteTaskItem(
     val dueDate: String?,
     val priority: String,
     val categoryId: String?,
+    val kanbanLaneId: String?,
     val isRecurring: Boolean,
     val recurrenceRule: String?,
     val isCompleted: Boolean,
@@ -66,6 +71,40 @@ class TasksSyncApi(private val baseUrlProvider: () -> String) {
         request("DELETE", "/api/tasks/categories/$id", accessToken, null)
     }
 
+    suspend fun fetchKanbanLanes(accessToken: String): List<RemoteKanbanLane> {
+        val array = request("GET", "/api/tasks/kanban-lanes", accessToken, null) as JSONArray
+        return (0 until array.length()).map { i -> array.getJSONObject(i).toRemoteKanbanLane() }
+    }
+
+    suspend fun upsertKanbanLane(accessToken: String, lane: RemoteKanbanLane): RemoteKanbanLane {
+        val body = JSONObject()
+            .put("name", lane.name)
+            .put("colorHex", lane.colorHex)
+            .put("position", lane.position)
+            .put("updatedAt", lane.updatedAt)
+        val result = request("PUT", "/api/tasks/kanban-lanes/${lane.id}", accessToken, body) as JSONObject
+        return result.toRemoteKanbanLane()
+    }
+
+    suspend fun deleteKanbanLane(accessToken: String, id: String) {
+        request("DELETE", "/api/tasks/kanban-lanes/$id", accessToken, null)
+    }
+
+    suspend fun fetchComments(accessToken: String, taskId: String): List<RemoteTaskComment> {
+        val array = request("GET", "/api/tasks/items/$taskId/comments", accessToken, null) as JSONArray
+        return (0 until array.length()).map { i -> array.getJSONObject(i).toRemoteTaskComment() }
+    }
+
+    suspend fun postComment(accessToken: String, taskId: String, text: String): RemoteTaskComment {
+        val body = JSONObject().put("text", text)
+        val result = request("POST", "/api/tasks/items/$taskId/comments", accessToken, body) as JSONObject
+        return result.toRemoteTaskComment()
+    }
+
+    suspend fun deleteComment(accessToken: String, taskId: String, commentId: String) {
+        request("DELETE", "/api/tasks/items/$taskId/comments/$commentId", accessToken, null)
+    }
+
     suspend fun upsertTask(accessToken: String, task: RemoteTaskItem): RemoteTaskItem {
         val body = JSONObject()
             .put("title", task.title)
@@ -73,6 +112,7 @@ class TasksSyncApi(private val baseUrlProvider: () -> String) {
             .put("dueDate", task.dueDate)
             .put("priority", task.priority)
             .put("categoryId", task.categoryId)
+            .put("kanbanLaneId", task.kanbanLaneId)
             .put("isRecurring", task.isRecurring)
             .put("recurrenceRule", task.recurrenceRule)
             .put("isCompleted", task.isCompleted)
@@ -131,6 +171,22 @@ private fun JSONObject.toRemoteCategory() = RemoteCategory(
     updatedAt = getString("updatedAt"),
 )
 
+private fun JSONObject.toRemoteKanbanLane() = RemoteKanbanLane(
+    id = getString("id"),
+    name = getString("name"),
+    colorHex = getString("colorHex"),
+    position = optInt("position", 0),
+    updatedAt = getString("updatedAt"),
+)
+
+private fun JSONObject.toRemoteTaskComment() = RemoteTaskComment(
+    id = getString("id"),
+    taskId = getString("taskId"),
+    text = getString("text"),
+    createdAt = getString("createdAt"),
+    updatedAt = getString("updatedAt"),
+)
+
 private fun JSONObject.toRemoteTaskItem() = RemoteTaskItem(
     id = getString("id"),
     title = getString("title"),
@@ -138,6 +194,7 @@ private fun JSONObject.toRemoteTaskItem() = RemoteTaskItem(
     dueDate = optStringOrNull("dueDate"),
     priority = getString("priority"),
     categoryId = optStringOrNull("categoryId"),
+    kanbanLaneId = optStringOrNull("kanbanLaneId"),
     isRecurring = getBoolean("isRecurring"),
     recurrenceRule = optStringOrNull("recurrenceRule"),
     isCompleted = getBoolean("isCompleted"),

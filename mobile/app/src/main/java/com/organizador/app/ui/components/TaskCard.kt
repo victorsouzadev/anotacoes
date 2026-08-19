@@ -1,7 +1,9 @@
 package com.organizador.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -44,6 +46,7 @@ import com.organizador.app.ui.theme.Accent
 import com.organizador.app.ui.theme.OnSurfaceSecondary
 import com.organizador.app.ui.theme.Surface as SurfaceColor
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TaskCard(
     taskWithCategory: TaskWithCategory,
@@ -52,6 +55,8 @@ fun TaskCard(
     modifier: Modifier = Modifier,
     onToggleSubtask: (subtaskId: Long, isCompleted: Boolean) -> Unit = { _, _ -> },
     onStartPomodoro: (() -> Unit)? = null,
+    /** Long-press ação: duplicar a tarefa. Null quando o card não deve suportar isso (ex.: lixeira). */
+    onDuplicate: (() -> Unit)? = null,
 ) {
     val task = taskWithCategory.task
     val category = taskWithCategory.category
@@ -63,7 +68,7 @@ fun TaskCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onDuplicate),
         color = SurfaceColor,
     ) {
         Row(

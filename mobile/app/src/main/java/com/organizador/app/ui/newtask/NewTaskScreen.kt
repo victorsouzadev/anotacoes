@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,12 +25,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +48,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -119,6 +126,11 @@ fun NewTaskScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    if (uiState.templates.isNotEmpty()) {
+                        TemplatePickerButton(templates = uiState.templates, onPick = viewModel::onCreateFromTemplate)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Background),
@@ -249,6 +261,34 @@ fun NewTaskScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.new_task_recurrence_label), style = MaterialTheme.typography.titleSmall)
                 RecurrenceSelector(selected = uiState.recurrence, onSelect = viewModel::onRecurrenceSelected)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemplatePickerButton(
+    templates: List<com.organizador.app.data.local.entity.TaskTemplate>,
+    onPick: (com.organizador.app.data.local.entity.TaskTemplate) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Filled.Description,
+                contentDescription = stringResource(R.string.task_template_pick),
+                tint = Accent,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            templates.forEach { template ->
+                DropdownMenuItem(
+                    text = { Text(template.name) },
+                    onClick = {
+                        expanded = false
+                        onPick(template)
+                    },
+                )
             }
         }
     }

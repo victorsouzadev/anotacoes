@@ -197,6 +197,27 @@ class TaskRepository(
         syncCalendarEvent(withId)
     }
 
+    /** Cria uma cópia independente de [task] (novo id local, sem remoteId/calendarEventId/photoPath
+     * — cada tarefa precisa dos seus), preservando as subtarefas (zeradas) e o restante dos campos. */
+    suspend fun duplicate(task: Task): Long {
+        val now = System.currentTimeMillis()
+        val copy = task.copy(
+            id = 0,
+            title = "${task.title} (cópia)",
+            isCompleted = false,
+            completedAt = null,
+            deletedAt = null,
+            completedPomodoros = 0,
+            calendarEventId = null,
+            photoPath = null,
+            remoteId = null,
+            createdAt = now,
+            updatedAt = now,
+        )
+        val subtaskTitles = subtaskDao.getSubtasksForTask(task.id).first().sortedBy { it.position }.map { it.title }
+        return createTaskWithSubtasks(copy, subtaskTitles)
+    }
+
     /** Persists a drag-reordered task list (manual sort mode). No side-effects (reminders/calendar/widget) needed — only display order changes. */
     suspend fun reorderTasks(orderedTaskIds: List<Long>) = taskDao.updatePositions(orderedTaskIds)
 

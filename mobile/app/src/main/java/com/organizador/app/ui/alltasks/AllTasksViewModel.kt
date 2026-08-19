@@ -27,6 +27,8 @@ data class AllTasksUiState(
     val categories: List<Category> = emptyList(),
     val selectedCategoryId: Long? = null,
     val searchQuery: String = "",
+    val filterNoCategory: Boolean = false,
+    val filterNoDate: Boolean = false,
     val sortOption: TaskSortOption = TaskSortOption.DUE_DATE,
     val recurringTasks: List<TaskWithCategory> = emptyList(),
     val dateGroups: List<DateGroup> = emptyList(),
@@ -36,6 +38,13 @@ data class AllTasksUiState(
     val isEmpty: Boolean get() = !isLoading && recurringTasks.isEmpty() && dateGroups.isEmpty() && flatTasks.isEmpty()
 }
 
+private data class Filters(
+    val categoryId: Long?,
+    val query: String,
+    val noCategory: Boolean,
+    val noDate: Boolean,
+)
+
 class AllTasksViewModel(
     private val taskRepository: TaskRepository,
     private val categoryRepository: CategoryRepository,
@@ -43,20 +52,35 @@ class AllTasksViewModel(
 
     private val selectedCategoryId = MutableStateFlow<Long?>(null)
     private val searchQuery = MutableStateFlow("")
+    private val filterNoCategory = MutableStateFlow(false)
+    private val filterNoDate = MutableStateFlow(false)
     private val sortOption = MutableStateFlow(TaskSortOption.DUE_DATE)
+
+    private val filters: kotlinx.coroutines.flow.Flow<Filters> = combine(
+        selectedCategoryId,
+        searchQuery,
+        filterNoCategory,
+        filterNoDate,
+    ) { categoryId, query, noCategory, noDate -> Filters(categoryId, query, noCategory, noDate) }
 
     val uiState: StateFlow<AllTasksUiState> = combine(
         taskRepository.allTasks,
         categoryRepository.categories,
-        selectedCategoryId,
-        searchQuery,
+        filters,
         sortOption,
-    ) { allTasks, categories, selectedId, query, sort ->
+    ) { allTasks, categories, f, sort ->
+        val selectedId = f.categoryId
+        val query = f.query
         var filtered = if (selectedId == null) allTasks else allTasks.filter { it.task.categoryId == selectedId }
         val needle = query.trim()
         if (needle.isNotEmpty()) {
-            filtered = filtered.filter { it.task.title.contains(needle, ignoreCase = true) }
+            filtered = filtered.filter {
+                it.task.title.contains(needle, ignoreCase = true) ||
+                    it.task.description?.contains(needle, ignoreCase = true) == true
+            }
         }
+        if (f.noCategory) filtered = filtered.filter { it.task.categoryId == null }
+        if (f.noDate) filtered = filtered.filter { it.task.dueDate == null }
 
         val recurring = filtered.filter { it.task.isRecurring }
         val dated = filtered.filter { !it.task.isRecurring }
@@ -73,6 +97,8 @@ class AllTasksViewModel(
                 categories = categories,
                 selectedCategoryId = selectedId,
                 searchQuery = query,
+                filterNoCategory = f.noCategory,
+                filterNoDate = f.noDate,
                 sortOption = sort,
                 recurringTasks = recurring,
                 dateGroups = groups,
@@ -88,6 +114,8 @@ class AllTasksViewModel(
                 categories = categories,
                 selectedCategoryId = selectedId,
                 searchQuery = query,
+                filterNoCategory = f.noCategory,
+                filterNoDate = f.noDate,
                 sortOption = sort,
                 recurringTasks = recurring,
                 flatTasks = sorted,
@@ -102,6 +130,18 @@ class AllTasksViewModel(
 
     fun onSearchQueryChanged(query: String) {
         searchQuery.value = query
+    }
+
+    fun onFilterNoCategoryChanged(enabled: Boolean) {
+        filterNoCategory.value = enabled
+    }
+
+    fun onFilterNoDateChanged(enabled: Boolean) {
+        filterNoDate.value = enabled
+    }
+
+    fun onDuplicate(task: Task) {
+        viewModelScope.launch { taskRepository.duplicate(task) }
     }
 
     fun onSortOptionSelected(option: TaskSortOption) {
