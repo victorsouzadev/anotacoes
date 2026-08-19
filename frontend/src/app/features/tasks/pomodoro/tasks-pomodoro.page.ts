@@ -3,10 +3,11 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
 import { TasksStoreService } from '../services/tasks-store.service';
+import { POMODORO_WORK_SECONDS } from '../models/task.model';
 
 type Phase = 'work' | 'break';
 
-const WORK_SECONDS = 25 * 60;
+const WORK_SECONDS = POMODORO_WORK_SECONDS;
 const SHORT_BREAK_SECONDS = 5 * 60;
 const LONG_BREAK_SECONDS = 15 * 60;
 

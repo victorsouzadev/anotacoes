@@ -1,11 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../shared/icon';
-import { decodeRecurrence, TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
+import { decodeRecurrence, formatDuration, totalTimeSpent } from '../models/task.model';
+import { TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+function isImage(attachment: TaskAttachment): boolean {
+  return attachment.contentType.startsWith('image/');
+}
 
 @Component({
   selector: 'app-task-detail',
@@ -14,7 +19,7 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
   templateUrl: './task-detail.component.html',
   styleUrl: './task-detail.component.css',
 })
-export class TaskDetailComponent implements OnChanges {
+export class TaskDetailComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) task!: TaskItem;
   @Output() close = new EventEmitter<void>();
   @Output() edit = new EventEmitter<void>();
@@ -27,14 +32,45 @@ export class TaskDetailComponent implements OnChanges {
   loadingAttachments = true;
   attachmentError = '';
 
+  imagePreviews = new Map<string, string>();
+
   constructor(public store: TasksStoreService) {}
 
   ngOnChanges(): void {
     this.comments = [];
+    this.revokePreviews();
     this.attachments = [];
     this.attachmentError = '';
     this.loadComments();
     this.loadAttachments();
+  }
+
+  ngOnDestroy(): void {
+    this.revokePreviews();
+  }
+
+  private revokePreviews(): void {
+    for (const url of this.imagePreviews.values()) URL.revokeObjectURL(url);
+    this.imagePreviews = new Map();
+  }
+
+  isImage(attachment: TaskAttachment): boolean {
+    return isImage(attachment);
+  }
+
+  imagePreviewUrl(attachment: TaskAttachment): string | null {
+    return this.imagePreviews.get(attachment.id) ?? null;
+  }
+
+  private async loadImagePreview(attachment: TaskAttachment): Promise<void> {
+    const blob = await this.store.downloadAttachment(this.task.id, attachment.id);
+    const url = URL.createObjectURL(blob);
+    this.imagePreviews.set(attachment.id, url);
+  }
+
+  timeSpentLabel(): string | null {
+    if (this.task.completedPomodoros === 0) return null;
+    return formatDuration(totalTimeSpent(this.task.completedPomodoros));
   }
 
   private async loadComments(): Promise<void> {
@@ -50,6 +86,7 @@ export class TaskDetailComponent implements OnChanges {
     this.loadingAttachments = true;
     try {
       this.attachments = await this.store.listAttachments(this.task.id);
+      await Promise.all(this.attachments.filter(isImage).map((a) => this.loadImagePreview(a)));
     } finally {
       this.loadingAttachments = false;
     }
@@ -93,11 +130,17 @@ export class TaskDetailComponent implements OnChanges {
     const dataBase64 = await fileToBase64(file);
     const attachment = await this.store.addAttachment(this.task.id, file.name, file.type, dataBase64);
     this.attachments = [...this.attachments, attachment];
+    if (isImage(attachment)) await this.loadImagePreview(attachment);
   }
 
   async removeAttachment(attachment: TaskAttachment): Promise<void> {
     await this.store.deleteAttachment(this.task.id, attachment.id);
     this.attachments = this.attachments.filter((a) => a.id !== attachment.id);
+    const preview = this.imagePreviews.get(attachment.id);
+    if (preview) {
+      URL.revokeObjectURL(preview);
+      this.imagePreviews.delete(attachment.id);
+    }
   }
 
   async downloadAttachment(attachment: TaskAttachment): Promise<void> {

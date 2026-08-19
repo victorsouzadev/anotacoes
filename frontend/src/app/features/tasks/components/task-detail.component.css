@@ -174,6 +174,36 @@
   color: var(--text-muted);
 }
 
+.attachment-image {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  text-align: left;
+}
+
+.attachment-image:hover {
+  border-color: var(--accent);
+}
+
+.attachment-image img {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 4px;
+  object-fit: contain;
+  align-self: flex-start;
+}
+
+.attachment-image-caption {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .attachment-link {
   flex: 1;
   min-width: 0;

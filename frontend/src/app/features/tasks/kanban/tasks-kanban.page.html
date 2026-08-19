@@ -2,6 +2,13 @@
   <app-tasks-top-bar />
 
   <main class="content">
+    <div class="kanban-toolbar">
+      <div class="group-tabs">
+        <button [class.active]="groupBy === 'category'" (click)="groupBy = 'category'">Por categoria</button>
+        <button [class.active]="groupBy === 'status'" (click)="groupBy = 'status'">Por status</button>
+      </div>
+    </div>
+
     @if (store.loading()) {
       <p class="empty">Carregando…</p>
     } @else {
@@ -9,7 +16,7 @@
         @for (col of columns(); track col.id ?? '__none__') {
           <div
             class="column"
-            [class.drag-over]="dragOverColumn === (col.id ?? '__none__')"
+            [class.drag-over]="dragOverColumn === (col.id ?? '__none__') && !dragOverTaskId"
             (dragover)="onDragOverColumn(col.id, $event)"
             (drop)="onDropColumn(col.id, $event)"
           >
@@ -23,7 +30,15 @@
 
             <div class="cards">
               @for (task of tasksFor(col.id); track task.id) {
-                <div class="card" draggable="true" (dragstart)="onDragStart(task, $event)" (dragend)="onDragEnd()">
+                <div
+                  class="card"
+                  [class.drag-over]="dragOverTaskId === task.id"
+                  draggable="true"
+                  (dragstart)="onDragStart(task, $event)"
+                  (dragend)="onDragEnd()"
+                  (dragover)="onDragOverCard(col.id, task, $event)"
+                  (drop)="onDropCard(col.id, task, $event)"
+                >
                   <button class="check" (click)="toggleComplete(task, $event)"><app-icon name="check" [size]="11" /></button>
                   <div class="card-body">
                     <span class="title">{{ task.title }}</span>

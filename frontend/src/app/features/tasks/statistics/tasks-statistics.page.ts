@@ -2,6 +2,7 @@ import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnI
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
 import { TasksStoreService } from '../services/tasks-store.service';
+import { formatDuration, totalTimeSpent } from '../models/task.model';
 
 Chart.register(...registerables);
 
@@ -35,6 +36,10 @@ const CATEGORY_FALLBACK_COLOR = '#6b7280';
           <div class="card">
             <span class="label">Pomodoros concluídos</span>
             <span class="value">{{ totalPomodoros }}</span>
+          </div>
+          <div class="card">
+            <span class="label">Tempo total focado</span>
+            <span class="value">{{ totalTimeLabel }}</span>
           </div>
         </div>
 
@@ -71,6 +76,7 @@ export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDe
   pending = 0;
   completedToday = 0;
   totalPomodoros = 0;
+  totalTimeLabel = '0min';
   categoryLabels: string[] = [];
   categoryData: number[] = [];
   categoryColors: string[] = [];
@@ -99,6 +105,7 @@ export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDe
     const today = new Date().toDateString();
     this.completedToday = active.filter((t) => t.isCompleted && t.completedAt && new Date(t.completedAt).toDateString() === today).length;
     this.totalPomodoros = active.reduce((sum, t) => sum + t.completedPomodoros, 0);
+    this.totalTimeLabel = formatDuration(totalTimeSpent(this.totalPomodoros));
 
     const byCategory = new Map<string, number>();
     for (const t of active) {

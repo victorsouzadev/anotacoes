@@ -3,6 +3,7 @@ import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core
 import { FormsModule } from '@angular/forms';
 import { CATEGORY_COLORS, DecodedRecurrence, Priority, Subtask, TaskItem, decodeRecurrence, encodeRecurrence } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
+import type { TaskTemplate } from '../services/task-templates.service';
 
 export interface TaskFormResult {
   title: string;
@@ -24,8 +25,10 @@ export interface TaskFormResult {
 })
 export class TaskFormComponent implements OnChanges {
   @Input() task: TaskItem | null = null;
+  @Input() template: TaskTemplate | null = null;
   @Output() save = new EventEmitter<TaskFormResult>();
   @Output() cancel = new EventEmitter<void>();
+  @Output() saveAsTemplate = new EventEmitter<TaskFormResult>();
 
   title = '';
   description = '';
@@ -48,17 +51,18 @@ export class TaskFormComponent implements OnChanges {
   constructor(public store: TasksStoreService) {}
 
   ngOnChanges(): void {
-    this.title = this.task?.title ?? '';
-    this.description = this.task?.description ?? '';
+    const source = this.task ?? this.template;
+    this.title = (this.task ? this.task.title : this.template?.title) ?? '';
+    this.description = source?.description ?? '';
     this.dueDateLocal = this.task?.dueDate ? toLocalInputValue(this.task.dueDate) : '';
-    this.priority = this.task?.priority ?? 'Medium';
-    this.categoryId = this.task?.categoryId ?? null;
-    this.subtasks = this.task?.subtasks ? [...this.task.subtasks] : [];
+    this.priority = source?.priority ?? 'Medium';
+    this.categoryId = source?.categoryId ?? null;
+    this.subtasks = source?.subtasks ? [...source.subtasks] : [];
     this.newSubtaskTitle = '';
 
-    const decoded: DecodedRecurrence | null = this.task?.isRecurring
-      ? decodeRecurrence(this.task.recurrenceRule)
-      : null;
+    const isRecurringSource = this.task ? this.task.isRecurring : !!this.template?.isRecurring;
+    const recurrenceRuleSource = this.task ? this.task.recurrenceRule : (this.template?.recurrenceRule ?? null);
+    const decoded: DecodedRecurrence | null = isRecurringSource ? decodeRecurrence(recurrenceRuleSource) : null;
     this.recurrenceKind = decoded?.kind ?? 'NONE';
     this.dailyInterval = decoded?.intervalDays ?? 1;
     this.weeklyDays = new Set(decoded?.daysOfWeek ?? []);
@@ -95,6 +99,15 @@ export class TaskFormComponent implements OnChanges {
 
   submit(): void {
     if (!this.title.trim()) return;
+    this.save.emit(this.buildResult());
+  }
+
+  emitSaveAsTemplate(): void {
+    if (!this.title.trim()) return;
+    this.saveAsTemplate.emit(this.buildResult());
+  }
+
+  private buildResult(): TaskFormResult {
     let recurrenceRule: string | null = null;
     switch (this.recurrenceKind) {
       case 'DAILY':
@@ -109,7 +122,7 @@ export class TaskFormComponent implements OnChanges {
     }
     const isRecurring = this.recurrenceKind !== 'NONE';
 
-    this.save.emit({
+    return {
       title: this.title,
       description: this.description.trim() || null,
       dueDate: this.dueDateLocal ? new Date(this.dueDateLocal).toISOString() : null,
@@ -118,7 +131,7 @@ export class TaskFormComponent implements OnChanges {
       isRecurring: isRecurring && !!recurrenceRule,
       recurrenceRule,
       subtasks: this.subtasks,
-    });
+    };
   }
 }
 

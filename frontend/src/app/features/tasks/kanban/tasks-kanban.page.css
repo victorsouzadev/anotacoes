@@ -14,6 +14,34 @@
   padding: 40px 0;
 }
 
+.kanban-toolbar {
+  display: flex;
+  margin-bottom: 16px;
+}
+
+.group-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px;
+  background: var(--surface);
+}
+
+.group-tabs button {
+  border: none;
+  background: none;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.group-tabs button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .board {
   display: flex;
   gap: 14px;
@@ -94,6 +122,11 @@
 
 .card:active {
   cursor: grabbing;
+}
+
+.card.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 -2px 0 var(--accent);
 }
 
 .card .check {

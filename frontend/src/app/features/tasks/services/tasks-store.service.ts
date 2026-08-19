@@ -3,6 +3,13 @@ import { uuid } from '../../../core/uuid';
 import { Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem } from '../models/task.model';
 import { TaskUpsertInput, TasksService } from './tasks.service';
 
+export interface TaskStateSnapshot {
+  id: string;
+  isCompleted: boolean;
+  completedAt: string | null;
+  deletedAt: string | null;
+}
+
 type TaskDraft = Partial<
   Pick<
     TaskUpsertInput,
@@ -78,7 +85,11 @@ export class TasksStoreService {
   }
 
   async toggleComplete(task: TaskItem): Promise<void> {
-    const isCompleted = !task.isCompleted;
+    await this.setCompleted(task, !task.isCompleted);
+  }
+
+  async setCompleted(task: TaskItem, isCompleted: boolean): Promise<void> {
+    if (task.isCompleted === isCompleted) return;
     await this.save(task, {}, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
   }
 
@@ -127,6 +138,22 @@ export class TasksStoreService {
 
   async bulkSetCategory(tasks: TaskItem[], categoryId: string | null): Promise<void> {
     await Promise.all(tasks.map((t) => this.save(t, { categoryId })));
+  }
+
+  /** Captura o estado mutável por ações em massa, pra permitir desfazer depois. */
+  snapshotState(task: TaskItem): TaskStateSnapshot {
+    return { id: task.id, isCompleted: task.isCompleted, completedAt: task.completedAt, deletedAt: task.deletedAt };
+  }
+
+  async restoreState(snapshots: TaskStateSnapshot[]): Promise<void> {
+    const byId = new Map(this.tasks().map((t) => [t.id, t]));
+    await Promise.all(
+      snapshots.map((s) => {
+        const task = byId.get(s.id);
+        if (!task) return Promise.resolve();
+        return this.save(task, {}, { isCompleted: s.isCompleted, completedAt: s.completedAt, deletedAt: s.deletedAt });
+      }),
+    );
   }
 
   listComments(taskId: string): Promise<TaskComment[]> {

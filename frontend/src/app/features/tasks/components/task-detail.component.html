@@ -38,6 +38,12 @@
           <span><app-icon name="pomodoro" [size]="12" /> {{ task.completedPomodoros }}</span>
         </div>
       }
+      @if (timeSpentLabel(); as time) {
+        <div class="meta-item">
+          <span class="label">Tempo total</span>
+          <span>{{ time }}</span>
+        </div>
+      }
     </div>
 
     @if (task.subtasks.length > 0) {
@@ -87,11 +93,18 @@
         <ul class="attachment-list">
           @for (a of attachments; track a.id) {
             <li>
-              <button type="button" class="attachment-link" (click)="downloadAttachment(a)">
-                <app-icon name="download" [size]="13" />
-                <span class="attachment-name">{{ a.fileName }}</span>
-                <span class="attachment-size">{{ formatBytes(a.sizeBytes) }}</span>
-              </button>
+              @if (isImage(a) && imagePreviewUrl(a); as previewUrl) {
+                <button type="button" class="attachment-image" (click)="downloadAttachment(a)" title="Baixar {{ a.fileName }}">
+                  <img [src]="previewUrl" [alt]="a.fileName" />
+                  <span class="attachment-image-caption">{{ a.fileName }} · {{ formatBytes(a.sizeBytes) }}</span>
+                </button>
+              } @else {
+                <button type="button" class="attachment-link" (click)="downloadAttachment(a)">
+                  <app-icon name="download" [size]="13" />
+                  <span class="attachment-name">{{ a.fileName }}</span>
+                  <span class="attachment-size">{{ formatBytes(a.sizeBytes) }}</span>
+                </button>
+              }
               <button type="button" class="remove" (click)="removeAttachment(a)">✕</button>
             </li>
           }
