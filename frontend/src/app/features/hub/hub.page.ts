@@ -14,6 +14,7 @@ interface ToolCard {
 const TOOLS: ToolCard[] = [
   { path: '/notes', icon: 'pen', title: 'Notas', description: 'Notas manuscritas, texto, desenho e checklists num canvas por página.' },
   { path: '/financas', icon: 'wallet', title: 'Finanças', description: 'Lançamentos financeiros a partir de texto livre, com dashboard de receitas e despesas.' },
+  { path: '/tasks', icon: 'checklist', title: 'Tarefas', description: 'Tarefas com subtarefas, categorias, prioridade, recorrência, pomodoro e estatísticas — sincronizadas com o app Android.' },
 ];
 
 @Component({

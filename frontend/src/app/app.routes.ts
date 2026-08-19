@@ -31,5 +31,30 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/financas/financas.page').then((m) => m.FinancasPageComponent),
   },
+  {
+    path: 'tasks',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/list/tasks-list.page').then((m) => m.TasksListPageComponent),
+  },
+  {
+    path: 'tasks/categorias',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/categories/tasks-categories.page').then((m) => m.TasksCategoriesPageComponent),
+  },
+  {
+    path: 'tasks/pomodoro',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/pomodoro/tasks-pomodoro.page').then((m) => m.TasksPomodoroPageComponent),
+  },
+  {
+    path: 'tasks/estatisticas',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/statistics/tasks-statistics.page').then((m) => m.TasksStatisticsPageComponent),
+  },
+  {
+    path: 'tasks/lixeira',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/trash/tasks-trash.page').then((m) => m.TasksTrashPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

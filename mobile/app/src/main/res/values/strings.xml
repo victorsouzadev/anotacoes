@@ -1,0 +1,263 @@
+<resources>
+    <string name="app_name">Organizador</string>
+    <string name="shortcut_new_task_short">Nova tarefa</string>
+    <string name="shortcut_new_task_long">Criar nova tarefa</string>
+
+    <string name="trash_title">Lixeira</string>
+    <string name="trash_empty">Nenhuma tarefa na lixeira</string>
+    <string name="trash_deleted_on">Excluída em %1$s</string>
+    <string name="trash_restore">Restaurar</string>
+    <string name="trash_delete_forever">Excluir definitivamente</string>
+    <string name="trash_delete_forever_confirm_title">Excluir permanentemente?</string>
+    <string name="trash_delete_forever_confirm_message">Essa ação não pode ser desfeita.</string>
+    <string name="settings_trash_section_title">Lixeira</string>
+    <string name="settings_trash_section_description">Tarefas excluídas ficam aqui por até 30 dias antes de serem removidas de vez.</string>
+    <string name="settings_trash_open">Abrir lixeira</string>
+
+    <string name="nav_today">Hoje</string>
+    <string name="nav_all_tasks">Todas</string>
+    <string name="nav_categories">Categorias</string>
+    <string name="nav_settings">Config</string>
+
+    <string name="today_title">Hoje</string>
+    <string name="today_section_overdue">Atrasadas</string>
+    <string name="today_section_today">Hoje</string>
+    <string name="today_section_calendar">Agenda de hoje</string>
+    <string name="today_calendar_event_all_day">Dia todo</string>
+    <string name="today_calendar_event_untitled">(sem título)</string>
+    <string name="today_empty">Nenhuma tarefa por aqui. Aproveite o dia!</string>
+    <string name="new_task_fab">Nova tarefa</string>
+
+    <string name="all_tasks_title">Todas as tarefas</string>
+    <string name="calendar_title">Calendário</string>
+    <string name="calendar_previous_month">Mês anterior</string>
+    <string name="calendar_next_month">Próximo mês</string>
+    <string name="calendar_day_empty">Nenhuma tarefa neste dia.</string>
+    <string name="all_tasks_section_recurring">Recorrentes</string>
+    <string name="all_tasks_filter_all">Todas</string>
+    <string name="all_tasks_empty">Nenhuma tarefa encontrada</string>
+
+    <string name="new_task_title">Nova tarefa</string>
+    <string name="new_task_input_placeholder">Ex: Enviar relatório até sexta 18h #trabalho urgente\n  revisar números\n  anexar planilha\nLigar pro dentista amanhã</string>
+    <string name="new_task_input_label">Descreva a(s) tarefa(s)</string>
+    <string name="new_task_priority_label">Prioridade</string>
+    <string name="new_task_recurrence_label">Repetir</string>
+    <string name="new_task_save">Salvar tarefa</string>
+    <string name="new_task_save_multiple">Salvar %1$d tarefas</string>
+    <string name="new_task_understood">O que eu entendi</string>
+    <string name="new_task_understood_multiple">%1$d tarefas identificadas</string>
+    <string name="new_task_interpret_ai">Interpretar com IA</string>
+    <string name="new_task_source_ai">IA</string>
+    <string name="new_task_source_local">Local</string>
+    <string name="new_task_remove_item">Remover esta tarefa da lista</string>
+    <string name="new_task_voice_input">Ditar por voz</string>
+    <string name="new_task_voice_prompt">Fale a(s) tarefa(s)</string>
+    <string name="new_task_voice_unavailable">Reconhecimento de voz não disponível neste aparelho</string>
+
+    <string name="priority_low">Baixa</string>
+    <string name="priority_medium">Média</string>
+    <string name="priority_high">Alta</string>
+
+    <string name="recurrence_none">Não repete</string>
+    <string name="recurrence_daily">Diariamente</string>
+    <string name="recurrence_weekly">Semanalmente</string>
+    <string name="recurrence_monthly">Mensalmente</string>
+    <string name="recurrence_every_prefix">A cada</string>
+    <string name="recurrence_day_singular">dia</string>
+    <string name="recurrence_day_plural">dias</string>
+    <string name="recurrence_decrease">Diminuir intervalo</string>
+    <string name="recurrence_increase">Aumentar intervalo</string>
+
+    <string name="weekday_mon">Seg</string>
+    <string name="weekday_tue">Ter</string>
+    <string name="weekday_wed">Qua</string>
+    <string name="weekday_thu">Qui</string>
+    <string name="weekday_fri">Sex</string>
+    <string name="weekday_sat">Sáb</string>
+    <string name="weekday_sun">Dom</string>
+
+    <string name="due_no_date">Sem prazo</string>
+    <string name="due_today">Hoje</string>
+    <string name="due_tomorrow">Amanhã</string>
+    <string name="due_overdue">Atrasada</string>
+
+    <string name="categories_title">Categorias</string>
+    <string name="categories_empty">Nenhuma categoria cadastrada ainda</string>
+    <string name="categories_add">Nova categoria</string>
+    <string name="categories_dialog_title_new">Nova categoria</string>
+    <string name="categories_dialog_title_edit">Editar categoria</string>
+    <string name="categories_name_label">Nome</string>
+    <string name="categories_name_placeholder">Ex: Trabalho</string>
+    <string name="categories_color_label">Cor</string>
+    <string name="categories_save">Salvar</string>
+    <string name="categories_cancel">Cancelar</string>
+    <string name="categories_delete">Excluir</string>
+
+    <string name="settings_theme_section_title">Tema</string>
+    <string name="settings_theme_mode_label">Aparência</string>
+    <string name="settings_theme_mode_system">Sistema</string>
+    <string name="settings_theme_mode_light">Claro</string>
+    <string name="settings_theme_mode_dark">Escuro</string>
+    <string name="settings_theme_accent_label">Cor de destaque</string>
+    <string name="settings_theme_dynamic_color_toggle">Cores dinâmicas (Material You)</string>
+
+    <string name="edit_task_title">Editar tarefa</string>
+    <string name="edit_task_save">Salvar alterações</string>
+    <string name="edit_task_delete">Excluir tarefa</string>
+    <string name="edit_task_share">Compartilhar tarefa</string>
+    <string name="edit_task_photo_label">Foto</string>
+    <string name="edit_task_photo_camera">Câmera</string>
+    <string name="edit_task_photo_gallery">Galeria</string>
+    <string name="edit_task_photo_remove">Remover foto</string>
+    <string name="edit_task_location_label">Lembrete por localização</string>
+    <string name="edit_task_location_add">Adicionar lembrete de localização</string>
+    <string name="edit_task_location_remove">Remover localização</string>
+    <string name="edit_task_location_radius_label">Avisar ao chegar a</string>
+    <string name="edit_task_location_search_placeholder">Endereço ou nome do local</string>
+    <string name="edit_task_location_search_action">Buscar</string>
+    <string name="edit_task_location_search_error">Local não encontrado. Tente um endereço mais específico.</string>
+    <string name="edit_task_location_background_hint">Para avisar mesmo com o app fechado, permita o acesso à localização "o tempo todo"</string>
+    <string name="edit_task_location_background_action">Permitir em segundo plano</string>
+    <string name="edit_task_delete_confirm_title">Excluir esta tarefa?</string>
+    <string name="edit_task_delete_confirm_message">A tarefa vai para a lixeira e pode ser restaurada por até 30 dias.</string>
+    <string name="edit_task_delete_confirm_action">Excluir</string>
+    <string name="edit_task_skip_occurrence_action">Pular esta ocorrência</string>
+    <string name="edit_task_skip_confirm_title">Pular esta ocorrência?</string>
+    <string name="edit_task_skip_confirm_message">A ocorrência atual vai para a lixeira (sem contar como concluída) e a próxima já é criada automaticamente.</string>
+    <string name="edit_task_skip_confirm_action">Pular</string>
+    <string name="edit_task_not_found">Tarefa não encontrada</string>
+    <string name="edit_task_title_label">Título</string>
+    <string name="edit_task_description_label">Descrição (opcional)</string>
+    <string name="edit_task_due_label">Prazo</string>
+    <string name="edit_task_due_none">Sem data</string>
+    <string name="edit_task_time_none">Dia todo</string>
+    <string name="edit_task_category_label">Categoria</string>
+    <string name="edit_task_no_category">Sem categoria</string>
+    <string name="edit_task_subtasks_label">Subtarefas</string>
+    <string name="edit_task_add_subtask_placeholder">Nova subtarefa</string>
+    <string name="edit_task_add_subtask_action">Adicionar subtarefa</string>
+    <string name="edit_task_remove_subtask_action">Remover subtarefa</string>
+    <string name="edit_task_time_picker_title">Horário do prazo</string>
+    <string name="edit_task_time_hour_label">Hora (0–23)</string>
+    <string name="edit_task_time_minute_label">Minuto (0–59)</string>
+    <string name="edit_task_time_clear">Sem horário</string>
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancelar</string>
+
+    <string name="settings_title">Configurações</string>
+    <string name="settings_ai_section_title">Interpretação por IA (OpenRouter)</string>
+    <string name="settings_ai_section_description">Configure sua chave de API da OpenRouter (openrouter.ai) para interpretar o texto da tela \"Nova tarefa\" com um modelo de linguagem, em vez do parser local. A chave fica salva apenas neste aparelho, criptografada.</string>
+    <string name="settings_api_key_label">Chave de API da OpenRouter</string>
+    <string name="settings_api_key_placeholder">sk-or-v1-…</string>
+    <string name="settings_api_key_save">Salvar chave</string>
+    <string name="settings_api_key_clear">Remover chave</string>
+    <string name="settings_api_key_saved">Chave salva neste aparelho</string>
+    <string name="settings_api_key_not_set">Nenhuma chave configurada</string>
+    <string name="settings_model_label">Modelo</string>
+    <string name="settings_model_placeholder">anthropic/claude-haiku-4.5</string>
+    <string name="settings_model_hint">Use o identificador do modelo em openrouter.ai/models (formato provedor/modelo)</string>
+    <string name="settings_model_save">Salvar modelo</string>
+
+    <string name="notification_channel_name">Lembretes de tarefas</string>
+    <string name="notification_channel_description">Avisos no horário do prazo de cada tarefa</string>
+    <string name="notification_task_due_title">Prazo: %1$s</string>
+    <string name="notification_task_due_body">Toque para abrir a tarefa</string>
+    <string name="notification_location_due_body">Você chegou ao local desta tarefa</string>
+    <string name="notification_location_due_body_with_place">Você chegou perto de %1$s</string>
+    <string name="notification_action_complete">Concluir</string>
+    <string name="notification_action_snooze">Adiar 1h</string>
+
+    <string name="settings_reminders_section_title">Lembretes</string>
+    <string name="settings_reminders_notifications_denied">Notificações desativadas para o app. Toque para ajustar nas configurações do sistema.</string>
+    <string name="settings_reminders_exact_alarm_denied">Alarmes exatos desativados. Os lembretes podem atrasar um pouco. Toque para permitir.</string>
+    <string name="settings_reminders_ok">Lembretes ativados normalmente.</string>
+
+    <string name="settings_calendar_section_title">Agenda</string>
+    <string name="settings_calendar_section_description">Sincronize tarefas com prazo direto no app de calendário do seu aparelho (Google Agenda, etc.) e veja os eventos de hoje junto das suas tarefas.</string>
+    <string name="settings_calendar_sync_toggle">Sincronizar com a agenda</string>
+    <string name="settings_calendar_permission_needed">Conceda permissão de agenda para ativar a sincronização.</string>
+    <string name="settings_calendar_none_found">Nenhum calendário encontrado no aparelho.</string>
+    <string name="settings_calendar_picker_label">Calendário usado para as tarefas</string>
+    <string name="settings_calendar_visible_label">Calendários exibidos na Agenda de hoje</string>
+    <string name="settings_calendar_show_all">Marcar todos</string>
+
+    <string name="settings_statistics_section_title">Estatísticas</string>
+    <string name="settings_statistics_section_description">Veja tarefas concluídas, sessões de pomodoro e progresso por categoria.</string>
+    <string name="settings_statistics_open">Ver estatísticas</string>
+
+    <string name="statistics_title">Estatísticas</string>
+    <string name="statistics_completed">Concluídas</string>
+    <string name="statistics_active">Em aberto</string>
+    <string name="statistics_pomodoros">Pomodoros</string>
+    <string name="statistics_streak">Sequência (dias)</string>
+    <string name="statistics_last_7_days">Últimos 7 dias</string>
+    <string name="statistics_by_category">Por categoria</string>
+    <string name="statistics_no_category">Sem categoria</string>
+
+    <string name="undo_task_completed">Tarefa concluída</string>
+    <string name="undo_task_trashed">Tarefa movida para a lixeira</string>
+    <string name="undo_action">Desfazer</string>
+    <string name="undo_task_deleting">Movendo para a lixeira…</string>
+
+    <string name="all_tasks_search_placeholder">Buscar tarefas</string>
+    <string name="all_tasks_sort_due_date">Prazo</string>
+    <string name="all_tasks_sort_priority">Prioridade</string>
+    <string name="all_tasks_sort_alphabetical">A–Z</string>
+    <string name="all_tasks_sort_manual">Manual (arrastar)</string>
+    <string name="all_tasks_manual_drag_handle">Arrastar para reordenar</string>
+    <string name="all_tasks_sort_label">Ordenar tarefas</string>
+
+    <string name="settings_backup_section_title">Dados</string>
+    <string name="settings_backup_section_description">Exporte suas tarefas e categorias para um arquivo, ou importe um backup anterior.</string>
+    <string name="settings_backup_export">Exportar dados</string>
+    <string name="settings_backup_import">Importar dados</string>
+    <string name="settings_backup_exporting">Exportando…</string>
+    <string name="settings_backup_importing">Importando…</string>
+    <string name="settings_backup_export_success">Backup exportado com sucesso</string>
+    <string name="settings_backup_import_success">Backup importado com sucesso</string>
+    <string name="settings_backup_error">Falha: %1$s</string>
+
+    <string name="settings_sync_section_title">Conta e sincronização</string>
+    <string name="settings_sync_section_description">Entre com a mesma conta do hub (notas-vps) pra sincronizar suas tarefas com a versão web — opcional, o app continua funcionando totalmente offline sem login.</string>
+    <string name="settings_sync_server_label">Endereço do servidor</string>
+    <string name="settings_sync_email_label">E-mail</string>
+    <string name="settings_sync_password_label">Senha</string>
+    <string name="settings_sync_login_button">Entrar</string>
+    <string name="settings_sync_register_button">Criar conta</string>
+    <string name="settings_sync_toggle_to_register">Ainda não tem conta? Criar uma</string>
+    <string name="settings_sync_toggle_to_login">Já tem conta? Entrar</string>
+    <string name="settings_sync_logged_in_as">Conectado como %1$s</string>
+    <string name="settings_sync_logout_button">Sair</string>
+    <string name="settings_sync_now_button">Sincronizar agora</string>
+    <string name="settings_sync_syncing">Sincronizando…</string>
+    <string name="settings_sync_last_synced">Última sincronização: %1$s</string>
+    <string name="settings_sync_never_synced">Ainda não sincronizado</string>
+    <string name="settings_sync_success">Sincronizado com sucesso</string>
+    <string name="settings_sync_error">Falha: %1$s</string>
+
+    <string name="widget_title">Hoje</string>
+    <string name="widget_empty">Nenhuma tarefa por aqui</string>
+    <string name="widget_description">Mostra as tarefas de hoje e permite concluí-las ou adicionar uma nova sem abrir o app.</string>
+
+    <string name="task_card_start_pomodoro">Iniciar pomodoro para esta tarefa</string>
+    <string name="edit_task_pomodoro_start">Iniciar pomodoro</string>
+    <string name="edit_task_pomodoro_start_with_count">Iniciar pomodoro (%1$d concluídos)</string>
+
+    <string name="pomodoro_title">Pomodoro</string>
+    <string name="pomodoro_start">Iniciar</string>
+    <string name="pomodoro_pause">Pausar</string>
+    <string name="pomodoro_resume">Retomar</string>
+    <string name="pomodoro_skip">Pular</string>
+    <string name="pomodoro_stop">Parar</string>
+    <string name="pomodoro_phase_focus">Foco</string>
+    <string name="pomodoro_phase_short_break">Pausa curta</string>
+    <string name="pomodoro_phase_long_break">Pausa longa</string>
+    <string name="pomodoro_running_elsewhere">Já existe um pomodoro em andamento para \"%1$s\".</string>
+    <string name="pomodoro_switch_task">Usar para esta tarefa</string>
+    <string name="pomodoro_channel_name">Pomodoro</string>
+    <string name="pomodoro_channel_description">Cronômetro de foco vinculado a uma tarefa</string>
+    <string name="pomodoro_action_pause">Pausar</string>
+    <string name="pomodoro_action_resume">Retomar</string>
+    <string name="pomodoro_action_skip">Pular</string>
+    <string name="pomodoro_action_stop">Parar</string>
+</resources>

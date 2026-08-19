@@ -87,5 +87,6 @@ app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapFoldersEndpoints();
 app.MapFinancasEndpoints();
+app.MapTasksEndpoints();
 
 app.Run();

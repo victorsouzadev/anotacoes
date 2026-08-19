@@ -1,0 +1,86 @@
+<div class="page">
+  <app-tasks-top-bar />
+
+  <main class="content">
+    <div class="toolbar">
+      <div class="view-tabs">
+        <button [class.active]="viewFilter === 'all'" (click)="viewFilter = 'all'">Todas</button>
+        <button [class.active]="viewFilter === 'today'" (click)="viewFilter = 'today'">Hoje</button>
+        <button [class.active]="viewFilter === 'overdue'" (click)="viewFilter = 'overdue'">Atrasadas</button>
+      </div>
+
+      <select class="category-select" [(ngModel)]="categoryFilter">
+        <option [ngValue]="null">Todas as categorias</option>
+        @for (c of store.categories(); track c.id) {
+          <option [ngValue]="c.id">{{ c.name }}</option>
+        }
+      </select>
+
+      <select class="sort-select" [(ngModel)]="sortMode">
+        <option value="dueDate">Ordenar por prazo</option>
+        <option value="priority">Ordenar por prioridade</option>
+        <option value="created">Ordenar por criação</option>
+      </select>
+
+      <button class="new-task" (click)="openCreate()"><app-icon name="plus" [size]="16" /> Nova tarefa</button>
+    </div>
+
+    @if (store.loading()) {
+      <p class="empty">Carregando…</p>
+    } @else if (visibleTasks().length === 0) {
+      <p class="empty">Nenhuma tarefa por aqui.</p>
+    } @else {
+      <div class="list">
+        @for (task of visibleTasks(); track task.id) {
+          <div class="task-card" [class.completed]="task.isCompleted" (click)="toggleExpanded(task)">
+            <button class="check" [class.done]="task.isCompleted" (click)="toggleComplete(task, $event)">
+              @if (task.isCompleted) { <app-icon name="check" [size]="13" /> }
+            </button>
+
+            <div class="info">
+              <span class="title">{{ task.title }}</span>
+              <div class="meta">
+                @if (task.dueDate) {
+                  <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
+                }
+                <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
+                @if (store.categoryFor(task); as cat) {
+                  <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
+                }
+                @if (subtaskProgress(task); as progress) {
+                  <span class="chip subtasks">{{ progress }}</span>
+                }
+                @if (task.isRecurring) {
+                  <span class="chip recurring">↻</span>
+                }
+              </div>
+            </div>
+
+            <div class="actions" (click)="$event.stopPropagation()">
+              <button (click)="startPomodoro(task, $event)" title="Iniciar pomodoro"><app-icon name="pomodoro" [size]="15" /></button>
+              <button (click)="openEdit(task, $event)" title="Editar"><app-icon name="edit" [size]="15" /></button>
+              <button (click)="moveToTrash(task, $event)" title="Mover pra lixeira"><app-icon name="delete" [size]="15" /></button>
+            </div>
+          </div>
+
+          @if (expandedId === task.id && task.subtasks.length > 0) {
+            <ul class="subtask-list" (click)="$event.stopPropagation()">
+              @for (s of task.subtasks; track $index) {
+                <li>
+                  <button class="check small" [class.done]="s.isCompleted" (click)="toggleSubtask(task, $index, $event)">
+                    @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
+                  </button>
+                  <span [class.done]="s.isCompleted">{{ s.title }}</span>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </div>
+    }
+  </main>
+
+  @if (showForm) {
+    <app-task-form [task]="formTask" (save)="onSave($event)" (cancel)="closeForm()" />
+  }
+</div>

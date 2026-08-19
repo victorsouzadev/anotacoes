@@ -49,6 +49,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<Transacao> Transacoes => Set<Transacao>();
+    public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
+    public DbSet<TaskItem> TaskItems => Set<TaskItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -95,6 +97,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.TextoOriginal).HasMaxLength(1000);
             e.HasIndex(t => new { t.UserId, t.Data });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TaskCategory>(e =>
+        {
+            e.ToTable("tasks_categories");
+            e.Property(c => c.Name).IsRequired().HasMaxLength(100);
+            e.Property(c => c.ColorHex).IsRequired().HasMaxLength(20);
+            e.HasIndex(c => c.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TaskItem>(e =>
+        {
+            e.ToTable("tasks_items");
+            e.Property(t => t.Title).IsRequired().HasMaxLength(300);
+            e.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
+            e.Property(t => t.RecurrenceRule).HasMaxLength(100);
+            e.Property(t => t.LocationLabel).HasMaxLength(300);
+            e.Property(t => t.Subtasks).IsRequired();
+            e.HasIndex(t => new { t.UserId, t.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskCategory>().WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
