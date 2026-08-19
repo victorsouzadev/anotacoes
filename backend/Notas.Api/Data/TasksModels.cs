@@ -17,6 +17,18 @@ public class TaskCategory
     public DateTime UpdatedAt { get; set; }
 }
 
+// Raia do quadro Kanban — independente de categoria (o usuário organiza o Kanban do jeito que
+// quiser, ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer fluxo próprio).
+public class KanbanLane
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ColorHex { get; set; } = "";
+    public int Position { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
 public class TaskItem
 {
     public string Id { get; set; } = "";
@@ -26,6 +38,7 @@ public class TaskItem
     public DateTime? DueDate { get; set; }
     public TaskPriority Priority { get; set; } = TaskPriority.Medium;
     public string? CategoryId { get; set; }
+    public string? KanbanLaneId { get; set; }
     public bool IsRecurring { get; set; }
     public string? RecurrenceRule { get; set; }
     public bool IsCompleted { get; set; }

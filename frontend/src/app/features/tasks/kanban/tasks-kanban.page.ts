@@ -1,35 +1,52 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../shared/icon';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
-import { TaskCategory, TaskItem } from '../models/task.model';
+import { CATEGORY_COLORS, KanbanLane, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
 import { reorderIds } from './kanban-logic';
 
-type GroupBy = 'category' | 'status';
+type GroupBy = 'lanes' | 'status';
 
 const STATUS_TODO = '__todo__';
 const STATUS_DONE = '__done__';
+const NO_LANE = '__none__';
 
 interface KanbanColumn {
-  id: string | null;
+  id: string;
   name: string;
   colorHex: string | null;
+  /** Raias de verdade podem ser editadas/apagadas/reordenadas; a coluna "Sem raia" e as de status não. */
+  lane: KanbanLane | null;
 }
 
 @Component({
   selector: 'app-tasks-kanban-page',
   standalone: true,
-  imports: [CommonModule, TasksTopBarComponent, IconComponent],
+  imports: [CommonModule, FormsModule, TasksTopBarComponent, IconComponent],
   templateUrl: './tasks-kanban.page.html',
   styleUrl: './tasks-kanban.page.css',
 })
 export class TasksKanbanPageComponent implements OnInit {
-  groupBy: GroupBy = 'category';
+  readonly colors = CATEGORY_COLORS;
 
-  draggingId: string | null = null;
+  groupBy: GroupBy = 'lanes';
+
+  draggingTaskId: string | null = null;
   dragOverColumn: string | null = null;
   dragOverTaskId: string | null = null;
+
+  draggingLaneId: string | null = null;
+  dragOverLaneId: string | null = null;
+
+  editingLaneId: string | null = null;
+  editingLaneName = '';
+  editingLaneColor = CATEGORY_COLORS[0];
+
+  showNewLane = false;
+  newLaneName = '';
+  newLaneColor = CATEGORY_COLORS[0];
 
   constructor(
     public store: TasksStoreService,
@@ -44,85 +61,27 @@ export class TasksKanbanPageComponent implements OnInit {
   columns(): KanbanColumn[] {
     if (this.groupBy === 'status') {
       return [
-        { id: STATUS_TODO, name: 'A fazer', colorHex: null },
-        { id: STATUS_DONE, name: 'Concluída', colorHex: null },
+        { id: STATUS_TODO, name: 'A fazer', colorHex: null, lane: null },
+        { id: STATUS_DONE, name: 'Concluída', colorHex: null, lane: null },
       ];
     }
-    const categories: TaskCategory[] = this.store.categories();
+    const lanes = this.store.kanbanLanes();
     return [
-      { id: null, name: 'Sem categoria', colorHex: null },
-      ...categories.map((c) => ({ id: c.id, name: c.name, colorHex: c.colorHex })),
+      { id: NO_LANE, name: 'Sem raia', colorHex: null, lane: null },
+      ...lanes.map((l) => ({ id: l.id, name: l.name, colorHex: l.colorHex, lane: l })),
     ];
   }
 
   private columnOf(task: TaskItem): string | null {
     if (this.groupBy === 'status') return task.isCompleted ? STATUS_DONE : STATUS_TODO;
-    return task.categoryId ?? null;
+    return task.kanbanLaneId ?? NO_LANE;
   }
 
-  tasksFor(columnId: string | null): TaskItem[] {
+  tasksFor(columnId: string) {
     return this.store
       .activeTasks()
       .filter((t) => this.columnOf(t) === columnId)
       .sort((a, b) => a.position - b.position);
-  }
-
-  onDragStart(task: TaskItem, event: DragEvent): void {
-    this.draggingId = task.id;
-    event.dataTransfer?.setData('text/plain', task.id);
-  }
-
-  onDragEnd(): void {
-    this.draggingId = null;
-    this.dragOverColumn = null;
-    this.dragOverTaskId = null;
-  }
-
-  onDragOverColumn(columnId: string | null, event: DragEvent): void {
-    event.preventDefault();
-    this.dragOverColumn = columnId ?? '__none__';
-  }
-
-  onDragOverCard(columnId: string | null, task: TaskItem, event: DragEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.dragOverColumn = columnId ?? '__none__';
-    this.dragOverTaskId = task.id;
-  }
-
-  async onDropColumn(columnId: string | null, event: DragEvent): Promise<void> {
-    event.preventDefault();
-    await this.drop(columnId, null);
-  }
-
-  async onDropCard(columnId: string | null, targetTask: TaskItem, event: DragEvent): Promise<void> {
-    event.preventDefault();
-    event.stopPropagation();
-    await this.drop(columnId, targetTask.id);
-  }
-
-  private async drop(columnId: string | null, targetTaskId: string | null): Promise<void> {
-    this.dragOverColumn = null;
-    this.dragOverTaskId = null;
-    const id = this.draggingId;
-    this.draggingId = null;
-    if (!id) return;
-    const task = this.store.activeTasks().find((t) => t.id === id);
-    if (!task) return;
-
-    const targetColumnIds = this.tasksFor(columnId).map((t) => t.id);
-    const reordered = reorderIds(targetColumnIds, id, targetTaskId);
-
-    const sameColumn = this.columnOf(task) === columnId;
-    if (!sameColumn) {
-      if (this.groupBy === 'status') {
-        await this.store.setCompleted(task, columnId === STATUS_DONE);
-      } else {
-        await this.store.updateTask(task, { categoryId: columnId });
-      }
-    }
-    await this.store.reorder(reordered);
-    this.cdr.markForCheck();
   }
 
   isOverdue(task: TaskItem): boolean {
@@ -132,6 +91,150 @@ export class TasksKanbanPageComponent implements OnInit {
   async toggleComplete(task: TaskItem, event: Event): Promise<void> {
     event.stopPropagation();
     await this.store.toggleComplete(task);
+    this.cdr.markForCheck();
+  }
+
+  // --- Drag-and-drop de tarefas entre colunas/cards ---
+
+  onDragStart(task: TaskItem, event: DragEvent): void {
+    this.draggingTaskId = task.id;
+    event.dataTransfer?.setData('text/plain', task.id);
+  }
+
+  onDragEnd(): void {
+    this.draggingTaskId = null;
+    this.dragOverColumn = null;
+    this.dragOverTaskId = null;
+  }
+
+  onDragOverColumn(columnId: string, event: DragEvent): void {
+    event.preventDefault();
+    this.dragOverColumn = columnId;
+  }
+
+  onDragOverCard(columnId: string, task: TaskItem, event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dragOverColumn = columnId;
+    this.dragOverTaskId = task.id;
+  }
+
+  async onDropColumn(columnId: string, event: DragEvent): Promise<void> {
+    event.preventDefault();
+    await this.dropTask(columnId, null);
+  }
+
+  async onDropCard(columnId: string, targetTask: TaskItem, event: DragEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    await this.dropTask(columnId, targetTask.id);
+  }
+
+  private async dropTask(columnId: string, targetTaskId: string | null): Promise<void> {
+    this.dragOverColumn = null;
+    this.dragOverTaskId = null;
+    const id = this.draggingTaskId;
+    this.draggingTaskId = null;
+    if (!id) return;
+    const task = this.store.activeTasks().find((t) => t.id === id);
+    if (!task) return;
+
+    const targetColumnIds = this.tasksFor(columnId).map((t) => t.id);
+    const reordered = reorderIds(targetColumnIds, id, targetTaskId);
+
+    await this.assignColumn(task, columnId);
+    await this.store.reorder(reordered);
+    this.cdr.markForCheck();
+  }
+
+  private async assignColumn(task: TaskItem, columnId: string): Promise<void> {
+    if (this.columnOf(task) === columnId) return;
+    if (this.groupBy === 'status') {
+      await this.store.setCompleted(task, columnId === STATUS_DONE);
+    } else {
+      await this.store.setTaskLane(task, columnId === NO_LANE ? null : columnId);
+    }
+  }
+
+  // Fallback pra quem não consegue arrastar (touch não dispara drag-and-drop HTML5) — o select
+  // por card move a tarefa direto pra outra coluna, indo pro fim dela.
+  async onMoveSelect(task: TaskItem, event: Event): Promise<void> {
+    const select = event.target as HTMLSelectElement;
+    const value = select.value;
+    select.value = '';
+    if (!value) return;
+    await this.assignColumn(task, value);
+    const targetColumnIds = [...this.tasksFor(value).map((t) => t.id), task.id];
+    await this.store.reorder(targetColumnIds);
+    this.cdr.markForCheck();
+  }
+
+  // --- Gestão das raias (criar / renomear / apagar / reordenar) ---
+
+  async addLane(): Promise<void> {
+    const name = this.newLaneName.trim();
+    if (!name) return;
+    await this.store.createLane(name, this.newLaneColor);
+    this.newLaneName = '';
+    this.newLaneColor = CATEGORY_COLORS[0];
+    this.showNewLane = false;
+    this.cdr.markForCheck();
+  }
+
+  startEditLane(lane: KanbanLane, event: Event): void {
+    event.stopPropagation();
+    this.editingLaneId = lane.id;
+    this.editingLaneName = lane.name;
+    this.editingLaneColor = lane.colorHex;
+  }
+
+  async commitEditLane(lane: KanbanLane): Promise<void> {
+    if (this.editingLaneId !== lane.id) return;
+    this.editingLaneId = null;
+    const name = this.editingLaneName.trim();
+    if (!name) return;
+    await this.store.renameLane(lane, name, this.editingLaneColor);
+    this.cdr.markForCheck();
+  }
+
+  cancelEditLane(): void {
+    this.editingLaneId = null;
+  }
+
+  async removeLane(lane: KanbanLane, event: Event): Promise<void> {
+    event.stopPropagation();
+    if (!confirm(`Apagar a raia "${lane.name}"? As tarefas dela vão pra "Sem raia".`)) return;
+    await this.store.deleteLane(lane);
+    this.cdr.markForCheck();
+  }
+
+  onLaneDragStart(lane: KanbanLane, event: DragEvent): void {
+    event.stopPropagation();
+    this.draggingLaneId = lane.id;
+    event.dataTransfer?.setData('text/plain', lane.id);
+  }
+
+  onLaneDragEnd(): void {
+    this.draggingLaneId = null;
+    this.dragOverLaneId = null;
+  }
+
+  onLaneDragOver(lane: KanbanLane, event: DragEvent): void {
+    if (!this.draggingLaneId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.dragOverLaneId = lane.id;
+  }
+
+  async onLaneDrop(lane: KanbanLane, event: DragEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dragOverLaneId = null;
+    const draggedId = this.draggingLaneId;
+    this.draggingLaneId = null;
+    if (!draggedId || draggedId === lane.id) return;
+    const ids = this.store.kanbanLanes().map((l) => l.id);
+    await this.store.reorderLanes(reorderIds(ids, draggedId, lane.id));
     this.cdr.markForCheck();
   }
 }

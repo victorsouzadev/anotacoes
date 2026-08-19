@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskItemWire } from '../models/task.model';
+import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskItemWire } from '../models/task.model';
 
 function toView(wire: TaskItemWire): TaskItem {
   let subtasks: Subtask[] = [];
@@ -19,6 +19,7 @@ export interface TaskUpsertInput {
   dueDate: string | null;
   priority: TaskItem['priority'];
   categoryId: string | null;
+  kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
   isCompleted: boolean;
@@ -51,6 +52,20 @@ export class TasksService {
 
   deleteCategory(id: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`/api/tasks/categories/${id}`));
+  }
+
+  listKanbanLanes(): Promise<KanbanLane[]> {
+    return firstValueFrom(this.http.get<KanbanLane[]>('/api/tasks/kanban-lanes'));
+  }
+
+  upsertKanbanLane(id: string, name: string, colorHex: string, position: number, updatedAt: string): Promise<KanbanLane> {
+    return firstValueFrom(
+      this.http.put<KanbanLane>(`/api/tasks/kanban-lanes/${id}`, { name, colorHex, position, updatedAt }),
+    );
+  }
+
+  deleteKanbanLane(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/tasks/kanban-lanes/${id}`));
   }
 
   async listTasks(): Promise<TaskItem[]> {

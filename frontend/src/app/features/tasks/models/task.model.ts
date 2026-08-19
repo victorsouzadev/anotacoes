@@ -7,6 +7,16 @@ export interface TaskCategory {
   updatedAt: string;
 }
 
+// Raia do quadro Kanban — independente de categoria, o usuário monta o próprio fluxo
+// (ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer outra sequência).
+export interface KanbanLane {
+  id: string;
+  name: string;
+  colorHex: string;
+  position: number;
+  updatedAt: string;
+}
+
 export interface Subtask {
   title: string;
   isCompleted: boolean;
@@ -21,6 +31,7 @@ export interface TaskItemWire {
   dueDate: string | null;
   priority: Priority;
   categoryId: string | null;
+  kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
   isCompleted: boolean;

@@ -57,6 +57,53 @@ public static class TasksEndpoints
             return Results.NoContent();
         });
 
+        var lanes = app.MapGroup("/api/tasks/kanban-lanes").RequireAuthorization();
+
+        lanes.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+            await db.KanbanLanes.AsNoTracking()
+                .Where(l => l.UserId == user.UserId())
+                .OrderBy(l => l.Position)
+                .Select(l => ToDto(l))
+                .ToListAsync());
+
+        lanes.MapPut("/{id}", async (string id, KanbanLaneUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var name = req.Name?.Trim() ?? "";
+            if (name.Length is 0 or > 100)
+                return Results.BadRequest(new { error = "Nome inválido." });
+
+            var userId = user.UserId();
+            var lane = await db.KanbanLanes.FirstOrDefaultAsync(l => l.Id == id && l.UserId == userId);
+            if (lane is null)
+            {
+                if (await db.KanbanLanes.AnyAsync(l => l.Id == id))
+                    return Results.Conflict(new { error = "Id em uso." });
+                lane = new KanbanLane { Id = id, UserId = userId };
+                db.KanbanLanes.Add(lane);
+            }
+            else if (lane.UpdatedAt >= req.UpdatedAt)
+            {
+                return Results.Ok(ToDto(lane));
+            }
+
+            lane.Name = name;
+            lane.ColorHex = req.ColorHex;
+            lane.Position = req.Position;
+            lane.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(ToDto(lane));
+        });
+
+        lanes.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var lane = await db.KanbanLanes.FirstOrDefaultAsync(l => l.Id == id && l.UserId == user.UserId());
+            if (lane is null) return Results.NotFound();
+            db.KanbanLanes.Remove(lane);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
         var items = app.MapGroup("/api/tasks/items").RequireAuthorization();
 
         items.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -220,6 +267,11 @@ public static class TasksEndpoints
             !await db.TaskCategories.AnyAsync(c => c.Id == categoryId && c.UserId == userId))
             categoryId = null;
 
+        var kanbanLaneId = req.KanbanLaneId;
+        if (kanbanLaneId is not null &&
+            !await db.KanbanLanes.AnyAsync(l => l.Id == kanbanLaneId && l.UserId == userId))
+            kanbanLaneId = null;
+
         var task = await db.TaskItems.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
         var isNew = task is null;
         if (task is null)
@@ -234,7 +286,7 @@ public static class TasksEndpoints
             return Results.Ok(ToDto(task));
         }
 
-        Apply(task, req, categoryId);
+        Apply(task, req, categoryId, kanbanLaneId);
 
         try
         {
@@ -249,7 +301,7 @@ public static class TasksEndpoints
             if (existing is null) throw;
             if (existing.UpdatedAt < req.UpdatedAt)
             {
-                Apply(existing, req, categoryId);
+                Apply(existing, req, categoryId, kanbanLaneId);
                 await db.SaveChangesAsync();
             }
             task = existing;
@@ -257,13 +309,14 @@ public static class TasksEndpoints
         return Results.Ok(ToDto(task));
     }
 
-    private static void Apply(TaskItem task, TaskItemUpsertRequest req, string? categoryId)
+    private static void Apply(TaskItem task, TaskItemUpsertRequest req, string? categoryId, string? kanbanLaneId)
     {
         task.Title = req.Title.Trim();
         task.Description = req.Description;
         task.DueDate = req.DueDate;
         task.Priority = req.Priority;
         task.CategoryId = categoryId;
+        task.KanbanLaneId = kanbanLaneId;
         task.IsRecurring = req.IsRecurring;
         task.RecurrenceRule = req.RecurrenceRule;
         task.IsCompleted = req.IsCompleted;
@@ -281,8 +334,10 @@ public static class TasksEndpoints
 
     private static TaskCategoryDto ToDto(TaskCategory c) => new(c.Id, c.Name, c.ColorHex, c.UpdatedAt);
 
+    private static KanbanLaneDto ToDto(KanbanLane l) => new(l.Id, l.Name, l.ColorHex, l.Position, l.UpdatedAt);
+
     private static TaskItemDto ToDto(TaskItem t) => new(
-        t.Id, t.Title, t.Description, t.DueDate, t.Priority, t.CategoryId, t.IsRecurring, t.RecurrenceRule,
+        t.Id, t.Title, t.Description, t.DueDate, t.Priority, t.CategoryId, t.KanbanLaneId, t.IsRecurring, t.RecurrenceRule,
         t.IsCompleted, t.CreatedAt, t.CompletedAt, t.DeletedAt, t.CompletedPomodoros, t.Position,
         t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.UpdatedAt);
 
