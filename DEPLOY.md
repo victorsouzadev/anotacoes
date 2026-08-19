@@ -12,6 +12,11 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    echo "JWT_SECRET=$(openssl rand -hex 32)" > /opt/notas-vps/.env
    chmod 600 /opt/notas-vps/.env
    ```
+   Opcional — para a ferramenta Finanças usar o LLM real (Anthropic Claude) em vez
+   do extrator heurístico local, adicionar também ao `.env`:
+   ```bash
+   echo "ANTHROPIC_API_KEY=sk-ant-..." >> /opt/notas-vps/.env
+   ```
 
 2. Enviar os arquivos do projeto (do Windows):
    ```powershell

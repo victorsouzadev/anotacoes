@@ -1,0 +1,41 @@
+<div class="card lista">
+  <h2>Lançamentos recentes</h2>
+
+  <p class="vazio" *ngIf="transacoes.length === 0">Nenhum lançamento ainda.</p>
+
+  <ul>
+    <li *ngFor="let t of transacoes" [class.pendente]="t.status === 'pendente_revisao'">
+      <div class="info">
+        <span class="descricao">{{ t.descricao }}</span>
+        <span class="meta">{{ t.data }} · {{ t.categoria }}</span>
+      </div>
+
+      <div class="valor" [class.receita]="t.tipo === 'receita'" [class.despesa]="t.tipo === 'despesa'">
+        {{ t.tipo === 'receita' ? '+' : '-' }} R$ {{ t.valor.toFixed(2) }}
+      </div>
+
+      <div class="status-badge" [class.pendente]="t.status === 'pendente_revisao'">
+        {{ t.status === 'pendente_revisao' ? 'pendente' : 'confirmado' }}
+      </div>
+
+      <div class="acoes">
+        <button
+          type="button"
+          *ngIf="t.status === 'pendente_revisao'"
+          (click)="confirmar(t)"
+          title="Confirmar lançamento"
+        >
+          <app-icon name="check" [size]="14" />
+        </button>
+        <button
+          type="button"
+          (click)="remover(t)"
+          [disabled]="removendoId === t.id"
+          title="Remover lançamento"
+        >
+          <app-icon name="x" [size]="14" />
+        </button>
+      </div>
+    </li>
+  </ul>
+</div>

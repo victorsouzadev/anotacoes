@@ -1,0 +1,64 @@
+.dashboard {
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.cards-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.resumo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.resumo-card .label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.resumo-card .valor {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.resumo-card .valor.positivo {
+  color: #16a34a;
+}
+
+.resumo-card .valor.negativo {
+  color: #dc2626;
+}
+
+.graficos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.grafico-card h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.grafico-card .vazio {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.grafico-card canvas {
+  max-height: 280px;
+}

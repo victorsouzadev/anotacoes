@@ -152,7 +152,7 @@ export class RegisterPageComponent {
     this.loading = true;
     try {
       await this.auth.register(this.email, this.password);
-      this.router.navigateByUrl('/notes');
+      this.router.navigateByUrl('/');
     } catch (e: any) {
       this.error = e?.error?.error ?? 'Não foi possível criar a conta.';
     } finally {

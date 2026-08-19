@@ -1,0 +1,115 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.lancamento-form {
+  margin-bottom: 1.5rem;
+}
+
+.lancamento-form h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.lancamento-form .ajuda {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-top: -0.25rem;
+}
+
+.lancamento-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.95rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.lancamento-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.lancamento-form .acoes {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lancamento-form button[type='submit'] {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.6rem 1.4rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.lancamento-form button[type='submit']:hover:not(:disabled) {
+  background: var(--accent-dark);
+}
+
+.lancamento-form button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lancamento-form .exemplos {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.lancamento-form .chip {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  color: var(--accent-dark);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.lancamento-form .erro {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  margin-top: 1rem;
+}
+
+.lancamento-form .confirmacao {
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  color: #14532d;
+}
+
+.lancamento-form .status {
+  margin-left: 0.5rem;
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+.lancamento-form .status.pendente {
+  background: #d97706;
+}

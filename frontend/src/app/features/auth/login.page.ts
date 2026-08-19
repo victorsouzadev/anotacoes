@@ -152,7 +152,7 @@ export class LoginPageComponent {
     this.loading = true;
     try {
       await this.auth.login(this.email, this.password);
-      this.router.navigateByUrl('/notes');
+      this.router.navigateByUrl('/');
     } catch {
       this.error = 'E-mail ou senha incorretos.';
     } finally {

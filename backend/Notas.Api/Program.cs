@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -6,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Notas.Api.Auth;
 using Notas.Api.Data;
 using Notas.Api.Endpoints;
+using Notas.Api.Services.Financas;
+using Notas.Api.Services.Financas.Llm;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +21,25 @@ builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 10 * 1024 * 
 
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite(connectionString));
 builder.Services.AddSingleton<TokenService>();
+
+// Enums (ferramenta Finanças) trafegam como string no JSON, em vez de índice numérico.
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// Ferramenta "Finanças": extração de lançamentos via LLM (Anthropic), com
+// fallback heurístico local quando nenhuma chave de API está configurada.
+builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
+builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(ExtracaoOptions.SectionName));
+var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"];
+if (!string.IsNullOrWhiteSpace(anthropicApiKey))
+{
+    builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>();
+}
+else
+{
+    builder.Services.AddSingleton<ILlmExtractor, HeuristicLlmExtractor>();
+}
+builder.Services.AddScoped<TransacaoExtractionService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -64,5 +86,6 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapFoldersEndpoints();
+app.MapFinancasEndpoints();
 
 app.Run();

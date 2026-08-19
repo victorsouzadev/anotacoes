@@ -7,7 +7,8 @@ export type IconName =
   | 'duplicate' | 'delete' | 'bring-to-front' | 'send-to-back'
   | 'download' | 'more'
   | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
-  | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout';
+  | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
+  | 'grid' | 'wallet' | 'check' | 'x';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -74,6 +75,19 @@ export type IconName =
         @case ('monitor') { <rect x="2.5" y="3.8" width="15" height="10" rx="1.4" /><path d="M7 17h6M10 13.8V17" /> }
         @case ('plus') { <path d="M10 4v12M4 10h12" /> }
         @case ('logout') { <path d="M8 3.5H4.7a1.2 1.2 0 0 0-1.2 1.2v10.6a1.2 1.2 0 0 0 1.2 1.2H8" /><path d="M8.5 10h8m0 0l-3-3m3 3l-3 3" /> }
+        @case ('grid') {
+          <rect x="2.7" y="2.7" width="6" height="6" rx="1.1" />
+          <rect x="11.3" y="2.7" width="6" height="6" rx="1.1" />
+          <rect x="2.7" y="11.3" width="6" height="6" rx="1.1" />
+          <rect x="11.3" y="11.3" width="6" height="6" rx="1.1" />
+        }
+        @case ('wallet') {
+          <path d="M2.5 6.2a1.7 1.7 0 0 1 1.7-1.7h9.4a1.7 1.7 0 0 1 1.7 1.7v7.6a1.7 1.7 0 0 1-1.7 1.7H4.2a1.7 1.7 0 0 1-1.7-1.7z" />
+          <path d="M2.5 8.5h12.3a2.2 2.2 0 0 1 2.2 2.2v.6a2.2 2.2 0 0 1-2.2 2.2H13a1.8 1.8 0 0 1 0-3.6h1.8" />
+          <circle cx="14.2" cy="11.5" r=".4" fill="currentColor" />
+        }
+        @case ('check') { <path d="M4 10.5l4 4 8-9" /> }
+        @case ('x') { <path d="M5 5l10 10M15 5L5 15" /> }
       }
     </svg>
   `,

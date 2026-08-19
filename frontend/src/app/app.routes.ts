@@ -2,7 +2,12 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'notes' },
+  {
+    path: '',
+    pathMatch: 'full',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/hub/hub.page').then((m) => m.HubPageComponent),
+  },
   {
     path: 'login',
     loadComponent: () => import('./features/auth/login.page').then((m) => m.LoginPageComponent),
@@ -21,5 +26,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/editor/editor.page').then((m) => m.EditorPageComponent),
   },
-  { path: '**', redirectTo: 'notes' },
+  {
+    path: 'financas',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/financas/financas.page').then((m) => m.FinancasPageComponent),
+  },
+  { path: '**', redirectTo: '' },
 ];

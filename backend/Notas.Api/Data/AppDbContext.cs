@@ -48,6 +48,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
+    public DbSet<Transacao> Transacoes => Set<Transacao>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -80,6 +81,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(n => new { n.UserId, n.FolderId });
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(n => n.FolderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<Transacao>(e =>
+        {
+            e.ToTable("financas_transacoes");
+            e.Property(t => t.Descricao).IsRequired().HasMaxLength(500);
+            e.Property(t => t.Valor).HasColumnType("decimal(10,2)");
+            e.Property(t => t.Tipo).HasConversion<string>().HasMaxLength(20);
+            e.Property(t => t.Categoria).HasConversion<string>().HasMaxLength(30);
+            e.Property(t => t.FormaPagamento).HasConversion<string>().HasMaxLength(20);
+            e.Property(t => t.Status).HasConversion<string>().HasMaxLength(30);
+            e.Property(t => t.TextoOriginal).HasMaxLength(1000);
+            e.HasIndex(t => new { t.UserId, t.Data });
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

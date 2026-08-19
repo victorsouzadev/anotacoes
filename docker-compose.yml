@@ -8,6 +8,7 @@ services:
     env_file: .env
     environment:
       - ConnectionStrings__Db=Data Source=/data/db/notas.db
+      - Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
     volumes:
       - ./data/db:/data/db
     healthcheck:

@@ -1,0 +1,44 @@
+<div class="card lancamento-form">
+  <h2>Novo lançamento</h2>
+  <p class="ajuda">
+    Digite em texto livre, como você falaria. Ex.: "gastei 45 reais no mercado hoje".
+  </p>
+
+  <form (ngSubmit)="registrar()">
+    <textarea
+      [(ngModel)]="texto"
+      name="texto"
+      rows="2"
+      placeholder="Descreva o que aconteceu..."
+      [disabled]="enviando"
+    ></textarea>
+
+    <div class="acoes">
+      <button type="submit" [disabled]="!texto.trim() || enviando">
+        {{ enviando ? 'Registrando...' : 'Registrar' }}
+      </button>
+    </div>
+  </form>
+
+  <div class="exemplos">
+    <span>Exemplos:</span>
+    <button
+      type="button"
+      class="chip"
+      *ngFor="let exemplo of exemplos"
+      (click)="usarExemplo(exemplo)"
+    >
+      {{ exemplo }}
+    </button>
+  </div>
+
+  <p class="erro" *ngIf="erro">{{ erro }}</p>
+
+  <div class="confirmacao" *ngIf="ultimoLancamento as t">
+    <strong>Lançamento registrado:</strong>
+    {{ t.descricao }} — R$ {{ t.valor.toFixed(2) }} ({{ t.tipo }})
+    <span class="status" [class.pendente]="t.status === 'pendente_revisao'">
+      {{ t.status === 'pendente_revisao' ? 'pendente de revisão' : 'confirmado' }}
+    </span>
+  </div>
+</div>

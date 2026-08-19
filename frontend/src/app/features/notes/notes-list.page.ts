@@ -24,7 +24,10 @@ const MOBILE_BREAKPOINT = 760;
       <aside class="sidebar">
         <div class="sidebar-head">
           <h2><span class="brand-mark"><app-icon name="pen" [size]="14" /></span> Notas</h2>
-          <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
+          <div class="sidebar-head-actions">
+            <a class="theme-toggle" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+            <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
+          </div>
         </div>
         <button class="new-note" (click)="createNote()"><app-icon name="plus" [size]="16" /> Nova nota</button>
         <nav>
@@ -194,6 +197,7 @@ const MOBILE_BREAKPOINT = 760;
     }
     .sidebar-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .sidebar h2 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+    .sidebar-head-actions { display: flex; align-items: center; gap: 6px; }
     .theme-toggle {
       border: 1px solid var(--border);
       background: var(--bg);
@@ -202,6 +206,7 @@ const MOBILE_BREAKPOINT = 760;
       display: flex; align-items: center; justify-content: center;
       color: var(--text-muted);
       flex-shrink: 0;
+      text-decoration: none;
     }
     .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
     .brand-mark {
