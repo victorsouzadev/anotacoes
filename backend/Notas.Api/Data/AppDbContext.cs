@@ -52,6 +52,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transacao> Transacoes => Set<Transacao>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
+    public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -131,6 +133,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(t => new { t.UserId, t.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<TaskCategory>().WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<TaskComment>(e =>
+        {
+            e.ToTable("tasks_comments");
+            e.Property(c => c.Text).IsRequired().HasMaxLength(2000);
+            e.HasIndex(c => new { c.TaskId, c.CreatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskItem>().WithMany().HasForeignKey(c => c.TaskId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TaskAttachment>(e =>
+        {
+            e.ToTable("tasks_attachments");
+            e.Property(a => a.FileName).IsRequired().HasMaxLength(255);
+            e.Property(a => a.ContentType).IsRequired().HasMaxLength(150);
+            e.Property(a => a.DataBase64).IsRequired();
+            e.HasIndex(a => a.TaskId);
+            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskItem>().WithMany().HasForeignKey(a => a.TaskId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

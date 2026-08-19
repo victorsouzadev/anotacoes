@@ -36,6 +36,12 @@
   color: var(--text-muted);
 }
 
+.field > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -212,15 +218,16 @@ textarea {
   color: var(--text-muted);
 }
 
-.subtask-list .remove {
+.remove {
   border: none;
   background: none;
   color: var(--text-muted);
   font-size: 12px;
   padding: 2px 4px;
+  flex-shrink: 0;
 }
 
-.subtask-list .remove:hover {
+.remove:hover {
   color: var(--danger);
 }
 
@@ -242,6 +249,104 @@ textarea {
   font-size: 16px;
   font-weight: 600;
   color: var(--text);
+}
+
+.comment-list, .attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-list li, .attachment-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.comment-body p {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-date {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.attachment-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color: var(--text);
+  text-align: left;
+}
+
+.attachment-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.attachment-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.attachment-size {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.file-input-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: 1px dashed var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.file-input-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .actions {

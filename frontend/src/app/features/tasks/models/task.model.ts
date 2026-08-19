@@ -42,6 +42,23 @@ export interface TaskItem extends Omit<TaskItemWire, 'subtasks'> {
   subtasks: Subtask[];
 }
 
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  text: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  taskId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export const CATEGORY_COLORS = [
   '#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
   '#0891b2', '#db2777', '#65a30d', '#4b5563', '#ea580c',
