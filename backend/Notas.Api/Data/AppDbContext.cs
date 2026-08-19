@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Notas.Api.Data;
 
@@ -51,6 +52,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transacao> Transacoes => Set<Transacao>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
+
+    // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
+    // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
+    // memória) sai com "Z" no fim, mas a mesma entidade relida do banco (ex.: próximo GET) sai
+    // sem "Z" — inconsistência que quebra parsers estritos de ISO 8601 como o do Android
+    // (java.time.Instant.parse exige "Z"/offset). Força Kind=Utc em toda leitura, pra todo
+    // DateTime/DateTime? do modelo, deixando a serialização sempre consistente.
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+    }
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -120,5 +132,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<TaskCategory>().WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.SetNull);
         });
+    }
+}
+
+public class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>
+{
+    public UtcDateTimeConverter() : base(
+        v => v,
+        v => v.Kind == DateTimeKind.Utc ? v : DateTime.SpecifyKind(v, DateTimeKind.Utc))
+    {
     }
 }
