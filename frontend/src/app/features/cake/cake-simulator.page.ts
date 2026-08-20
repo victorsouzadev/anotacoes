@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -54,6 +54,15 @@ interface Candle {
   color: string;
 }
 
+interface Topper {
+  id: string;
+  src: string;
+  naturalRatio: number;
+  xCm: number;
+  yCm: number;
+  widthCm: number;
+}
+
 const FLAVORS: Flavor[] = [
   { id: 'chocolate', label: 'Chocolate', color: '#6b4226' },
   { id: 'baunilha', label: 'Baunilha', color: '#f3dfb0' },
@@ -77,6 +86,12 @@ const SPRINKLE_COLORS = ['#ff6b6b', '#ffd93d', '#4ecdc4', '#a78bfa', '#ff9f43', 
 
 const CAKE_BOX = 360;
 const MAX_TIERS = 3;
+const MINIMAP_CAKE_PX = 200;
+const MINIMAP_RULER_PX = 18;
+
+function uid(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 function seededRandom(seed: number): number {
   const x = Math.sin(seed * 999.7) * 43758.5453;
@@ -170,6 +185,19 @@ function seededRandom(seed: number): number {
                           ></button>
                         </div>
                       }
+                      @for (t of toppers(); track t.id) {
+                        <img
+                          class="topper-img"
+                          [class.selected]="selectedTopperId() === t.id"
+                          [src]="t.src"
+                          alt="Imagem colada no topo do bolo"
+                          [style.left.px]="tier.capSize / 2 + t.xCm * pxPerCm()"
+                          [style.top.px]="tier.capSize / 2 + t.yCm * pxPerCm()"
+                          [style.width.px]="t.widthCm * pxPerCm()"
+                          [style.height.px]="t.widthCm * t.naturalRatio * pxPerCm()"
+                          (click)="selectTopper(t.id)"
+                        />
+                      }
                     }
                   </div>
                 }
@@ -195,6 +223,92 @@ function seededRandom(seed: number): number {
               <span>{{ layerCount() }}</span>
               <button (click)="setLayerCount(layerCount() + 1)" [disabled]="layerCount() >= maxTiers">+</button>
             </div>
+          </section>
+
+          <section class="panel">
+            <h2>Topo do bolo</h2>
+            <label class="field-row">
+              <span>Diâmetro do topo</span>
+              <span class="field-input">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="5"
+                  max="40"
+                  [value]="topDiameterCm()"
+                  (input)="setTopDiameter($any($event.target).value)"
+                />
+                cm
+              </span>
+            </label>
+            <p class="hint">Copie uma imagem e pressione Ctrl+V para colar no topo do bolo.</p>
+
+            <div class="minimap-wrap">
+              <div class="minimap-ruler-top" [style.left.px]="minimapRulerPx">
+                @for (m of rulerMarksCm(); track m) {
+                  <span class="ruler-mark" [style.left.px]="m * widgetPxPerCm()">{{ m }}</span>
+                }
+              </div>
+              <div class="minimap-row">
+                <div class="minimap-ruler-left">
+                  @for (m of rulerMarksCm(); track m) {
+                    <span class="ruler-mark" [style.top.px]="m * widgetPxPerCm()">{{ m }}</span>
+                  }
+                </div>
+                <div
+                  class="minimap-cake"
+                  [style.width.px]="minimapCakePx"
+                  [style.height.px]="minimapCakePx"
+                  [style.border-radius]="shape() === 'round' ? '50%' : '6%'"
+                  [style.background-size.px]="widgetPxPerCm()"
+                >
+                  @for (t of toppers(); track t.id) {
+                    <div
+                      class="minimap-topper"
+                      [class.selected]="selectedTopperId() === t.id"
+                      [style.left.px]="minimapCakePx / 2 + t.xCm * widgetPxPerCm()"
+                      [style.top.px]="minimapCakePx / 2 + t.yCm * widgetPxPerCm()"
+                      [style.width.px]="t.widthCm * widgetPxPerCm()"
+                      [style.height.px]="t.widthCm * t.naturalRatio * widgetPxPerCm()"
+                      (pointerdown)="onMinimapDragStart($event, t.id)"
+                      (pointermove)="onMinimapDragMove($event)"
+                      (pointerup)="onMinimapDragEnd($event)"
+                      (pointercancel)="onMinimapDragEnd($event)"
+                    >
+                      <img [src]="t.src" alt="" />
+                      <div
+                        class="resize-handle"
+                        (pointerdown)="onMinimapResizeStart($event, t.id)"
+                        (pointermove)="onMinimapResizeMove($event)"
+                        (pointerup)="onMinimapDragEnd($event)"
+                        (pointercancel)="onMinimapDragEnd($event)"
+                      ></div>
+                    </div>
+                  }
+                </div>
+              </div>
+            </div>
+
+            @if (selectedTopper(); as sel) {
+              <div class="topper-fields">
+                <label>
+                  X (cm)
+                  <input type="number" step="0.1" [value]="sel.xCm" (input)="updateTopper(sel.id, { xCm: +$any($event.target).value })" />
+                </label>
+                <label>
+                  Y (cm)
+                  <input type="number" step="0.1" [value]="sel.yCm" (input)="updateTopper(sel.id, { yCm: +$any($event.target).value })" />
+                </label>
+                <label>
+                  Largura (cm)
+                  <input type="number" step="0.1" min="0.5" [value]="sel.widthCm" (input)="updateTopper(sel.id, { widthCm: +$any($event.target).value })" />
+                </label>
+                <p class="size-readout">{{ sizeLabel(sel) }}</p>
+                <button class="link-btn danger" (click)="removeTopper(sel.id)">Remover imagem</button>
+              </div>
+            } @else if (toppers().length === 0) {
+              <p class="empty-hint">Nenhuma imagem colada ainda.</p>
+            }
           </section>
 
           <section class="panel">
@@ -413,6 +527,58 @@ function seededRandom(seed: number): number {
       color: var(--accent-dark); font-size: 12px; font-weight: 600; padding: 4px 0;
     }
     .link-btn:hover { text-decoration: underline; }
+    .link-btn.danger { color: var(--danger, #d9534f); margin-top: 6px; }
+
+    .field-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+    .field-input { display: flex; align-items: center; gap: 6px; }
+    .field-input input {
+      width: 60px; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); font-size: 13px;
+    }
+    .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; line-height: 1.4; }
+    .empty-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
+
+    .minimap-wrap { display: inline-block; user-select: none; }
+    .minimap-ruler-top {
+      position: relative; height: ${MINIMAP_RULER_PX}px; margin-bottom: 2px;
+    }
+    .minimap-row { display: flex; }
+    .minimap-ruler-left {
+      position: relative; width: ${MINIMAP_RULER_PX}px; flex-shrink: 0; margin-right: 2px;
+    }
+    .ruler-mark {
+      position: absolute; font-size: 8px; color: var(--text-muted); transform: translateX(-50%);
+    }
+    .minimap-ruler-left .ruler-mark { transform: translateY(-50%); }
+    .minimap-cake {
+      position: relative; overflow: visible; background: var(--accent-soft);
+      border: 1px solid var(--border);
+      background-image:
+        linear-gradient(to right, rgba(120, 120, 140, 0.16) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(120, 120, 140, 0.16) 1px, transparent 1px);
+      background-position: center;
+    }
+    .minimap-topper {
+      position: absolute; transform: translate(-50%, -50%); cursor: move;
+      outline: 1px dashed transparent;
+    }
+    .minimap-topper.selected { outline-color: var(--accent); }
+    .minimap-topper img { width: 100%; height: 100%; display: block; pointer-events: none; }
+    .resize-handle {
+      position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px;
+      background: var(--accent); border: 2px solid var(--surface); border-radius: 50%; cursor: nwse-resize;
+    }
+
+    .topper-img { position: absolute; transform: translate(-50%, -50%) translateZ(3px); cursor: pointer; }
+    .topper-img.selected { outline: 2px dashed rgba(255, 255, 255, 0.85); outline-offset: 2px; }
+
+    .topper-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .topper-fields label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+    .topper-fields input {
+      width: 70px; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); font-size: 13px;
+    }
+    .size-readout { font-size: 12px; color: var(--text); font-weight: 600; margin: 2px 0 0; }
 
     .actions { display: flex; flex-direction: column; gap: 10px; }
     .primary-btn {
@@ -441,6 +607,12 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   flavors = FLAVORS;
   frostings = FROSTINGS;
   maxTiers = MAX_TIERS;
+  minimapCakePx = MINIMAP_CAKE_PX;
+  minimapRulerPx = MINIMAP_RULER_PX;
+
+  topDiameterCm = signal(15);
+  toppers = signal<Topper[]>([]);
+  selectedTopperId = signal<string | null>(null);
 
   shape = signal<Shape>('round');
   layerCount = signal(3);
@@ -461,6 +633,11 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   private lastX = 0;
   private lastY = 0;
   private autoRotateTimer: ReturnType<typeof setInterval> | undefined;
+
+  private minimapDragId: string | null = null;
+  private minimapResizeId: string | null = null;
+  private minimapLastX = 0;
+  private minimapLastY = 0;
 
   tierIndexes = computed(() => Array.from({ length: this.layerCount() }, (_, i) => i));
 
@@ -560,6 +737,19 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     }
     return out;
   });
+
+  topCapSize = computed(() => {
+    const tiers = this.tiers();
+    return tiers[tiers.length - 1]?.capSize ?? 0;
+  });
+
+  pxPerCm = computed(() => this.topCapSize() / this.topDiameterCm());
+
+  widgetPxPerCm = computed(() => MINIMAP_CAKE_PX / this.topDiameterCm());
+
+  rulerMarksCm = computed(() => Array.from({ length: Math.floor(this.topDiameterCm()) + 1 }, (_, i) => i));
+
+  selectedTopper = computed(() => this.toppers().find((t) => t.id === this.selectedTopperId()) ?? null);
 
   constructor(public auth: AuthService, public theme: ThemeService) {
     this.autoRotateTimer = setInterval(() => {
@@ -664,6 +854,111 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     this.spinDeg.set(-28);
     this.tiltDeg.set(-28);
     this.autoRotate.set(true);
+    this.toppers.set([]);
+    this.selectedTopperId.set(null);
+  }
+
+  setTopDiameter(value: string): void {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    this.topDiameterCm.set(Math.min(40, Math.max(5, n)));
+  }
+
+  @HostListener('document:paste', ['$event'])
+  onPaste(event: ClipboardEvent): void {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (!item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      event.preventDefault();
+      this.addTopperFromFile(file);
+      break;
+    }
+  }
+
+  private addTopperFromFile(file: File): void {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const naturalRatio = img.naturalHeight / img.naturalWidth || 1;
+        const widthCm = Math.min(this.topDiameterCm() * 0.5, 6);
+        const topper: Topper = { id: uid(), src, naturalRatio, xCm: 0, yCm: 0, widthCm };
+        this.toppers.update((arr) => [...arr, topper]);
+        this.selectedTopperId.set(topper.id);
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  selectTopper(id: string): void {
+    this.selectedTopperId.set(id);
+  }
+
+  updateTopper(id: string, changes: Partial<Pick<Topper, 'xCm' | 'yCm' | 'widthCm'>>): void {
+    this.toppers.update((arr) =>
+      arr.map((t) => (t.id === id ? { ...t, ...changes, widthCm: Math.max(0.5, changes.widthCm ?? t.widthCm) } : t)),
+    );
+  }
+
+  removeTopper(id: string): void {
+    this.toppers.update((arr) => arr.filter((t) => t.id !== id));
+    if (this.selectedTopperId() === id) this.selectedTopperId.set(null);
+  }
+
+  sizeLabel(t: Topper): string {
+    const heightCm = t.widthCm * t.naturalRatio;
+    const fmt = (cm: number) => `${cm.toFixed(1)} cm (${Math.round(cm * 10)} mm)`;
+    return `${fmt(t.widthCm)} × ${fmt(heightCm)}`;
+  }
+
+  onMinimapDragStart(event: PointerEvent, id: string): void {
+    event.stopPropagation();
+    this.minimapDragId = id;
+    this.selectedTopperId.set(id);
+    this.minimapLastX = event.clientX;
+    this.minimapLastY = event.clientY;
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  onMinimapDragMove(event: PointerEvent): void {
+    if (!this.minimapDragId) return;
+    const dxCm = (event.clientX - this.minimapLastX) / this.widgetPxPerCm();
+    const dyCm = (event.clientY - this.minimapLastY) / this.widgetPxPerCm();
+    this.minimapLastX = event.clientX;
+    this.minimapLastY = event.clientY;
+    const id = this.minimapDragId;
+    const current = this.toppers().find((t) => t.id === id);
+    if (!current) return;
+    this.updateTopper(id, { xCm: current.xCm + dxCm, yCm: current.yCm + dyCm });
+  }
+
+  onMinimapResizeStart(event: PointerEvent, id: string): void {
+    event.stopPropagation();
+    this.minimapResizeId = id;
+    this.selectedTopperId.set(id);
+    this.minimapLastX = event.clientX;
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+  }
+
+  onMinimapResizeMove(event: PointerEvent): void {
+    if (!this.minimapResizeId) return;
+    const dxCm = (event.clientX - this.minimapLastX) / this.widgetPxPerCm();
+    this.minimapLastX = event.clientX;
+    const id = this.minimapResizeId;
+    const current = this.toppers().find((t) => t.id === id);
+    if (!current) return;
+    this.updateTopper(id, { widthCm: current.widthCm + dxCm * 2 });
+  }
+
+  onMinimapDragEnd(event: PointerEvent): void {
+    this.minimapDragId = null;
+    this.minimapResizeId = null;
+    (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
   }
 
   themeIconName(): IconName {
