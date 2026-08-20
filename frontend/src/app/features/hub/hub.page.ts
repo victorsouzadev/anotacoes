@@ -26,6 +26,12 @@ const TOOLS: ToolCard[] = [
     downloadFileName: 'organizador.apk',
     downloadLabel: 'Baixar app Android (.apk)',
   },
+  {
+    path: '/bolo-3d',
+    icon: 'cake',
+    title: 'Simulador de Bolo 3D',
+    description: 'Monte um bolo em 3D: camadas, sabores, cobertura, granulado, cerejas e velas para acender.',
+  },
 ];
 
 @Component({

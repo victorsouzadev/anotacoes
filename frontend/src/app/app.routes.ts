@@ -71,5 +71,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
   },
+  {
+    path: 'bolo-3d',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/cake/cake-simulator.page').then((m) => m.CakeSimulatorPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
