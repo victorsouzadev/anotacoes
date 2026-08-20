@@ -4,6 +4,9 @@
   "description": "Servidor MCP para adicionar e gerenciar tarefas do hub via LLM (Claude Desktop, Claude Code, etc.)",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "anotacoes-tasks-mcp": "dist/index.js"
   },
