@@ -27,6 +27,8 @@ interface FaceView {
 interface TierView {
   index: number;
   height: number;
+  apothem: number;
+  groupY: number;
   faces: FaceView[];
   capSize: number;
   capRadius: string;
@@ -55,6 +57,7 @@ interface Candle {
 }
 
 type TopperOrientation = 'standing' | 'flat';
+type TopperLocation = 'top' | 'side';
 
 interface Topper {
   id: string;
@@ -64,6 +67,10 @@ interface Topper {
   yCm: number;
   widthCm: number;
   orientation: TopperOrientation;
+  location: TopperLocation;
+  tierIndex: number;
+  angleDeg: number;
+  wallYCm: number;
 }
 
 const FLAVORS: Flavor[] = [
@@ -205,6 +212,20 @@ function seededRandom(seed: number): number {
                     }
                   </div>
                 }
+                @for (wv of topperWallRenderViews(); track wv.id) {
+                  <img
+                    class="topper-img wall"
+                    [class.selected]="wv.selected"
+                    [src]="wv.src"
+                    alt="Imagem colada na lateral do bolo"
+                    [style.width.px]="wv.widthPx"
+                    [style.height.px]="wv.heightPx"
+                    [style.margin-left.px]="-wv.widthPx / 2"
+                    [style.margin-top.px]="-wv.heightPx / 2"
+                    [style.transform]="wv.transform"
+                    (click)="selectTopper(wv.id)"
+                  />
+                }
               </div>
             </div>
           </div>
@@ -266,7 +287,7 @@ function seededRandom(seed: number): number {
                   [style.border-radius]="shape() === 'round' ? '50%' : '6%'"
                   [style.background-size.px]="widgetPxPerCm()"
                 >
-                  @for (t of toppers(); track t.id) {
+                  @for (t of topToppers(); track t.id) {
                     <div
                       class="minimap-topper"
                       [class.selected]="selectedTopperId() === t.id"
@@ -294,20 +315,55 @@ function seededRandom(seed: number): number {
               </div>
             </div>
 
+            @if (sideToppers().length > 0) {
+              <div class="side-list">
+                <span class="tier-label">Na lateral (parede)</span>
+                @for (t of sideToppers(); track t.id) {
+                  <button class="side-item" [class.selected]="selectedTopperId() === t.id" (click)="selectTopper(t.id)">
+                    <img [src]="t.src" alt="" />
+                    <span>Camada {{ t.tierIndex + 1 }} · {{ t.angleDeg }}°</span>
+                  </button>
+                }
+              </div>
+            }
+
             @if (selectedTopper(); as sel) {
               <div class="topper-fields">
                 <div class="row">
-                  <button class="chip" [class.active]="sel.orientation === 'standing'" (click)="updateTopper(sel.id, { orientation: 'standing' })">Em pé</button>
-                  <button class="chip" [class.active]="sel.orientation === 'flat'" (click)="updateTopper(sel.id, { orientation: 'flat' })">Deitada</button>
+                  <button class="chip" [class.active]="sel.location === 'top'" (click)="updateTopper(sel.id, { location: 'top' })">Topo</button>
+                  <button class="chip" [class.active]="sel.location === 'side'" (click)="updateTopper(sel.id, { location: 'side' })">Lateral</button>
                 </div>
-                <label>
-                  X (cm)
-                  <input type="number" step="0.1" [value]="sel.xCm" (input)="updateTopper(sel.id, { xCm: +$any($event.target).value })" />
-                </label>
-                <label>
-                  Y (cm)
-                  <input type="number" step="0.1" [value]="sel.yCm" (input)="updateTopper(sel.id, { yCm: +$any($event.target).value })" />
-                </label>
+
+                @if (sel.location === 'top') {
+                  <div class="row">
+                    <button class="chip" [class.active]="sel.orientation === 'standing'" (click)="updateTopper(sel.id, { orientation: 'standing' })">Em pé</button>
+                    <button class="chip" [class.active]="sel.orientation === 'flat'" (click)="updateTopper(sel.id, { orientation: 'flat' })">Deitada</button>
+                  </div>
+                  <label>
+                    X (cm)
+                    <input type="number" step="0.1" [value]="sel.xCm" (input)="updateTopper(sel.id, { xCm: +$any($event.target).value })" />
+                  </label>
+                  <label>
+                    Y (cm)
+                    <input type="number" step="0.1" [value]="sel.yCm" (input)="updateTopper(sel.id, { yCm: +$any($event.target).value })" />
+                  </label>
+                } @else {
+                  <label class="tier-label">Camada</label>
+                  <div class="row">
+                    @for (i of tierIndexes(); track i) {
+                      <button class="chip" [class.active]="sel.tierIndex === i" (click)="updateTopper(sel.id, { tierIndex: i })">{{ i + 1 }}</button>
+                    }
+                  </div>
+                  <label>
+                    Ângulo (°)
+                    <input type="number" step="5" min="0" max="359" [value]="sel.angleDeg" (input)="updateTopper(sel.id, { angleDeg: +$any($event.target).value })" />
+                  </label>
+                  <label>
+                    Altura na parede (cm)
+                    <input type="number" step="0.1" [value]="sel.wallYCm" (input)="updateTopper(sel.id, { wallYCm: +$any($event.target).value })" />
+                  </label>
+                }
+
                 <label>
                   Largura (cm)
                   <input type="number" step="0.1" min="0.5" [value]="sel.widthCm" (input)="updateTopper(sel.id, { widthCm: +$any($event.target).value })" />
@@ -550,6 +606,15 @@ function seededRandom(seed: number): number {
     .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; line-height: 1.4; }
     .empty-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 0; }
 
+    .side-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .side-item {
+      display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); background: var(--bg); text-align: left;
+    }
+    .side-item.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .side-item img { width: 20px; height: 20px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+    .side-item span { font-size: 11px; color: var(--text-muted); }
+
     .minimap-wrap { display: inline-block; user-select: none; }
     .minimap-ruler-top {
       position: relative; height: ${MINIMAP_RULER_PX}px; margin-bottom: 2px;
@@ -591,6 +656,7 @@ function seededRandom(seed: number): number {
       transform-origin: center bottom;
     }
     .topper-img.selected { outline: 2px dashed rgba(255, 255, 255, 0.85); outline-offset: 2px; }
+    .topper-img.wall { left: 50%; top: 50%; }
 
     .topper-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .topper-fields label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
@@ -698,6 +764,8 @@ export class CakeSimulatorPageComponent implements OnDestroy {
       tiers.push({
         index: i,
         height,
+        apothem,
+        groupY,
         faces,
         capSize,
         capRadius: this.shape() === 'round' ? '50%' : '12%',
@@ -771,27 +839,55 @@ export class CakeSimulatorPageComponent implements OnDestroy {
 
   selectedTopper = computed(() => this.toppers().find((t) => t.id === this.selectedTopperId()) ?? null);
 
+  topToppers = computed(() => this.toppers().filter((t) => t.location === 'top'));
+
+  sideToppers = computed(() => this.toppers().filter((t) => t.location === 'side'));
+
   topperRenderViews = computed(() => {
     const px = this.pxPerCm();
     const cap = this.topCapSize();
     const selectedId = this.selectedTopperId();
-    return this.toppers().map((t) => {
-      const widthPx = t.widthCm * px;
-      const heightPx = t.widthCm * t.naturalRatio * px;
-      const centerX = cap / 2 + t.xCm * px;
-      const centerY = cap / 2 + t.yCm * px;
-      const standing = t.orientation === 'standing';
-      return {
-        id: t.id,
-        src: t.src,
-        selected: t.id === selectedId,
-        leftPx: centerX,
-        topPx: standing ? centerY - heightPx : centerY,
-        widthPx,
-        heightPx,
-        standing,
-      };
-    });
+    return this.toppers()
+      .filter((t) => t.location === 'top')
+      .map((t) => {
+        const widthPx = t.widthCm * px;
+        const heightPx = t.widthCm * t.naturalRatio * px;
+        const centerX = cap / 2 + t.xCm * px;
+        const centerY = cap / 2 + t.yCm * px;
+        const standing = t.orientation === 'standing';
+        return {
+          id: t.id,
+          src: t.src,
+          selected: t.id === selectedId,
+          leftPx: centerX,
+          topPx: standing ? centerY - heightPx : centerY,
+          widthPx,
+          heightPx,
+          standing,
+        };
+      });
+  });
+
+  topperWallRenderViews = computed(() => {
+    const px = this.pxPerCm();
+    const tiers = this.tiers();
+    const selectedId = this.selectedTopperId();
+    return this.toppers()
+      .filter((t) => t.location === 'side')
+      .map((t) => {
+        const tier = tiers[Math.min(t.tierIndex, tiers.length - 1)];
+        const widthPx = t.widthCm * px;
+        const heightPx = t.widthCm * t.naturalRatio * px;
+        const wallY = tier.groupY + t.wallYCm * px;
+        return {
+          id: t.id,
+          src: t.src,
+          selected: t.id === selectedId,
+          widthPx,
+          heightPx,
+          transform: `translateY(${-wallY}px) rotateY(${t.angleDeg}deg) translateZ(${tier.apothem + 1}px)`,
+        };
+      });
   });
 
   constructor(public auth: AuthService, public theme: ThemeService) {
@@ -929,7 +1025,22 @@ export class CakeSimulatorPageComponent implements OnDestroy {
       img.onload = () => {
         const naturalRatio = img.naturalHeight / img.naturalWidth || 1;
         const widthCm = Math.min(this.topDiameterCm() * 0.5, 6);
-        const topper: Topper = { id: uid(), src, naturalRatio, xCm: 0, yCm: 0, widthCm, orientation: 'standing' };
+        const existingOnTop = this.toppers().filter((t) => t.location === 'top').length;
+        const spreadAngle = existingOnTop * 47;
+        const spreadRadius = existingOnTop === 0 ? 0 : Math.min(this.topDiameterCm() * 0.22, 3);
+        const topper: Topper = {
+          id: uid(),
+          src,
+          naturalRatio,
+          xCm: Math.cos((spreadAngle * Math.PI) / 180) * spreadRadius,
+          yCm: Math.sin((spreadAngle * Math.PI) / 180) * spreadRadius,
+          widthCm,
+          orientation: 'standing',
+          location: 'top',
+          tierIndex: Math.max(0, this.layerCount() - 1),
+          angleDeg: 0,
+          wallYCm: 0,
+        };
         this.toppers.update((arr) => [...arr, topper]);
         this.selectedTopperId.set(topper.id);
       };
@@ -942,7 +1053,10 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     this.selectedTopperId.set(id);
   }
 
-  updateTopper(id: string, changes: Partial<Pick<Topper, 'xCm' | 'yCm' | 'widthCm' | 'orientation'>>): void {
+  updateTopper(
+    id: string,
+    changes: Partial<Pick<Topper, 'xCm' | 'yCm' | 'widthCm' | 'orientation' | 'location' | 'tierIndex' | 'angleDeg' | 'wallYCm'>>,
+  ): void {
     this.toppers.update((arr) =>
       arr.map((t) => (t.id === id ? { ...t, ...changes, widthCm: Math.max(0.5, changes.widthCm ?? t.widthCm) } : t)),
     );
@@ -957,6 +1071,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     const heightCm = t.widthCm * t.naturalRatio;
     const fmt = (cm: number) => `${cm.toFixed(1)} cm (${Math.round(cm * 10)} mm)`;
     const dims = `${fmt(t.widthCm)} × ${fmt(heightCm)}`;
+    if (t.location === 'side') return `Largura × altura (na parede): ${dims}`;
     return t.orientation === 'standing' ? `Largura × altura (em pé): ${dims}` : `Largura × altura (deitada): ${dims}`;
   }
 
