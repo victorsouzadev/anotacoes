@@ -248,6 +248,21 @@ function seededRandom(seed: number): number {
               <span>{{ layerCount() }}</span>
               <button (click)="setLayerCount(layerCount() + 1)" [disabled]="layerCount() >= maxTiers">+</button>
             </div>
+            <label class="field-row">
+              <span>Altura de cada camada</span>
+              <span class="field-input">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="2"
+                  max="20"
+                  [value]="layerHeightCm()"
+                  (input)="setLayerHeight($any($event.target).value)"
+                />
+                cm
+              </span>
+            </label>
+            <p class="hint">Altura total do bolo: {{ totalHeightCm().toFixed(1) }} cm</p>
           </section>
 
           <section class="panel">
@@ -697,6 +712,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   minimapRulerPx = MINIMAP_RULER_PX;
 
   topDiameterCm = signal(15);
+  layerHeightCm = signal(7);
   toppers = signal<Topper[]>([]);
   selectedTopperId = signal<string | null>(null);
 
@@ -734,13 +750,13 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     const sides = this.shape() === 'round' ? 28 : 4;
     const flavorIds = this.tierFlavors();
     const frosting = this.frostingColor();
+    const height = this.layerHeightCm() * this.pxPerCm();
     const tiers: TierView[] = [];
     let stackTop = 0;
-    const totalHeight = count * 60;
+    const totalHeight = count * height;
 
     for (let i = 0; i < count; i++) {
       const apothem = Math.max(46, 118 - i * 24);
-      const height = 60;
       const flavor = this.flavors.find((f) => f.id === flavorIds[i]) ?? this.flavors[0];
       const groupY = stackTop + height / 2 - totalHeight * 0.62;
 
@@ -826,12 +842,21 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     return out;
   });
 
+  // Calculado de forma independente de `tiers()` (não a partir do array já montado)
+  // porque `tiers()` usa `pxPerCm()` para converter a altura de cm para px — depender
+  // do array aqui criaria um ciclo (tiers -> pxPerCm -> topCapSize -> tiers).
   topCapSize = computed(() => {
-    const tiers = this.tiers();
-    return tiers[tiers.length - 1]?.capSize ?? 0;
+    const count = this.layerCount();
+    const sides = this.shape() === 'round' ? 28 : 4;
+    const apothem = Math.max(46, 118 - (count - 1) * 24);
+    return this.shape() === 'round'
+      ? (apothem / Math.cos(Math.PI / sides)) * 2
+      : 2 * apothem * Math.tan(Math.PI / sides);
   });
 
   pxPerCm = computed(() => this.topCapSize() / this.topDiameterCm());
+
+  totalHeightCm = computed(() => this.layerHeightCm() * this.layerCount());
 
   widgetPxPerCm = computed(() => MINIMAP_CAKE_PX / this.topDiameterCm());
 
@@ -983,6 +1008,8 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   reset(): void {
     this.shape.set('round');
     this.layerCount.set(3);
+    this.topDiameterCm.set(15);
+    this.layerHeightCm.set(7);
     this.tierFlavors.set(['chocolate', 'baunilha', 'morango']);
     this.frostingId.set('branco');
     this.showCherries.set(true);
@@ -1001,6 +1028,12 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     const n = Number(value);
     if (!Number.isFinite(n)) return;
     this.topDiameterCm.set(Math.min(40, Math.max(5, n)));
+  }
+
+  setLayerHeight(value: string): void {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    this.layerHeightCm.set(Math.min(20, Math.max(2, n)));
   }
 
   @HostListener('document:paste', ['$event'])
