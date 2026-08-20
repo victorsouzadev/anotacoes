@@ -10,7 +10,7 @@ import { searchTasks } from './taskSearch.js';
 
 const server = new McpServer({
   name: 'anotacoes-tasks',
-  version: '2.1.0',
+  version: '2.2.0',
 });
 
 function text(value: unknown) {
@@ -41,7 +41,7 @@ function summarize(t: TaskItem) {
     description: t.description,
     dueDate: t.dueDate,
     priority: t.priority,
-    categoryId: t.categoryId,
+    categoryIds: t.categoryIds,
     kanbanLaneId: t.kanbanLaneId,
     isCompleted: t.isCompleted,
     isRecurring: t.isRecurring,
@@ -49,14 +49,24 @@ function summarize(t: TaskItem) {
   };
 }
 
-async function resolveCategoryId(categoryName: string | undefined): Promise<string | null> {
-  if (!categoryName?.trim()) return null;
-  const trimmed = categoryName.trim();
+// Aceita uma ou várias categorias separadas por vírgula, criando automaticamente as que ainda
+// não existem — mesma resolução de nome-ou-cria usada para raia do Kanban.
+async function resolveCategoryIds(categoryNames: string | undefined): Promise<string[]> {
+  const names = (categoryNames ?? '').split(',').map((n) => n.trim()).filter(Boolean);
+  if (names.length === 0) return [];
   const categories = await api.listCategories();
-  const existing = findCategoryByName(categories, trimmed);
-  if (existing) return existing.id;
-  const created = await api.createCategory(trimmed);
-  return created.id;
+  const ids: string[] = [];
+  for (const name of names) {
+    const existing = findCategoryByName(categories, name);
+    if (existing) {
+      ids.push(existing.id);
+    } else {
+      const created = await api.createCategory(name);
+      categories.push(created);
+      ids.push(created.id);
+    }
+  }
+  return [...new Set(ids)];
 }
 
 async function resolveLaneId(laneName: string | undefined): Promise<string | null> {
@@ -84,16 +94,16 @@ server.tool(
       .string()
       .optional()
       .describe('Prioridade: low/medium/high ou baixa/média/alta. Padrão: media.'),
-    category: z.string().max(100).optional().describe('Nome da categoria. Criada automaticamente se não existir.'),
+    categories: z.string().max(300).optional().describe('Uma ou mais categorias, separadas por vírgula. Criadas automaticamente se não existirem.'),
   },
-  safe(async ({ title, description, dueDate, priority, category }) => {
-    const categoryId = await resolveCategoryId(category);
+  safe(async ({ title, description, dueDate, priority, categories }) => {
+    const categoryIds = await resolveCategoryIds(categories);
     const task = await api.createTask({
       title,
       description: description ?? null,
       dueDate: dueDate ?? null,
       priority: normalizePriority(priority),
-      categoryId,
+      categoryIds,
     });
     return text({ created: true, task: summarize(task) });
   }),
@@ -315,11 +325,12 @@ server.tool(
     dueDate: z.string().datetime().optional().describe('Novo prazo, em ISO 8601 UTC.'),
     clearDueDate: z.boolean().optional().describe('Remove o prazo atual (ignora `dueDate` se true).'),
     priority: z.string().optional().describe('Nova prioridade: low/medium/high ou baixa/média/alta.'),
-    category: z.string().max(100).optional().describe('Novo nome de categoria (criada se não existir).'),
+    categories: z.string().max(300).optional().describe('Novas categorias, separadas por vírgula (substitui as atuais; criadas se não existirem).'),
+    clearCategories: z.boolean().optional().describe('Remove todas as categorias da tarefa (ignora `categories` se true).'),
     lane: z.string().max(100).optional().describe('Nome da raia do Kanban (criada se não existir). Raia é independente de categoria.'),
     clearLane: z.boolean().optional().describe('Remove a tarefa de qualquer raia do Kanban (ignora `lane` se true).'),
   },
-  safe(async ({ idOrTitle, title, description, dueDate, clearDueDate, priority, category, lane, clearLane }) => {
+  safe(async ({ idOrTitle, title, description, dueDate, clearDueDate, priority, categories, clearCategories, lane, clearLane }) => {
     const all = await api.listTasks();
     const match = findTaskMatch(all, idOrTitle, (t) => !t.deletedAt);
     if (!match.task) return text({ updated: false, error: match.error, candidates: match.candidates });
@@ -330,7 +341,8 @@ server.tool(
     if (clearDueDate) changes.dueDate = null;
     else if (dueDate !== undefined) changes.dueDate = dueDate;
     if (priority !== undefined) changes.priority = normalizePriority(priority);
-    if (category !== undefined) changes.categoryId = await resolveCategoryId(category);
+    if (clearCategories) changes.categoryIds = [];
+    else if (categories !== undefined) changes.categoryIds = await resolveCategoryIds(categories);
     if (clearLane) changes.kanbanLaneId = null;
     else if (lane !== undefined) changes.kanbanLaneId = await resolveLaneId(lane);
 

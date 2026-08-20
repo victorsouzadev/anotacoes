@@ -300,7 +300,7 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
   exportCsv(): void {
     const csv = tasksToCsv(
       this.visibleTasks(),
-      (t) => this.store.categoryFor(t)?.name ?? '',
+      (t) => this.store.categoriesFor(t).map((c) => c.name).join(', '),
       (iso) => this.formatDueDate(iso),
     );
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });

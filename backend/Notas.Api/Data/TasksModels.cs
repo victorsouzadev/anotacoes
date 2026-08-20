@@ -37,7 +37,9 @@ public class TaskItem
     public string? Description { get; set; }
     public DateTime? DueDate { get; set; }
     public TaskPriority Priority { get; set; } = TaskPriority.Medium;
-    public string? CategoryId { get; set; }
+    // JSON opaco (array de ids de TaskCategory) — mesma estratégia do campo Subtasks: o backend só
+    // valida contra as categorias existentes do usuário no upsert, não modela como FK/join table.
+    public string CategoryIds { get; set; } = "[]";
     public string? KanbanLaneId { get; set; }
     public bool IsRecurring { get; set; }
     public string? RecurrenceRule { get; set; }

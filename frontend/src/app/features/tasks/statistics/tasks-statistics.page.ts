@@ -114,8 +114,9 @@ export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDe
 
     const byCategory = new Map<string, number>();
     for (const t of active) {
-      const label = this.store.categoryFor(t)?.name ?? 'Sem categoria';
-      byCategory.set(label, (byCategory.get(label) ?? 0) + 1);
+      const categories = this.store.categoriesFor(t);
+      const labels = categories.length > 0 ? categories.map((c) => c.name) : ['Sem categoria'];
+      for (const label of labels) byCategory.set(label, (byCategory.get(label) ?? 0) + 1);
     }
     this.categoryLabels = [...byCategory.keys()];
     this.categoryData = [...byCategory.values()];

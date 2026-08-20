@@ -18,8 +18,8 @@ export function filterAndSortTasks(tasks: TaskItem[], opts: TaskFilterOptions): 
   const now = opts.now ?? new Date();
   let list = tasks;
 
-  if (opts.categoryFilter === NO_CATEGORY) list = list.filter((t) => !t.categoryId);
-  else if (opts.categoryFilter) list = list.filter((t) => t.categoryId === opts.categoryFilter);
+  if (opts.categoryFilter === NO_CATEGORY) list = list.filter((t) => t.categoryIds.length === 0);
+  else if (opts.categoryFilter) list = list.filter((t) => t.categoryIds.includes(opts.categoryFilter!));
 
   if (opts.viewFilter === 'today') {
     const today = now.toDateString();

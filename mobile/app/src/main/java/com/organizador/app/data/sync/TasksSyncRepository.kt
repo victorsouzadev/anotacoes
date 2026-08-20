@@ -3,6 +3,7 @@ package com.organizador.app.data.sync
 import com.organizador.app.data.local.dao.CategoryDao
 import com.organizador.app.data.local.dao.KanbanLaneDao
 import com.organizador.app.data.local.dao.SubtaskDao
+import com.organizador.app.data.local.dao.TaskCategoryCrossRefDao
 import com.organizador.app.data.local.dao.TaskCommentDao
 import com.organizador.app.data.local.dao.TaskDao
 import com.organizador.app.data.local.entity.Category
@@ -41,6 +42,7 @@ import org.json.JSONObject
 class TasksSyncRepository(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
+    private val taskCategoryCrossRefDao: TaskCategoryCrossRefDao,
     private val kanbanLaneDao: KanbanLaneDao,
     private val taskCommentDao: TaskCommentDao,
     private val subtaskDao: SubtaskDao,
@@ -186,14 +188,14 @@ class TasksSyncRepository(
         for (r in remote) {
             val local = taskDao.findByRemoteId(r.id)
             val remoteMillis = r.updatedAt.toEpochMillis()
-            val categoryLocalId = r.categoryId?.let { categoriesByRemoteId[it]?.id }
+            val categoryLocalIds = r.categoryIds.mapNotNull { categoriesByRemoteId[it]?.id }
             val laneLocalId = r.kanbanLaneId?.let { lanesByRemoteId[it]?.id }
 
             val localId = when {
-                local == null -> taskDao.upsert(r.toLocalTask(id = 0, categoryId = categoryLocalId, kanbanLaneId = laneLocalId))
+                local == null -> taskDao.upsert(r.toLocalTask(id = 0, kanbanLaneId = laneLocalId))
                 remoteMillis > local.updatedAt -> {
                     taskDao.upsert(
-                        r.toLocalTask(id = local.id, categoryId = categoryLocalId, kanbanLaneId = laneLocalId).copy(
+                        r.toLocalTask(id = local.id, kanbanLaneId = laneLocalId).copy(
                             // Estado só-do-aparelho: cada dispositivo tem o seu, não vem do servidor.
                             calendarEventId = local.calendarEventId,
                             photoPath = local.photoPath,
@@ -205,6 +207,7 @@ class TasksSyncRepository(
             }
 
             if (localId != null) {
+                taskCategoryCrossRefDao.replaceForTask(localId, categoryLocalIds)
                 applyRemoteSubtasks(localId, r.subtasks)
                 val applied = taskDao.getTaskOnce(localId) ?: continue
                 reminderScheduler.schedule(applied)
@@ -214,13 +217,14 @@ class TasksSyncRepository(
 
         for (t in taskDao.getAllTasksOnce()) {
             val remoteId = t.remoteId ?: UUID.randomUUID().toString()
+            val categoryRemoteIds = taskCategoryCrossRefDao.getCategoryIdsForTaskOnce(t.id).mapNotNull { categoryRemoteIdByLocalId[it] }
             val payload = RemoteTaskItem(
                 id = remoteId,
                 title = t.title,
                 description = t.description,
                 dueDate = t.dueDate?.toIso(),
                 priority = t.priority.toWire(),
-                categoryId = t.categoryId?.let { categoryRemoteIdByLocalId[it] },
+                categoryIds = categoryRemoteIds,
                 kanbanLaneId = t.kanbanLaneId?.let { laneRemoteIdByLocalId[it] },
                 isRecurring = t.isRecurring,
                 recurrenceRule = t.recurrenceRule,
@@ -244,12 +248,13 @@ class TasksSyncRepository(
             if (savedMillis > t.updatedAt) {
                 // Corrida rara: outro dispositivo sincronizou uma versão mais nova entre o pull e
                 // o push desta rodada — o servidor "venceu", reflete o resultado de volta.
-                val categoryLocalId = saved.categoryId?.let { categoriesByRemoteId[it]?.id }
                 val laneLocalId = saved.kanbanLaneId?.let { lanesByRemoteId[it]?.id }
-                taskDao.upsert(saved.toLocalTask(id = t.id, categoryId = categoryLocalId, kanbanLaneId = laneLocalId).copy(
+                taskDao.upsert(saved.toLocalTask(id = t.id, kanbanLaneId = laneLocalId).copy(
                     calendarEventId = t.calendarEventId,
                     photoPath = t.photoPath,
                 ))
+                val categoryLocalIds = saved.categoryIds.mapNotNull { categoriesByRemoteId[it]?.id }
+                taskCategoryCrossRefDao.replaceForTask(t.id, categoryLocalIds)
                 applyRemoteSubtasks(t.id, saved.subtasks)
                 val applied = taskDao.getTaskOnce(t.id) ?: continue
                 reminderScheduler.schedule(applied)
@@ -271,13 +276,12 @@ class TasksSyncRepository(
     }
 }
 
-private fun RemoteTaskItem.toLocalTask(id: Long, categoryId: Long?, kanbanLaneId: Long?): Task = Task(
+private fun RemoteTaskItem.toLocalTask(id: Long, kanbanLaneId: Long?): Task = Task(
     id = id,
     title = title,
     description = description,
     dueDate = dueDate?.toEpochMillisOrNull(),
     priority = priority.toPriority(),
-    categoryId = categoryId,
     kanbanLaneId = kanbanLaneId,
     isRecurring = isRecurring,
     recurrenceRule = recurrenceRule,

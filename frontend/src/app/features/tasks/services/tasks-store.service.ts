@@ -17,7 +17,7 @@ type TaskDraft = Partial<
     | 'description'
     | 'dueDate'
     | 'priority'
-    | 'categoryId'
+    | 'categoryIds'
     | 'kanbanLaneId'
     | 'isRecurring'
     | 'recurrenceRule'
@@ -54,8 +54,9 @@ export class TasksStoreService {
     this.loading.set(false);
   }
 
-  categoryFor(task: TaskItem): TaskCategory | undefined {
-    return task.categoryId ? this.categories().find((c) => c.id === task.categoryId) : undefined;
+  categoriesFor(task: TaskItem): TaskCategory[] {
+    const byId = new Map(this.categories().map((c) => [c.id, c]));
+    return task.categoryIds.map((id) => byId.get(id)).filter((c): c is TaskCategory => !!c);
   }
 
   laneFor(task: TaskItem): KanbanLane | undefined {
@@ -71,7 +72,7 @@ export class TasksStoreService {
       description: draft.description ?? null,
       dueDate: draft.dueDate ?? null,
       priority: draft.priority ?? 'Medium',
-      categoryId: draft.categoryId ?? null,
+      categoryIds: draft.categoryIds ?? [],
       kanbanLaneId: draft.kanbanLaneId ?? null,
       isRecurring: draft.isRecurring ?? false,
       recurrenceRule: draft.recurrenceRule ?? null,
@@ -129,7 +130,7 @@ export class TasksStoreService {
       description: task.description,
       dueDate: task.dueDate,
       priority: task.priority,
-      categoryId: task.categoryId,
+      categoryIds: task.categoryIds,
       kanbanLaneId: task.kanbanLaneId,
       isRecurring: task.isRecurring,
       recurrenceRule: task.recurrenceRule,
@@ -150,7 +151,7 @@ export class TasksStoreService {
   }
 
   async bulkSetCategory(tasks: TaskItem[], categoryId: string | null): Promise<void> {
-    await Promise.all(tasks.map((t) => this.save(t, { categoryId })));
+    await Promise.all(tasks.map((t) => this.save(t, { categoryIds: categoryId ? [categoryId] : [] })));
   }
 
   /** Captura o estado mutável por ações em massa, pra permitir desfazer depois. */
@@ -228,7 +229,9 @@ export class TasksStoreService {
   async deleteCategory(category: TaskCategory): Promise<void> {
     await this.api.deleteCategory(category.id);
     this.categories.update((list) => list.filter((c) => c.id !== category.id));
-    this.tasks.update((list) => list.map((t) => (t.categoryId === category.id ? { ...t, categoryId: null } : t)));
+    this.tasks.update((list) =>
+      list.map((t) => (t.categoryIds.includes(category.id) ? { ...t, categoryIds: t.categoryIds.filter((id) => id !== category.id) } : t)),
+    );
   }
 
   async createLane(name: string, colorHex: string): Promise<KanbanLane> {
@@ -282,7 +285,7 @@ export class TasksStoreService {
       description: draft.description !== undefined ? draft.description : task.description,
       dueDate: draft.dueDate !== undefined ? draft.dueDate : task.dueDate,
       priority: draft.priority ?? task.priority,
-      categoryId: draft.categoryId !== undefined ? draft.categoryId : task.categoryId,
+      categoryIds: draft.categoryIds !== undefined ? draft.categoryIds : task.categoryIds,
       kanbanLaneId: draft.kanbanLaneId !== undefined ? draft.kanbanLaneId : task.kanbanLaneId,
       isRecurring: draft.isRecurring ?? task.isRecurring,
       recurrenceRule: draft.recurrenceRule !== undefined ? draft.recurrenceRule : task.recurrenceRule,
@@ -295,7 +298,7 @@ export class TasksStoreService {
       description: merged.description,
       dueDate: merged.dueDate,
       priority: merged.priority,
-      categoryId: merged.categoryId,
+      categoryIds: merged.categoryIds,
       kanbanLaneId: merged.kanbanLaneId,
       isRecurring: merged.isRecurring,
       recurrenceRule: merged.recurrenceRule,

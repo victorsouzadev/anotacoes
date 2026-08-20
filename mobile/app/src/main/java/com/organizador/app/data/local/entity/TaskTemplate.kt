@@ -16,9 +16,16 @@ data class TaskTemplate(
     val title: String,
     val description: String? = null,
     val priority: Priority = Priority.MEDIUM,
-    val categoryId: Long? = null,
+    /** Ids de categoria, separados por vírgula. */
+    val categoryIds: String = "",
     val isRecurring: Boolean = false,
     val recurrenceRule: String? = null,
     /** Títulos das subtarefas, um por linha. */
     val subtaskTitles: String = "",
-)
+) {
+    val categoryIdList: List<Long> get() = categoryIds.split(",").mapNotNull { it.trim().toLongOrNull() }
+
+    companion object {
+        fun encodeCategoryIds(ids: List<Long>): String = ids.joinToString(",")
+    }
+}

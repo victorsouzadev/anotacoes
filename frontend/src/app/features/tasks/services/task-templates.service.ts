@@ -9,7 +9,7 @@ export interface TaskTemplate {
   title: string;
   description: string | null;
   priority: Priority;
-  categoryId: string | null;
+  categoryIds: string[];
   isRecurring: boolean;
   recurrenceRule: string | null;
   subtasks: Subtask[];
@@ -24,7 +24,7 @@ export function templateFromResult(id: string, name: string, result: TaskFormRes
     title: result.title,
     description: result.description,
     priority: result.priority,
-    categoryId: result.categoryId,
+    categoryIds: result.categoryIds,
     isRecurring: result.isRecurring,
     recurrenceRule: result.recurrenceRule,
     subtasks: result.subtasks.map((s) => ({ ...s, isCompleted: false })),

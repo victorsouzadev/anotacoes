@@ -9,7 +9,7 @@ function task(overrides: Partial<TaskItem> = {}): TaskItem {
     description: null,
     dueDate: null,
     priority: 'Medium',
-    categoryId: null,
+    categoryIds: [],
     kanbanLaneId: null,
     isRecurring: false,
     recurrenceRule: null,
@@ -60,12 +60,12 @@ describe('searchTasks', () => {
   });
 
   it('filtra por categoria pelo nome', () => {
-    const tasks = [task({ id: 'a', categoryId: 'work' }), task({ id: 'b', categoryId: null })];
+    const tasks = [task({ id: 'a', categoryIds: ['work'] }), task({ id: 'b', categoryIds: [] })];
     expect(searchTasks(tasks, categories, { categoryName: 'Trabalho' }).map((t) => t.id)).toEqual(['a']);
   });
 
   it('retorna lista vazia se a categoria não existir', () => {
-    const tasks = [task({ id: 'a', categoryId: 'work' })];
+    const tasks = [task({ id: 'a', categoryIds: ['work'] })];
     expect(searchTasks(tasks, categories, { categoryName: 'Inexistente' })).toEqual([]);
   });
 

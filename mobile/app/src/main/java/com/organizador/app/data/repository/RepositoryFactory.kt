@@ -18,6 +18,7 @@ fun buildTaskRepository(context: Context): TaskRepository {
     return TaskRepository(
         database.taskDao(),
         database.categoryDao(),
+        database.taskCategoryCrossRefDao(),
         database.subtaskDao(),
         AlarmTaskReminderScheduler(context),
         DeviceCalendarSync(context, settingsStore),

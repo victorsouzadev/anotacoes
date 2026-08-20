@@ -40,6 +40,7 @@ class AppContainer(context: Context) {
     val taskRepository: TaskRepository = TaskRepository(
         database.taskDao(),
         database.categoryDao(),
+        database.taskCategoryCrossRefDao(),
         database.subtaskDao(),
         reminderScheduler,
         calendarSync,
@@ -51,6 +52,7 @@ class AppContainer(context: Context) {
         appContext,
         database.taskDao(),
         database.categoryDao(),
+        database.taskCategoryCrossRefDao(),
         database.subtaskDao(),
     )
 
@@ -62,6 +64,7 @@ class AppContainer(context: Context) {
     val tasksSyncRepository: TasksSyncRepository = TasksSyncRepository(
         database.taskDao(),
         database.categoryDao(),
+        database.taskCategoryCrossRefDao(),
         database.kanbanLaneDao(),
         database.taskCommentDao(),
         database.subtaskDao(),

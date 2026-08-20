@@ -40,7 +40,7 @@ describe('tasksApi', () => {
       description: null,
       dueDate: null,
       priority: 'Medium',
-      categoryId: null,
+      categoryIds: [],
       kanbanLaneId: null,
       isRecurring: false,
       recurrenceRule: null,

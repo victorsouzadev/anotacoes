@@ -6,6 +6,6 @@ import com.organizador.app.data.local.entity.Task
 
 data class TaskWithCategory(
     val task: Task,
-    val category: Category?,
+    val categories: List<Category> = emptyList(),
     val subtasks: List<Subtask> = emptyList(),
 )

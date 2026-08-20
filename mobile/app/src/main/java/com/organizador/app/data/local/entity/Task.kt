@@ -10,19 +10,13 @@ import com.organizador.app.domain.model.Priority
     tableName = "tasks",
     foreignKeys = [
         ForeignKey(
-            entity = Category::class,
-            parentColumns = ["id"],
-            childColumns = ["categoryId"],
-            onDelete = ForeignKey.SET_NULL,
-        ),
-        ForeignKey(
             entity = KanbanLane::class,
             parentColumns = ["id"],
             childColumns = ["kanbanLaneId"],
             onDelete = ForeignKey.SET_NULL,
         ),
     ],
-    indices = [Index("categoryId"), Index("kanbanLaneId"), Index("dueDate"), Index("isCompleted"), Index("deletedAt")],
+    indices = [Index("kanbanLaneId"), Index("dueDate"), Index("isCompleted"), Index("deletedAt")],
 )
 data class Task(
     @PrimaryKey(autoGenerate = true)
@@ -32,7 +26,6 @@ data class Task(
     /** Epoch millis (UTC) of the due instant, null when the task has no deadline. */
     val dueDate: Long? = null,
     val priority: Priority = Priority.MEDIUM,
-    val categoryId: Long? = null,
     /** Raia (coluna) do Kanban — independente de categoria. Null quando a tarefa não está em nenhuma. */
     val kanbanLaneId: Long? = null,
     val isRecurring: Boolean = false,

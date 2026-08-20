@@ -1,6 +1,6 @@
 {
   "name": "@anotacoes/mcp-tasks",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Servidor MCP para adicionar e gerenciar tarefas do hub via LLM (Claude Desktop, Claude Code, etc.)",
   "private": true,
   "type": "module",

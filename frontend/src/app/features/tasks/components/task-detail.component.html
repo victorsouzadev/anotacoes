@@ -20,11 +20,15 @@
         <span class="label">Prioridade</span>
         <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
       </div>
-      @if (store.categoryFor(task); as cat) {
-        <div class="meta-item">
-          <span class="label">Categoria</span>
-          <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
-        </div>
+      @if (store.categoriesFor(task); as cats) {
+        @if (cats.length > 0) {
+          <div class="meta-item">
+            <span class="label">Categorias</span>
+            @for (cat of cats; track cat.id) {
+              <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
+            }
+          </div>
+        }
       }
       @if (recurrenceLabel(); as rec) {
         <div class="meta-item">

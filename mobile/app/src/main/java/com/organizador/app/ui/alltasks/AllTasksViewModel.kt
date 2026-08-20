@@ -71,7 +71,7 @@ class AllTasksViewModel(
     ) { allTasks, categories, f, sort ->
         val selectedId = f.categoryId
         val query = f.query
-        var filtered = if (selectedId == null) allTasks else allTasks.filter { it.task.categoryId == selectedId }
+        var filtered = if (selectedId == null) allTasks else allTasks.filter { item -> item.categories.any { it.id == selectedId } }
         val needle = query.trim()
         if (needle.isNotEmpty()) {
             filtered = filtered.filter {
@@ -79,7 +79,7 @@ class AllTasksViewModel(
                     it.task.description?.contains(needle, ignoreCase = true) == true
             }
         }
-        if (f.noCategory) filtered = filtered.filter { it.task.categoryId == null }
+        if (f.noCategory) filtered = filtered.filter { it.categories.isEmpty() }
         if (f.noDate) filtered = filtered.filter { it.task.dueDate == null }
 
         val recurring = filtered.filter { it.task.isRecurring }

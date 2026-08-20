@@ -8,6 +8,7 @@ import androidx.room.TypeConverters
 import com.organizador.app.data.local.dao.CategoryDao
 import com.organizador.app.data.local.dao.KanbanLaneDao
 import com.organizador.app.data.local.dao.SubtaskDao
+import com.organizador.app.data.local.dao.TaskCategoryCrossRefDao
 import com.organizador.app.data.local.dao.TaskCommentDao
 import com.organizador.app.data.local.dao.TaskDao
 import com.organizador.app.data.local.dao.TaskTemplateDao
@@ -15,12 +16,16 @@ import com.organizador.app.data.local.entity.Category
 import com.organizador.app.data.local.entity.KanbanLane
 import com.organizador.app.data.local.entity.Subtask
 import com.organizador.app.data.local.entity.Task
+import com.organizador.app.data.local.entity.TaskCategoryCrossRef
 import com.organizador.app.data.local.entity.TaskComment
 import com.organizador.app.data.local.entity.TaskTemplate
 
 @Database(
-    entities = [Task::class, Category::class, Subtask::class, KanbanLane::class, TaskComment::class, TaskTemplate::class],
-    version = 10,
+    entities = [
+        Task::class, Category::class, Subtask::class, KanbanLane::class, TaskComment::class,
+        TaskTemplate::class, TaskCategoryCrossRef::class,
+    ],
+    version = 11,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -32,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun kanbanLaneDao(): KanbanLaneDao
     abstract fun taskCommentDao(): TaskCommentDao
     abstract fun taskTemplateDao(): TaskTemplateDao
+    abstract fun taskCategoryCrossRefDao(): TaskCategoryCrossRefDao
 
     companion object {
         private const val DATABASE_NAME = "organizador.db"

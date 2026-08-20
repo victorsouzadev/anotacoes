@@ -9,11 +9,11 @@ já usam, então uma tarefa criada por aqui aparece em ambos.
 
 | Tool | Descrição |
 |---|---|
-| `add_task` | Cria uma tarefa (título, descrição, prazo, prioridade, categoria — categoria é criada automaticamente se ainda não existir). |
+| `add_task` | Cria uma tarefa (título, descrição, prazo, prioridade, uma ou mais categorias — categorias são criadas automaticamente se ainda não existirem). |
 | `list_tasks` | Lista tarefas do usuário (por padrão só as pendentes). |
 | `search_tasks` | Busca tarefas por texto e/ou filtros de categoria, prioridade e prazo (`dueBefore`/`dueAfter`). |
 | `get_task` | Detalhe completo de uma tarefa — inclui subtarefas e comentários. |
-| `update_task` | Edita título, descrição, prazo, prioridade, categoria e/ou raia do Kanban de uma tarefa existente. |
+| `update_task` | Edita título, descrição, prazo, prioridade, categorias (substitui a lista atual) e/ou raia do Kanban de uma tarefa existente. |
 | `complete_task` | Marca uma tarefa como concluída, pelo id ou por um trecho do título. |
 | `reopen_task` | Desfaz `complete_task` — reabre uma tarefa concluída. |
 | `delete_task` | Move uma tarefa pra lixeira (reversível). |
@@ -28,6 +28,9 @@ já usam, então uma tarefa criada por aqui aparece em ambos.
 | `move_task_to_lane` | Move uma tarefa pra uma raia do Kanban (criada automaticamente se não existir). |
 | `add_comment` | Adiciona um comentário a uma tarefa. |
 | `list_comments` | Lista os comentários de uma tarefa. |
+
+Uma tarefa pode ter **várias categorias ao mesmo tempo** — `add_task`/`update_task` aceitam nomes
+separados por vírgula (ex.: `"Trabalho, Urgente"`).
 
 Raia do Kanban é **independente de categoria** — é a organização própria do quadro Kanban da
 ferramenta Tarefas (colunas como "A fazer"/"Em andamento"/"Feito", ou qualquer fluxo que o usuário

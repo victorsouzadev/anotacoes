@@ -2,10 +2,12 @@ package com.organizador.app.data.repository
 
 import com.organizador.app.data.local.dao.CategoryDao
 import com.organizador.app.data.local.dao.SubtaskDao
+import com.organizador.app.data.local.dao.TaskCategoryCrossRefDao
 import com.organizador.app.data.local.dao.TaskDao
 import com.organizador.app.data.local.entity.Category
 import com.organizador.app.data.local.entity.Subtask
 import com.organizador.app.data.local.entity.Task
+import com.organizador.app.data.local.entity.TaskCategoryCrossRef
 import com.organizador.app.data.photo.PhotoStorage
 import com.organizador.app.domain.calendar.CalendarSync
 import com.organizador.app.domain.common.toEpochMillis
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.first
 class TaskRepository(
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
+    private val taskCategoryCrossRefDao: TaskCategoryCrossRefDao,
     private val subtaskDao: SubtaskDao,
     private val reminderScheduler: TaskReminderScheduler,
     private val calendarSync: CalendarSync,
@@ -31,15 +34,16 @@ class TaskRepository(
 ) {
 
     val allTasks: Flow<List<TaskWithCategory>> =
-        combine(taskDao.getAllTasks(), categoryDao.getAllCategories(), subtaskDao.getAllSubtasks(), ::attachDetails)
+        combine(taskDao.getAllTasks(), categoryDao.getAllCategories(), taskCategoryCrossRefDao.getAllCrossRefs(), subtaskDao.getAllSubtasks(), ::attachDetails)
 
     val recurringTasks: Flow<List<TaskWithCategory>> =
-        combine(taskDao.getRecurringTasks(), categoryDao.getAllCategories(), subtaskDao.getAllSubtasks(), ::attachDetails)
+        combine(taskDao.getRecurringTasks(), categoryDao.getAllCategories(), taskCategoryCrossRefDao.getAllCrossRefs(), subtaskDao.getAllSubtasks(), ::attachDetails)
 
     fun todayTasks(startOfDayMillis: Long, endOfDayMillis: Long): Flow<List<TaskWithCategory>> =
         combine(
             taskDao.getTodayTasks(startOfDayMillis, endOfDayMillis),
             categoryDao.getAllCategories(),
+            taskCategoryCrossRefDao.getAllCrossRefs(),
             subtaskDao.getAllSubtasks(),
             ::attachDetails,
         )
@@ -48,36 +52,31 @@ class TaskRepository(
         combine(
             taskDao.getOverdueTasks(startOfDayMillis),
             categoryDao.getAllCategories(),
+            taskCategoryCrossRefDao.getAllCrossRefs(),
             subtaskDao.getAllSubtasks(),
             ::attachDetails,
         )
 
-    fun tasksByCategory(categoryId: Long): Flow<List<TaskWithCategory>> =
-        combine(
-            taskDao.getTasksByCategory(categoryId),
-            categoryDao.getAllCategories(),
-            subtaskDao.getAllSubtasks(),
-            ::attachDetails,
-        )
-
-    /** Single task with its category and subtasks, for the edit screen. Emits null once the task no longer exists (e.g. deleted). */
+    /** Single task with its categories and subtasks, for the edit screen. Emits null once the task no longer exists (e.g. deleted). */
     fun taskDetails(taskId: Long): Flow<TaskWithCategory?> =
         combine(
             taskDao.getTaskById(taskId),
             categoryDao.getAllCategories(),
+            taskCategoryCrossRefDao.getAllCrossRefs(),
             subtaskDao.getSubtasksForTask(taskId),
-        ) { task, categories, subtasks ->
+        ) { task, categories, crossRefs, subtasks ->
             task?.let {
+                val categoriesById = categories.associateBy { c -> c.id }
                 TaskWithCategory(
                     task = it,
-                    category = it.categoryId?.let { id -> categories.find { category -> category.id == id } },
+                    categories = crossRefs.filter { ref -> ref.taskId == it.id }.mapNotNull { ref -> categoriesById[ref.categoryId] },
                     subtasks = subtasks,
                 )
             }
         }
 
     val trashedTasks: Flow<List<TaskWithCategory>> =
-        combine(taskDao.getTrashedTasks(), categoryDao.getAllCategories(), subtaskDao.getAllSubtasks(), ::attachDetails)
+        combine(taskDao.getTrashedTasks(), categoryDao.getAllCategories(), taskCategoryCrossRefDao.getAllCrossRefs(), subtaskDao.getAllSubtasks(), ::attachDetails)
 
     /** Soft-deletes a task (recoverable from the trash), cancels its reminder and removes its calendar event. */
     suspend fun moveToTrash(task: Task) {
@@ -108,11 +107,12 @@ class TaskRepository(
 
     suspend fun incrementPomodoroCount(taskId: Long) = taskDao.incrementPomodoroCount(taskId)
 
-    suspend fun upsert(task: Task): Long {
+    suspend fun upsert(task: Task, categoryIds: List<Long>? = null): Long {
         // Room's @Upsert returns -1 when it takes the update branch (task.id already exists) —
         // only a genuine insert produces a real generated id, so trust task.id whenever it's set.
         val generatedId = taskDao.upsert(task.copy(updatedAt = System.currentTimeMillis()))
         val taskId = if (task.id != 0L) task.id else generatedId
+        if (categoryIds != null) taskCategoryCrossRefDao.replaceForTask(taskId, categoryIds)
         val withId = task.copy(id = taskId)
         reminderScheduler.schedule(withId)
         locationReminderScheduler.schedule(withId)
@@ -184,6 +184,8 @@ class TaskRepository(
             remoteId = null,
         )
         val nextTaskId = taskDao.upsert(nextTask)
+        val categoryIds = taskCategoryCrossRefDao.getCategoryIdsForTaskOnce(completedTask.id)
+        if (categoryIds.isNotEmpty()) taskCategoryCrossRefDao.replaceForTask(nextTaskId, categoryIds)
 
         val originalSubtasks = subtaskDao.getSubtasksForTask(completedTask.id).first()
         if (originalSubtasks.isNotEmpty()) {
@@ -215,7 +217,8 @@ class TaskRepository(
             updatedAt = now,
         )
         val subtaskTitles = subtaskDao.getSubtasksForTask(task.id).first().sortedBy { it.position }.map { it.title }
-        return createTaskWithSubtasks(copy, subtaskTitles)
+        val categoryIds = taskCategoryCrossRefDao.getCategoryIdsForTaskOnce(task.id)
+        return createTaskWithSubtasks(copy, subtaskTitles, categoryIds)
     }
 
     /** Persists a drag-reordered task list (manual sort mode). No side-effects (reminders/calendar/widget) needed — only display order changes. */
@@ -227,7 +230,7 @@ class TaskRepository(
     }
 
     /** Creates a task and its checklist items together, used by the "new task" flow which can produce several tasks at once. */
-    suspend fun createTaskWithSubtasks(task: Task, subtaskTitles: List<String>): Long {
+    suspend fun createTaskWithSubtasks(task: Task, subtaskTitles: List<String>, categoryIds: List<Long> = emptyList()): Long {
         val taskId = taskDao.upsert(task.copy(updatedAt = System.currentTimeMillis()))
         if (subtaskTitles.isNotEmpty()) {
             val subtasks = subtaskTitles.mapIndexed { index, title ->
@@ -235,6 +238,7 @@ class TaskRepository(
             }
             subtaskDao.upsertAll(subtasks)
         }
+        if (categoryIds.isNotEmpty()) taskCategoryCrossRefDao.replaceForTask(taskId, categoryIds)
         val withId = task.copy(id = taskId)
         reminderScheduler.schedule(withId)
         locationReminderScheduler.schedule(withId)
@@ -270,14 +274,16 @@ class TaskRepository(
     private fun attachDetails(
         tasks: List<Task>,
         categories: List<Category>,
+        crossRefs: List<TaskCategoryCrossRef>,
         subtasks: List<Subtask>,
     ): List<TaskWithCategory> {
         val categoriesById = categories.associateBy { it.id }
+        val categoryIdsByTaskId = crossRefs.groupBy({ it.taskId }, { it.categoryId })
         val subtasksByTaskId = subtasks.groupBy { it.taskId }
         return tasks.map { task ->
             TaskWithCategory(
                 task = task,
-                category = task.categoryId?.let(categoriesById::get),
+                categories = categoryIdsByTaskId[task.id].orEmpty().mapNotNull(categoriesById::get),
                 subtasks = subtasksByTaskId[task.id].orEmpty(),
             )
         }

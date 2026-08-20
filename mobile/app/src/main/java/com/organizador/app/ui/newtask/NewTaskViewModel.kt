@@ -70,12 +70,11 @@ class NewTaskViewModel(
                 title = template.title,
                 description = template.description,
                 priority = template.priority,
-                categoryId = template.categoryId,
                 isRecurring = template.isRecurring,
                 recurrenceRule = template.recurrenceRule,
             )
             val subtaskTitles = template.subtaskTitles.split("\n").map { it.trim() }.filter { it.isNotBlank() }
-            taskRepository.createTaskWithSubtasks(task, subtaskTitles)
+            taskRepository.createTaskWithSubtasks(task, subtaskTitles, template.categoryIdList)
             _uiState.update { it.copy(isSaving = false, savedSuccessfully = true) }
         }
     }
@@ -170,11 +169,10 @@ class NewTaskViewModel(
                     title = title,
                     dueDate = item.dueDateTime?.toEpochMillis(),
                     priority = item.priority ?: state.priority,
-                    categoryId = categoryId,
                     isRecurring = state.recurrence != null,
                     recurrenceRule = state.recurrence?.encode(),
                 )
-                taskRepository.createTaskWithSubtasks(task, item.subtasks)
+                taskRepository.createTaskWithSubtasks(task, item.subtasks, listOfNotNull(categoryId))
             }
             _uiState.update { it.copy(isSaving = false, savedSuccessfully = true) }
         }

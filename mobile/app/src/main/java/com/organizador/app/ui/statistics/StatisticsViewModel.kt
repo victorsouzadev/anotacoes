@@ -54,14 +54,17 @@ class StatisticsViewModel(taskRepository: TaskRepository) : ViewModel() {
             cursor = cursor.minusDays(1)
         }
 
+        // Tarefa com várias categorias entra na contagem de cada uma; sem nenhuma entra em "sem categoria".
         val categoryStats = tasks
-            .groupBy { it.category?.id }
-            .map { (_, items) ->
+            .flatMap { item -> if (item.categories.isEmpty()) listOf(null to item) else item.categories.map { it to item } }
+            .groupBy { (category, _) -> category?.id }
+            .map { (_, entries) ->
+                val category = entries.first().first
                 CategoryStat(
-                    name = items.first().category?.name,
-                    colorHex = items.first().category?.colorHex,
-                    completed = items.count { it.task.isCompleted },
-                    total = items.size,
+                    name = category?.name,
+                    colorHex = category?.colorHex,
+                    completed = entries.count { (_, item) -> item.task.isCompleted },
+                    total = entries.size,
                 )
             }
             .sortedByDescending { it.total }

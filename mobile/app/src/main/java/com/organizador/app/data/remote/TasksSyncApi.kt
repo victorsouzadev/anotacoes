@@ -20,7 +20,7 @@ data class RemoteTaskItem(
     val description: String?,
     val dueDate: String?,
     val priority: String,
-    val categoryId: String?,
+    val categoryIds: List<String>,
     val kanbanLaneId: String?,
     val isRecurring: Boolean,
     val recurrenceRule: String?,
@@ -111,7 +111,7 @@ class TasksSyncApi(private val baseUrlProvider: () -> String) {
             .put("description", task.description)
             .put("dueDate", task.dueDate)
             .put("priority", task.priority)
-            .put("categoryId", task.categoryId)
+            .put("categoryIds", JSONArray(task.categoryIds))
             .put("kanbanLaneId", task.kanbanLaneId)
             .put("isRecurring", task.isRecurring)
             .put("recurrenceRule", task.recurrenceRule)
@@ -193,7 +193,7 @@ private fun JSONObject.toRemoteTaskItem() = RemoteTaskItem(
     description = optStringOrNull("description"),
     dueDate = optStringOrNull("dueDate"),
     priority = getString("priority"),
-    categoryId = optStringOrNull("categoryId"),
+    categoryIds = optJSONArray("categoryIds")?.let { arr -> (0 until arr.length()).map { arr.getString(it) } } ?: emptyList(),
     kanbanLaneId = optStringOrNull("kanbanLaneId"),
     isRecurring = getBoolean("isRecurring"),
     recurrenceRule = optStringOrNull("recurrenceRule"),
