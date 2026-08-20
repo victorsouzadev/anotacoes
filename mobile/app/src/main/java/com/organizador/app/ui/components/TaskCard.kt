@@ -59,7 +59,7 @@ fun TaskCard(
     onDuplicate: (() -> Unit)? = null,
 ) {
     val task = taskWithCategory.task
-    val category = taskWithCategory.category
+    val categories = taskWithCategory.categories
     val subtasks = taskWithCategory.subtasks
     val borderColor = priorityColor(task.priority)
     var areSubtasksExpanded by remember(task.id) { mutableStateOf(false) }
@@ -108,7 +108,7 @@ fun TaskCard(
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         DueDateChip(dueDateMillis = task.dueDate, isCompleted = task.isCompleted)
-                        if (category != null) {
+                        categories.forEach { category ->
                             Spacer(Modifier.width(8.dp))
                             CategoryChip(name = category.name, colorHex = category.colorHex)
                         }

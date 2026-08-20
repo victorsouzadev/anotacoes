@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
 using Notas.Api.Dtos;
@@ -50,9 +51,21 @@ public static class TasksEndpoints
 
         categories.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var category = await db.TaskCategories.FirstOrDefaultAsync(c => c.Id == id && c.UserId == user.UserId());
+            var userId = user.UserId();
+            var category = await db.TaskCategories.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
             if (category is null) return Results.NotFound();
             db.TaskCategories.Remove(category);
+
+            // CategoryIds é um blob JSON opaco, sem FK — precisa tirar o id apagado manualmente das
+            // tarefas que o referenciam (antes era um ON DELETE SET NULL do banco).
+            var affected = await db.TaskItems.Where(t => t.UserId == userId && t.CategoryIds.Contains(id)).ToListAsync();
+            foreach (var task in affected)
+            {
+                var ids = ParseCategoryIds(task.CategoryIds);
+                if (ids.Remove(id))
+                    task.CategoryIds = JsonSerializer.Serialize(ids);
+            }
+
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
@@ -262,10 +275,15 @@ public static class TasksEndpoints
 
         var userId = user.UserId();
 
-        var categoryId = req.CategoryId;
-        if (categoryId is not null &&
-            !await db.TaskCategories.AnyAsync(c => c.Id == categoryId && c.UserId == userId))
-            categoryId = null;
+        // Filtra a lista pedida pra só as categorias que existem e pertencem ao usuário — igual ao
+        // tratamento de categoryId único de antes, agora aplicado item a item.
+        var requestedCategoryIds = (req.CategoryIds ?? []).Distinct().ToList();
+        var categoryIds = requestedCategoryIds.Count == 0
+            ? new List<string>()
+            : await db.TaskCategories
+                .Where(c => c.UserId == userId && requestedCategoryIds.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToListAsync();
 
         var kanbanLaneId = req.KanbanLaneId;
         if (kanbanLaneId is not null &&
@@ -286,7 +304,7 @@ public static class TasksEndpoints
             return Results.Ok(ToDto(task));
         }
 
-        Apply(task, req, categoryId, kanbanLaneId);
+        Apply(task, req, categoryIds, kanbanLaneId);
 
         try
         {
@@ -301,7 +319,7 @@ public static class TasksEndpoints
             if (existing is null) throw;
             if (existing.UpdatedAt < req.UpdatedAt)
             {
-                Apply(existing, req, categoryId, kanbanLaneId);
+                Apply(existing, req, categoryIds, kanbanLaneId);
                 await db.SaveChangesAsync();
             }
             task = existing;
@@ -309,13 +327,13 @@ public static class TasksEndpoints
         return Results.Ok(ToDto(task));
     }
 
-    private static void Apply(TaskItem task, TaskItemUpsertRequest req, string? categoryId, string? kanbanLaneId)
+    private static void Apply(TaskItem task, TaskItemUpsertRequest req, List<string> categoryIds, string? kanbanLaneId)
     {
         task.Title = req.Title.Trim();
         task.Description = req.Description;
         task.DueDate = req.DueDate;
         task.Priority = req.Priority;
-        task.CategoryId = categoryId;
+        task.CategoryIds = JsonSerializer.Serialize(categoryIds);
         task.KanbanLaneId = kanbanLaneId;
         task.IsRecurring = req.IsRecurring;
         task.RecurrenceRule = req.RecurrenceRule;
@@ -337,9 +355,21 @@ public static class TasksEndpoints
     private static KanbanLaneDto ToDto(KanbanLane l) => new(l.Id, l.Name, l.ColorHex, l.Position, l.UpdatedAt);
 
     private static TaskItemDto ToDto(TaskItem t) => new(
-        t.Id, t.Title, t.Description, t.DueDate, t.Priority, t.CategoryId, t.KanbanLaneId, t.IsRecurring, t.RecurrenceRule,
+        t.Id, t.Title, t.Description, t.DueDate, t.Priority, ParseCategoryIds(t.CategoryIds), t.KanbanLaneId, t.IsRecurring, t.RecurrenceRule,
         t.IsCompleted, t.CreatedAt, t.CompletedAt, t.DeletedAt, t.CompletedPomodoros, t.Position,
         t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.UpdatedAt);
+
+    private static List<string> ParseCategoryIds(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     private static TaskCommentDto ToDto(TaskComment c) => new(c.Id, c.TaskId, c.Text, c.CreatedAt, c.UpdatedAt);
 

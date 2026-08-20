@@ -92,7 +92,6 @@ import com.organizador.app.R
 import com.organizador.app.data.local.entity.TaskComment
 import com.organizador.app.data.photo.PhotoStorage
 import com.organizador.app.ui.common.rememberEditTaskViewModelFactory
-import com.organizador.app.ui.components.CategoryFilterRow
 import com.organizador.app.ui.components.PrioritySelector
 import com.organizador.app.ui.components.RecurrenceSelector
 import com.organizador.app.ui.theme.Accent
@@ -377,12 +376,18 @@ fun EditTaskScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.edit_task_category_label), style = MaterialTheme.typography.titleSmall)
-                    CategoryFilterRow(
-                        categories = uiState.categories,
-                        selectedCategoryId = uiState.categoryId,
-                        onSelect = viewModel::onCategorySelected,
-                        allLabel = stringResource(R.string.edit_task_no_category),
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        uiState.categories.forEach { category ->
+                            ActionChip(
+                                label = category.name,
+                                onClick = { viewModel.onCategoryToggled(category.id) },
+                                isSelected = uiState.selectedCategoryIds.contains(category.id),
+                            )
+                        }
+                    }
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

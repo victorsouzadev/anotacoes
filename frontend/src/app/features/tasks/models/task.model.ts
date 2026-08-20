@@ -30,7 +30,7 @@ export interface TaskItemWire {
   description: string | null;
   dueDate: string | null;
   priority: Priority;
-  categoryId: string | null;
+  categoryIds: string[];
   kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;

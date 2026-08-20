@@ -24,7 +24,7 @@ export interface TaskItem {
   description: string | null;
   dueDate: string | null;
   priority: Priority;
-  categoryId: string | null;
+  categoryIds: string[];
   kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
@@ -150,7 +150,7 @@ export interface CreateTaskInput {
   description?: string | null;
   dueDate?: string | null;
   priority?: Priority;
-  categoryId?: string | null;
+  categoryIds?: string[];
 }
 
 export async function createTask(input: CreateTaskInput): Promise<TaskItem> {
@@ -163,7 +163,7 @@ export async function createTask(input: CreateTaskInput): Promise<TaskItem> {
       description: input.description ?? null,
       dueDate: input.dueDate ?? null,
       priority: input.priority ?? 'Medium',
-      categoryId: input.categoryId ?? null,
+      categoryIds: input.categoryIds ?? [],
       isRecurring: false,
       recurrenceRule: null,
       isCompleted: false,

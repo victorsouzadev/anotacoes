@@ -127,7 +127,7 @@ export class TasksCategoriesPageComponent implements OnInit {
   }
 
   taskCount(category: TaskCategory): number {
-    return this.store.activeTasks().filter((t) => t.categoryId === category.id).length;
+    return this.store.activeTasks().filter((t) => t.categoryIds.includes(category.id)).length;
   }
 
   async create(): Promise<void> {

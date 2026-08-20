@@ -111,7 +111,7 @@
                   <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
                 }
                 <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
-                @if (store.categoryFor(task); as cat) {
+                @for (cat of store.categoriesFor(task); track cat.id) {
                   <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
                 }
                 @if (subtaskProgress(task); as progress) {

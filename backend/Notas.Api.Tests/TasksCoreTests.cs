@@ -43,7 +43,7 @@ public class TasksCoreTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         description = (string?)null,
         dueDate = (DateTime?)null,
         priority = "Medium",
-        categoryId,
+        categoryIds = categoryId is null ? Array.Empty<string>() : new[] { categoryId },
         isRecurring = false,
         recurrenceRule = (string?)null,
         isCompleted,
@@ -145,14 +145,14 @@ public class TasksCoreTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
         var beforeDelete = await (await _client.GetAsync("/api/tasks/items")).Content.ReadFromJsonAsync<JsonElement>();
         var beforeTask = beforeDelete.EnumerateArray().First(t => t.GetProperty("id").GetString() == taskId);
-        Assert.Equal(categoryId, beforeTask.GetProperty("categoryId").GetString());
+        Assert.Equal(new[] { categoryId }, beforeTask.GetProperty("categoryIds").EnumerateArray().Select(e => e.GetString()));
 
         var deleteRes = await _client.DeleteAsync($"/api/tasks/categories/{categoryId}");
         Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
 
         var afterDelete = await (await _client.GetAsync("/api/tasks/items")).Content.ReadFromJsonAsync<JsonElement>();
         var afterTask = afterDelete.EnumerateArray().First(t => t.GetProperty("id").GetString() == taskId);
-        Assert.True(afterTask.GetProperty("categoryId").ValueKind == JsonValueKind.Null);
+        Assert.Empty(afterTask.GetProperty("categoryIds").EnumerateArray());
     }
 
     [Fact]
@@ -174,7 +174,48 @@ public class TasksCoreTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         var res = await _client.PutAsJsonAsync($"/api/tasks/items/{taskId}", TaskPayload("Tarefa", DateTime.UtcNow, foreignCategoryId));
         var created = await res.Content.ReadFromJsonAsync<JsonElement>();
 
-        Assert.True(created.GetProperty("categoryId").ValueKind == JsonValueKind.Null);
+        Assert.Empty(created.GetProperty("categoryIds").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task CreateTask_WithMultipleCategories_KeepsOnlyValidOwnedOnes()
+    {
+        var catA = Guid.NewGuid().ToString();
+        var catB = Guid.NewGuid().ToString();
+        await _client.PutAsJsonAsync($"/api/tasks/categories/{catA}", new { name = "A", colorHex = "#111111", updatedAt = DateTime.UtcNow });
+        await _client.PutAsJsonAsync($"/api/tasks/categories/{catB}", new { name = "B", colorHex = "#222222", updatedAt = DateTime.UtcNow });
+
+        var foreignCategoryId = Guid.NewGuid().ToString();
+        var taskId = Guid.NewGuid().ToString();
+        var res = await _client.PutAsJsonAsync($"/api/tasks/items/{taskId}", new
+        {
+            title = "Multi",
+            description = (string?)null,
+            dueDate = (DateTime?)null,
+            priority = "Medium",
+            categoryIds = new[] { catA, catB, foreignCategoryId },
+            isRecurring = false,
+            recurrenceRule = (string?)null,
+            isCompleted = false,
+            createdAt = DateTime.UtcNow,
+            completedAt = (DateTime?)null,
+            deletedAt = (DateTime?)null,
+            completedPomodoros = 0,
+            position = 0,
+            locationLat = (double?)null,
+            locationLng = (double?)null,
+            locationRadiusMeters = (float?)null,
+            locationLabel = (string?)null,
+            subtasks = "[]",
+            updatedAt = DateTime.UtcNow,
+        });
+        var created = await res.Content.ReadFromJsonAsync<JsonElement>();
+
+        var ids = created.GetProperty("categoryIds").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Equal(2, ids.Count);
+        Assert.Contains(catA, ids);
+        Assert.Contains(catB, ids);
+        Assert.DoesNotContain(foreignCategoryId, ids);
     }
 
     [Fact]

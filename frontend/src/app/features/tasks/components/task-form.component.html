@@ -29,14 +29,22 @@
     </div>
 
     <label class="field">
-      <span>Categoria</span>
+      <span>Categorias</span>
       <div class="category-row">
-        <select [(ngModel)]="categoryId">
-          <option [ngValue]="null">Sem categoria</option>
+        <div class="category-chips">
           @for (c of store.categories(); track c.id) {
-            <option [ngValue]="c.id">{{ c.name }}</option>
+            <button
+              type="button"
+              class="category-chip"
+              [class.selected]="categoryIds.includes(c.id)"
+              [style.borderColor]="c.colorHex"
+              [style.background]="categoryIds.includes(c.id) ? c.colorHex : 'transparent'"
+              (click)="toggleCategory(c.id)"
+            >
+              {{ c.name }}
+            </button>
           }
-        </select>
+        </div>
         <button type="button" class="chip-btn" (click)="showNewCategory = !showNewCategory">+ Nova</button>
       </div>
     </label>

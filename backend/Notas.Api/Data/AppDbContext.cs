@@ -140,9 +140,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.RecurrenceRule).HasMaxLength(100);
             e.Property(t => t.LocationLabel).HasMaxLength(300);
             e.Property(t => t.Subtasks).IsRequired();
+            e.Property(t => t.CategoryIds).IsRequired();
             e.HasIndex(t => new { t.UserId, t.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskCategory>().WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<KanbanLane>().WithMany().HasForeignKey(t => t.KanbanLaneId).OnDelete(DeleteBehavior.SetNull);
         });
 

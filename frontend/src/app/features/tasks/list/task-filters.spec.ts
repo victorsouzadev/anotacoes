@@ -9,7 +9,7 @@ function task(overrides: Partial<TaskItem> = {}): TaskItem {
     description: null,
     dueDate: null,
     priority: 'Medium',
-    categoryId: null,
+    categoryIds: [],
     kanbanLaneId: null,
     isRecurring: false,
     recurrenceRule: null,
@@ -33,7 +33,7 @@ describe('filterAndSortTasks', () => {
   const now = new Date('2026-08-19T12:00:00.000Z');
 
   it('filtra por categoria', () => {
-    const tasks = [task({ id: 'a', categoryId: 'cat1' }), task({ id: 'b', categoryId: 'cat2' })];
+    const tasks = [task({ id: 'a', categoryIds: ['cat1'] }), task({ id: 'b', categoryIds: ['cat2'] })];
     const result = filterAndSortTasks(tasks, {
       categoryFilter: 'cat1',
       viewFilter: 'all',
@@ -45,7 +45,7 @@ describe('filterAndSortTasks', () => {
   });
 
   it('filtra tarefas sem categoria com NO_CATEGORY', () => {
-    const tasks = [task({ id: 'a', categoryId: 'cat1' }), task({ id: 'b', categoryId: null })];
+    const tasks = [task({ id: 'a', categoryIds: ['cat1'] }), task({ id: 'b', categoryIds: [] })];
     const result = filterAndSortTasks(tasks, {
       categoryFilter: NO_CATEGORY,
       viewFilter: 'all',

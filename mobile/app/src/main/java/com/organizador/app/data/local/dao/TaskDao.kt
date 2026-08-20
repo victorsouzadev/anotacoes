@@ -36,9 +36,6 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isRecurring = 1 AND deletedAt IS NULL ORDER BY dueDate IS NULL, dueDate ASC")
     fun getRecurringTasks(): Flow<List<Task>>
 
-    @Query("SELECT * FROM tasks WHERE categoryId = :categoryId AND deletedAt IS NULL ORDER BY dueDate IS NULL, dueDate ASC")
-    fun getTasksByCategory(categoryId: Long): Flow<List<Task>>
-
     @Query("SELECT * FROM tasks WHERE id = :taskId")
     fun getTaskById(taskId: Long): Flow<Task?>
 

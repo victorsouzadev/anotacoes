@@ -10,7 +10,7 @@ export interface TaskFormResult {
   description: string | null;
   dueDate: string | null;
   priority: Priority;
-  categoryId: string | null;
+  categoryIds: string[];
   isRecurring: boolean;
   recurrenceRule: string | null;
   subtasks: Subtask[];
@@ -34,7 +34,7 @@ export class TaskFormComponent implements OnChanges {
   description = '';
   dueDateLocal = ''; // valor de <input type="datetime-local">
   priority: Priority = 'Medium';
-  categoryId: string | null = null;
+  categoryIds: string[] = [];
   subtasks: Subtask[] = [];
   newSubtaskTitle = '';
 
@@ -56,7 +56,7 @@ export class TaskFormComponent implements OnChanges {
     this.description = source?.description ?? '';
     this.dueDateLocal = this.task?.dueDate ? toLocalInputValue(this.task.dueDate) : '';
     this.priority = source?.priority ?? 'Medium';
-    this.categoryId = source?.categoryId ?? null;
+    this.categoryIds = source?.categoryIds ? [...source.categoryIds] : [];
     this.subtasks = source?.subtasks ? [...source.subtasks] : [];
     this.newSubtaskTitle = '';
 
@@ -66,6 +66,12 @@ export class TaskFormComponent implements OnChanges {
     this.recurrenceKind = decoded?.kind ?? 'NONE';
     this.dailyInterval = decoded?.intervalDays ?? 1;
     this.weeklyDays = new Set(decoded?.daysOfWeek ?? []);
+  }
+
+  toggleCategory(categoryId: string): void {
+    this.categoryIds = this.categoryIds.includes(categoryId)
+      ? this.categoryIds.filter((id) => id !== categoryId)
+      : [...this.categoryIds, categoryId];
   }
 
   toggleWeekday(day: string): void {
@@ -92,7 +98,7 @@ export class TaskFormComponent implements OnChanges {
     const name = this.newCategoryName.trim();
     if (!name) return;
     const category = await this.store.createCategory(name, this.newCategoryColor);
-    this.categoryId = category.id;
+    this.categoryIds = [...this.categoryIds, category.id];
     this.newCategoryName = '';
     this.showNewCategory = false;
   }
@@ -127,7 +133,7 @@ export class TaskFormComponent implements OnChanges {
       description: this.description.trim() || null,
       dueDate: this.dueDateLocal ? new Date(this.dueDateLocal).toISOString() : null,
       priority: this.priority,
-      categoryId: this.categoryId,
+      categoryIds: this.categoryIds,
       isRecurring: isRecurring && !!recurrenceRule,
       recurrenceRule,
       subtasks: this.subtasks,

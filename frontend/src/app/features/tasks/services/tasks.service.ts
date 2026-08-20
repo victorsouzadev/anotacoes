@@ -18,7 +18,7 @@ export interface TaskUpsertInput {
   description: string | null;
   dueDate: string | null;
   priority: TaskItem['priority'];
-  categoryId: string | null;
+  categoryIds: string[];
   kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;

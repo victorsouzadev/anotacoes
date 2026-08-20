@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.organizador.app.data.local.dao.CategoryDao
 import com.organizador.app.data.local.dao.SubtaskDao
+import com.organizador.app.data.local.dao.TaskCategoryCrossRefDao
 import com.organizador.app.data.local.dao.TaskDao
 import com.organizador.app.data.local.entity.Category
 import com.organizador.app.data.local.entity.Subtask
@@ -24,6 +25,7 @@ class BackupRepository(
     private val context: Context,
     private val taskDao: TaskDao,
     private val categoryDao: CategoryDao,
+    private val taskCategoryCrossRefDao: TaskCategoryCrossRefDao,
     private val subtaskDao: SubtaskDao,
 ) {
     suspend fun exportToUri(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
@@ -48,6 +50,8 @@ class BackupRepository(
         val categories = categoryDao.getAllCategories().first()
         val tasks = taskDao.getAllTasks().first()
         val subtasks = subtaskDao.getAllSubtasks().first()
+        val crossRefs = taskCategoryCrossRefDao.getAllCrossRefsOnce()
+        val categoryIdsByTaskId = crossRefs.groupBy({ it.taskId }, { it.categoryId })
 
         val categoriesJson = JSONArray()
         categories.forEach { category ->
@@ -61,6 +65,8 @@ class BackupRepository(
 
         val tasksJson = JSONArray()
         tasks.forEach { task ->
+            val categoryIdsJson = JSONArray()
+            categoryIdsByTaskId[task.id].orEmpty().forEach { categoryIdsJson.put(it) }
             tasksJson.put(
                 JSONObject()
                     .put("id", task.id)
@@ -68,7 +74,7 @@ class BackupRepository(
                     .putOrNull("description", task.description)
                     .putOrNull("dueDate", task.dueDate)
                     .put("priority", task.priority.name)
-                    .putOrNull("categoryId", task.categoryId)
+                    .put("categoryIds", categoryIdsJson)
                     .put("isRecurring", task.isRecurring)
                     .putOrNull("recurrenceRule", task.recurrenceRule)
                     .put("isCompleted", task.isCompleted)
@@ -120,20 +126,26 @@ class BackupRepository(
         for (i in 0 until tasksArray.length()) {
             val obj = tasksArray.getJSONObject(i)
             val oldId = obj.getLong("id")
-            val oldCategoryId = obj.optLongOrNull("categoryId")
+            // Formato antigo (versões anteriores da ferramenta) tinha uma única `categoryId`; o novo
+            // tem `categoryIds` — aceita os dois pra importar backups antigos sem perder a categoria.
+            val oldCategoryIds = obj.optJSONArray("categoryIds")?.let { arr -> (0 until arr.length()).map { arr.getLong(it) } }
+                ?: obj.optLongOrNull("categoryId")?.let { listOf(it) }
+                ?: emptyList()
             val task = Task(
                 title = obj.getString("title"),
                 description = obj.optStringOrNull("description"),
                 dueDate = obj.optLongOrNull("dueDate"),
                 priority = runCatching { Priority.valueOf(obj.getString("priority")) }.getOrDefault(Priority.MEDIUM),
-                categoryId = oldCategoryId?.let { categoryIdRemap[it] },
                 isRecurring = obj.optBoolean("isRecurring", false),
                 recurrenceRule = obj.optStringOrNull("recurrenceRule"),
                 isCompleted = obj.optBoolean("isCompleted", false),
                 createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                 completedAt = obj.optLongOrNull("completedAt"),
             )
-            taskIdRemap[oldId] = taskDao.upsert(task)
+            val newTaskId = taskDao.upsert(task)
+            taskIdRemap[oldId] = newTaskId
+            val newCategoryIds = oldCategoryIds.mapNotNull { categoryIdRemap[it] }
+            if (newCategoryIds.isNotEmpty()) taskCategoryCrossRefDao.replaceForTask(newTaskId, newCategoryIds)
         }
 
         val subtasksArray = root.optJSONArray("subtasks") ?: JSONArray()

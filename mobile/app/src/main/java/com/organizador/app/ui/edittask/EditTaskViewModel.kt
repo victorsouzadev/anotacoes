@@ -48,7 +48,7 @@ data class EditTaskUiState(
     val dueDate: LocalDate? = null,
     val dueTime: LocalTime? = null,
     val priority: Priority = Priority.MEDIUM,
-    val categoryId: Long? = null,
+    val selectedCategoryIds: List<Long> = emptyList(),
     val categories: List<Category> = emptyList(),
     val kanbanLaneId: Long? = null,
     val kanbanLanes: List<KanbanLane> = emptyList(),
@@ -117,7 +117,7 @@ class EditTaskViewModel(
                     dueDate = dateTime?.toLocalDate(),
                     dueTime = if (hasExplicitTime) dateTime?.toLocalTime() else null,
                     priority = task.priority,
-                    categoryId = task.categoryId,
+                    selectedCategoryIds = details.categories.map { it.id },
                     categories = categories,
                     kanbanLaneId = task.kanbanLaneId,
                     kanbanLanes = lanes,
@@ -152,7 +152,15 @@ class EditTaskViewModel(
 
     fun onPrioritySelected(priority: Priority) = _uiState.update { it.copy(priority = priority) }
 
-    fun onCategorySelected(categoryId: Long?) = _uiState.update { it.copy(categoryId = categoryId) }
+    fun onCategoryToggled(categoryId: Long) = _uiState.update {
+        it.copy(
+            selectedCategoryIds = if (it.selectedCategoryIds.contains(categoryId)) {
+                it.selectedCategoryIds - categoryId
+            } else {
+                it.selectedCategoryIds + categoryId
+            },
+        )
+    }
 
     fun onKanbanLaneSelected(laneId: Long?) = _uiState.update { it.copy(kanbanLaneId = laneId) }
 
@@ -187,7 +195,7 @@ class EditTaskViewModel(
                     title = state.title.trim(),
                     description = state.description.trim().ifBlank { null },
                     priority = state.priority,
-                    categoryId = state.categoryId,
+                    categoryIds = TaskTemplate.encodeCategoryIds(state.selectedCategoryIds),
                     isRecurring = state.recurrence != null,
                     recurrenceRule = state.recurrence?.encode(),
                     subtaskTitles = state.subtasks.mapNotNull { it.title.trim().ifBlank { null } }.joinToString("\n"),
@@ -272,7 +280,6 @@ class EditTaskViewModel(
                 description = state.description.trim().ifBlank { null },
                 dueDate = dueDateTime?.toEpochMillis(),
                 priority = state.priority,
-                categoryId = state.categoryId,
                 kanbanLaneId = state.kanbanLaneId,
                 isRecurring = state.recurrence != null,
                 recurrenceRule = state.recurrence?.encode(),
@@ -285,7 +292,7 @@ class EditTaskViewModel(
             if (original.photoPath != null && original.photoPath != state.photoPath) {
                 PhotoStorage.delete(original.photoPath)
             }
-            taskRepository.upsert(task)
+            taskRepository.upsert(task, state.selectedCategoryIds)
             val subtasks = state.subtasks
                 .filter { it.title.isNotBlank() }
                 .map { Subtask(id = it.id ?: 0, taskId = taskId, title = it.title.trim(), isCompleted = it.isCompleted) }

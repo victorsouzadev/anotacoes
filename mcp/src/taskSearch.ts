@@ -26,7 +26,7 @@ export function searchTasks(tasks: TaskItem[], categories: TaskCategory[], filte
 
   if (filters.categoryName?.trim()) {
     const category = findCategoryByName(categories, filters.categoryName);
-    list = category ? list.filter((t) => t.categoryId === category.id) : [];
+    list = category ? list.filter((t) => t.categoryIds.includes(category.id)) : [];
   }
 
   if (filters.priority) list = list.filter((t) => t.priority === filters.priority);

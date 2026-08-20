@@ -43,7 +43,7 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
         description = (string?)null,
         dueDate = (DateTime?)null,
         priority = "Medium",
-        categoryId = (string?)null,
+        categoryIds = Array.Empty<string>(),
         kanbanLaneId,
         isRecurring = false,
         recurrenceRule = (string?)null,
