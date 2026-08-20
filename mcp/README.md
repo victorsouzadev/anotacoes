@@ -94,3 +94,12 @@ Adicione ao `claude_desktop_config.json` (ou configuração equivalente de servi
 
 Reinicie o cliente MCP depois de configurar. As ferramentas da tabela acima ficam disponíveis para
 o LLM usar na conversa.
+
+## Solução de problemas
+
+- **`fetch is not defined`**: o servidor requer **Node 18 ou mais recente** (usa o `fetch` global).
+  Aponte o `"command"` da configuração do cliente MCP pro caminho de um Node 18+ (`node --version`
+  pra conferir) e reinicie o cliente. Esse é um problema do Node usado pra rodar o servidor MCP no
+  seu computador — reiniciar a conversa com o LLM não resolve, é preciso reiniciar o processo do
+  servidor MCP em si (reabrindo o Claude Desktop/Code, ou o que estiver hospedando os servidores
+  MCP).

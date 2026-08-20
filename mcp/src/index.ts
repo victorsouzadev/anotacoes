@@ -8,6 +8,17 @@ import { normalizePriority } from './priority.js';
 import { findCategoryByName, findLaneByName, findTaskMatch } from './taskMatch.js';
 import { searchTasks } from './taskSearch.js';
 
+// `fetch` global só existe a partir do Node 18. Sem essa checagem, a primeira tool chamada falha
+// com "fetch is not defined" — mensagem que não indica a causa real (Node do cliente MCP é antigo).
+if (typeof fetch === 'undefined') {
+  console.error(
+    `[anotacoes-tasks] Node ${process.version} não tem fetch global (precisa de Node 18+). ` +
+      'Aponte o "command" do servidor MCP (claude_desktop_config.json ou equivalente) para um ' +
+      'Node 18 ou mais recente e reinicie o cliente MCP.',
+  );
+  process.exit(1);
+}
+
 const server = new McpServer({
   name: 'anotacoes-tasks',
   version: '2.2.0',
