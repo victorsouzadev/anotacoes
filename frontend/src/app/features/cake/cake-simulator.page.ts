@@ -54,6 +54,8 @@ interface Candle {
   color: string;
 }
 
+type TopperOrientation = 'standing' | 'flat';
+
 interface Topper {
   id: string;
   src: string;
@@ -61,6 +63,7 @@ interface Topper {
   xCm: number;
   yCm: number;
   widthCm: number;
+  orientation: TopperOrientation;
 }
 
 const FLAVORS: Flavor[] = [
@@ -185,17 +188,18 @@ function seededRandom(seed: number): number {
                           ></button>
                         </div>
                       }
-                      @for (t of toppers(); track t.id) {
+                      @for (tv of topperRenderViews(); track tv.id) {
                         <img
                           class="topper-img"
-                          [class.selected]="selectedTopperId() === t.id"
-                          [src]="t.src"
+                          [class.standing]="tv.standing"
+                          [class.selected]="tv.selected"
+                          [src]="tv.src"
                           alt="Imagem colada no topo do bolo"
-                          [style.left.px]="tier.capSize / 2 + t.xCm * pxPerCm()"
-                          [style.top.px]="tier.capSize / 2 + t.yCm * pxPerCm()"
-                          [style.width.px]="t.widthCm * pxPerCm()"
-                          [style.height.px]="t.widthCm * t.naturalRatio * pxPerCm()"
-                          (click)="selectTopper(t.id)"
+                          [style.left.px]="tv.leftPx"
+                          [style.top.px]="tv.topPx"
+                          [style.width.px]="tv.widthPx"
+                          [style.height.px]="tv.heightPx"
+                          (click)="selectTopper(tv.id)"
                         />
                       }
                     }
@@ -266,6 +270,7 @@ function seededRandom(seed: number): number {
                     <div
                       class="minimap-topper"
                       [class.selected]="selectedTopperId() === t.id"
+                      [class.standing]="t.orientation === 'standing'"
                       [style.left.px]="minimapCakePx / 2 + t.xCm * widgetPxPerCm()"
                       [style.top.px]="minimapCakePx / 2 + t.yCm * widgetPxPerCm()"
                       [style.width.px]="t.widthCm * widgetPxPerCm()"
@@ -291,6 +296,10 @@ function seededRandom(seed: number): number {
 
             @if (selectedTopper(); as sel) {
               <div class="topper-fields">
+                <div class="row">
+                  <button class="chip" [class.active]="sel.orientation === 'standing'" (click)="updateTopper(sel.id, { orientation: 'standing' })">Em pé</button>
+                  <button class="chip" [class.active]="sel.orientation === 'flat'" (click)="updateTopper(sel.id, { orientation: 'flat' })">Deitada</button>
+                </div>
                 <label>
                   X (cm)
                   <input type="number" step="0.1" [value]="sel.xCm" (input)="updateTopper(sel.id, { xCm: +$any($event.target).value })" />
@@ -440,7 +449,10 @@ function seededRandom(seed: number): number {
       position: relative; width: ${CAKE_BOX}px; height: ${CAKE_BOX}px; transform-style: preserve-3d;
     }
     .face { position: absolute; left: 50%; top: 50%; border-radius: 3px; }
-    .cap { position: absolute; left: 50%; top: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04) inset; }
+    .cap {
+      position: absolute; left: 50%; top: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04) inset;
+      transform-style: preserve-3d;
+    }
 
     .sprinkle { position: absolute; width: 7px; height: 2.6px; border-radius: 2px; margin-left: -3.5px; margin-top: -1.3px; }
     .cherry {
@@ -563,13 +575,21 @@ function seededRandom(seed: number): number {
       outline: 1px dashed transparent;
     }
     .minimap-topper.selected { outline-color: var(--accent); }
+    .minimap-topper.standing { border-bottom: 2px solid var(--accent-dark); }
     .minimap-topper img { width: 100%; height: 100%; display: block; pointer-events: none; }
     .resize-handle {
       position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px;
       background: var(--accent); border: 2px solid var(--surface); border-radius: 50%; cursor: nwse-resize;
     }
 
-    .topper-img { position: absolute; transform: translate(-50%, -50%) translateZ(3px); cursor: pointer; }
+    .topper-img {
+      position: absolute; transform: translate(-50%, -50%) translateZ(3px); cursor: pointer;
+      backface-visibility: visible;
+    }
+    .topper-img.standing {
+      transform: translateX(-50%) rotateX(-90deg) translateZ(0.5px);
+      transform-origin: center bottom;
+    }
     .topper-img.selected { outline: 2px dashed rgba(255, 255, 255, 0.85); outline-offset: 2px; }
 
     .topper-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
@@ -751,6 +771,29 @@ export class CakeSimulatorPageComponent implements OnDestroy {
 
   selectedTopper = computed(() => this.toppers().find((t) => t.id === this.selectedTopperId()) ?? null);
 
+  topperRenderViews = computed(() => {
+    const px = this.pxPerCm();
+    const cap = this.topCapSize();
+    const selectedId = this.selectedTopperId();
+    return this.toppers().map((t) => {
+      const widthPx = t.widthCm * px;
+      const heightPx = t.widthCm * t.naturalRatio * px;
+      const centerX = cap / 2 + t.xCm * px;
+      const centerY = cap / 2 + t.yCm * px;
+      const standing = t.orientation === 'standing';
+      return {
+        id: t.id,
+        src: t.src,
+        selected: t.id === selectedId,
+        leftPx: centerX,
+        topPx: standing ? centerY - heightPx : centerY,
+        widthPx,
+        heightPx,
+        standing,
+      };
+    });
+  });
+
   constructor(public auth: AuthService, public theme: ThemeService) {
     this.autoRotateTimer = setInterval(() => {
       if (this.autoRotate() && !this.dragging) {
@@ -886,7 +929,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
       img.onload = () => {
         const naturalRatio = img.naturalHeight / img.naturalWidth || 1;
         const widthCm = Math.min(this.topDiameterCm() * 0.5, 6);
-        const topper: Topper = { id: uid(), src, naturalRatio, xCm: 0, yCm: 0, widthCm };
+        const topper: Topper = { id: uid(), src, naturalRatio, xCm: 0, yCm: 0, widthCm, orientation: 'standing' };
         this.toppers.update((arr) => [...arr, topper]);
         this.selectedTopperId.set(topper.id);
       };
@@ -899,7 +942,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     this.selectedTopperId.set(id);
   }
 
-  updateTopper(id: string, changes: Partial<Pick<Topper, 'xCm' | 'yCm' | 'widthCm'>>): void {
+  updateTopper(id: string, changes: Partial<Pick<Topper, 'xCm' | 'yCm' | 'widthCm' | 'orientation'>>): void {
     this.toppers.update((arr) =>
       arr.map((t) => (t.id === id ? { ...t, ...changes, widthCm: Math.max(0.5, changes.widthCm ?? t.widthCm) } : t)),
     );
@@ -913,7 +956,8 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   sizeLabel(t: Topper): string {
     const heightCm = t.widthCm * t.naturalRatio;
     const fmt = (cm: number) => `${cm.toFixed(1)} cm (${Math.round(cm * 10)} mm)`;
-    return `${fmt(t.widthCm)} × ${fmt(heightCm)}`;
+    const dims = `${fmt(t.widthCm)} × ${fmt(heightCm)}`;
+    return t.orientation === 'standing' ? `Largura × altura (em pé): ${dims}` : `Largura × altura (deitada): ${dims}`;
   }
 
   onMinimapDragStart(event: PointerEvent, id: string): void {
