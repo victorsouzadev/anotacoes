@@ -10,6 +10,7 @@ import { TaskItem } from '../models/task.model';
 import { TasksStoreService, TaskStateSnapshot } from '../services/tasks-store.service';
 import { TaskTemplate, TaskTemplatesService } from '../services/task-templates.service';
 import { TaskNotificationsService } from '../services/task-notifications.service';
+import { TasksFilterStateService } from '../services/tasks-filter-state.service';
 import { NO_CATEGORY, SortMode, ViewFilter, filterAndSortTasks, tasksToCsv } from './task-filters';
 
 @Component({
@@ -25,10 +26,10 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
   @ViewChild('searchInput') searchInputRef?: ElementRef<HTMLInputElement>;
 
   viewFilter: ViewFilter = 'all';
-  categoryFilter: string | null = null;
   sortMode: SortMode = 'dueDate';
   expandedId: string | null = null;
   searchTerm = '';
+  showCategoryFilter = false;
 
   showForm = false;
   formTask: TaskItem | null = null;
@@ -49,6 +50,7 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
     public store: TasksStoreService,
     public templatesService: TaskTemplatesService,
     public notifications: TaskNotificationsService,
+    public filterState: TasksFilterStateService,
     private router: Router,
     private cdr: ChangeDetectorRef,
   ) {}
@@ -73,6 +75,7 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
       if (this.showForm) this.closeForm();
       else if (this.detailTask) this.closeDetail();
       else if (this.showTemplates) this.showTemplates = false;
+      else if (this.showCategoryFilter) this.showCategoryFilter = false;
       return;
     }
     if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -88,11 +91,28 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
 
   visibleTasks(): TaskItem[] {
     return filterAndSortTasks(this.store.activeTasks(), {
-      categoryFilter: this.categoryFilter,
+      categoryFilterIds: this.filterState.categoryFilterIds(),
       viewFilter: this.viewFilter,
       searchTerm: this.searchTerm,
       sortMode: this.sortMode,
     });
+  }
+
+  categoryFilterLabel(): string {
+    const ids = this.filterState.categoryFilterIds();
+    if (ids.length === 0) return 'Todas as categorias';
+    const names = ids.map((id) =>
+      id === NO_CATEGORY ? 'Sem categoria' : this.store.categories().find((c) => c.id === id)?.name ?? '?',
+    );
+    return names.length <= 2 ? names.join(', ') : `${names.length} categorias`;
+  }
+
+  isCategorySelected(id: string): boolean {
+    return this.filterState.categoryFilterIds().includes(id);
+  }
+
+  toggleCategoryFilter(id: string): void {
+    this.filterState.toggle(id);
   }
 
   isOverdue(task: TaskItem): boolean {

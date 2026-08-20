@@ -35,7 +35,7 @@ describe('filterAndSortTasks', () => {
   it('filtra por categoria', () => {
     const tasks = [task({ id: 'a', categoryIds: ['cat1'] }), task({ id: 'b', categoryIds: ['cat2'] })];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: 'cat1',
+      categoryFilterIds: ['cat1'],
       viewFilter: 'all',
       searchTerm: '',
       sortMode: 'dueDate',
@@ -47,13 +47,45 @@ describe('filterAndSortTasks', () => {
   it('filtra tarefas sem categoria com NO_CATEGORY', () => {
     const tasks = [task({ id: 'a', categoryIds: ['cat1'] }), task({ id: 'b', categoryIds: [] })];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: NO_CATEGORY,
+      categoryFilterIds: [NO_CATEGORY],
       viewFilter: 'all',
       searchTerm: '',
       sortMode: 'dueDate',
       now,
     });
     expect(result.map((t) => t.id)).toEqual(['b']);
+  });
+
+  it('filtra por mais de uma categoria (união)', () => {
+    const tasks = [
+      task({ id: 'a', categoryIds: ['cat1'] }),
+      task({ id: 'b', categoryIds: ['cat2'] }),
+      task({ id: 'c', categoryIds: ['cat3'] }),
+    ];
+    const result = filterAndSortTasks(tasks, {
+      categoryFilterIds: ['cat1', 'cat2'],
+      viewFilter: 'all',
+      searchTerm: '',
+      sortMode: 'dueDate',
+      now,
+    });
+    expect(result.map((t) => t.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('combina NO_CATEGORY com outra categoria selecionada', () => {
+    const tasks = [
+      task({ id: 'a', categoryIds: ['cat1'] }),
+      task({ id: 'b', categoryIds: [] }),
+      task({ id: 'c', categoryIds: ['cat2'] }),
+    ];
+    const result = filterAndSortTasks(tasks, {
+      categoryFilterIds: [NO_CATEGORY, 'cat1'],
+      viewFilter: 'all',
+      searchTerm: '',
+      sortMode: 'dueDate',
+      now,
+    });
+    expect(result.map((t) => t.id).sort()).toEqual(['a', 'b']);
   });
 
   it('filtra tarefas atrasadas', () => {
@@ -63,7 +95,7 @@ describe('filterAndSortTasks', () => {
       task({ id: 'done-past', dueDate: '2026-08-18T12:00:00.000Z', isCompleted: true }),
     ];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: null,
+      categoryFilterIds: [],
       viewFilter: 'overdue',
       searchTerm: '',
       sortMode: 'dueDate',
@@ -75,7 +107,7 @@ describe('filterAndSortTasks', () => {
   it('filtra tarefas sem prazo', () => {
     const tasks = [task({ id: 'a', dueDate: null }), task({ id: 'b', dueDate: '2026-08-20T12:00:00.000Z' })];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: null,
+      categoryFilterIds: [],
       viewFilter: 'noDate',
       searchTerm: '',
       sortMode: 'dueDate',
@@ -91,7 +123,7 @@ describe('filterAndSortTasks', () => {
       task({ id: 'c', title: 'Nada a ver' }),
     ];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: null,
+      categoryFilterIds: [],
       viewFilter: 'all',
       searchTerm: 'leite',
       sortMode: 'created',
@@ -103,7 +135,7 @@ describe('filterAndSortTasks', () => {
   it('ordena por prioridade (Alta, Média, Baixa)', () => {
     const tasks = [task({ id: 'low', priority: 'Low' }), task({ id: 'high', priority: 'High' }), task({ id: 'medium', priority: 'Medium' })];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: null,
+      categoryFilterIds: [],
       viewFilter: 'all',
       searchTerm: '',
       sortMode: 'priority',
@@ -119,7 +151,7 @@ describe('filterAndSortTasks', () => {
       task({ id: 'sooner', dueDate: '2026-08-20T00:00:00.000Z' }),
     ];
     const result = filterAndSortTasks(tasks, {
-      categoryFilter: null,
+      categoryFilterIds: [],
       viewFilter: 'all',
       searchTerm: '',
       sortMode: 'dueDate',

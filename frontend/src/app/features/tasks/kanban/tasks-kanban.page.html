@@ -7,6 +7,31 @@
         <button [class.active]="groupBy === 'lanes'" (click)="groupBy = 'lanes'">Raias</button>
         <button [class.active]="groupBy === 'status'" (click)="groupBy = 'status'">Por status</button>
       </div>
+
+      <div class="category-filter-menu">
+        <button type="button" class="category-filter-toggle" (click)="showCategoryFilter = !showCategoryFilter">
+          {{ categoryFilterLabel() }}
+        </button>
+        @if (showCategoryFilter) {
+          <div class="category-filter-panel" (click)="$event.stopPropagation()">
+            <label class="category-filter-option">
+              <input type="checkbox" [checked]="isCategorySelected(NO_CATEGORY)" (change)="toggleCategoryFilter(NO_CATEGORY)" />
+              Sem categoria
+            </label>
+            @for (c of store.categories(); track c.id) {
+              <label class="category-filter-option">
+                <input type="checkbox" [checked]="isCategorySelected(c.id)" (change)="toggleCategoryFilter(c.id)" />
+                <span class="dot" [style.background]="c.colorHex"></span>
+                {{ c.name }}
+              </label>
+            }
+            @if (filterState.categoryFilterIds().length > 0) {
+              <button type="button" class="clear-filter" (click)="filterState.clear()">Limpar filtro</button>
+            }
+          </div>
+        }
+      </div>
+
       @if (groupBy === 'lanes') {
         <button class="new-lane-btn" (click)="showNewLane = !showNewLane">
           <app-icon name="plus" [size]="14" /> Nova raia

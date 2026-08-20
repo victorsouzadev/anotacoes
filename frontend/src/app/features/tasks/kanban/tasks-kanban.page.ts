@@ -5,6 +5,8 @@ import { IconComponent } from '../../../shared/icon';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
 import { CATEGORY_COLORS, KanbanLane, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
+import { TasksFilterStateService } from '../services/tasks-filter-state.service';
+import { NO_CATEGORY } from '../list/task-filters';
 import { reorderIds } from './kanban-logic';
 
 type GroupBy = 'lanes' | 'status';
@@ -30,8 +32,10 @@ interface KanbanColumn {
 })
 export class TasksKanbanPageComponent implements OnInit {
   readonly colors = CATEGORY_COLORS;
+  readonly NO_CATEGORY = NO_CATEGORY;
 
   groupBy: GroupBy = 'lanes';
+  showCategoryFilter = false;
 
   draggingTaskId: string | null = null;
   dragOverColumn: string | null = null;
@@ -50,6 +54,7 @@ export class TasksKanbanPageComponent implements OnInit {
 
   constructor(
     public store: TasksStoreService,
+    public filterState: TasksFilterStateService,
     private cdr: ChangeDetectorRef,
   ) {}
 
@@ -78,10 +83,36 @@ export class TasksKanbanPageComponent implements OnInit {
   }
 
   tasksFor(columnId: string) {
+    const ids = this.filterState.categoryFilterIds();
+    const wantsNoCategory = ids.includes(NO_CATEGORY);
+    const wantedIds = ids.filter((id) => id !== NO_CATEGORY);
     return this.store
       .activeTasks()
       .filter((t) => this.columnOf(t) === columnId)
+      .filter(
+        (t) =>
+          ids.length === 0 ||
+          (wantsNoCategory && t.categoryIds.length === 0) ||
+          t.categoryIds.some((id) => wantedIds.includes(id)),
+      )
       .sort((a, b) => a.position - b.position);
+  }
+
+  categoryFilterLabel(): string {
+    const ids = this.filterState.categoryFilterIds();
+    if (ids.length === 0) return 'Todas as categorias';
+    const names = ids.map((id) =>
+      id === NO_CATEGORY ? 'Sem categoria' : this.store.categories().find((c) => c.id === id)?.name ?? '?',
+    );
+    return names.length <= 2 ? names.join(', ') : `${names.length} categorias`;
+  }
+
+  isCategorySelected(id: string): boolean {
+    return this.filterState.categoryFilterIds().includes(id);
+  }
+
+  toggleCategoryFilter(id: string): void {
+    this.filterState.toggle(id);
   }
 
   isOverdue(task: TaskItem): boolean {

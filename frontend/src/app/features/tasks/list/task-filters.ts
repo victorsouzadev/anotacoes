@@ -7,7 +7,8 @@ export const NO_CATEGORY = '__none__';
 const PRIORITY_WEIGHT: Record<TaskItem['priority'], number> = { High: 0, Medium: 1, Low: 2 };
 
 export interface TaskFilterOptions {
-  categoryFilter: string | null;
+  /** Ids de categoria selecionados (multi-seleção); pode incluir NO_CATEGORY. Vazio = sem filtro. */
+  categoryFilterIds: string[];
   viewFilter: ViewFilter;
   searchTerm: string;
   sortMode: SortMode;
@@ -18,8 +19,14 @@ export function filterAndSortTasks(tasks: TaskItem[], opts: TaskFilterOptions): 
   const now = opts.now ?? new Date();
   let list = tasks;
 
-  if (opts.categoryFilter === NO_CATEGORY) list = list.filter((t) => t.categoryIds.length === 0);
-  else if (opts.categoryFilter) list = list.filter((t) => t.categoryIds.includes(opts.categoryFilter!));
+  if (opts.categoryFilterIds.length > 0) {
+    const wantsNoCategory = opts.categoryFilterIds.includes(NO_CATEGORY);
+    const ids = opts.categoryFilterIds.filter((id) => id !== NO_CATEGORY);
+    list = list.filter(
+      (t) =>
+        (wantsNoCategory && t.categoryIds.length === 0) || t.categoryIds.some((id) => ids.includes(id)),
+    );
+  }
 
   if (opts.viewFilter === 'today') {
     const today = now.toDateString();
