@@ -15,13 +15,29 @@
         <input #searchInput type="text" placeholder="Buscar por título ou descrição… (/)" [(ngModel)]="searchTerm" />
       </div>
 
-      <select class="category-select" [(ngModel)]="categoryFilter">
-        <option [ngValue]="null">Todas as categorias</option>
-        <option [ngValue]="NO_CATEGORY">Sem categoria</option>
-        @for (c of store.categories(); track c.id) {
-          <option [ngValue]="c.id">{{ c.name }}</option>
+      <div class="category-filter-menu">
+        <button type="button" class="category-filter-toggle" (click)="showCategoryFilter = !showCategoryFilter">
+          {{ categoryFilterLabel() }}
+        </button>
+        @if (showCategoryFilter) {
+          <div class="category-filter-panel" (click)="$event.stopPropagation()">
+            <label class="category-filter-option">
+              <input type="checkbox" [checked]="isCategorySelected(NO_CATEGORY)" (change)="toggleCategoryFilter(NO_CATEGORY)" />
+              Sem categoria
+            </label>
+            @for (c of store.categories(); track c.id) {
+              <label class="category-filter-option">
+                <input type="checkbox" [checked]="isCategorySelected(c.id)" (change)="toggleCategoryFilter(c.id)" />
+                <span class="dot" [style.background]="c.colorHex"></span>
+                {{ c.name }}
+              </label>
+            }
+            @if (filterState.categoryFilterIds().length > 0) {
+              <button type="button" class="clear-filter" (click)="filterState.clear()">Limpar filtro</button>
+            }
+          </div>
         }
-      </select>
+      </div>
 
       <select class="sort-select" [(ngModel)]="sortMode">
         <option value="dueDate">Ordenar por prazo</option>

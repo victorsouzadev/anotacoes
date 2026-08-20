@@ -67,6 +67,19 @@ export function formatDuration(totalSeconds: number): string {
   return `${h}h ${m}min`;
 }
 
+export interface TaskActivity {
+  id: string;
+  name: string;
+  taskId: string | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export function activityDurationSeconds(activity: TaskActivity, now: Date = new Date()): number {
+  const end = activity.endedAt ? new Date(activity.endedAt).getTime() : now.getTime();
+  return Math.max(0, Math.round((end - new Date(activity.startedAt).getTime()) / 1000));
+}
+
 export interface TaskComment {
   id: string;
   taskId: string;

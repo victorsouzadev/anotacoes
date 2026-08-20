@@ -2,7 +2,8 @@ import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnI
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
 import { TasksStoreService } from '../services/tasks-store.service';
-import { formatDuration, totalTimeSpent } from '../models/task.model';
+import { TaskActivitiesService } from '../services/task-activities.service';
+import { TaskActivity, activityDurationSeconds, formatDuration, totalTimeSpent } from '../models/task.model';
 
 Chart.register(...registerables);
 
@@ -41,6 +42,14 @@ const CATEGORY_FALLBACK_COLOR = '#6b7280';
             <span class="label">Tempo total focado</span>
             <span class="value">{{ totalTimeLabel }}</span>
           </div>
+          <div class="card">
+            <span class="label">Atividades registradas</span>
+            <span class="value">{{ totalActivities }}</span>
+          </div>
+          <div class="card">
+            <span class="label">Tempo total em atividades</span>
+            <span class="value">{{ totalActivityTimeLabel }}</span>
+          </div>
         </div>
 
         <div class="card chart-card">
@@ -49,6 +58,25 @@ const CATEGORY_FALLBACK_COLOR = '#6b7280';
             <p class="empty">Sem tarefas categorizadas.</p>
           }
           <canvas #categoryCanvas [style.display]="categoryLabels.length ? 'block' : 'none'"></canvas>
+        </div>
+
+        <div class="card">
+          <h2>Atividades recentes</h2>
+          @if (recentActivities.length === 0) {
+            <p class="empty">Nenhuma atividade finalizada ainda.</p>
+          } @else {
+            <ul class="activity-list">
+              @for (a of recentActivities; track a.id) {
+                <li>
+                  <span class="activity-name">{{ a.name }}</span>
+                  @if (taskTitleFor(a); as title) {
+                    <span class="activity-task">{{ title }}</span>
+                  }
+                  <span class="activity-duration">{{ formatDuration(activityDurationSeconds(a)) }}</span>
+                </li>
+              }
+            </ul>
+          }
         </div>
       </main>
     </div>
@@ -65,6 +93,13 @@ const CATEGORY_FALLBACK_COLOR = '#6b7280';
     .chart-card h2 { margin: 0 0 12px; font-size: 1.05rem; }
     .chart-card canvas { max-height: 300px; }
     .empty { color: var(--text-muted); font-size: 0.9rem; }
+    .card h2 { margin: 0 0 12px; font-size: 1.05rem; }
+    .activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .activity-list li { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .activity-list li:last-child { border-bottom: none; }
+    .activity-name { font-weight: 600; color: var(--text); }
+    .activity-task { color: var(--text-muted); font-size: 0.78rem; }
+    .activity-duration { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 
     @media (max-width: 480px) {
       .content { padding: 16px; }
@@ -82,11 +117,22 @@ export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDe
   completedToday = 0;
   totalPomodoros = 0;
   totalTimeLabel = '0min';
+  totalActivities = 0;
+  totalActivityTimeLabel = '0min';
+  recentActivities: TaskActivity[] = [];
   categoryLabels: string[] = [];
   categoryData: number[] = [];
   categoryColors: string[] = [];
 
-  constructor(public store: TasksStoreService, private cdr: ChangeDetectorRef) {}
+  readonly formatDuration = formatDuration;
+  readonly activityDurationSeconds = activityDurationSeconds;
+
+  constructor(public store: TasksStoreService, public activitiesService: TaskActivitiesService, private cdr: ChangeDetectorRef) {}
+
+  taskTitleFor(activity: TaskActivity): string | null {
+    if (!activity.taskId) return null;
+    return this.store.tasks().find((t) => t.id === activity.taskId)?.title ?? null;
+  }
 
   async ngOnInit(): Promise<void> {
     if (this.store.tasks().length === 0) await this.store.reload();
@@ -111,6 +157,11 @@ export class TasksStatisticsPageComponent implements OnInit, AfterViewInit, OnDe
     this.completedToday = active.filter((t) => t.isCompleted && t.completedAt && new Date(t.completedAt).toDateString() === today).length;
     this.totalPomodoros = active.reduce((sum, t) => sum + t.completedPomodoros, 0);
     this.totalTimeLabel = formatDuration(totalTimeSpent(this.totalPomodoros));
+
+    const finished = this.activitiesService.finished();
+    this.totalActivities = finished.length;
+    this.totalActivityTimeLabel = formatDuration(finished.reduce((sum, a) => sum + activityDurationSeconds(a), 0));
+    this.recentActivities = finished.slice(0, 8);
 
     const byCategory = new Map<string, number>();
     for (const t of active) {
