@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../shared/icon';
-import { decodeRecurrence, formatDuration, totalTimeSpent } from '../models/task.model';
-import { TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
+import { activityDurationSeconds, decodeRecurrence, formatDuration, totalTimeSpent } from '../models/task.model';
+import { TaskActivity, TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
+import { TaskActivitiesService } from '../services/task-activities.service';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
@@ -19,7 +20,7 @@ function isImage(attachment: TaskAttachment): boolean {
   templateUrl: './task-detail.component.html',
   styleUrl: './task-detail.component.css',
 })
-export class TaskDetailComponent implements OnChanges, OnDestroy {
+export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
   @Input({ required: true }) task!: TaskItem;
   @Output() close = new EventEmitter<void>();
   @Output() edit = new EventEmitter<void>();
@@ -34,7 +35,17 @@ export class TaskDetailComponent implements OnChanges, OnDestroy {
 
   imagePreviews = new Map<string, string>();
 
-  constructor(public store: TasksStoreService) {}
+  readonly formatDuration = formatDuration;
+
+  /** Só serve pra forçar recomputo do tempo decorrido da atividade em andamento a cada segundo. */
+  private nowTick = signal(Date.now());
+  private tickInterval?: ReturnType<typeof setInterval>;
+
+  constructor(public store: TasksStoreService, public activitiesService: TaskActivitiesService) {}
+
+  ngOnInit(): void {
+    this.tickInterval = setInterval(() => this.nowTick.set(Date.now()), 1000);
+  }
 
   ngOnChanges(): void {
     this.comments = [];
@@ -47,6 +58,40 @@ export class TaskDetailComponent implements OnChanges, OnDestroy {
 
   ngOnDestroy(): void {
     this.revokePreviews();
+    if (this.tickInterval) clearInterval(this.tickInterval);
+  }
+
+  runningActivityForTask(): TaskActivity | null {
+    const running = this.activitiesService.running();
+    return running && running.taskId === this.task.id ? running : null;
+  }
+
+  finishedActivitiesForTask(): TaskActivity[] {
+    return this.activitiesService.finished().filter((a) => a.taskId === this.task.id);
+  }
+
+  activityTimeSpentLabel(): string | null {
+    const finished = this.finishedActivitiesForTask();
+    if (finished.length === 0) return null;
+    return formatDuration(finished.reduce((sum, a) => sum + activityDurationSeconds(a), 0));
+  }
+
+  activityElapsedLabel(activity: TaskActivity): string {
+    this.nowTick();
+    return formatDuration(activityDurationSeconds(activity));
+  }
+
+  durationOf(activity: TaskActivity): number {
+    return activityDurationSeconds(activity);
+  }
+
+  startActivity(): void {
+    this.activitiesService.start(this.task.title, this.task.id);
+  }
+
+  finishActivity(): void {
+    const running = this.runningActivityForTask();
+    if (running) this.activitiesService.finish(running.id);
   }
 
   private revokePreviews(): void {

@@ -3,6 +3,8 @@ import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../shared/icon';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
+import { TaskFormComponent, TaskFormResult } from '../components/task-form.component';
+import { TaskDetailComponent } from '../components/task-detail.component';
 import { CATEGORY_COLORS, KanbanLane, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
 import { TasksFilterStateService } from '../services/tasks-filter-state.service';
@@ -26,7 +28,7 @@ interface KanbanColumn {
 @Component({
   selector: 'app-tasks-kanban-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, TasksTopBarComponent, IconComponent],
+  imports: [CommonModule, FormsModule, TasksTopBarComponent, IconComponent, TaskFormComponent, TaskDetailComponent],
   templateUrl: './tasks-kanban.page.html',
   styleUrl: './tasks-kanban.page.css',
 })
@@ -51,6 +53,10 @@ export class TasksKanbanPageComponent implements OnInit {
   showNewLane = false;
   newLaneName = '';
   newLaneColor = CATEGORY_COLORS[0];
+
+  detailTask: TaskItem | null = null;
+  showForm = false;
+  formTask: TaskItem | null = null;
 
   constructor(
     public store: TasksStoreService,
@@ -117,6 +123,37 @@ export class TasksKanbanPageComponent implements OnInit {
 
   isOverdue(task: TaskItem): boolean {
     return !!task.dueDate && !task.isCompleted && new Date(task.dueDate).getTime() < Date.now();
+  }
+
+  // --- Abrir/editar tarefa ---
+
+  openDetail(task: TaskItem, event: Event): void {
+    event.stopPropagation();
+    this.detailTask = task;
+  }
+
+  closeDetail(): void {
+    this.detailTask = null;
+  }
+
+  editFromDetail(): void {
+    const task = this.detailTask;
+    this.detailTask = null;
+    if (task) {
+      this.formTask = task;
+      this.showForm = true;
+    }
+  }
+
+  closeForm(): void {
+    this.showForm = false;
+    this.formTask = null;
+  }
+
+  async onSave(result: TaskFormResult): Promise<void> {
+    if (this.formTask) await this.store.updateTask(this.formTask, result);
+    this.closeForm();
+    this.cdr.markForCheck();
   }
 
   async toggleComplete(task: TaskItem, event: Event): Promise<void> {

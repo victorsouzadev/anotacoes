@@ -302,6 +302,50 @@
   color: var(--accent);
 }
 
+.activity-running {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.activity-running button, .start-activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.activity-running button:hover, .start-activity:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.activity-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-history li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;

@@ -67,6 +67,35 @@
     }
 
     <div class="section">
+      <span class="section-title"><app-icon name="pomodoro" [size]="13" /> Atividade</span>
+      @if (runningActivityForTask(); as running) {
+        <div class="activity-running">
+          <span>Em andamento · {{ activityElapsedLabel(running) }}</span>
+          <button type="button" class="secondary" (click)="finishActivity()">Finalizar</button>
+        </div>
+      } @else {
+        <button type="button" class="secondary start-activity" (click)="startActivity()">
+          <app-icon name="plus" [size]="13" /> Iniciar atividade nesta tarefa
+        </button>
+      }
+      @if (activityTimeSpentLabel(); as time) {
+        <span class="hint">Tempo total em atividades: {{ time }}</span>
+      }
+      @if (finishedActivitiesForTask(); as history) {
+        @if (history.length > 0) {
+          <ul class="activity-history">
+            @for (a of history; track a.id) {
+              <li>
+                <span>{{ formatDateTime(a.startedAt) }}</span>
+                <span>{{ formatDuration(durationOf(a)) }}</span>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </div>
+
+    <div class="section">
       <span class="section-title"><app-icon name="comment" [size]="13" /> Comentários</span>
       @if (loadingComments) {
         <p class="hint">Carregando…</p>
