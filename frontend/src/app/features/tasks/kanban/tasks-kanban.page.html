@@ -118,7 +118,7 @@
                 >
                   <button class="check" (click)="toggleComplete(task, $event)"><app-icon name="check" [size]="11" /></button>
                   <div class="card-body">
-                    <span class="title">{{ task.title }}</span>
+                    <button type="button" class="title" (click)="openDetail(task, $event)">{{ task.title }}</button>
                     <div class="meta">
                       @if (task.dueDate) {
                         <span class="chip" [class.overdue]="isOverdue(task)">{{ task.dueDate | date: 'dd/MM' }}</span>
@@ -144,4 +144,12 @@
       </div>
     }
   </main>
+
+  @if (detailTask) {
+    <app-task-detail [task]="detailTask" (close)="closeDetail()" (edit)="editFromDetail()" />
+  }
+
+  @if (showForm && formTask) {
+    <app-task-form [task]="formTask" [template]="null" (save)="onSave($event)" (cancel)="closeForm()" />
+  }
 </div>

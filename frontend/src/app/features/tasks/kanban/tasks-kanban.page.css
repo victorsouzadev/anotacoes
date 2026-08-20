@@ -371,7 +371,15 @@
 .title {
   font-size: 13px;
   font-weight: 500;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
 }
+
+.title:hover { color: var(--accent); text-decoration: underline; }
 
 .meta {
   display: flex;
