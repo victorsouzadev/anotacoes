@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
@@ -7,9 +8,20 @@ import { Polygon, pngBlobWithDpi, polygonsToPathData, traceCutPaths } from './co
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
 import {
-  Erasure, applyErasures, buildContourLayer, flipHorizontal, floodRemoveBackground,
+  Erasure, applyErasures, buildContourLayer, encodeCanvas, flipHorizontal, floodRemoveBackground,
   makeThumb, restrictContourToOuterRegion,
 } from './raster';
+import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
+import { uuid } from '../../core/uuid';
+
+/** Um clique de "remover fundo". Guardado em vez do bitmap resultante: ao abrir
+ * um projeto salvo, os cliques são reaplicados sobre a arte original, então o
+ * backend só precisa carregar a imagem de origem. */
+interface BgRemoval {
+  x: number;
+  y: number;
+  tolerance: number;
+}
 
 interface ImportedImage {
   id: string;
@@ -17,8 +29,11 @@ interface ImportedImage {
   thumbUrl: string;
   /** Arte atual (pode ter o fundo removido). */
   source: HTMLCanvasElement;
-  /** Cópia intocada pra "restaurar". */
+  /** Cópia intocada pra "restaurar" e pra salvar no backend. */
   original: HTMLCanvasElement;
+  /** Codificação da arte original, calculada uma vez na importação. */
+  originalDataUrl: string;
+  bgRemovals: BgRemoval[];
   /** Muda a cada edição do source, pra invalidar o cache da peça. */
   srcVersion: number;
   bgRemoved: boolean;
@@ -61,6 +76,9 @@ interface Prefs {
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
+/** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
+ * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
+const MAX_IMPORT_DIMENSION = 3000;
 const EXPORT_DPI = 300;
 const SHEET_MARGIN_MM = 10;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
@@ -82,6 +100,15 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Falha ao carregar imagem do projeto.'));
+    img.src = src;
+  });
+}
+
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -93,7 +120,7 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent],
+  imports: [RouterLink, IconComponent, DatePipe],
   template: `
     <div class="page">
       <header class="top-bar">
@@ -176,6 +203,42 @@ function loadPrefs(): Prefs {
         </div>
 
         <aside class="panel">
+          <section class="panel-section">
+            <h2>Projeto</h2>
+            <input
+              class="num-input"
+              type="text"
+              maxlength="300"
+              placeholder="Nome do projeto"
+              [value]="projectName()"
+              (input)="onProjectNameInput($event)"
+            />
+            <div class="margin-nudge">
+              <button class="btn primary" [disabled]="savingProject() || !images().length" (click)="saveProject()">
+                {{ savingProject() ? 'Salvando…' : projectId() ? 'Salvar' : 'Salvar novo' }}
+              </button>
+              <button class="btn" (click)="newProject()">Novo</button>
+            </div>
+            @if (projectStatus()) {
+              <p class="field-note">{{ projectStatus() }}</p>
+            }
+            @if (projects().length) {
+              <ul class="project-list">
+                @for (p of projects(); track p.id) {
+                  <li [class.active]="p.id === projectId()">
+                    <button class="project-open" (click)="openProject(p.id)">
+                      <span class="project-name">{{ p.name }}</span>
+                      <span class="project-date">{{ p.updatedAt | date: 'dd/MM HH:mm' }}</span>
+                    </button>
+                    <button class="remove-btn" title="Excluir projeto" (click)="deleteProject(p.id, $event)">
+                      <app-icon name="x" [size]="12" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </section>
+
           <section class="panel-section">
             <h2>Imagens</h2>
             <button class="btn primary full" (click)="fileInput.click()"><app-icon name="plus" [size]="14" /> Importar imagens</button>
@@ -461,6 +524,18 @@ function loadPrefs(): Prefs {
         0 0 / 12px 12px;
     }
     .thumb-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .project-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+    .project-list li {
+      display: flex; align-items: center; gap: 4px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 4px;
+    }
+    .project-list li.active { border-color: var(--accent); background: var(--accent-soft); }
+    .project-open {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-width: 0;
+      border: none; background: none; padding: 6px 4px; text-align: left; cursor: pointer; color: inherit;
+    }
+    .project-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .project-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
     .copies-badge {
       font-size: 11px; font-weight: 700; color: var(--accent-dark);
       background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; flex-shrink: 0;
@@ -544,14 +619,26 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
+  projects = signal<ImageProjectMetaDto[]>([]);
+  projectId = signal<string | null>(null);
+  projectName = signal('');
+  projectStatus = signal('');
+  savingProject = signal(false);
+
   private renderQueued = false;
   private erasing = false;
+  private projectCreatedAt = new Date().toISOString();
   private pieceCache = new Map<string, { sig: string; piece: Piece }>();
 
-  constructor(public auth: AuthService, public theme: ThemeService) {}
+  constructor(
+    public auth: AuthService,
+    public theme: ThemeService,
+    private projectsApi: ImageProjectsService,
+  ) {}
 
   ngAfterViewInit(): void {
     this.scheduleRender();
+    void this.refreshProjects();
   }
 
   ngOnDestroy(): void {
@@ -603,28 +690,51 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const img = new Image();
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const source = document.createElement('canvas');
-        source.width = img.naturalWidth;
-        source.height = img.naturalHeight;
-        source.getContext('2d')!.drawImage(img, 0, 0);
-        const original = document.createElement('canvas');
-        original.width = source.width;
-        original.height = source.height;
-        original.getContext('2d')!.drawImage(source, 0, 0);
-        const item: ImportedImage = {
-          id: uid(), name: file.name, thumbUrl: makeThumb(source),
-          source, original, srcVersion: 0, bgRemoved: false,
-          widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
-          color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
-          outerOnly: this.prefs.outerOnly, erasures: [], editVersion: 0,
-        };
-        this.images.update((list) => [...list, item]);
-        if (!this.selectedId()) this.selectedId.set(item.id);
-        this.scheduleRender();
+        this.addImage(file.name, img);
       };
       img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     }
+  }
+
+  /** Cria a arte a partir de uma imagem carregada, reduzindo se passar do teto
+   * de resolução — o que se vê é o que é salvo, sem surpresa ao reabrir. */
+  private addImage(name: string, img: HTMLImageElement, overrides: Partial<ImportedImage> = {}): ImportedImage {
+    const scale = Math.min(1, MAX_IMPORT_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const original = document.createElement('canvas');
+    original.width = w;
+    original.height = h;
+    const octx = original.getContext('2d')!;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(img, 0, 0, w, h);
+
+    const source = document.createElement('canvas');
+    source.width = w;
+    source.height = h;
+    source.getContext('2d')!.drawImage(original, 0, 0);
+
+    const item: ImportedImage = {
+      id: uid(), name, thumbUrl: makeThumb(source),
+      source, original, originalDataUrl: encodeCanvas(original), bgRemovals: [],
+      srcVersion: 0, bgRemoved: false,
+      widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
+      color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
+      outerOnly: this.prefs.outerOnly, erasures: [], editVersion: 0,
+      ...overrides,
+    };
+    // remoções de fundo salvas são reaplicadas sobre a arte original
+    for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
+    if (item.bgRemovals.length) {
+      item.bgRemoved = true;
+      item.thumbUrl = makeThumb(item.source);
+    }
+
+    this.images.update((list) => [...list, item]);
+    if (!this.selectedId()) this.selectedId.set(item.id);
+    this.scheduleRender();
+    return item;
   }
 
   select(id: string): void {
@@ -771,9 +881,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (!sel) return;
     const point = this.artPointFrom(event, sel);
     if (!point) return;
-    const changed = floodRemoveBackground(sel.source, Math.floor(point.x), Math.floor(point.y), this.tolerance());
+    const x = Math.floor(point.x);
+    const y = Math.floor(point.y);
+    const changed = floodRemoveBackground(sel.source, x, y, this.tolerance());
     if (changed) {
-      this.updateSelected({ srcVersion: sel.srcVersion + 1, bgRemoved: true, thumbUrl: makeThumb(sel.source) });
+      this.updateSelected({
+        srcVersion: sel.srcVersion + 1,
+        bgRemoved: true,
+        thumbUrl: makeThumb(sel.source),
+        bgRemovals: [...sel.bgRemovals, { x, y, tolerance: this.tolerance() }],
+      });
     }
   }
 
@@ -830,7 +947,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = sel.source.getContext('2d')!;
     ctx.clearRect(0, 0, sel.source.width, sel.source.height);
     ctx.drawImage(sel.original, 0, 0);
-    this.updateSelected({ srcVersion: sel.srcVersion + 1, bgRemoved: false, thumbUrl: makeThumb(sel.source) });
+    this.updateSelected({
+      srcVersion: sel.srcVersion + 1,
+      bgRemoved: false,
+      thumbUrl: makeThumb(sel.source),
+      bgRemovals: [],
+    });
   }
 
   // ---------- folha ----------
@@ -1138,6 +1260,128 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       paths +
       `</svg>\n`;
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `folha-${this.sheetSize()}-corte.svg`);
+  }
+
+  // ---------- projetos no backend ----------
+
+  async refreshProjects(): Promise<void> {
+    try {
+      this.projects.set(await this.projectsApi.list());
+    } catch {
+      this.projectStatus.set('Não foi possível listar os projetos salvos.');
+    }
+  }
+
+  private serialize(): string {
+    return JSON.stringify({
+      version: 1,
+      smoothing: this.smoothing(),
+      fillHoles: this.fillHoles(),
+      sheetSize: this.sheetSize(),
+      orientation: this.orientation(),
+      spacingMm: this.spacingMm(),
+      images: this.images().map((i) => ({
+        name: i.name,
+        original: i.originalDataUrl,
+        bgRemovals: i.bgRemovals,
+        erasures: i.erasures,
+        widthMm: i.widthMm,
+        marginMm: i.marginMm,
+        gapMm: i.gapMm,
+        color: i.color,
+        shape: i.shape,
+        mirrored: i.mirrored,
+        copies: i.copies,
+        outerOnly: i.outerOnly,
+      })),
+    });
+  }
+
+  async saveProject(): Promise<void> {
+    if (this.savingProject()) return;
+    const name = this.projectName().trim() || 'Projeto sem nome';
+    if (!this.images().length) {
+      this.projectStatus.set('Importe ao menos uma imagem antes de salvar.');
+      return;
+    }
+    this.savingProject.set(true);
+    this.projectStatus.set('Salvando…');
+    const id = this.projectId() ?? uuid();
+    try {
+      const saved = await this.projectsApi.save(id, name, this.serialize(), this.projectCreatedAt);
+      this.projectId.set(saved.id);
+      this.projectName.set(saved.name);
+      this.projectCreatedAt = saved.createdAt;
+      this.projectStatus.set(`Salvo às ${new Date().toLocaleTimeString('pt-BR')}`);
+      await this.refreshProjects();
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      this.projectStatus.set(status === 413
+        ? 'Projeto grande demais pro servidor — remova imagens ou reduza a quantidade.'
+        : 'Falha ao salvar. Tente de novo.');
+    } finally {
+      this.savingProject.set(false);
+    }
+  }
+
+  async openProject(id: string): Promise<void> {
+    this.projectStatus.set('Abrindo…');
+    try {
+      const dto = await this.projectsApi.get(id);
+      const data = JSON.parse(dto.data) as {
+        smoothing?: number; fillHoles?: boolean; sheetSize?: SheetSize;
+        orientation?: SheetOrientation; spacingMm?: number;
+        images?: (Partial<ImportedImage> & { original: string })[];
+      };
+
+      this.images.set([]);
+      this.pieceCache.clear();
+      this.selectedId.set(null);
+      if (data.smoothing !== undefined) this.smoothing.set(data.smoothing);
+      if (data.fillHoles !== undefined) this.fillHoles.set(data.fillHoles);
+      if (data.sheetSize) this.sheetSize.set(data.sheetSize);
+      if (data.orientation) this.orientation.set(data.orientation);
+      if (data.spacingMm !== undefined) this.spacingMm.set(data.spacingMm);
+
+      for (const stored of data.images ?? []) {
+        const { name, original, ...rest } = stored;
+        const img = await loadImage(original);
+        this.addImage(name ?? 'imagem', img, { ...rest, originalDataUrl: original });
+      }
+
+      this.projectId.set(dto.id);
+      this.projectName.set(dto.name);
+      this.projectCreatedAt = dto.createdAt;
+      this.projectStatus.set(`Aberto: ${dto.name}`);
+    } catch {
+      this.projectStatus.set('Falha ao abrir o projeto.');
+    }
+  }
+
+  async deleteProject(id: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await this.projectsApi.remove(id);
+      if (this.projectId() === id) this.newProject();
+      await this.refreshProjects();
+    } catch {
+      this.projectStatus.set('Falha ao excluir o projeto.');
+    }
+  }
+
+  newProject(): void {
+    this.images.set([]);
+    this.pieceCache.clear();
+    this.selectedId.set(null);
+    this.projectId.set(null);
+    this.projectName.set('');
+    this.projectCreatedAt = new Date().toISOString();
+    this.projectStatus.set('');
+    this.scheduleRender();
+  }
+
+  onProjectNameInput(event: Event): void {
+    this.projectName.set((event.target as HTMLInputElement).value);
   }
 
   private baseName(item: ImportedImage): string {

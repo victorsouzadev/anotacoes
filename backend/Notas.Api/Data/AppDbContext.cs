@@ -55,6 +55,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<KanbanLane> KanbanLanes => Set<KanbanLane>();
+    public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -98,6 +99,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(n => new { n.UserId, n.FolderId });
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(n => n.FolderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<ImageProject>(e =>
+        {
+            e.ToTable("imagem_projetos");
+            e.Property(p => p.Name).IsRequired().HasMaxLength(300);
+            e.Property(p => p.Data).IsRequired();
+            e.HasIndex(p => new { p.UserId, p.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Transacao>(e =>
