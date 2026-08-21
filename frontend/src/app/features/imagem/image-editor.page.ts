@@ -89,6 +89,8 @@ const MAX_GAP_MM = 10;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 8;
 const EXPORT_DPI = 300;
 const SHEET_MARGIN_MM = 10;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
@@ -161,11 +163,22 @@ function loadPrefs(): Prefs {
             <button [class.active]="view() === 'folha'" (click)="setView('folha')">
               Folha de montagem @if (totalCopies()) { ({{ totalCopies() }}) }
             </button>
+            <div class="zoom-bar" title="Ctrl + roda do mouse também dá zoom">
+              <button (click)="zoomBy(1 / 1.25)" aria-label="Menos zoom">−</button>
+              <button class="zoom-level" (click)="resetZoom()" title="Ajustar à tela">{{ (zoom() * 100).toFixed(0) }}%</button>
+              <button (click)="zoomBy(1.25)" aria-label="Mais zoom">+</button>
+            </div>
           </div>
 
           @if (view() === 'peca') {
             @if (selected(); as sel) {
-              <div class="preview-stage" [class.picking]="tool() === 'fundo' || tool() === 'corte'" [class.erasing]="tool() === 'borracha'">
+              <div
+                #pieceStage
+                class="preview-stage"
+                [class.picking]="tool() === 'fundo' || tool() === 'corte'"
+                [class.erasing]="tool() === 'borracha'"
+                (wheel)="onWheel($event)"
+              >
                 <canvas
                   #previewCanvas
                   (click)="onPreviewClick($event)"
@@ -211,7 +224,7 @@ function loadPrefs(): Prefs {
               </div>
             }
           } @else {
-            <div class="preview-stage sheet-stage">
+            <div #sheetStage class="preview-stage sheet-stage" (wheel)="onWheel($event)">
               <canvas #sheetCanvas></canvas>
             </div>
             <div class="preview-meta">
@@ -552,23 +565,39 @@ function loadPrefs(): Prefs {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm); padding: 16px;
       position: sticky; top: 16px;
+      /* Sem isto, o mínimo automático do item de grade é o tamanho do canvas:
+         ao dar zoom a coluna incharia e empurraria o painel pra fora da tela,
+         em vez de o palco rolar. */
+      min-width: 0;
     }
-    .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+    .zoom-bar {
+      display: flex; align-items: center; gap: 2px; margin-left: auto;
+      border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+    }
+    .zoom-bar button {
+      border: none; background: var(--bg); color: var(--text-muted);
+      padding: 6px 10px; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1;
+    }
+    .zoom-bar button:hover { color: var(--accent); }
+    .zoom-level { min-width: 52px; font-size: 12px; font-variant-numeric: tabular-nums; }
     .tabs button {
       border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
       padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
     }
     .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-stage {
-      display: flex; align-items: center; justify-content: center;
-      height: clamp(280px, 52dvh, 560px); border-radius: var(--radius); padding: 16px;
+      display: flex; overflow: auto; overscroll-behavior: contain;
+      height: clamp(280px, 52dvh, 560px); min-width: 0; border-radius: var(--radius); padding: 16px;
       background:
         repeating-conic-gradient(rgba(128, 128, 128, 0.16) 0% 25%, transparent 0% 50%)
         0 0 / 22px 22px;
     }
     .preview-stage.picking canvas { cursor: crosshair; }
     .preview-stage.erasing canvas { cursor: cell; touch-action: none; }
-    .preview-stage canvas { max-width: 100%; max-height: 100%; }
+    /* margin auto centraliza quando cabe e, ao contrário de align-items:center,
+       não corta o topo/esquerda quando a imagem fica maior que o palco. */
+    .preview-stage canvas { margin: auto; }
     .sheet-stage { background: var(--bg); }
     .preview-meta {
       display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -595,14 +624,15 @@ function loadPrefs(): Prefs {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm); padding: 16px; display: flex; flex-direction: column; gap: 10px;
     }
-    .panel-section { padding: 0; gap: 0; }
-    .panel-section > *:not(.section-head) { margin-left: 14px; margin-right: 14px; }
-    .panel-section > *:not(.section-head):last-child { margin-bottom: 14px; }
-    .panel-section > .section-head + * { margin-top: 2px; }
-    .panel-section > *:not(.section-head) + *:not(.section-head) { margin-top: 10px; }
+    /* O cabeçalho sangra até as bordas do cartão com margem negativa; o corpo
+       fica no padding normal, pra que "width: 100%" dos controles case com a
+       largura interna em vez de estourar o cartão. */
+    .panel-section { padding: 0 14px 14px; gap: 10px; overflow: hidden; }
+    .panel-section:not(.open) { padding-bottom: 0; }
     .section-head {
-      display: flex; align-items: center; gap: 8px; width: 100%;
-      border: none; background: none; padding: 12px 14px; cursor: pointer; color: inherit; text-align: left;
+      display: flex; align-items: center; gap: 8px;
+      margin: 0 -14px; padding: 12px 14px;
+      border: none; background: none; cursor: pointer; color: inherit; text-align: left;
     }
     .section-title {
       display: flex; align-items: center; gap: 7px;
@@ -727,6 +757,8 @@ function loadPrefs(): Prefs {
 export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   @ViewChild('previewCanvas') previewCanvas?: ElementRef<HTMLCanvasElement>;
   @ViewChild('sheetCanvas') sheetCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('pieceStage') pieceStage?: ElementRef<HTMLElement>;
+  @ViewChild('sheetStage') sheetStage?: ElementRef<HTMLElement>;
 
   readonly maxMarginMm = MAX_MARGIN_MM;
   readonly maxGapMm = MAX_GAP_MM;
@@ -748,6 +780,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
   cutHint = signal('');
+  /** 1 = imagem ajustada ao palco; acima disso, o palco ganha rolagem. */
+  zoom = signal(1);
   openSections = signal<Record<string, boolean>>({ ...this.prefs.openSections });
   dragOver = signal(false);
   packInfo = signal<{ placed: number; overflow: number }>({ placed: 0, overflow: 0 });
@@ -1009,10 +1043,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Coordenada do evento em pixels da arte original (desfazendo o espelho). */
   private artPointFrom(event: PointerEvent | MouseEvent, item: ImportedImage): { x: number; y: number } | null {
     const canvas = this.previewCanvas?.nativeElement;
-    if (!canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
+    if (!canvas) return null;
+    // Pelo retângulo real na tela, e não por offsetX: assim vale em qualquer
+    // zoom e com o palco rolado, sem precisar saber a escala aplicada.
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
     const piece = this.pieceFor(item);
-    const px = event.offsetX * (canvas.width / canvas.clientWidth);
-    const py = event.offsetY * (canvas.height / canvas.clientHeight);
+    const px = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const py = ((event.clientY - rect.top) / rect.height) * canvas.height;
     const x = px - piece.artX;
     return { x: item.mirrored ? item.source.width - x : x, y: py - piece.artY };
   }
@@ -1268,6 +1306,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(piece.canvas, 0, 0);
     this.strokeCutPaths(ctx, piece.paths, Math.max(1.5, canvas.width / 500));
+    this.applyZoom(canvas, this.pieceStage?.nativeElement);
   }
 
   private strokeCutPaths(ctx: CanvasRenderingContext2D, paths: Polygon[], lineWidth: number): void {
@@ -1336,6 +1375,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.strokeCutPaths(ctx, piece.paths, Math.max(1.2, 1.2 / f));
       ctx.restore();
     }
+    this.applyZoom(canvas, this.sheetStage?.nativeElement);
   }
 
   // ---------- exportação da peça ----------
@@ -1572,6 +1612,34 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.projectCreatedAt = new Date().toISOString();
     this.projectStatus.set('');
     this.scheduleRender();
+  }
+
+  zoomBy(factor: number): void {
+    this.zoom.update((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor)));
+    this.scheduleRender();
+  }
+
+  resetZoom(): void {
+    this.zoom.set(1);
+    this.scheduleRender();
+  }
+
+  /** Ctrl/⌘ + roda dá zoom; roda sozinha rola o palco, como de costume. */
+  onWheel(event: WheelEvent): void {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    this.zoomBy(event.deltaY < 0 ? 1.15 : 1 / 1.15);
+  }
+
+  /** Dimensiona o canvas: ajustado ao palco quando zoom = 1, maior a partir
+   * daí — o palco rola sozinho porque tem overflow auto. */
+  private applyZoom(canvas: HTMLCanvasElement, stage: HTMLElement | undefined): void {
+    if (!stage) return;
+    const availW = Math.max(40, stage.clientWidth - 32);
+    const availH = Math.max(40, stage.clientHeight - 32);
+    const escala = Math.min(availW / canvas.width, availH / canvas.height) * this.zoom();
+    canvas.style.width = `${Math.round(canvas.width * escala)}px`;
+    canvas.style.height = `${Math.round(canvas.height * escala)}px`;
   }
 
   isOpen(id: StepId): boolean {
