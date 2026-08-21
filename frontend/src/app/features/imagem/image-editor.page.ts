@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
-import { Polygon, pngBlobWithDpi, polygonsToPathData, traceCutPaths } from './contour';
+import { Polygon, pngBlobWithDpi, polygonsToPathData, smallestPathContaining, traceCutPaths } from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
 import {
@@ -21,6 +21,14 @@ interface BgRemoval {
   x: number;
   y: number;
   tolerance: number;
+}
+
+/** Ponto (em pixels da arte) que marca uma linha de corte a descartar: no
+ * rebuild, o contorno mais justo que o contiver é removido. Guardar o ponto em
+ * vez do índice do caminho sobrevive a re-vetorizações (mudar margem, suavizar). */
+interface CutRemoval {
+  x: number;
+  y: number;
 }
 
 interface ImportedImage {
@@ -47,6 +55,7 @@ interface ImportedImage {
   /** Só desenha contorno na região ligada à borda (ignora vãos internos). */
   outerOnly: boolean;
   erasures: Erasure[];
+  cutRemovals: CutRemoval[];
   /** Sobe a cada borrachada/ajuste destrutivo, pra invalidar o cache da peça. */
   editVersion: number;
 }
@@ -146,7 +155,7 @@ function loadPrefs(): Prefs {
 
           @if (view() === 'peca') {
             @if (selected(); as sel) {
-              <div class="preview-stage" [class.picking]="tool() === 'fundo'" [class.erasing]="tool() === 'borracha'">
+              <div class="preview-stage" [class.picking]="tool() === 'fundo' || tool() === 'corte'" [class.erasing]="tool() === 'borracha'">
                 <canvas
                   #previewCanvas
                   (click)="onPreviewClick($event)"
@@ -169,6 +178,9 @@ function loadPrefs(): Prefs {
                 }
                 @case ('borracha') {
                   <p class="cut-hint pick-hint">Arraste sobre o contorno pra apagá-lo. A arte não é afetada — só o contorno e a faixa branca.</p>
+                }
+                @case ('corte') {
+                  <p class="cut-hint pick-hint">Clique dentro de uma linha tracejada pra removê-la do corte. O desenho e o contorno continuam iguais.</p>
                 }
                 @default {
                   <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
@@ -320,6 +332,24 @@ function loadPrefs(): Prefs {
                   <input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" />
                   <span>Só contorno externo — remove de uma vez o contorno nascido dentro de vãos fechados do desenho</span>
                 </label>
+              }
+            </section>
+
+            <section class="panel-section">
+              <h2>Linhas de corte</h2>
+              <button class="btn full" [class.primary]="tool() === 'corte'" (click)="setTool('corte')">
+                <app-icon name="delete" [size]="14" />
+                {{ tool() === 'corte' ? 'Clique na linha a remover…' : 'Remover linha de corte' }}
+              </button>
+              @if (cutHint()) {
+                <p class="field-note">{{ cutHint() }}</p>
+              }
+              @if (sel.cutRemovals.length) {
+                <p class="field-note">{{ sel.cutRemovals.length }} linha(s) removida(s).</p>
+                <div class="margin-nudge">
+                  <button class="btn" (click)="undoCutRemoval()">Desfazer</button>
+                  <button class="btn" (click)="restoreCuts()">Restaurar todas</button>
+                </div>
               }
             </section>
 
@@ -610,9 +640,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
-  tool = signal<'nenhuma' | 'fundo' | 'borracha'>('nenhuma');
+  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte'>('nenhuma');
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
+  cutHint = signal('');
   dragOver = signal(false);
   packInfo = signal<{ placed: number; overflow: number }>({ placed: 0, overflow: 0 });
 
@@ -721,9 +752,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       srcVersion: 0, bgRemoved: false,
       widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
       color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
-      outerOnly: this.prefs.outerOnly, erasures: [], editVersion: 0,
+      outerOnly: this.prefs.outerOnly, erasures: [], cutRemovals: [], editVersion: 0,
       ...overrides,
     };
+    // projeto salvo por uma versão anterior pode não trazer todas as listas —
+    // um campo ausente vira undefined no spread e quebraria o rebuild da peça
+    item.bgRemovals ??= [];
+    item.erasures ??= [];
+    item.cutRemovals ??= [];
     // remoções de fundo salvas são reaplicadas sobre a arte original
     for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
     if (item.bgRemovals.length) {
@@ -840,10 +876,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- ferramentas sobre a peça (fundo e borracha) ----------
 
-  setTool(tool: 'nenhuma' | 'fundo' | 'borracha'): void {
+  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte'): void {
     const next = this.tool() === tool ? 'nenhuma' : tool;
     if (next !== 'nenhuma') this.view.set('peca');
     this.tool.set(next);
+    this.cutHint.set('');
     this.scheduleRender();
   }
 
@@ -876,6 +913,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onPreviewClick(event: MouseEvent): void {
+    if (this.tool() === 'corte') {
+      this.removeCutAt(event);
+      return;
+    }
     if (this.tool() !== 'fundo') return;
     const sel = this.selected();
     if (!sel) return;
@@ -927,6 +968,39 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       erasures: [...sel.erasures, { x: point.x, y: point.y, r }],
       editVersion: sel.editVersion + 1,
     });
+  }
+
+  /** Descarta a linha de corte clicada (a mais justa ao ponto). */
+  private removeCutAt(event: MouseEvent): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const point = this.artPointFrom(event, sel);
+    if (!point) return;
+    const piece = this.pieceFor(sel);
+    const x = piece.artX + (sel.mirrored ? sel.source.width - point.x : point.x);
+    if (smallestPathContaining(piece.paths, x, piece.artY + point.y) < 0) {
+      this.cutHint.set('Nenhuma linha de corte nesse ponto — clique dentro da linha que quer remover.');
+      return;
+    }
+    this.cutHint.set('');
+    this.updateSelected({
+      cutRemovals: [...sel.cutRemovals, { x: point.x, y: point.y }],
+      editVersion: sel.editVersion + 1,
+    });
+  }
+
+  undoCutRemoval(): void {
+    const sel = this.selected();
+    if (!sel || !sel.cutRemovals.length) return;
+    this.cutHint.set('');
+    this.updateSelected({ cutRemovals: sel.cutRemovals.slice(0, -1), editVersion: sel.editVersion + 1 });
+  }
+
+  restoreCuts(): void {
+    const sel = this.selected();
+    if (!sel || !sel.cutRemovals.length) return;
+    this.cutHint.set('');
+    this.updateSelected({ cutRemovals: [], editVersion: sel.editVersion + 1 });
   }
 
   undoErase(): void {
@@ -989,13 +1063,27 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private pieceFor(item: ImportedImage): Piece {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
-      item.srcVersion, item.outerOnly, item.editVersion, this.smoothing(), this.fillHoles(),
+      item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
+      this.smoothing(), this.fillHoles(),
     ]);
     const cached = this.pieceCache.get(item.id);
     if (cached && cached.sig === sig) return cached.piece;
     const piece = this.buildPiece(item);
     this.pieceCache.set(item.id, { sig, piece });
     return piece;
+  }
+
+  /** Remove os contornos marcados pelo usuário: pra cada ponto guardado, cai
+   * fora o caminho mais justo que o contém. */
+  private dropRemovedCuts(paths: Polygon[], item: ImportedImage, artX: number, artY: number): Polygon[] {
+    if (!item.cutRemovals.length) return paths;
+    let kept = paths;
+    for (const c of item.cutRemovals) {
+      const x = artX + (item.mirrored ? item.source.width - c.x : c.x);
+      const idx = smallestPathContaining(kept, x, artY + c.y);
+      if (idx >= 0) kept = kept.filter((_, i) => i !== idx);
+    }
+    return kept;
   }
 
   private buildPiece(item: ImportedImage): Piece {
@@ -1024,7 +1112,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         chaikinIterations: s >= 5 ? 2 : s >= 1 ? 1 : 0,
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
-      return { canvas, paths, ppm, artX: total, artY: total };
+      return { canvas, paths: this.dropRemovedCuts(paths, item, total, total), ppm, artX: total, artY: total };
     }
 
     const { W, H } = shapeCanvasSize(item.shape, source.width, source.height, total);
@@ -1049,7 +1137,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(contour, 0, 0);
     ctx.drawImage(source, artX, artY);
-    return { canvas, paths: [outer], ppm, artX, artY };
+    return { canvas, paths: this.dropRemovedCuts([outer], item, artX, artY), ppm, artX, artY };
   }
 
   // ---------- render ----------
@@ -1285,6 +1373,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         original: i.originalDataUrl,
         bgRemovals: i.bgRemovals,
         erasures: i.erasures,
+        cutRemovals: i.cutRemovals,
         widthMm: i.widthMm,
         marginMm: i.marginMm,
         gapMm: i.gapMm,
