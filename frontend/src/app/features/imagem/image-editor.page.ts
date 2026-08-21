@@ -6,6 +6,10 @@ import { IconComponent, IconName } from '../../shared/icon';
 import { Polygon, pngBlobWithDpi, polygonsToPathData, traceCutPaths } from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
+import {
+  Erasure, applyErasures, buildContourLayer, flipHorizontal, floodRemoveBackground,
+  makeThumb, restrictContourToOuterRegion,
+} from './raster';
 
 interface ImportedImage {
   id: string;
@@ -25,6 +29,11 @@ interface ImportedImage {
   shape: CutShape;
   mirrored: boolean;
   copies: number;
+  /** Só desenha contorno na região ligada à borda (ignora vãos internos). */
+  outerOnly: boolean;
+  erasures: Erasure[];
+  /** Sobe a cada borrachada/ajuste destrutivo, pra invalidar o cache da peça. */
+  editVersion: number;
 }
 
 interface Piece {
@@ -43,6 +52,8 @@ interface Prefs {
   shape: CutShape;
   smoothing: number;
   fillHoles: boolean;
+  outerOnly: boolean;
+  brushMm: number;
   sheetSize: SheetSize;
   orientation: SheetOrientation;
   spacingMm: number;
@@ -56,7 +67,8 @@ const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc
 const PREFS_KEY = 'imagem-editor-prefs';
 const DEFAULT_PREFS: Prefs = {
   widthMm: 100, marginMm: 3, gapMm: 0, color: '#ffffff', shape: 'silhueta',
-  smoothing: 4, fillHoles: true, sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
+  smoothing: 4, fillHoles: true, outerOnly: false, brushMm: 4,
+  sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
 };
 
 const SHAPES: { id: CutShape; label: string }[] = [
@@ -76,122 +88,6 @@ function loadPrefs(): Prefs {
     if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
   } catch { /* prefs são só conveniência */ }
   return { ...DEFAULT_PREFS };
-}
-
-/** Silhueta da arte (canal alpha) preenchida numa cor sólida. */
-function buildSilhouette(source: HTMLCanvasElement, color: string): HTMLCanvasElement {
-  const sil = document.createElement('canvas');
-  sil.width = source.width;
-  sil.height = source.height;
-  const sctx = sil.getContext('2d')!;
-  sctx.drawImage(source, 0, 0);
-  sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = color;
-  sctx.fillRect(0, 0, sil.width, sil.height);
-  // reforça o alpha das bordas suavizadas pra silhueta não ficar translúcida
-  sctx.globalCompositeOperation = 'source-over';
-  sctx.drawImage(sil, 0, 0);
-  sctx.drawImage(sil, 0, 0);
-  return sil;
-}
-
-/** Carimba a silhueta dilatada por um raio: a união dos deslocamentos da forma
- * cheia em todos os raios até `radius` cobre a dilatação inteira. */
-function stampDilated(ctx: CanvasRenderingContext2D, sil: HTMLCanvasElement, offset: number, radius: number): void {
-  const angleSteps = 16;
-  const radialStep = Math.max(1, Math.floor(radius / 14));
-  for (let r = radius; r > 0; r -= radialStep) {
-    for (let a = 0; a < angleSteps; a++) {
-      const t = (a / angleSteps) * Math.PI * 2;
-      ctx.drawImage(sil, offset + Math.cos(t) * r, offset + Math.sin(t) * r);
-    }
-  }
-  ctx.drawImage(sil, offset, offset);
-}
-
-/** Contorno tipo "sticker" seguindo a silhueta, com faixa branca opcional
- * (gapPx) entre a arte e o contorno colorido. */
-function buildOutline(source: HTMLCanvasElement, marginPx: number, gapPx: number, color: string): HTMLCanvasElement {
-  const w = source.width;
-  const h = source.height;
-  const m = Math.max(0, Math.round(marginPx));
-  const g = Math.max(0, Math.round(gapPx));
-  const total = m + g;
-  const out = document.createElement('canvas');
-  out.width = w + total * 2;
-  out.height = h + total * 2;
-  const ctx = out.getContext('2d')!;
-
-  if (total > 0) {
-    const sil = buildSilhouette(source, color);
-    stampDilated(ctx, sil, total, total);
-    if (g > 0) {
-      const white = buildSilhouette(source, '#ffffff');
-      stampDilated(ctx, white, total, g);
-    }
-  }
-
-  ctx.drawImage(source, total, total);
-  return out;
-}
-
-function flipHorizontal(source: HTMLCanvasElement): HTMLCanvasElement {
-  const out = document.createElement('canvas');
-  out.width = source.width;
-  out.height = source.height;
-  const ctx = out.getContext('2d')!;
-  ctx.translate(out.width, 0);
-  ctx.scale(-1, 1);
-  ctx.drawImage(source, 0, 0);
-  return out;
-}
-
-function makeThumb(source: HTMLCanvasElement): string {
-  const size = 72;
-  const scale = Math.min(size / source.width, size / source.height, 1);
-  const thumb = document.createElement('canvas');
-  thumb.width = Math.max(1, Math.round(source.width * scale));
-  thumb.height = Math.max(1, Math.round(source.height * scale));
-  thumb.getContext('2d')!.drawImage(source, 0, 0, thumb.width, thumb.height);
-  return thumb.toDataURL('image/png');
-}
-
-/** Remove o fundo por inundação (flood fill) a partir do pixel clicado:
- * apaga a região contígua de cor parecida (distância RGB ≤ tolerância). */
-function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY: number, tolerance: number): boolean {
-  const w = source.width;
-  const h = source.height;
-  if (startX < 0 || startY < 0 || startX >= w || startY >= h) return false;
-  const ctx = source.getContext('2d')!;
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-  const start = (startY * w + startX) * 4;
-  if (data[start + 3] === 0) return false;
-  const r0 = data[start];
-  const g0 = data[start + 1];
-  const b0 = data[start + 2];
-  const tol2 = tolerance * tolerance;
-
-  const visited = new Uint8Array(w * h);
-  const stack: number[] = [startY * w + startX];
-  visited[stack[0]] = 1;
-  while (stack.length) {
-    const idx = stack.pop()!;
-    const o = idx * 4;
-    const dr = data[o] - r0;
-    const dg = data[o + 1] - g0;
-    const db = data[o + 2] - b0;
-    if (dr * dr + dg * dg + db * db > tol2 || data[o + 3] === 0) continue;
-    data[o + 3] = 0;
-    const x = idx % w;
-    const y = (idx / w) | 0;
-    if (x > 0 && !visited[idx - 1]) { visited[idx - 1] = 1; stack.push(idx - 1); }
-    if (x < w - 1 && !visited[idx + 1]) { visited[idx + 1] = 1; stack.push(idx + 1); }
-    if (y > 0 && !visited[idx - w]) { visited[idx - w] = 1; stack.push(idx - w); }
-    if (y < h - 1 && !visited[idx + w]) { visited[idx + w] = 1; stack.push(idx + w); }
-  }
-  ctx.putImageData(imageData, 0, 0);
-  return true;
 }
 
 @Component({
@@ -223,8 +119,15 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
 
           @if (view() === 'peca') {
             @if (selected(); as sel) {
-              <div class="preview-stage" [class.picking]="removingBg()">
-                <canvas #previewCanvas (click)="onPreviewClick($event)"></canvas>
+              <div class="preview-stage" [class.picking]="tool() === 'fundo'" [class.erasing]="tool() === 'borracha'">
+                <canvas
+                  #previewCanvas
+                  (click)="onPreviewClick($event)"
+                  (pointerdown)="onPreviewPointerDown($event)"
+                  (pointermove)="onPreviewPointerMove($event)"
+                  (pointerup)="onPreviewPointerUp($event)"
+                  (pointercancel)="onPreviewPointerUp($event)"
+                ></canvas>
               </div>
               <div class="preview-meta">
                 <span class="file-name">{{ sel.name }}</span>
@@ -233,10 +136,16 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
                   peça {{ pieceSizeLabel(sel) }}
                 </span>
               </div>
-              @if (removingBg()) {
-                <p class="cut-hint pick-hint">Clique na cor de fundo que quer remover. A região contígua àquela cor será apagada.</p>
-              } @else {
-                <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
+              @switch (tool()) {
+                @case ('fundo') {
+                  <p class="cut-hint pick-hint">Clique na cor de fundo que quer remover. A região contígua àquela cor será apagada.</p>
+                }
+                @case ('borracha') {
+                  <p class="cut-hint pick-hint">Arraste sobre o contorno pra apagá-lo. A arte não é afetada — só o contorno e a faixa branca.</p>
+                }
+                @default {
+                  <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
+                }
               }
             } @else {
               <div
@@ -311,10 +220,10 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
                 <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
                 <span>Espelhar horizontal (vinil termocolante)</span>
               </label>
-              <button class="btn full" [class.primary]="removingBg()" (click)="toggleRemoveBg()">
-                {{ removingBg() ? 'Clique no fundo da imagem…' : 'Remover fundo (clicar na cor)' }}
+              <button class="btn full" [class.primary]="tool() === 'fundo'" (click)="setTool('fundo')">
+                {{ tool() === 'fundo' ? 'Clique no fundo da imagem…' : 'Remover fundo (clicar na cor)' }}
               </button>
-              @if (removingBg()) {
+              @if (tool() === 'fundo') {
                 <label class="field">
                   <span class="field-label">Tolerância <strong>{{ tolerance() }}</strong></span>
                   <input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" />
@@ -322,6 +231,32 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
               }
               @if (sel.bgRemoved) {
                 <button class="btn full" (click)="restoreOriginal()">Restaurar imagem original</button>
+              }
+            </section>
+
+            <section class="panel-section">
+              <h2>Borracha de contorno</h2>
+              <button class="btn full" [class.primary]="tool() === 'borracha'" (click)="setTool('borracha')">
+                <app-icon name="eraser-area" [size]="14" />
+                {{ tool() === 'borracha' ? 'Arraste sobre o contorno…' : 'Apagar contorno à mão' }}
+              </button>
+              @if (tool() === 'borracha') {
+                <label class="field">
+                  <span class="field-label">Tamanho da borracha <strong>{{ brushMm().toFixed(1) }} mm</strong></span>
+                  <input type="range" min="0.5" max="20" step="0.5" [value]="brushMm()" (input)="onBrushInput($event)" />
+                </label>
+              }
+              @if (sel.erasures.length) {
+                <div class="margin-nudge">
+                  <button class="btn" (click)="undoErase()">Desfazer</button>
+                  <button class="btn" (click)="clearErasures()">Limpar tudo</button>
+                </div>
+              }
+              @if (sel.shape === 'silhueta') {
+                <label class="check-field">
+                  <input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" />
+                  <span>Só contorno externo — remove de uma vez o contorno nascido dentro de vãos fechados do desenho</span>
+                </label>
               }
             </section>
 
@@ -334,15 +269,15 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
               </div>
               <label class="field">
                 <span class="field-label">Margem <strong>{{ sel.marginMm.toFixed(1) }} mm</strong></span>
-                <input type="range" min="0" [max]="maxMarginMm" step="0.5" [value]="sel.marginMm" (input)="onMarginInput($event)" />
+                <input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" />
               </label>
               <div class="margin-nudge">
-                <button class="btn" (click)="nudgeMargin(-0.5)" [disabled]="sel.marginMm <= 0">−0,5</button>
-                <button class="btn" (click)="nudgeMargin(0.5)" [disabled]="sel.marginMm >= maxMarginMm">+0,5</button>
+                <button class="btn" (click)="nudgeMargin(-0.1)" [disabled]="sel.marginMm <= 0">−0,1</button>
+                <button class="btn" (click)="nudgeMargin(0.1)" [disabled]="sel.marginMm >= maxMarginMm">+0,1</button>
               </div>
               <label class="field">
                 <span class="field-label">Espaço entre imagem e contorno <strong>{{ sel.gapMm.toFixed(1) }} mm</strong></span>
-                <input type="range" min="0" [max]="maxGapMm" step="0.5" [value]="sel.gapMm" (input)="onGapInput($event)" />
+                <input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" />
               </label>
               @if (sel.shape === 'silhueta') {
                 <label class="field">
@@ -468,6 +403,7 @@ function floodRemoveBackground(source: HTMLCanvasElement, startX: number, startY
         0 0 / 22px 22px;
     }
     .preview-stage.picking canvas { cursor: crosshair; }
+    .preview-stage.erasing canvas { cursor: cell; touch-action: none; }
     .preview-stage canvas { max-width: 100%; max-height: 60dvh; }
     .sheet-stage { background: var(--bg); }
     .preview-meta {
@@ -599,8 +535,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
-  removingBg = signal(false);
+  tool = signal<'nenhuma' | 'fundo' | 'borracha'>('nenhuma');
   tolerance = signal(40);
+  brushMm = signal(this.prefs.brushMm);
   dragOver = signal(false);
   packInfo = signal<{ placed: number; overflow: number }>({ placed: 0, overflow: 0 });
 
@@ -608,6 +545,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
   private renderQueued = false;
+  private erasing = false;
   private pieceCache = new Map<string, { sig: string; piece: Piece }>();
 
   constructor(public auth: AuthService, public theme: ThemeService) {}
@@ -678,6 +616,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
           source, original, srcVersion: 0, bgRemoved: false,
           widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
           color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
+          outerOnly: this.prefs.outerOnly, erasures: [], editVersion: 0,
         };
         this.images.update((list) => [...list, item]);
         if (!this.selectedId()) this.selectedId.set(item.id);
@@ -690,7 +629,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   select(id: string): void {
     this.selectedId.set(id);
-    this.removingBg.set(false);
+    this.tool.set('nenhuma');
     this.scheduleRender();
   }
 
@@ -714,7 +653,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   setView(view: 'peca' | 'folha'): void {
     this.view.set(view);
-    this.removingBg.set(false);
+    this.tool.set('nenhuma');
     this.scheduleRender();
   }
 
@@ -752,7 +691,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   nudgeMargin(delta: number): void {
     const sel = this.selected();
     if (!sel) return;
-    const marginMm = Math.min(MAX_MARGIN_MM, Math.max(0, Math.round((sel.marginMm + delta) * 2) / 2));
+    const marginMm = Math.min(MAX_MARGIN_MM, Math.max(0, Math.round((sel.marginMm + delta) * 10) / 10));
     this.prefs.marginMm = marginMm;
     this.savePrefs();
     this.updateSelected({ marginMm });
@@ -789,12 +728,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
-  // ---------- remoção de fundo ----------
+  // ---------- ferramentas sobre a peça (fundo e borracha) ----------
 
-  toggleRemoveBg(): void {
-    const next = !this.removingBg();
-    if (next) this.view.set('peca');
-    this.removingBg.set(next);
+  setTool(tool: 'nenhuma' | 'fundo' | 'borracha'): void {
+    const next = this.tool() === tool ? 'nenhuma' : tool;
+    if (next !== 'nenhuma') this.view.set('peca');
+    this.tool.set(next);
     this.scheduleRender();
   }
 
@@ -802,23 +741,87 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.tolerance.set(Number((event.target as HTMLInputElement).value));
   }
 
-  onPreviewClick(event: MouseEvent): void {
-    if (!this.removingBg()) return;
-    const sel = this.selected();
+  onBrushInput(event: Event): void {
+    this.brushMm.set(Number((event.target as HTMLInputElement).value));
+    this.prefs.brushMm = this.brushMm();
+    this.savePrefs();
+  }
+
+  onOuterOnlyChange(event: Event): void {
+    const outerOnly = (event.target as HTMLInputElement).checked;
+    this.prefs.outerOnly = outerOnly;
+    this.savePrefs();
+    this.updateSelected({ outerOnly });
+  }
+
+  /** Coordenada do evento em pixels da arte original (desfazendo o espelho). */
+  private artPointFrom(event: PointerEvent | MouseEvent, item: ImportedImage): { x: number; y: number } | null {
     const canvas = this.previewCanvas?.nativeElement;
-    if (!sel || !canvas) return;
-    const piece = this.pieceFor(sel);
-    const scaleX = canvas.width / canvas.clientWidth;
-    const scaleY = canvas.height / canvas.clientHeight;
-    const px = event.offsetX * scaleX;
-    const py = event.offsetY * scaleY;
-    let imgX = Math.floor(px - piece.artX);
-    const imgY = Math.floor(py - piece.artY);
-    if (sel.mirrored) imgX = sel.source.width - 1 - imgX;
-    const changed = floodRemoveBackground(sel.source, imgX, imgY, this.tolerance());
+    if (!canvas || !canvas.clientWidth || !canvas.clientHeight) return null;
+    const piece = this.pieceFor(item);
+    const px = event.offsetX * (canvas.width / canvas.clientWidth);
+    const py = event.offsetY * (canvas.height / canvas.clientHeight);
+    const x = px - piece.artX;
+    return { x: item.mirrored ? item.source.width - x : x, y: py - piece.artY };
+  }
+
+  onPreviewClick(event: MouseEvent): void {
+    if (this.tool() !== 'fundo') return;
+    const sel = this.selected();
+    if (!sel) return;
+    const point = this.artPointFrom(event, sel);
+    if (!point) return;
+    const changed = floodRemoveBackground(sel.source, Math.floor(point.x), Math.floor(point.y), this.tolerance());
     if (changed) {
       this.updateSelected({ srcVersion: sel.srcVersion + 1, bgRemoved: true, thumbUrl: makeThumb(sel.source) });
     }
+  }
+
+  onPreviewPointerDown(event: PointerEvent): void {
+    if (this.tool() !== 'borracha') return;
+    event.preventDefault();
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    this.erasing = true;
+    this.eraseAt(event);
+  }
+
+  onPreviewPointerMove(event: PointerEvent): void {
+    if (!this.erasing) return;
+    this.eraseAt(event);
+  }
+
+  onPreviewPointerUp(event: PointerEvent): void {
+    if (!this.erasing) return;
+    this.erasing = false;
+    (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
+  }
+
+  /** Registra uma borrachada, ignorando pontos quase colados no anterior pra não
+   * acumular centenas de círculos redundantes num arrasto. */
+  private eraseAt(event: PointerEvent): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const point = this.artPointFrom(event, sel);
+    if (!point) return;
+    const r = Math.max(1, this.brushMm() * this.pxPerMm(sel));
+    const last = sel.erasures[sel.erasures.length - 1];
+    if (last && Math.hypot(last.x - point.x, last.y - point.y) < r / 3) return;
+    this.updateSelected({
+      erasures: [...sel.erasures, { x: point.x, y: point.y, r }],
+      editVersion: sel.editVersion + 1,
+    });
+  }
+
+  undoErase(): void {
+    const sel = this.selected();
+    if (!sel || !sel.erasures.length) return;
+    this.updateSelected({ erasures: sel.erasures.slice(0, -1), editVersion: sel.editVersion + 1 });
+  }
+
+  clearErasures(): void {
+    const sel = this.selected();
+    if (!sel || !sel.erasures.length) return;
+    this.updateSelected({ erasures: [], editVersion: sel.editVersion + 1 });
   }
 
   restoreOriginal(): void {
@@ -864,7 +867,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private pieceFor(item: ImportedImage): Piece {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
-      item.srcVersion, this.smoothing(), this.fillHoles(),
+      item.srcVersion, item.outerOnly, item.editVersion, this.smoothing(), this.fillHoles(),
     ]);
     const cached = this.pieceCache.get(item.id);
     if (cached && cached.sig === sig) return cached.piece;
@@ -881,7 +884,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const total = marginPx + gapPx;
 
     if (item.shape === 'silhueta') {
-      const canvas = buildOutline(source, marginPx, gapPx, item.color);
+      const contour = buildContourLayer(source, marginPx, gapPx, item.color);
+      if (item.outerOnly && total > 0) restrictContourToOuterRegion(contour, source, total);
+      applyErasures(contour, item.erasures, total, total, item.mirrored, item.source.width);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = contour.width;
+      canvas.height = contour.height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(contour, 0, 0);
+      ctx.drawImage(source, total, total);
+
       const s = this.smoothing();
       const paths = traceCutPaths(canvas, {
         fillHoles: this.fillHoles(),
@@ -893,18 +906,26 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     }
 
     const { W, H } = shapeCanvasSize(item.shape, source.width, source.height, total);
+    const artX = (W - source.width) / 2;
+    const artY = (H - source.height) / 2;
+    const cornerRadius = total + 2 * ppm;
+    const outer = shapePolygon(item.shape, W, H, 0, cornerRadius);
+
+    const contour = document.createElement('canvas');
+    contour.width = W;
+    contour.height = H;
+    if (total > 0) {
+      const cctx = contour.getContext('2d')!;
+      fillPolygon(cctx, outer, item.color);
+      if (gapPx > 0) fillPolygon(cctx, shapePolygon(item.shape, W, H, marginPx, cornerRadius), '#ffffff');
+      applyErasures(contour, item.erasures, artX, artY, item.mirrored, item.source.width);
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d')!;
-    const cornerRadius = total + 2 * ppm;
-    const outer = shapePolygon(item.shape, W, H, 0, cornerRadius);
-    if (total > 0) {
-      fillPolygon(ctx, outer, item.color);
-      if (gapPx > 0) fillPolygon(ctx, shapePolygon(item.shape, W, H, marginPx, cornerRadius), '#ffffff');
-    }
-    const artX = (W - source.width) / 2;
-    const artY = (H - source.height) / 2;
+    ctx.drawImage(contour, 0, 0);
     ctx.drawImage(source, artX, artY);
     return { canvas, paths: [outer], ppm, artX, artY };
   }
