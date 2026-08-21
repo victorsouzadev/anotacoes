@@ -30,7 +30,7 @@ const TOOLS: ToolCard[] = [
     path: '/imagens',
     icon: 'image',
     title: 'Editor de Imagens',
-    description: 'Importe imagens, gere contorno tipo sticker com margem e cor ajustáveis e exporte em PNG — tudo no navegador.',
+    description: 'Contorno tipo sticker com margem em mm e linha de corte em SVG pra ScanNCut — impressão a 300 DPI, tudo no navegador.',
   },
   {
     path: '/bolo-3d',
