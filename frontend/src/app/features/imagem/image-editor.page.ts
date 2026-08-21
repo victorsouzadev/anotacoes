@@ -3,15 +3,20 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
+import { Polygon, pngBlobWithDpi, polygonsToPathData, traceCutPaths } from './contour';
 
 interface ImportedImage {
   id: string;
   name: string;
   url: string;
   img: HTMLImageElement;
+  /** Largura física da arte (sem a margem) em mm. */
+  widthMm: number;
 }
 
-const MAX_MARGIN = 80;
+const MAX_MARGIN_MM = 20;
+const DEFAULT_WIDTH_MM = 100;
+const EXPORT_DPI = 300;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
 
 function uid(): string {
@@ -21,10 +26,10 @@ function uid(): string {
 /** Gera a imagem com contorno tipo "sticker": dilata a silhueta (canal alpha)
  * na cor escolhida e desenha a imagem original por cima. Em imagens sem
  * transparência o contorno vira uma moldura ao redor do retângulo. */
-function buildOutline(img: HTMLImageElement, margin: number, color: string): HTMLCanvasElement {
+function buildOutline(img: HTMLImageElement, marginPx: number, color: string): HTMLCanvasElement {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
-  const m = Math.max(0, Math.round(margin));
+  const m = Math.max(0, Math.round(marginPx));
   const out = document.createElement('canvas');
   out.width = w + m * 2;
   out.height = h + m * 2;
@@ -85,8 +90,12 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
             </div>
             <div class="preview-meta">
               <span class="file-name">{{ sel.name }}</span>
-              <span class="file-dims">{{ sel.img.naturalWidth }} × {{ sel.img.naturalHeight }} px</span>
+              <span class="file-dims">
+                arte {{ formatMm(sel.widthMm) }} × {{ formatMm(artHeightMm(sel)) }} ·
+                com margem {{ formatMm(sel.widthMm + 2 * marginMm()) }} × {{ formatMm(artHeightMm(sel) + 2 * marginMm()) }}
+              </span>
             </div>
+            <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
           } @else {
             <div
               class="drop-zone"
@@ -97,7 +106,7 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
               (drop)="onDrop($event)"
             >
               <app-icon name="image" [size]="34" />
-              <p><strong>Importe imagens</strong> pra gerar o contorno</p>
+              <p><strong>Importe imagens</strong> pra gerar o contorno e a linha de corte</p>
               <p class="hint">Clique ou arraste arquivos aqui. PNGs com fundo transparente ficam com contorno na forma do desenho; imagens opacas ganham uma moldura.</p>
             </div>
           }
@@ -123,25 +132,52 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
             }
           </section>
 
+          @if (selected(); as sel) {
+            <section class="panel-section">
+              <h2>Tamanho real</h2>
+              <label class="field">
+                <span class="field-label">Largura da arte (cm)</span>
+                <input
+                  class="num-input"
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="0.1"
+                  [value]="(sel.widthMm / 10).toFixed(1)"
+                  (change)="onWidthCmChange($event)"
+                />
+              </label>
+              <p class="field-note">Altura acompanha a proporção: {{ formatMm(artHeightMm(sel)) }}. Impressão sai a {{ dpi }} DPI.</p>
+            </section>
+          }
+
           <section class="panel-section">
-            <h2>Contorno</h2>
+            <h2>Contorno e corte</h2>
             <label class="field">
-              <span class="field-label">Margem <strong>{{ margin() }}px</strong></span>
+              <span class="field-label">Margem <strong>{{ marginMm().toFixed(1) }} mm</strong></span>
               <input
                 type="range"
                 min="0"
-                [max]="maxMargin"
-                step="1"
-                [value]="margin()"
+                [max]="maxMarginMm"
+                step="0.5"
+                [value]="marginMm()"
                 (input)="onMarginInput($event)"
               />
             </label>
             <div class="margin-nudge">
-              <button class="btn" (click)="nudgeMargin(-1)" [disabled]="margin() <= 0">−1</button>
-              <button class="btn" (click)="nudgeMargin(1)" [disabled]="margin() >= maxMargin">+1</button>
+              <button class="btn" (click)="nudgeMargin(-0.5)" [disabled]="marginMm() <= 0">−0,5</button>
+              <button class="btn" (click)="nudgeMargin(0.5)" [disabled]="marginMm() >= maxMarginMm">+0,5</button>
             </div>
             <label class="field">
-              <span class="field-label">Cor</span>
+              <span class="field-label">Suavização da linha de corte <strong>{{ smoothing() }}</strong></span>
+              <input type="range" min="0" max="10" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
+            </label>
+            <label class="check-field">
+              <input type="checkbox" [checked]="fillHoles()" (change)="onFillHolesChange($event)" />
+              <span>Preencher furos internos (corta só o contorno externo)</span>
+            </label>
+            <label class="field">
+              <span class="field-label">Cor do contorno</span>
               <div class="color-row">
                 <input type="color" [value]="color()" (input)="onColorInput($event)" />
                 @for (sw of swatches; track sw) {
@@ -159,14 +195,16 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
 
           <section class="panel-section">
             <h2>Exportar</h2>
-            <button class="btn primary full" [disabled]="!selected()" (click)="exportSelected()">
-              <app-icon name="download" [size]="14" /> Exportar imagem (.png)
+            <button class="btn primary full" [disabled]="!selected()" (click)="exportPrintPng()">
+              <app-icon name="download" [size]="14" /> PNG {{ dpi }} DPI (imprimir)
             </button>
-            @if (images().length > 1) {
-              <button class="btn full" (click)="exportAll()">
-                <app-icon name="download" [size]="14" /> Exportar todas ({{ images().length }})
-              </button>
-            }
+            <button class="btn primary full" [disabled]="!selected()" (click)="exportCutSvg()">
+              <app-icon name="download" [size]="14" /> SVG linha de corte (ScanNCut)
+            </button>
+            <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
+              <app-icon name="download" [size]="14" /> SVG arte + corte
+            </button>
+            <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
           </section>
         </aside>
       </main>
@@ -219,11 +257,12 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
     }
     .preview-stage canvas { max-width: 100%; max-height: 60dvh; }
     .preview-meta {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
       padding: 12px 4px 0; font-size: 12px; color: var(--text-muted);
     }
     .file-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-dims { flex-shrink: 0; }
+    .cut-hint { margin: 6px 4px 0; font-size: 11px; color: var(--text-muted); }
 
     .drop-zone {
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
@@ -253,7 +292,7 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
     .btn.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
     .btn.full { width: 100%; }
 
-    .image-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .image-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
     .image-list li {
       display: flex; align-items: center; gap: 6px;
       border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 6px;
@@ -281,8 +320,16 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
     .field-label { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; }
     .field-label strong { color: var(--text); }
     .field input[type='range'] { width: 100%; accent-color: var(--accent); }
+    .field-note { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+    .num-input {
+      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
+      padding: 7px 10px; font-size: 13px; color: inherit; width: 100%;
+    }
+    .num-input:focus { outline: none; border-color: var(--accent); }
     .margin-nudge { display: flex; gap: 6px; }
     .margin-nudge .btn { flex: 1; padding: 5px 0; }
+    .check-field { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+    .check-field input { accent-color: var(--accent); margin-top: 1px; }
 
     .color-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .color-row input[type='color'] {
@@ -306,12 +353,15 @@ function buildOutline(img: HTMLImageElement, margin: number, color: string): HTM
 export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   @ViewChild('previewCanvas') previewCanvas?: ElementRef<HTMLCanvasElement>;
 
-  readonly maxMargin = MAX_MARGIN;
+  readonly maxMarginMm = MAX_MARGIN_MM;
+  readonly dpi = EXPORT_DPI;
   readonly swatches = SWATCHES;
 
   images = signal<ImportedImage[]>([]);
   selectedId = signal<string | null>(null);
-  margin = signal(16);
+  marginMm = signal(3);
+  smoothing = signal(4);
+  fillHoles = signal(true);
   color = signal('#ffffff');
   dragOver = signal(false);
 
@@ -327,6 +377,18 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     for (const item of this.images()) URL.revokeObjectURL(item.url);
+  }
+
+  artHeightMm(item: ImportedImage): number {
+    return (item.widthMm * item.img.naturalHeight) / item.img.naturalWidth;
+  }
+
+  formatMm(mm: number): string {
+    return mm >= 100 ? `${(mm / 10).toFixed(1)} cm` : `${mm.toFixed(1)} mm`;
+  }
+
+  private pxPerMm(item: ImportedImage): number {
+    return item.img.naturalWidth / item.widthMm;
   }
 
   onFilesSelected(event: Event): void {
@@ -352,7 +414,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const item: ImportedImage = { id: uid(), name: file.name, url, img };
+        const item: ImportedImage = { id: uid(), name: file.name, url, img, widthMm: DEFAULT_WIDTH_MM };
         this.images.update((list) => [...list, item]);
         if (!this.selectedId()) this.selectedId.set(item.id);
         this.scheduleRender();
@@ -377,13 +439,32 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  onWidthCmChange(event: Event): void {
+    const cm = Number((event.target as HTMLInputElement).value);
+    if (!Number.isFinite(cm) || cm <= 0) return;
+    const widthMm = Math.min(1000, Math.max(10, cm * 10));
+    const id = this.selectedId();
+    this.images.update((list) => list.map((i) => (i.id === id ? { ...i, widthMm } : i)));
+    this.scheduleRender();
+  }
+
   onMarginInput(event: Event): void {
-    this.margin.set(Number((event.target as HTMLInputElement).value));
+    this.marginMm.set(Number((event.target as HTMLInputElement).value));
     this.scheduleRender();
   }
 
   nudgeMargin(delta: number): void {
-    this.margin.update((m) => Math.min(MAX_MARGIN, Math.max(0, m + delta)));
+    this.marginMm.update((m) => Math.min(MAX_MARGIN_MM, Math.max(0, Math.round((m + delta) * 2) / 2)));
+    this.scheduleRender();
+  }
+
+  onSmoothingInput(event: Event): void {
+    this.smoothing.set(Number((event.target as HTMLInputElement).value));
+    this.scheduleRender();
+  }
+
+  onFillHolesChange(event: Event): void {
+    this.fillHoles.set((event.target as HTMLInputElement).checked);
     this.scheduleRender();
   }
 
@@ -395,6 +476,21 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   setColor(color: string): void {
     this.color.set(color);
     this.scheduleRender();
+  }
+
+  private buildFor(item: ImportedImage): HTMLCanvasElement {
+    return buildOutline(item.img, this.marginMm() * this.pxPerMm(item), this.color());
+  }
+
+  private traceFor(item: ImportedImage, outline: HTMLCanvasElement): Polygon[] {
+    const ppm = this.pxPerMm(item);
+    const s = this.smoothing();
+    return traceCutPaths(outline, {
+      fillHoles: this.fillHoles(),
+      simplifyEpsilon: s > 0 ? ppm * s * 0.05 : ppm * 0.02,
+      chaikinIterations: s >= 5 ? 2 : s >= 1 ? 1 : 0,
+      minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
+    });
   }
 
   /** Agrupa mudanças rápidas (arrastar o slider) num único redesenho por frame. */
@@ -411,32 +507,94 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sel = this.selected();
     const canvas = this.previewCanvas?.nativeElement;
     if (!sel || !canvas) return;
-    const result = buildOutline(sel.img, this.margin(), this.color());
+    const result = this.buildFor(sel);
     canvas.width = result.width;
     canvas.height = result.height;
-    canvas.getContext('2d')!.drawImage(result, 0, 0);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(result, 0, 0);
+
+    const paths = this.traceFor(sel, result);
+    ctx.strokeStyle = '#e5383b';
+    ctx.lineWidth = Math.max(1.5, result.width / 500);
+    ctx.setLineDash([ctx.lineWidth * 4, ctx.lineWidth * 3]);
+    for (const poly of paths) {
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.closePath();
+      ctx.stroke();
+    }
   }
 
-  exportSelected(): void {
+  /** PNG pra imprimir: redimensionado pro tamanho físico a 300 DPI, com o DPI
+   * gravado no arquivo (chunk pHYs) pra impressão sair na medida certa. */
+  exportPrintPng(): void {
     const sel = this.selected();
-    if (sel) this.exportImage(sel);
-  }
-
-  exportAll(): void {
-    for (const item of this.images()) this.exportImage(item);
-  }
-
-  private exportImage(item: ImportedImage): void {
-    const result = buildOutline(item.img, this.margin(), this.color());
-    result.toBlob((blob) => {
+    if (!sel) return;
+    const result = this.buildFor(sel);
+    const totalWMm = sel.widthMm + 2 * this.marginMm();
+    const targetW = Math.round((totalWMm / 25.4) * EXPORT_DPI);
+    const targetH = Math.round((targetW * result.height) / result.width);
+    const out = document.createElement('canvas');
+    out.width = targetW;
+    out.height = targetH;
+    const ctx = out.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(result, 0, 0, targetW, targetH);
+    out.toBlob(async (blob) => {
       if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = item.name.replace(/\.[^.]+$/, '') + '-contorno.png';
-      a.click();
-      URL.revokeObjectURL(url);
+      const withDpi = await pngBlobWithDpi(blob, EXPORT_DPI);
+      this.downloadBlob(withDpi, this.baseName(sel) + '-impressao.png');
     }, 'image/png');
+  }
+
+  /** SVG só com a linha de corte, em mm — pro CanvasWorkspace / ScanNCut. */
+  exportCutSvg(): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const result = this.buildFor(sel);
+    const paths = this.traceFor(sel, result);
+    const svg = this.svgDocument(sel, result, paths, null);
+    this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), this.baseName(sel) + '-corte.svg');
+  }
+
+  /** SVG com a arte embutida + linha de corte por cima, em camadas. */
+  exportFullSvg(): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const result = this.buildFor(sel);
+    const paths = this.traceFor(sel, result);
+    const svg = this.svgDocument(sel, result, paths, result.toDataURL('image/png'));
+    this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), this.baseName(sel) + '-arte-corte.svg');
+  }
+
+  private svgDocument(item: ImportedImage, outline: HTMLCanvasElement, paths: Polygon[], imageHref: string | null): string {
+    const ppm = this.pxPerMm(item);
+    const wMm = outline.width / ppm;
+    const hMm = outline.height / ppm;
+    const d = polygonsToPathData(paths);
+    const strokePx = ppm * 0.2; // 0,2 mm
+    const image = imageHref
+      ? `\n  <image x="0" y="0" width="${outline.width}" height="${outline.height}" href="${imageHref}" />`
+      : '';
+    return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${wMm.toFixed(2)}mm" height="${hMm.toFixed(2)}mm" ` +
+      `viewBox="0 0 ${outline.width} ${outline.height}">${image}\n` +
+      `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="${strokePx.toFixed(2)}" />\n` +
+      `</svg>\n`;
+  }
+
+  private baseName(item: ImportedImage): string {
+    return item.name.replace(/\.[^.]+$/, '');
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   themeIconName(): IconName {
