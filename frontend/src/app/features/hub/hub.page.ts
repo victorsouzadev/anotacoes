@@ -30,7 +30,7 @@ const TOOLS: ToolCard[] = [
     path: '/imagens',
     icon: 'image',
     title: 'Editor de Imagens',
-    description: 'Contorno tipo sticker com margem em mm e linha de corte em SVG pra ScanNCut — impressão a 300 DPI, tudo no navegador.',
+    description: 'Print & cut pra ScanNCut: contorno com margem em mm, remoção de fundo, folha de montagem A4/A3 e exports em PNG 300 DPI, PDF e SVG de corte.',
   },
   {
     path: '/bolo-3d',
