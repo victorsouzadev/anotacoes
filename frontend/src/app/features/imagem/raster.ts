@@ -138,6 +138,17 @@ export function flipHorizontal(source: HTMLCanvasElement): HTMLCanvasElement {
   return out;
 }
 
+/** Codifica a arte pra guardar no projeto: PNG quando há transparência (JPEG
+ * perderia o canal alfa, que é o que define o recorte) e JPEG quando é opaca,
+ * onde o payload menor compensa. */
+export function encodeCanvas(source: HTMLCanvasElement): string {
+  const { data } = source.getContext('2d')!.getImageData(0, 0, source.width, source.height);
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 255) return source.toDataURL('image/png');
+  }
+  return source.toDataURL('image/jpeg', 0.92);
+}
+
 export function makeThumb(source: HTMLCanvasElement): string {
   const size = 72;
   const scale = Math.min(size / source.width, size / source.height, 1);

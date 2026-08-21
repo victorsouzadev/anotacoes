@@ -1,15 +1,35 @@
+import { DatePipe } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
-import { Polygon, pngBlobWithDpi, polygonsToPathData, traceCutPaths } from './contour';
+import { Polygon, pngBlobWithDpi, polygonsToPathData, smallestPathContaining, traceCutPaths } from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
 import {
-  Erasure, applyErasures, buildContourLayer, flipHorizontal, floodRemoveBackground,
+  Erasure, applyErasures, buildContourLayer, encodeCanvas, flipHorizontal, floodRemoveBackground,
   makeThumb, restrictContourToOuterRegion,
 } from './raster';
+import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
+import { uuid } from '../../core/uuid';
+
+/** Um clique de "remover fundo". Guardado em vez do bitmap resultante: ao abrir
+ * um projeto salvo, os cliques são reaplicados sobre a arte original, então o
+ * backend só precisa carregar a imagem de origem. */
+interface BgRemoval {
+  x: number;
+  y: number;
+  tolerance: number;
+}
+
+/** Ponto (em pixels da arte) que marca uma linha de corte a descartar: no
+ * rebuild, o contorno mais justo que o contiver é removido. Guardar o ponto em
+ * vez do índice do caminho sobrevive a re-vetorizações (mudar margem, suavizar). */
+interface CutRemoval {
+  x: number;
+  y: number;
+}
 
 interface ImportedImage {
   id: string;
@@ -17,8 +37,11 @@ interface ImportedImage {
   thumbUrl: string;
   /** Arte atual (pode ter o fundo removido). */
   source: HTMLCanvasElement;
-  /** Cópia intocada pra "restaurar". */
+  /** Cópia intocada pra "restaurar" e pra salvar no backend. */
   original: HTMLCanvasElement;
+  /** Codificação da arte original, calculada uma vez na importação. */
+  originalDataUrl: string;
+  bgRemovals: BgRemoval[];
   /** Muda a cada edição do source, pra invalidar o cache da peça. */
   srcVersion: number;
   bgRemoved: boolean;
@@ -32,6 +55,7 @@ interface ImportedImage {
   /** Só desenha contorno na região ligada à borda (ignora vãos internos). */
   outerOnly: boolean;
   erasures: Erasure[];
+  cutRemovals: CutRemoval[];
   /** Sobe a cada borrachada/ajuste destrutivo, pra invalidar o cache da peça. */
   editVersion: number;
 }
@@ -54,6 +78,7 @@ interface Prefs {
   fillHoles: boolean;
   outerOnly: boolean;
   brushMm: number;
+  openSections: Record<string, boolean>;
   sheetSize: SheetSize;
   orientation: SheetOrientation;
   spacingMm: number;
@@ -61,6 +86,9 @@ interface Prefs {
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
+/** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
+ * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
+const MAX_IMPORT_DIMENSION = 3000;
 const EXPORT_DPI = 300;
 const SHEET_MARGIN_MM = 10;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
@@ -68,8 +96,13 @@ const PREFS_KEY = 'imagem-editor-prefs';
 const DEFAULT_PREFS: Prefs = {
   widthMm: 100, marginMm: 3, gapMm: 0, color: '#ffffff', shape: 'silhueta',
   smoothing: 4, fillHoles: true, outerOnly: false, brushMm: 4,
+  openSections: { imagens: true, contorno: true },
   sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
 };
+
+/** Passos do painel, na ordem do fluxo de trabalho. */
+const STEPS = ['projeto', 'imagens', 'tamanho', 'contorno', 'arte', 'retoques', 'folha', 'exportar'] as const;
+type StepId = (typeof STEPS)[number];
 
 const SHAPES: { id: CutShape; label: string }[] = [
   { id: 'silhueta', label: 'Silhueta' },
@@ -78,8 +111,21 @@ const SHAPES: { id: CutShape; label: string }[] = [
   { id: 'elipse', label: 'Elipse' },
 ];
 
+function plural(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Falha ao carregar imagem do projeto.'));
+    img.src = src;
+  });
 }
 
 function loadPrefs(): Prefs {
@@ -93,7 +139,7 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent],
+  imports: [RouterLink, IconComponent, DatePipe],
   template: `
     <div class="page">
       <header class="top-bar">
@@ -119,7 +165,7 @@ function loadPrefs(): Prefs {
 
           @if (view() === 'peca') {
             @if (selected(); as sel) {
-              <div class="preview-stage" [class.picking]="tool() === 'fundo'" [class.erasing]="tool() === 'borracha'">
+              <div class="preview-stage" [class.picking]="tool() === 'fundo' || tool() === 'corte'" [class.erasing]="tool() === 'borracha'">
                 <canvas
                   #previewCanvas
                   (click)="onPreviewClick($event)"
@@ -142,6 +188,9 @@ function loadPrefs(): Prefs {
                 }
                 @case ('borracha') {
                   <p class="cut-hint pick-hint">Arraste sobre o contorno pra apagá-lo. A arte não é afetada — só o contorno e a faixa branca.</p>
+                }
+                @case ('corte') {
+                  <p class="cut-hint pick-hint">Clique dentro de uma linha tracejada pra removê-la do corte. O desenho e o contorno continuam iguais.</p>
                 }
                 @default {
                   <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
@@ -176,176 +225,290 @@ function loadPrefs(): Prefs {
         </div>
 
         <aside class="panel">
-          <section class="panel-section">
-            <h2>Imagens</h2>
-            <button class="btn primary full" (click)="fileInput.click()"><app-icon name="plus" [size]="14" /> Importar imagens</button>
-            <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesSelected($event)" />
-            @if (images().length) {
-              <ul class="image-list">
-                @for (item of images(); track item.id) {
-                  <li [class.active]="item.id === selectedId()">
-                    <button class="thumb-btn" (click)="select(item.id)">
-                      <img [src]="item.thumbUrl" [alt]="item.name" />
-                      <span class="thumb-name">{{ item.name }}</span>
-                      @if (item.copies > 1) { <span class="copies-badge">×{{ item.copies }}</span> }
-                    </button>
-                    <button class="remove-btn" title="Remover" (click)="remove(item.id)"><app-icon name="x" [size]="12" /></button>
-                  </li>
-                }
-              </ul>
+          <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesSelected($event)" />
+          <section class="panel-section" [class.open]="isOpen('projeto')">
+            <button class="section-head" (click)="toggleSection('projeto')">
+              <span class="section-title"><app-icon name="folder" [size]="13" /> Projeto</span>
+              <span class="section-summary">{{ sectionSummary('projeto') }}</span>
+              <app-icon class="chevron" name="chevron" [size]="14" />
+            </button>
+            @if (isOpen('projeto')) {
+              <p class="section-help">Salva a montagem inteira na sua conta: as artes, as medidas e todos os ajustes. Dá pra continuar depois de outro computador.</p>
+              <input
+                class="num-input"
+                type="text"
+                maxlength="300"
+                placeholder="Nome do projeto"
+                [value]="projectName()"
+                (input)="onProjectNameInput($event)"
+              />
+              <div class="btn-row">
+                <button class="btn primary" [disabled]="savingProject() || !images().length" (click)="saveProject()">
+                  {{ savingProject() ? 'Salvando…' : projectId() ? 'Salvar' : 'Salvar novo' }}
+                </button>
+                <button class="btn" (click)="newProject()">Novo</button>
+              </div>
+              @if (projectStatus()) {
+                <p class="field-note">{{ projectStatus() }}</p>
+              }
+              @if (projects().length) {
+                <ul class="project-list">
+                  @for (p of projects(); track p.id) {
+                    <li [class.active]="p.id === projectId()">
+                      <button class="project-open" (click)="openProject(p.id)">
+                        <span class="project-name">{{ p.name }}</span>
+                        <span class="project-date">{{ p.updatedAt | date: 'dd/MM HH:mm' }}</span>
+                      </button>
+                      <button class="remove-btn" title="Excluir projeto" (click)="deleteProject(p.id, $event)">
+                        <app-icon name="x" [size]="12" />
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            }
+          </section>
+
+          <section class="panel-section" [class.open]="isOpen('imagens')">
+            <button class="section-head" (click)="toggleSection('imagens')">
+              <span class="section-title"><span class="step">1</span> Importar</span>
+              <span class="section-summary">{{ sectionSummary('imagens') }}</span>
+              <app-icon class="chevron" name="chevron" [size]="14" />
+            </button>
+            @if (isOpen('imagens')) {
+              <p class="section-help">PNG com fundo transparente é o ideal: o contorno segue o formato do desenho. Foto ou JPG dá certo também — depois é só usar "Remover fundo" no passo 4.</p>
+              <button class="btn primary full" (click)="fileInput.click()"><app-icon name="plus" [size]="14" /> Importar imagens</button>
+              @if (images().length) {
+                <ul class="image-list">
+                  @for (item of images(); track item.id) {
+                    <li [class.active]="item.id === selectedId()">
+                      <button class="thumb-btn" (click)="select(item.id)">
+                        <img [src]="item.thumbUrl" [alt]="item.name" />
+                        <span class="thumb-name">{{ item.name }}</span>
+                        @if (item.copies > 1) { <span class="copies-badge">×{{ item.copies }}</span> }
+                      </button>
+                      <button class="remove-btn" title="Remover" (click)="remove(item.id)"><app-icon name="x" [size]="12" /></button>
+                    </li>
+                  }
+                </ul>
+                <p class="field-note">Clique numa imagem da lista pra editá-la. Os ajustes valem só pra ela.</p>
+              }
             }
           </section>
 
           @if (selected(); as sel) {
-            <section class="panel-section">
-              <h2>Tamanho e cópias</h2>
-              <div class="field-row">
-                <label class="field">
-                  <span class="field-label">Largura (cm)</span>
-                  <input class="num-input" type="number" min="1" max="100" step="0.1"
-                    [value]="(sel.widthMm / 10).toFixed(1)" (change)="onWidthCmChange($event)" />
-                </label>
-                <label class="field">
-                  <span class="field-label">Cópias na folha</span>
-                  <input class="num-input" type="number" min="1" max="99" step="1"
-                    [value]="sel.copies" (change)="onCopiesChange($event)" />
-                </label>
-              </div>
-              <p class="field-note">Altura acompanha a proporção: {{ formatMm(artHeightMm(sel)) }}. Impressão sai a {{ dpi }} DPI.</p>
-            </section>
-
-            <section class="panel-section">
-              <h2>Imagem</h2>
-              <label class="check-field">
-                <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
-                <span>Espelhar horizontal (vinil termocolante)</span>
-              </label>
-              <button class="btn full" [class.primary]="tool() === 'fundo'" (click)="setTool('fundo')">
-                {{ tool() === 'fundo' ? 'Clique no fundo da imagem…' : 'Remover fundo (clicar na cor)' }}
+            <section class="panel-section" [class.open]="isOpen('tamanho')">
+              <button class="section-head" (click)="toggleSection('tamanho')">
+                <span class="section-title"><span class="step">2</span> Tamanho</span>
+                <span class="section-summary">{{ sectionSummary('tamanho') }}</span>
+                <app-icon class="chevron" name="chevron" [size]="14" />
               </button>
-              @if (tool() === 'fundo') {
-                <label class="field">
-                  <span class="field-label">Tolerância <strong>{{ tolerance() }}</strong></span>
-                  <input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" />
-                </label>
-              }
-              @if (sel.bgRemoved) {
-                <button class="btn full" (click)="restoreOriginal()">Restaurar imagem original</button>
-              }
-            </section>
-
-            <section class="panel-section">
-              <h2>Borracha de contorno</h2>
-              <button class="btn full" [class.primary]="tool() === 'borracha'" (click)="setTool('borracha')">
-                <app-icon name="eraser-area" [size]="14" />
-                {{ tool() === 'borracha' ? 'Arraste sobre o contorno…' : 'Apagar contorno à mão' }}
-              </button>
-              @if (tool() === 'borracha') {
-                <label class="field">
-                  <span class="field-label">Tamanho da borracha <strong>{{ brushMm().toFixed(1) }} mm</strong></span>
-                  <input type="range" min="0.5" max="20" step="0.5" [value]="brushMm()" (input)="onBrushInput($event)" />
-                </label>
-              }
-              @if (sel.erasures.length) {
-                <div class="margin-nudge">
-                  <button class="btn" (click)="undoErase()">Desfazer</button>
-                  <button class="btn" (click)="clearErasures()">Limpar tudo</button>
+              @if (isOpen('tamanho')) {
+                <p class="section-help">O tamanho real com que a peça vai ser impressa e cortada. A máquina corta em centímetros, não em pixels — por isso é aqui que tudo começa.</p>
+                <div class="field-row">
+                  <label class="field">
+                    <span class="field-label">Largura (cm)</span>
+                    <input class="num-input" type="number" min="1" max="100" step="0.1"
+                      [value]="(sel.widthMm / 10).toFixed(1)" (change)="onWidthCmChange($event)" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Cópias na folha</span>
+                    <input class="num-input" type="number" min="1" max="99" step="1"
+                      [value]="sel.copies" (change)="onCopiesChange($event)" />
+                  </label>
                 </div>
-              }
-              @if (sel.shape === 'silhueta') {
-                <label class="check-field">
-                  <input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" />
-                  <span>Só contorno externo — remove de uma vez o contorno nascido dentro de vãos fechados do desenho</span>
-                </label>
+                <p class="field-note">A altura acompanha a proporção: {{ formatMm(artHeightMm(sel)) }}. A impressão sai a {{ dpi }} DPI.</p>
               }
             </section>
 
-            <section class="panel-section">
-              <h2>Contorno e corte</h2>
-              <div class="shape-row">
-                @for (s of shapes; track s.id) {
-                  <button class="shape-btn" [class.active]="sel.shape === s.id" (click)="setShape(s.id)">{{ s.label }}</button>
-                }
-              </div>
-              <label class="field">
-                <span class="field-label">Margem <strong>{{ sel.marginMm.toFixed(1) }} mm</strong></span>
-                <input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" />
-              </label>
-              <div class="margin-nudge">
-                <button class="btn" (click)="nudgeMargin(-0.1)" [disabled]="sel.marginMm <= 0">−0,1</button>
-                <button class="btn" (click)="nudgeMargin(0.1)" [disabled]="sel.marginMm >= maxMarginMm">+0,1</button>
-              </div>
-              <label class="field">
-                <span class="field-label">Espaço entre imagem e contorno <strong>{{ sel.gapMm.toFixed(1) }} mm</strong></span>
-                <input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" />
-              </label>
-              @if (sel.shape === 'silhueta') {
-                <label class="field">
-                  <span class="field-label">Suavização da linha de corte <strong>{{ smoothing() }}</strong></span>
-                  <input type="range" min="0" max="10" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
-                </label>
-                <label class="check-field">
-                  <input type="checkbox" [checked]="fillHoles()" (change)="onFillHolesChange($event)" />
-                  <span>Preencher furos internos (corta só o contorno externo)</span>
-                </label>
-              }
-              <label class="field">
-                <span class="field-label">Cor do contorno</span>
-                <div class="color-row">
-                  <input type="color" [value]="sel.color" (input)="onColorInput($event)" />
-                  @for (sw of swatches; track sw) {
-                    <button class="swatch" [class.active]="sw === sel.color" [style.background]="sw" [title]="sw" (click)="setColor(sw)"></button>
+            <section class="panel-section" [class.open]="isOpen('contorno')">
+              <button class="section-head" (click)="toggleSection('contorno')">
+                <span class="section-title"><span class="step">3</span> Contorno</span>
+                <span class="section-summary">{{ sectionSummary('contorno') }}</span>
+                <app-icon class="chevron" name="chevron" [size]="14" />
+              </button>
+              @if (isOpen('contorno')) {
+                <p class="section-help">A borda colorida em volta do desenho — é por ela que passa a linha de corte. "Silhueta" acompanha o formato do desenho; as outras cortam numa forma simples em volta.</p>
+                <div class="shape-row">
+                  @for (s of shapes; track s.id) {
+                    <button class="shape-btn" [class.active]="sel.shape === s.id" (click)="setShape(s.id)">{{ s.label }}</button>
                   }
                 </div>
-              </label>
+                <label class="field">
+                  <span class="field-label">Largura da borda <strong>{{ sel.marginMm.toFixed(1) }} mm</strong></span>
+                  <input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" />
+                </label>
+                <div class="btn-row">
+                  <button class="btn" (click)="nudgeMargin(-0.1)" [disabled]="sel.marginMm <= 0">−0,1 mm</button>
+                  <button class="btn" (click)="nudgeMargin(0.1)" [disabled]="sel.marginMm >= maxMarginMm">+0,1 mm</button>
+                </div>
+                <label class="field">
+                  <span class="field-label">Respiro antes da borda <strong>{{ sel.gapMm.toFixed(1) }} mm</strong></span>
+                  <input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" />
+                </label>
+                <p class="field-note">O respiro é uma faixa branca entre o desenho e a borda colorida. Com a borda branca ele não aparece — escolha uma cor pra ver.</p>
+                <label class="field">
+                  <span class="field-label">Cor da borda</span>
+                  <div class="color-row">
+                    <input type="color" [value]="sel.color" (input)="onColorInput($event)" />
+                    @for (sw of swatches; track sw) {
+                      <button class="swatch" [class.active]="sw === sel.color" [style.background]="sw" [title]="sw" (click)="setColor(sw)"></button>
+                    }
+                  </div>
+                </label>
+                @if (sel.shape === 'silhueta') {
+                  <label class="field">
+                    <span class="field-label">Suavizar a linha de corte <strong>{{ smoothing() }}</strong></span>
+                    <input type="range" min="0" max="10" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
+                  </label>
+                  <p class="field-note">Linha muito serrilhada faz a lâmina vibrar e rasgar o papel. Suba isto se o corte estiver saindo picotado.</p>
+                  <label class="check-field">
+                    <input type="checkbox" [checked]="fillHoles()" (change)="onFillHolesChange($event)" />
+                    <span>Não cortar buracos internos — corta só o contorno de fora</span>
+                  </label>
+                }
+              }
+            </section>
+
+            <section class="panel-section" [class.open]="isOpen('arte')">
+              <button class="section-head" (click)="toggleSection('arte')">
+                <span class="section-title"><span class="step">4</span> Ajustar a arte</span>
+                <span class="section-summary">{{ sectionSummary('arte') }}</span>
+                <app-icon class="chevron" name="chevron" [size]="14" />
+              </button>
+              @if (isOpen('arte')) {
+                <p class="section-help">Mexe na imagem em si. Use "Remover fundo" quando a arte tem fundo branco ou colorido e o contorno está saindo em volta de um retângulo.</p>
+                <button class="btn full" [class.primary]="tool() === 'fundo'" (click)="setTool('fundo')">
+                  {{ tool() === 'fundo' ? 'Clique no fundo da imagem…' : 'Remover fundo (clicar na cor)' }}
+                </button>
+                @if (tool() === 'fundo') {
+                  <label class="field">
+                    <span class="field-label">Tolerância <strong>{{ tolerance() }}</strong></span>
+                    <input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" />
+                  </label>
+                  <p class="field-note">Sobrou fundo? Aumente a tolerância e clique de novo. Comeu parte do desenho? Diminua e desfaça em "Restaurar".</p>
+                }
+                @if (sel.bgRemoved) {
+                  <button class="btn full" (click)="restoreOriginal()">Restaurar imagem original</button>
+                }
+                <label class="check-field">
+                  <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
+                  <span>Espelhar na horizontal — necessário só pra vinil termocolante</span>
+                </label>
+              }
+            </section>
+
+            <section class="panel-section" [class.open]="isOpen('retoques')">
+              <button class="section-head" (click)="toggleSection('retoques')">
+                <span class="section-title"><span class="step">5</span> Retoques do corte</span>
+                <span class="section-summary">{{ sectionSummary('retoques') }}</span>
+                <app-icon class="chevron" name="chevron" [size]="14" />
+              </button>
+              @if (isOpen('retoques')) {
+                <p class="section-help">Para quando sobra contorno ou linha de corte onde você não quer — típico em desenhos de traço, que ganham borda por dentro também.</p>
+                @if (sel.shape === 'silhueta') {
+                  <label class="check-field">
+                    <input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" />
+                    <span>Só contorno por fora — tira de uma vez a borda que nasce dentro do desenho</span>
+                  </label>
+                }
+                <button class="btn full" [class.primary]="tool() === 'borracha'" (click)="setTool('borracha')">
+                  <app-icon name="eraser-area" [size]="14" />
+                  {{ tool() === 'borracha' ? 'Arraste sobre o contorno…' : 'Borracha de contorno' }}
+                </button>
+                @if (tool() === 'borracha') {
+                  <label class="field">
+                    <span class="field-label">Tamanho da borracha <strong>{{ brushMm().toFixed(1) }} mm</strong></span>
+                    <input type="range" min="0.5" max="20" step="0.5" [value]="brushMm()" (input)="onBrushInput($event)" />
+                  </label>
+                  <p class="field-note">Apaga só a borda; o desenho nunca é tocado.</p>
+                }
+                @if (sel.erasures.length) {
+                  <div class="btn-row">
+                    <button class="btn" (click)="undoErase()">Desfazer</button>
+                    <button class="btn" (click)="clearErasures()">Limpar borrachadas</button>
+                  </div>
+                }
+                <button class="btn full" [class.primary]="tool() === 'corte'" (click)="setTool('corte')">
+                  <app-icon name="delete" [size]="14" />
+                  {{ tool() === 'corte' ? 'Clique na linha a remover…' : 'Remover linha de corte' }}
+                </button>
+                @if (tool() === 'corte') {
+                  <p class="field-note">Clique dentro da linha tracejada que sobra. Ela sai do corte, mas o desenho impresso continua igual.</p>
+                }
+                @if (cutHint()) {
+                  <p class="field-note">{{ cutHint() }}</p>
+                }
+                @if (sel.cutRemovals.length) {
+                  <div class="btn-row">
+                    <button class="btn" (click)="undoCutRemoval()">Desfazer</button>
+                    <button class="btn" (click)="restoreCuts()">Restaurar linhas</button>
+                  </div>
+                }
+              }
             </section>
           }
 
-          <section class="panel-section">
-            <h2>Folha</h2>
-            <div class="field-row">
+          <section class="panel-section" [class.open]="isOpen('folha')">
+            <button class="section-head" (click)="toggleSection('folha')">
+              <span class="section-title"><span class="step">6</span> Folha</span>
+              <span class="section-summary">{{ sectionSummary('folha') }}</span>
+              <app-icon class="chevron" name="chevron" [size]="14" />
+            </button>
+            @if (isOpen('folha')) {
+              <p class="section-help">Junta todas as peças (e suas cópias) numa folha só pra imprimir de uma vez. Veja o resultado na aba "Folha de montagem" acima.</p>
+              <div class="field-row">
+                <label class="field">
+                  <span class="field-label">Tamanho</span>
+                  <select class="num-input" [value]="sheetSize()" (change)="onSheetSizeChange($event)">
+                    <option value="A4">A4</option>
+                    <option value="A3">A3</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field-label">Orientação</span>
+                  <select class="num-input" [value]="orientation()" (change)="onOrientationChange($event)">
+                    <option value="retrato">Retrato</option>
+                    <option value="paisagem">Paisagem</option>
+                  </select>
+                </label>
+              </div>
               <label class="field">
-                <span class="field-label">Tamanho</span>
-                <select class="num-input" [value]="sheetSize()" (change)="onSheetSizeChange($event)">
-                  <option value="A4">A4</option>
-                  <option value="A3">A3</option>
-                </select>
+                <span class="field-label">Espaço entre peças <strong>{{ spacingMm().toFixed(0) }} mm</strong></span>
+                <input type="range" min="0" max="10" step="1" [value]="spacingMm()" (input)="onSpacingInput($event)" />
               </label>
-              <label class="field">
-                <span class="field-label">Orientação</span>
-                <select class="num-input" [value]="orientation()" (change)="onOrientationChange($event)">
-                  <option value="retrato">Retrato</option>
-                  <option value="paisagem">Paisagem</option>
-                </select>
-              </label>
-            </div>
-            <label class="field">
-              <span class="field-label">Espaço entre peças <strong>{{ spacingMm().toFixed(0) }} mm</strong></span>
-              <input type="range" min="0" max="10" step="1" [value]="spacingMm()" (input)="onSpacingInput($event)" />
-            </label>
-            <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPng()">
-              <app-icon name="download" [size]="14" /> PNG da folha ({{ dpi }} DPI)
-            </button>
-            <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPdf()">
-              <app-icon name="download" [size]="14" /> PDF da folha (imprimir)
-            </button>
-            <button class="btn full" [disabled]="!images().length" (click)="exportSheetSvg()">
-              <app-icon name="download" [size]="14" /> SVG de corte da folha
-            </button>
+              <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPng()">
+                <app-icon name="download" [size]="14" /> PNG da folha ({{ dpi }} DPI)
+              </button>
+              <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPdf()">
+                <app-icon name="download" [size]="14" /> PDF da folha (imprimir)
+              </button>
+              <button class="btn full" [disabled]="!images().length" (click)="exportSheetSvg()">
+                <app-icon name="download" [size]="14" /> SVG de corte da folha
+              </button>
+              <p class="field-note">Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem entre os dois.</p>
+            }
           </section>
 
-          <section class="panel-section">
-            <h2>Exportar peça</h2>
-            <button class="btn primary full" [disabled]="!selected()" (click)="exportPrintPng()">
-              <app-icon name="download" [size]="14" /> PNG {{ dpi }} DPI (imprimir)
+          <section class="panel-section" [class.open]="isOpen('exportar')">
+            <button class="section-head" (click)="toggleSection('exportar')">
+              <span class="section-title"><span class="step">7</span> Exportar a peça</span>
+              <span class="section-summary">{{ sectionSummary('exportar') }}</span>
+              <app-icon class="chevron" name="chevron" [size]="14" />
             </button>
-            <button class="btn primary full" [disabled]="!selected()" (click)="exportCutSvg()">
-              <app-icon name="download" [size]="14" /> SVG linha de corte (ScanNCut)
-            </button>
-            <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
-              <app-icon name="download" [size]="14" /> SVG arte + corte
-            </button>
-            <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
+            @if (isOpen('exportar')) {
+              <p class="section-help">Só a peça selecionada, sem folha. São dois arquivos: um pra impressora e outro pra máquina de corte.</p>
+              <button class="btn primary full" [disabled]="!selected()" (click)="exportPrintPng()">
+                <app-icon name="download" [size]="14" /> PNG {{ dpi }} DPI (imprimir)
+              </button>
+              <button class="btn primary full" [disabled]="!selected()" (click)="exportCutSvg()">
+                <app-icon name="download" [size]="14" /> SVG linha de corte (ScanNCut)
+              </button>
+              <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
+                <app-icon name="download" [size]="14" /> SVG arte + corte
+              </button>
+              <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
+            }
           </section>
         </aside>
       </main>
@@ -388,6 +551,7 @@ function loadPrefs(): Prefs {
     .preview-wrap {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm); padding: 16px;
+      position: sticky; top: 16px;
     }
     .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
     .tabs button {
@@ -397,14 +561,14 @@ function loadPrefs(): Prefs {
     .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .preview-stage {
       display: flex; align-items: center; justify-content: center;
-      min-height: 420px; border-radius: var(--radius); padding: 16px;
+      height: clamp(280px, 52dvh, 560px); border-radius: var(--radius); padding: 16px;
       background:
         repeating-conic-gradient(rgba(128, 128, 128, 0.16) 0% 25%, transparent 0% 50%)
         0 0 / 22px 22px;
     }
     .preview-stage.picking canvas { cursor: crosshair; }
     .preview-stage.erasing canvas { cursor: cell; touch-action: none; }
-    .preview-stage canvas { max-width: 100%; max-height: 60dvh; }
+    .preview-stage canvas { max-width: 100%; max-height: 100%; }
     .sheet-stage { background: var(--bg); }
     .preview-meta {
       display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
@@ -418,7 +582,7 @@ function loadPrefs(): Prefs {
 
     .drop-zone {
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-      min-height: 420px; border: 2px dashed var(--border); border-radius: var(--radius);
+      height: clamp(280px, 52dvh, 560px); border: 2px dashed var(--border); border-radius: var(--radius);
       color: var(--text-muted); text-align: center; padding: 24px; cursor: pointer;
       transition: border-color 0.15s, background 0.15s;
     }
@@ -431,7 +595,38 @@ function loadPrefs(): Prefs {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm); padding: 16px; display: flex; flex-direction: column; gap: 10px;
     }
-    .panel-section h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+    .panel-section { padding: 0; gap: 0; }
+    .panel-section > *:not(.section-head) { margin-left: 14px; margin-right: 14px; }
+    .panel-section > *:not(.section-head):last-child { margin-bottom: 14px; }
+    .panel-section > .section-head + * { margin-top: 2px; }
+    .panel-section > *:not(.section-head) + *:not(.section-head) { margin-top: 10px; }
+    .section-head {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      border: none; background: none; padding: 12px 14px; cursor: pointer; color: inherit; text-align: left;
+    }
+    .section-title {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    }
+    .step {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+      background: var(--accent-soft); color: var(--accent-dark);
+      font-size: 11px; font-weight: 700;
+    }
+    .panel-section.open .step { background: var(--accent); color: #fff; }
+    .section-summary {
+      flex: 1; min-width: 0; text-align: right;
+      font-size: 11px; color: var(--text-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .panel-section.open .section-summary { display: none; }
+    .chevron { color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0; }
+    .panel-section.open .chevron { transform: rotate(180deg); }
+    .section-help {
+      margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted);
+      padding-bottom: 2px;
+    }
 
     .btn {
       display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -461,6 +656,18 @@ function loadPrefs(): Prefs {
         0 0 / 12px 12px;
     }
     .thumb-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .project-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+    .project-list li {
+      display: flex; align-items: center; gap: 4px;
+      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 4px;
+    }
+    .project-list li.active { border-color: var(--accent); background: var(--accent-soft); }
+    .project-open {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-width: 0;
+      border: none; background: none; padding: 6px 4px; text-align: left; cursor: pointer; color: inherit;
+    }
+    .project-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .project-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
     .copies-badge {
       font-size: 11px; font-weight: 700; color: var(--accent-dark);
       background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; flex-shrink: 0;
@@ -484,8 +691,8 @@ function loadPrefs(): Prefs {
       padding: 7px 10px; font-size: 13px; color: inherit; width: 100%;
     }
     .num-input:focus { outline: none; border-color: var(--accent); }
-    .margin-nudge { display: flex; gap: 6px; }
-    .margin-nudge .btn { flex: 1; padding: 5px 0; }
+    .btn-row { display: flex; gap: 6px; }
+    .btn-row .btn { flex: 1; padding: 6px 0; }
     .check-field { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
     .check-field input { accent-color: var(--accent); margin-top: 1px; }
 
@@ -510,8 +717,10 @@ function loadPrefs(): Prefs {
     @media (max-width: 900px) {
       .top-bar { padding: 12px 16px; }
       .user-email { display: none; }
-      .content { grid-template-columns: 1fr; padding: 20px 16px 48px; }
-      .preview-stage, .drop-zone { min-height: 300px; }
+      .content { grid-template-columns: 1fr; padding: 16px 16px 48px; }
+      .preview-wrap { top: 0; z-index: 5; padding: 12px; }
+      .preview-stage, .drop-zone { height: clamp(180px, 34dvh, 320px); }
+      .cut-hint { display: none; }
     }
   `],
 })
@@ -535,23 +744,37 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
-  tool = signal<'nenhuma' | 'fundo' | 'borracha'>('nenhuma');
+  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte'>('nenhuma');
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
+  cutHint = signal('');
+  openSections = signal<Record<string, boolean>>({ ...this.prefs.openSections });
   dragOver = signal(false);
   packInfo = signal<{ placed: number; overflow: number }>({ placed: 0, overflow: 0 });
 
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
+  projects = signal<ImageProjectMetaDto[]>([]);
+  projectId = signal<string | null>(null);
+  projectName = signal('');
+  projectStatus = signal('');
+  savingProject = signal(false);
+
   private renderQueued = false;
   private erasing = false;
+  private projectCreatedAt = new Date().toISOString();
   private pieceCache = new Map<string, { sig: string; piece: Piece }>();
 
-  constructor(public auth: AuthService, public theme: ThemeService) {}
+  constructor(
+    public auth: AuthService,
+    public theme: ThemeService,
+    private projectsApi: ImageProjectsService,
+  ) {}
 
   ngAfterViewInit(): void {
     this.scheduleRender();
+    void this.refreshProjects();
   }
 
   ngOnDestroy(): void {
@@ -603,28 +826,56 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const img = new Image();
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const source = document.createElement('canvas');
-        source.width = img.naturalWidth;
-        source.height = img.naturalHeight;
-        source.getContext('2d')!.drawImage(img, 0, 0);
-        const original = document.createElement('canvas');
-        original.width = source.width;
-        original.height = source.height;
-        original.getContext('2d')!.drawImage(source, 0, 0);
-        const item: ImportedImage = {
-          id: uid(), name: file.name, thumbUrl: makeThumb(source),
-          source, original, srcVersion: 0, bgRemoved: false,
-          widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
-          color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
-          outerOnly: this.prefs.outerOnly, erasures: [], editVersion: 0,
-        };
-        this.images.update((list) => [...list, item]);
-        if (!this.selectedId()) this.selectedId.set(item.id);
-        this.scheduleRender();
+        this.addImage(file.name, img);
       };
       img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     }
+  }
+
+  /** Cria a arte a partir de uma imagem carregada, reduzindo se passar do teto
+   * de resolução — o que se vê é o que é salvo, sem surpresa ao reabrir. */
+  private addImage(name: string, img: HTMLImageElement, overrides: Partial<ImportedImage> = {}): ImportedImage {
+    const scale = Math.min(1, MAX_IMPORT_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const original = document.createElement('canvas');
+    original.width = w;
+    original.height = h;
+    const octx = original.getContext('2d')!;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(img, 0, 0, w, h);
+
+    const source = document.createElement('canvas');
+    source.width = w;
+    source.height = h;
+    source.getContext('2d')!.drawImage(original, 0, 0);
+
+    const item: ImportedImage = {
+      id: uid(), name, thumbUrl: makeThumb(source),
+      source, original, originalDataUrl: encodeCanvas(original), bgRemovals: [],
+      srcVersion: 0, bgRemoved: false,
+      widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
+      color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
+      outerOnly: this.prefs.outerOnly, erasures: [], cutRemovals: [], editVersion: 0,
+      ...overrides,
+    };
+    // projeto salvo por uma versão anterior pode não trazer todas as listas —
+    // um campo ausente vira undefined no spread e quebraria o rebuild da peça
+    item.bgRemovals ??= [];
+    item.erasures ??= [];
+    item.cutRemovals ??= [];
+    // remoções de fundo salvas são reaplicadas sobre a arte original
+    for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
+    if (item.bgRemovals.length) {
+      item.bgRemoved = true;
+      item.thumbUrl = makeThumb(item.source);
+    }
+
+    this.images.update((list) => [...list, item]);
+    if (!this.selectedId()) this.selectedId.set(item.id);
+    this.scheduleRender();
+    return item;
   }
 
   select(id: string): void {
@@ -730,10 +981,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- ferramentas sobre a peça (fundo e borracha) ----------
 
-  setTool(tool: 'nenhuma' | 'fundo' | 'borracha'): void {
+  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte'): void {
     const next = this.tool() === tool ? 'nenhuma' : tool;
     if (next !== 'nenhuma') this.view.set('peca');
     this.tool.set(next);
+    this.cutHint.set('');
     this.scheduleRender();
   }
 
@@ -766,14 +1018,25 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onPreviewClick(event: MouseEvent): void {
+    if (this.tool() === 'corte') {
+      this.removeCutAt(event);
+      return;
+    }
     if (this.tool() !== 'fundo') return;
     const sel = this.selected();
     if (!sel) return;
     const point = this.artPointFrom(event, sel);
     if (!point) return;
-    const changed = floodRemoveBackground(sel.source, Math.floor(point.x), Math.floor(point.y), this.tolerance());
+    const x = Math.floor(point.x);
+    const y = Math.floor(point.y);
+    const changed = floodRemoveBackground(sel.source, x, y, this.tolerance());
     if (changed) {
-      this.updateSelected({ srcVersion: sel.srcVersion + 1, bgRemoved: true, thumbUrl: makeThumb(sel.source) });
+      this.updateSelected({
+        srcVersion: sel.srcVersion + 1,
+        bgRemoved: true,
+        thumbUrl: makeThumb(sel.source),
+        bgRemovals: [...sel.bgRemovals, { x, y, tolerance: this.tolerance() }],
+      });
     }
   }
 
@@ -812,6 +1075,39 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     });
   }
 
+  /** Descarta a linha de corte clicada (a mais justa ao ponto). */
+  private removeCutAt(event: MouseEvent): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const point = this.artPointFrom(event, sel);
+    if (!point) return;
+    const piece = this.pieceFor(sel);
+    const x = piece.artX + (sel.mirrored ? sel.source.width - point.x : point.x);
+    if (smallestPathContaining(piece.paths, x, piece.artY + point.y) < 0) {
+      this.cutHint.set('Nenhuma linha de corte nesse ponto — clique dentro da linha que quer remover.');
+      return;
+    }
+    this.cutHint.set('');
+    this.updateSelected({
+      cutRemovals: [...sel.cutRemovals, { x: point.x, y: point.y }],
+      editVersion: sel.editVersion + 1,
+    });
+  }
+
+  undoCutRemoval(): void {
+    const sel = this.selected();
+    if (!sel || !sel.cutRemovals.length) return;
+    this.cutHint.set('');
+    this.updateSelected({ cutRemovals: sel.cutRemovals.slice(0, -1), editVersion: sel.editVersion + 1 });
+  }
+
+  restoreCuts(): void {
+    const sel = this.selected();
+    if (!sel || !sel.cutRemovals.length) return;
+    this.cutHint.set('');
+    this.updateSelected({ cutRemovals: [], editVersion: sel.editVersion + 1 });
+  }
+
   undoErase(): void {
     const sel = this.selected();
     if (!sel || !sel.erasures.length) return;
@@ -830,7 +1126,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = sel.source.getContext('2d')!;
     ctx.clearRect(0, 0, sel.source.width, sel.source.height);
     ctx.drawImage(sel.original, 0, 0);
-    this.updateSelected({ srcVersion: sel.srcVersion + 1, bgRemoved: false, thumbUrl: makeThumb(sel.source) });
+    this.updateSelected({
+      srcVersion: sel.srcVersion + 1,
+      bgRemoved: false,
+      thumbUrl: makeThumb(sel.source),
+      bgRemovals: [],
+    });
   }
 
   // ---------- folha ----------
@@ -867,13 +1168,27 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private pieceFor(item: ImportedImage): Piece {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
-      item.srcVersion, item.outerOnly, item.editVersion, this.smoothing(), this.fillHoles(),
+      item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
+      this.smoothing(), this.fillHoles(),
     ]);
     const cached = this.pieceCache.get(item.id);
     if (cached && cached.sig === sig) return cached.piece;
     const piece = this.buildPiece(item);
     this.pieceCache.set(item.id, { sig, piece });
     return piece;
+  }
+
+  /** Remove os contornos marcados pelo usuário: pra cada ponto guardado, cai
+   * fora o caminho mais justo que o contém. */
+  private dropRemovedCuts(paths: Polygon[], item: ImportedImage, artX: number, artY: number): Polygon[] {
+    if (!item.cutRemovals.length) return paths;
+    let kept = paths;
+    for (const c of item.cutRemovals) {
+      const x = artX + (item.mirrored ? item.source.width - c.x : c.x);
+      const idx = smallestPathContaining(kept, x, artY + c.y);
+      if (idx >= 0) kept = kept.filter((_, i) => i !== idx);
+    }
+    return kept;
   }
 
   private buildPiece(item: ImportedImage): Piece {
@@ -902,7 +1217,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         chaikinIterations: s >= 5 ? 2 : s >= 1 ? 1 : 0,
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
-      return { canvas, paths, ppm, artX: total, artY: total };
+      return { canvas, paths: this.dropRemovedCuts(paths, item, total, total), ppm, artX: total, artY: total };
     }
 
     const { W, H } = shapeCanvasSize(item.shape, source.width, source.height, total);
@@ -927,7 +1242,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(contour, 0, 0);
     ctx.drawImage(source, artX, artY);
-    return { canvas, paths: [outer], ppm, artX, artY };
+    return { canvas, paths: this.dropRemovedCuts([outer], item, artX, artY), ppm, artX, artY };
   }
 
   // ---------- render ----------
@@ -1138,6 +1453,182 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       paths +
       `</svg>\n`;
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `folha-${this.sheetSize()}-corte.svg`);
+  }
+
+  // ---------- projetos no backend ----------
+
+  async refreshProjects(): Promise<void> {
+    try {
+      this.projects.set(await this.projectsApi.list());
+    } catch {
+      this.projectStatus.set('Não foi possível listar os projetos salvos.');
+    }
+  }
+
+  private serialize(): string {
+    return JSON.stringify({
+      version: 1,
+      smoothing: this.smoothing(),
+      fillHoles: this.fillHoles(),
+      sheetSize: this.sheetSize(),
+      orientation: this.orientation(),
+      spacingMm: this.spacingMm(),
+      images: this.images().map((i) => ({
+        name: i.name,
+        original: i.originalDataUrl,
+        bgRemovals: i.bgRemovals,
+        erasures: i.erasures,
+        cutRemovals: i.cutRemovals,
+        widthMm: i.widthMm,
+        marginMm: i.marginMm,
+        gapMm: i.gapMm,
+        color: i.color,
+        shape: i.shape,
+        mirrored: i.mirrored,
+        copies: i.copies,
+        outerOnly: i.outerOnly,
+      })),
+    });
+  }
+
+  async saveProject(): Promise<void> {
+    if (this.savingProject()) return;
+    const name = this.projectName().trim() || 'Projeto sem nome';
+    if (!this.images().length) {
+      this.projectStatus.set('Importe ao menos uma imagem antes de salvar.');
+      return;
+    }
+    this.savingProject.set(true);
+    this.projectStatus.set('Salvando…');
+    const id = this.projectId() ?? uuid();
+    try {
+      const saved = await this.projectsApi.save(id, name, this.serialize(), this.projectCreatedAt);
+      this.projectId.set(saved.id);
+      this.projectName.set(saved.name);
+      this.projectCreatedAt = saved.createdAt;
+      this.projectStatus.set(`Salvo às ${new Date().toLocaleTimeString('pt-BR')}`);
+      await this.refreshProjects();
+    } catch (err: unknown) {
+      const status = (err as { status?: number }).status;
+      this.projectStatus.set(status === 413
+        ? 'Projeto grande demais pro servidor — remova imagens ou reduza a quantidade.'
+        : 'Falha ao salvar. Tente de novo.');
+    } finally {
+      this.savingProject.set(false);
+    }
+  }
+
+  async openProject(id: string): Promise<void> {
+    this.projectStatus.set('Abrindo…');
+    try {
+      const dto = await this.projectsApi.get(id);
+      const data = JSON.parse(dto.data) as {
+        smoothing?: number; fillHoles?: boolean; sheetSize?: SheetSize;
+        orientation?: SheetOrientation; spacingMm?: number;
+        images?: (Partial<ImportedImage> & { original: string })[];
+      };
+
+      this.images.set([]);
+      this.pieceCache.clear();
+      this.selectedId.set(null);
+      if (data.smoothing !== undefined) this.smoothing.set(data.smoothing);
+      if (data.fillHoles !== undefined) this.fillHoles.set(data.fillHoles);
+      if (data.sheetSize) this.sheetSize.set(data.sheetSize);
+      if (data.orientation) this.orientation.set(data.orientation);
+      if (data.spacingMm !== undefined) this.spacingMm.set(data.spacingMm);
+
+      for (const stored of data.images ?? []) {
+        const { name, original, ...rest } = stored;
+        const img = await loadImage(original);
+        this.addImage(name ?? 'imagem', img, { ...rest, originalDataUrl: original });
+      }
+
+      this.projectId.set(dto.id);
+      this.projectName.set(dto.name);
+      this.projectCreatedAt = dto.createdAt;
+      this.projectStatus.set(`Aberto: ${dto.name}`);
+    } catch {
+      this.projectStatus.set('Falha ao abrir o projeto.');
+    }
+  }
+
+  async deleteProject(id: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await this.projectsApi.remove(id);
+      if (this.projectId() === id) this.newProject();
+      await this.refreshProjects();
+    } catch {
+      this.projectStatus.set('Falha ao excluir o projeto.');
+    }
+  }
+
+  newProject(): void {
+    this.images.set([]);
+    this.pieceCache.clear();
+    this.selectedId.set(null);
+    this.projectId.set(null);
+    this.projectName.set('');
+    this.projectCreatedAt = new Date().toISOString();
+    this.projectStatus.set('');
+    this.scheduleRender();
+  }
+
+  isOpen(id: StepId): boolean {
+    return !!this.openSections()[id];
+  }
+
+  toggleSection(id: StepId): void {
+    const next = { ...this.openSections(), [id]: !this.openSections()[id] };
+    this.openSections.set(next);
+    this.prefs.openSections = next;
+    this.savePrefs();
+  }
+
+  stepNumber(id: StepId): number {
+    return STEPS.indexOf(id); // 'projeto' é 0 e não mostra número
+  }
+
+  shapeLabel(shape: CutShape): string {
+    return SHAPES.find((s) => s.id === shape)?.label ?? shape;
+  }
+
+  /** Resumo mostrado no cabeçalho quando o passo está fechado, pra dar o estado
+   * atual sem precisar abrir. */
+  sectionSummary(id: StepId): string {
+    const sel = this.selected();
+    switch (id) {
+      case 'projeto':
+        return this.projectName().trim() || 'não salvo';
+      case 'imagens':
+        return this.images().length ? plural(this.images().length, 'imagem', 'imagens') : 'nenhuma';
+      case 'tamanho':
+        return sel ? `${(sel.widthMm / 10).toFixed(1)} cm · ${sel.copies}×` : '';
+      case 'contorno':
+        return sel ? `${this.shapeLabel(sel.shape)} · ${sel.marginMm.toFixed(1)} mm` : '';
+      case 'arte': {
+        if (!sel) return '';
+        const marks = [sel.bgRemoved ? 'fundo removido' : '', sel.mirrored ? 'espelhada' : ''].filter(Boolean);
+        return marks.length ? marks.join(' · ') : 'original';
+      }
+      case 'retoques': {
+        if (!sel) return '';
+        const marks = [
+          sel.erasures.length ? plural(sel.erasures.length, 'borrachada', 'borrachadas') : '',
+          sel.cutRemovals.length ? `${plural(sel.cutRemovals.length, 'linha', 'linhas')} fora` : '',
+          sel.outerOnly ? 'só contorno externo' : '',
+        ].filter(Boolean);
+        return marks.length ? marks.join(' · ') : 'nenhum';
+      }
+      case 'folha':
+        return `${this.sheetSize()} ${this.orientation()}`;
+      default:
+        return '';
+    }
+  }
+
+  onProjectNameInput(event: Event): void {
+    this.projectName.set((event.target as HTMLInputElement).value);
   }
 
   private baseName(item: ImportedImage): string {

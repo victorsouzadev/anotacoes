@@ -118,6 +118,39 @@ export function traceCutPaths(canvas: HTMLCanvasElement, options: TraceOptions =
   }).filter((p) => p.length >= 3);
 }
 
+/** Área com sinal (positiva/negativa conforme a orientação do polígono). */
+export function polygonArea(poly: Polygon): number {
+  return signedArea(poly);
+}
+
+/** Ray casting: o ponto está dentro do polígono? */
+export function pointInPolygon(poly: Polygon, x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Índice do menor contorno que contém o ponto, ou -1. "Menor" porque o ponto
+ * clicado dentro de um recorte interno também cai dentro do contorno externo —
+ * quem o usuário mirou é sempre o mais justo ao clique. */
+export function smallestPathContaining(paths: Polygon[], x: number, y: number): number {
+  let best = -1;
+  let bestArea = Infinity;
+  for (let i = 0; i < paths.length; i++) {
+    if (!pointInPolygon(paths[i], x, y)) continue;
+    const area = Math.abs(signedArea(paths[i]));
+    if (area < bestArea) {
+      bestArea = area;
+      best = i;
+    }
+  }
+  return best;
+}
+
 function signedArea(poly: Polygon): number {
   let sum = 0;
   for (let i = 0; i < poly.length; i++) {
