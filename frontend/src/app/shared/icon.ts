@@ -9,7 +9,7 @@ export type IconName =
   | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
   | 'grid' | 'wallet' | 'check' | 'x'
-  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake';
+  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake' | 'image';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -112,6 +112,11 @@ export type IconName =
         @case ('eye') {
           <path d="M2 10s2.8-5.5 8-5.5S18 10 18 10s-2.8 5.5-8 5.5S2 10 2 10z" />
           <circle cx="10" cy="10" r="2.4" />
+        }
+        @case ('image') {
+          <rect x="2.7" y="3.8" width="14.6" height="12.4" rx="1.6" />
+          <circle cx="7.2" cy="8" r="1.4" />
+          <path d="M2.7 14l4-3.6 3 2.6 3.6-3.4 4 3.6" />
         }
         @case ('cake') {
           <path d="M3 17.3v-6.1c0-.9.7-1.6 1.6-1.6h10.8c.9 0 1.6.7 1.6 1.6v6.1z" />

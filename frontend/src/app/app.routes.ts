@@ -72,6 +72,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
   },
   {
+    path: 'imagens',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/imagem/image-editor.page').then((m) => m.ImageEditorPageComponent),
+  },
+  {
     path: 'bolo-3d',
     canActivate: [authGuard],
     loadComponent: () => import('./features/cake/cake-simulator.page').then((m) => m.CakeSimulatorPageComponent),
