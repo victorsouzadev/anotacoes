@@ -10,97 +10,156 @@ export interface Erasure {
   r: number;
 }
 
-/** Silhueta da arte (canal alpha) preenchida numa cor sólida. */
-export function buildSilhouette(source: HTMLCanvasElement, color: string): HTMLCanvasElement {
-  const sil = document.createElement('canvas');
-  sil.width = source.width;
-  sil.height = source.height;
-  const sctx = sil.getContext('2d')!;
-  sctx.drawImage(source, 0, 0);
-  sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = color;
-  sctx.fillRect(0, 0, sil.width, sil.height);
-  // reforça o alpha das bordas suavizadas pra silhueta não ficar translúcida
-  sctx.globalCompositeOperation = 'source-over';
-  sctx.drawImage(sil, 0, 0);
-  sctx.drawImage(sil, 0, 0);
-  return sil;
-}
-
-/** Carimba a silhueta dilatada por um raio: a união dos deslocamentos da forma
- * cheia em todos os raios até `radius` cobre a dilatação inteira. */
-export function stampDilated(ctx: CanvasRenderingContext2D, sil: HTMLCanvasElement, offset: number, radius: number): void {
-  const angleSteps = 16;
-  const radialStep = Math.max(1, Math.floor(radius / 14));
-  for (let r = radius; r > 0; r -= radialStep) {
-    for (let a = 0; a < angleSteps; a++) {
-      const t = (a / angleSteps) * Math.PI * 2;
-      ctx.drawImage(sil, offset + Math.cos(t) * r, offset + Math.sin(t) * r);
+/** Máscara binária da arte (alpha >= 128) posicionada na moldura do contorno. */
+function artMask(source: HTMLCanvasElement, W: number, H: number, offset: number): Uint8Array {
+  const w = source.width;
+  const h = source.height;
+  const mask = new Uint8Array(W * H);
+  const px = source.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h).data;
+  for (let y = 0; y < h; y++) {
+    const destino = (y + offset) * W + offset;
+    const origem = y * w;
+    for (let x = 0; x < w; x++) {
+      if (px[(origem + x) * 4 + 3] >= 128) mask[destino + x] = 1;
     }
   }
-  ctx.drawImage(sil, offset, offset);
+  return mask;
+}
+
+/** Transformada de distância 1-D de Felzenszwalb & Huttenlocher: envoltória
+ * inferior das parábolas, em tempo linear. */
+function edt1d(f: Float64Array, d: Float64Array, v: Int32Array, z: Float64Array, n: number): void {
+  let k = 0;
+  v[0] = 0;
+  z[0] = -Infinity;
+  z[1] = Infinity;
+  for (let q = 1; q < n; q++) {
+    let s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    while (s <= z[k]) {
+      k--;
+      s = (f[q] + q * q - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    }
+    k++;
+    v[k] = q;
+    z[k] = s;
+    z[k + 1] = Infinity;
+  }
+  k = 0;
+  for (let q = 0; q < n; q++) {
+    while (z[k + 1] < q) k++;
+    const dist = q - v[k];
+    d[q] = dist * dist + f[v[k]];
+  }
+}
+
+/** Distância euclidiana (ao quadrado) de cada pixel até a arte mais próxima.
+ * Substitui a dilatação por carimbos: é exata e custa O(pixels), enquanto
+ * carimbar a silhueta centenas de vezes custava O(pixels × carimbos) — a conta
+ * que travava a aba em imagens grandes. */
+function squaredDistanceToMask(mask: Uint8Array, W: number, H: number): Float64Array {
+  const INF = 1e20;
+  const dist = new Float64Array(W * H);
+  for (let i = 0; i < W * H; i++) dist[i] = mask[i] ? 0 : INF;
+
+  const n = Math.max(W, H);
+  const f = new Float64Array(n);
+  const d = new Float64Array(n);
+  const v = new Int32Array(n);
+  const z = new Float64Array(n + 1);
+
+  for (let y = 0; y < H; y++) {
+    const linha = y * W;
+    for (let x = 0; x < W; x++) f[x] = dist[linha + x];
+    edt1d(f, d, v, z, W);
+    for (let x = 0; x < W; x++) dist[linha + x] = d[x];
+  }
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) f[y] = dist[y * W + x];
+    edt1d(f, d, v, z, H);
+    for (let y = 0; y < H; y++) dist[y * W + x] = d[y];
+  }
+  return dist;
+}
+
+/** Região alcançável a partir da moldura sem atravessar a arte (busca em
+ * largura com fila em Int32Array — um array comum cresceria pra milhões). */
+function outsideMask(mask: Uint8Array, W: number, H: number): Uint8Array {
+  const fora = new Uint8Array(W * H);
+  const fila = new Int32Array(W * H);
+  let fim = 0;
+  const semear = (i: number): void => {
+    if (!mask[i] && !fora[i]) {
+      fora[i] = 1;
+      fila[fim++] = i;
+    }
+  };
+  for (let x = 0; x < W; x++) { semear(x); semear((H - 1) * W + x); }
+  for (let y = 0; y < H; y++) { semear(y * W); semear(y * W + W - 1); }
+  for (let ini = 0; ini < fim; ini++) {
+    const idx = fila[ini];
+    const x = idx % W;
+    if (x > 0) semear(idx - 1);
+    if (x < W - 1) semear(idx + 1);
+    if (idx >= W) semear(idx - W);
+    if (idx < W * (H - 1)) semear(idx + W);
+  }
+  return fora;
+}
+
+function parseHex(color: string): [number, number, number] {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return [255, 255, 255];
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
 }
 
 /** Camada de contorno tipo "sticker" seguindo a silhueta (sem a arte), com
- * faixa branca opcional (gapPx) entre a arte e o contorno colorido. */
-export function buildContourLayer(source: HTMLCanvasElement, marginPx: number, gapPx: number, color: string): HTMLCanvasElement {
+ * faixa branca opcional (gapPx) entre a arte e o contorno colorido.
+ *
+ * `outerOnly` descarta o contorno que nasce dentro de vãos fechados do desenho
+ * (típico de arte de traço, que ganha borda dos dois lados). O que fica sob a
+ * própria arte também some, mas a arte é desenhada por cima. */
+export function buildContourLayer(
+  source: HTMLCanvasElement,
+  marginPx: number,
+  gapPx: number,
+  color: string,
+  outerOnly = false,
+): HTMLCanvasElement {
   const m = Math.max(0, Math.round(marginPx));
   const g = Math.max(0, Math.round(gapPx));
   const total = m + g;
+  const W = source.width + total * 2;
+  const H = source.height + total * 2;
   const out = document.createElement('canvas');
-  out.width = source.width + total * 2;
-  out.height = source.height + total * 2;
+  out.width = W;
+  out.height = H;
+  if (total === 0) return out;
 
-  if (total > 0) {
-    const ctx = out.getContext('2d')!;
-    const sil = buildSilhouette(source, color);
-    stampDilated(ctx, sil, total, total);
-    if (g > 0) {
-      const white = buildSilhouette(source, '#ffffff');
-      stampDilated(ctx, white, total, g);
-    }
-  }
-  return out;
-}
+  const mask = artMask(source, W, H, total);
+  const dist2 = squaredDistanceToMask(mask, W, H);
+  const fora = outerOnly ? outsideMask(mask, W, H) : null;
+  const [r, gCor, b] = parseHex(color);
 
-/** Apaga da camada de contorno tudo que não está na região ligada à borda do
- * canvas — ou seja, o contorno que nasceu dentro de vãos fechados do desenho.
- * O que fica sob a própria arte também some, mas a arte é desenhada por cima. */
-export function restrictContourToOuterRegion(contour: HTMLCanvasElement, source: HTMLCanvasElement, offset: number): void {
-  const W = contour.width;
-  const H = contour.height;
-  const artMask = document.createElement('canvas');
-  artMask.width = W;
-  artMask.height = H;
-  artMask.getContext('2d')!.drawImage(source, offset, offset);
-  const art = artMask.getContext('2d')!.getImageData(0, 0, W, H).data;
-
-  const outside = new Uint8Array(W * H);
-  const stack: number[] = [];
-  const visit = (idx: number): void => {
-    if (!outside[idx] && art[idx * 4 + 3] < 128) {
-      outside[idx] = 1;
-      stack.push(idx);
-    }
-  };
-  for (let x = 0; x < W; x++) { visit(x); visit((H - 1) * W + x); }
-  for (let y = 0; y < H; y++) { visit(y * W); visit(y * W + W - 1); }
-  while (stack.length) {
-    const idx = stack.pop()!;
-    const x = idx % W;
-    const y = (idx / W) | 0;
-    if (x > 0) visit(idx - 1);
-    if (x < W - 1) visit(idx + 1);
-    if (y > 0) visit(idx - W);
-    if (y < H - 1) visit(idx + W);
-  }
-
-  const ctx = contour.getContext('2d')!;
-  const img = ctx.getImageData(0, 0, W, H);
+  const img = new ImageData(W, H);
+  const dados = img.data;
+  const limite = total;
+  const limiteGap = g;
   for (let i = 0; i < W * H; i++) {
-    if (!outside[i]) img.data[i * 4 + 3] = 0;
+    if (fora && !fora[i]) continue; // contorno nascido dentro de vão fechado
+    const d = Math.sqrt(dist2[i]);
+    if (d > limite) continue;
+    const o = i * 4;
+    if (g > 0 && d <= limiteGap) {
+      dados[o] = 255; dados[o + 1] = 255; dados[o + 2] = 255;
+    } else {
+      dados[o] = r; dados[o + 1] = gCor; dados[o + 2] = b;
+    }
+    // meio pixel de suavização na borda externa, pra não sair serrilhado
+    dados[o + 3] = d > limite - 1 ? Math.round((limite - d) * 255) : 255;
   }
-  ctx.putImageData(img, 0, 0);
+  out.getContext('2d')!.putImageData(img, 0, 0);
+  return out;
 }
 
 /** Aplica as borrachadas (círculos em coordenadas da arte) sobre a camada de
@@ -125,6 +184,18 @@ export function applyErasures(
     ctx.fill();
   }
   ctx.restore();
+}
+
+/** Cópia reduzida da arte, pra prévia trabalhar no tamanho que aparece na tela
+ * em vez de na resolução cheia — o custo de tudo depois cai com o quadrado. */
+export function downscale(source: HTMLCanvasElement, factor: number): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(source.width * factor));
+  out.height = Math.max(1, Math.round(source.height * factor));
+  const ctx = out.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, out.width, out.height);
+  return out;
 }
 
 export function flipHorizontal(source: HTMLCanvasElement): HTMLCanvasElement {

@@ -9,7 +9,7 @@ import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
 import {
   Erasure, applyErasures, buildContourLayer, encodeCanvas, flipHorizontal, floodRemoveBackground,
-  makeThumb, restrictContourToOuterRegion,
+  downscale, makeThumb,
 } from './raster';
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
 import { uuid } from '../../core/uuid';
@@ -63,9 +63,12 @@ interface ImportedImage {
 interface Piece {
   canvas: HTMLCanvasElement;
   paths: Polygon[];
+  /** Pixels por mm DESTA peça (muda com a escala de trabalho). */
   ppm: number;
   artX: number;
   artY: number;
+  /** Fator entre a arte original e a resolução em que a peça foi montada. */
+  scale: number;
 }
 
 interface Prefs {
@@ -89,6 +92,7 @@ const MAX_GAP_MM = 10;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
+const MIN_WORK_WIDTH = 360;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 8;
 const EXPORT_DPI = 300;
@@ -112,6 +116,15 @@ const SHAPES: { id: CutShape; label: string }[] = [
   { id: 'arredondado', label: 'Arredondado' },
   { id: 'elipse', label: 'Elipse' },
 ];
+
+type PieceQuality = 'preview' | 'full';
+
+/** As borrachadas ficam em pixels da arte original; a peça pode estar numa
+ * escala menor, então os círculos precisam acompanhar. */
+function scaleErasures(erasures: Erasure[], escala: number): Erasure[] {
+  if (escala === 1) return erasures;
+  return erasures.map((e) => ({ x: e.x * escala, y: e.y * escala, r: e.r * escala }));
+}
 
 function plural(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`;
@@ -797,6 +810,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private renderQueued = false;
   private erasing = false;
+  /** Enquanto true, a prévia é montada em meia resolução pra responder na hora. */
+  private interacting = false;
+  private interactionTimer?: ReturnType<typeof setTimeout>;
   private projectCreatedAt = new Date().toISOString();
   private pieceCache = new Map<string, { sig: string; piece: Piece }>();
 
@@ -812,6 +828,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.interactionTimer);
     this.pieceCache.clear();
   }
 
@@ -967,6 +984,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onMarginInput(event: Event): void {
+    this.markInteracting();
     const marginMm = Number((event.target as HTMLInputElement).value);
     this.prefs.marginMm = marginMm;
     this.savePrefs();
@@ -983,6 +1001,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onGapInput(event: Event): void {
+    this.markInteracting();
     const gapMm = Number((event.target as HTMLInputElement).value);
     this.prefs.gapMm = gapMm;
     this.savePrefs();
@@ -1000,6 +1019,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onSmoothingInput(event: Event): void {
+    this.markInteracting();
     this.smoothing.set(Number((event.target as HTMLInputElement).value));
     this.prefs.smoothing = this.smoothing();
     this.savePrefs();
@@ -1028,6 +1048,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onBrushInput(event: Event): void {
+    this.markInteracting();
     this.brushMm.set(Number((event.target as HTMLInputElement).value));
     this.prefs.brushMm = this.brushMm();
     this.savePrefs();
@@ -1051,8 +1072,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const piece = this.pieceFor(item);
     const px = ((event.clientX - rect.left) / rect.width) * canvas.width;
     const py = ((event.clientY - rect.top) / rect.height) * canvas.height;
-    const x = px - piece.artX;
-    return { x: item.mirrored ? item.source.width - x : x, y: py - piece.artY };
+    // de pixels da peça (que pode estar em escala reduzida) pra pixels da arte
+    const x = (px - piece.artX) / piece.scale;
+    return { x: item.mirrored ? item.source.width - x : x, y: (py - piece.artY) / piece.scale };
   }
 
   onPreviewClick(event: MouseEvent): void {
@@ -1102,6 +1124,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private eraseAt(event: PointerEvent): void {
     const sel = this.selected();
     if (!sel) return;
+    this.markInteracting();
     const point = this.artPointFrom(event, sel);
     if (!point) return;
     const r = Math.max(1, this.brushMm() * this.pxPerMm(sel));
@@ -1189,6 +1212,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onSpacingInput(event: Event): void {
+    this.markInteracting();
     this.spacingMm.set(Number((event.target as HTMLInputElement).value));
     this.prefs.spacingMm = this.spacingMm();
     this.savePrefs();
@@ -1203,43 +1227,63 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- geração da peça ----------
 
-  private pieceFor(item: ImportedImage): Piece {
+  /** Largura de trabalho da peça. Na prévia acompanha o que aparece na tela
+   * (vezes o zoom, pra manter nitidez ao aproximar) e cai pela metade enquanto
+   * um controle está sendo arrastado, pra resposta imediata; ao soltar, o
+   * redesenho volta na resolução boa. Exportação sempre usa a arte inteira. */
+  private workWidth(item: ImportedImage, quality: PieceQuality): number {
+    if (quality === 'full') return item.source.width;
+    const stage = this.pieceStage?.nativeElement;
+    const exibida = Math.max(320, stage?.clientWidth ?? 800);
+    const dpr = Math.min(2, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1);
+    const alvo = exibida * this.zoom() * dpr * (this.interacting ? 0.5 : 1);
+    return Math.round(Math.min(item.source.width, Math.max(MIN_WORK_WIDTH, alvo)));
+  }
+
+  private pieceFor(item: ImportedImage, quality: PieceQuality = 'preview'): Piece {
+    const largura = this.workWidth(item, quality);
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
       item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
-      this.smoothing(), this.fillHoles(),
+      this.smoothing(), this.fillHoles(), largura,
     ]);
+    if (quality === 'full') return this.buildPiece(item, largura);
     const cached = this.pieceCache.get(item.id);
     if (cached && cached.sig === sig) return cached.piece;
-    const piece = this.buildPiece(item);
+    const piece = this.buildPiece(item, largura);
     this.pieceCache.set(item.id, { sig, piece });
     return piece;
   }
 
   /** Remove os contornos marcados pelo usuário: pra cada ponto guardado, cai
    * fora o caminho mais justo que o contém. */
-  private dropRemovedCuts(paths: Polygon[], item: ImportedImage, artX: number, artY: number): Polygon[] {
+  private dropRemovedCuts(
+    paths: Polygon[], item: ImportedImage, artX: number, artY: number, escala: number, artWidth: number,
+  ): Polygon[] {
     if (!item.cutRemovals.length) return paths;
     let kept = paths;
     for (const c of item.cutRemovals) {
-      const x = artX + (item.mirrored ? item.source.width - c.x : c.x);
-      const idx = smallestPathContaining(kept, x, artY + c.y);
+      const cx = c.x * escala;
+      const x = artX + (item.mirrored ? artWidth - cx : cx);
+      const idx = smallestPathContaining(kept, x, artY + c.y * escala);
       if (idx >= 0) kept = kept.filter((_, i) => i !== idx);
     }
     return kept;
   }
 
-  private buildPiece(item: ImportedImage): Piece {
-    const source = item.mirrored ? flipHorizontal(item.source) : item.source;
-    const ppm = this.pxPerMm(item);
+  private buildPiece(item: ImportedImage, workWidth: number): Piece {
+    const escala = Math.min(1, workWidth / item.source.width);
+    const base = item.mirrored ? flipHorizontal(item.source) : item.source;
+    const source = escala < 1 ? downscale(base, escala) : base;
+    // ppm da peça acompanha a escala, então tudo que vira mm depois continua certo
+    const ppm = this.pxPerMm(item) * escala;
     const marginPx = Math.round(item.marginMm * ppm);
     const gapPx = Math.round(item.gapMm * ppm);
     const total = marginPx + gapPx;
 
     if (item.shape === 'silhueta') {
-      const contour = buildContourLayer(source, marginPx, gapPx, item.color);
-      if (item.outerOnly && total > 0) restrictContourToOuterRegion(contour, source, total);
-      applyErasures(contour, item.erasures, total, total, item.mirrored, item.source.width);
+      const contour = buildContourLayer(source, marginPx, gapPx, item.color, item.outerOnly);
+      applyErasures(contour, scaleErasures(item.erasures, escala), total, total, item.mirrored, source.width);
 
       const canvas = document.createElement('canvas');
       canvas.width = contour.width;
@@ -1255,7 +1299,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         chaikinIterations: s >= 5 ? 2 : s >= 1 ? 1 : 0,
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
-      return { canvas, paths: this.dropRemovedCuts(paths, item, total, total), ppm, artX: total, artY: total };
+      return {
+        canvas, paths: this.dropRemovedCuts(paths, item, total, total, escala, source.width),
+        ppm, artX: total, artY: total, scale: escala,
+      };
     }
 
     const { W, H } = shapeCanvasSize(item.shape, source.width, source.height, total);
@@ -1271,7 +1318,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const cctx = contour.getContext('2d')!;
       fillPolygon(cctx, outer, item.color);
       if (gapPx > 0) fillPolygon(cctx, shapePolygon(item.shape, W, H, marginPx, cornerRadius), '#ffffff');
-      applyErasures(contour, item.erasures, artX, artY, item.mirrored, item.source.width);
+      applyErasures(contour, scaleErasures(item.erasures, escala), artX, artY, item.mirrored, source.width);
     }
 
     const canvas = document.createElement('canvas');
@@ -1280,10 +1327,24 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(contour, 0, 0);
     ctx.drawImage(source, artX, artY);
-    return { canvas, paths: this.dropRemovedCuts([outer], item, artX, artY), ppm, artX, artY };
+    return {
+      canvas, paths: this.dropRemovedCuts([outer], item, artX, artY, escala, source.width),
+      ppm, artX, artY, scale: escala,
+    };
   }
 
   // ---------- render ----------
+
+  /** Marca que um controle está sendo mexido: a prévia cai pra meia resolução e
+   * volta à resolução boa pouco depois da última mudança. */
+  private markInteracting(): void {
+    this.interacting = true;
+    clearTimeout(this.interactionTimer);
+    this.interactionTimer = setTimeout(() => {
+      this.interacting = false;
+      this.scheduleRender();
+    }, 220);
+  }
 
   /** Agrupa mudanças rápidas (arrastar o slider) num único redesenho por frame. */
   private scheduleRender(): void {
@@ -1383,7 +1444,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   exportPrintPng(): void {
     const sel = this.selected();
     if (!sel) return;
-    const piece = this.pieceFor(sel);
+    const piece = this.pieceFor(sel, 'full');
     const totalWMm = piece.canvas.width / piece.ppm;
     const targetW = Math.round((totalWMm / 25.4) * EXPORT_DPI);
     const targetH = Math.round((targetW * piece.canvas.height) / piece.canvas.width);
@@ -1403,7 +1464,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   exportCutSvg(): void {
     const sel = this.selected();
     if (!sel) return;
-    const piece = this.pieceFor(sel);
+    const piece = this.pieceFor(sel, 'full');
     const svg = this.pieceSvg(piece, null);
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), this.baseName(sel) + '-corte.svg');
   }
@@ -1411,7 +1472,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   exportFullSvg(): void {
     const sel = this.selected();
     if (!sel) return;
-    const piece = this.pieceFor(sel);
+    const piece = this.pieceFor(sel, 'full');
     const svg = this.pieceSvg(piece, piece.canvas.toDataURL('image/png'));
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), this.baseName(sel) + '-arte-corte.svg');
   }
@@ -1447,7 +1508,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     for (const p of placed) {
       const item = this.itemOf(p.id);
       if (!item) continue;
-      const piece = this.pieceFor(item);
+      const piece = this.pieceFor(item, 'full');
       ctx.drawImage(piece.canvas, p.xMm * scale, p.yMm * scale, p.wMm * scale, p.hMm * scale);
     }
     return { canvas, wMm, hMm };
@@ -1482,7 +1543,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     for (const p of placed) {
       const item = this.itemOf(p.id);
       if (!item) continue;
-      const piece = this.pieceFor(item);
+      const piece = this.pieceFor(item, 'full');
       const mmPolys = piece.paths.map((poly) =>
         poly.map(([x, y]) => [p.xMm + x / piece.ppm, p.yMm + y / piece.ppm] as [number, number]),
       );
