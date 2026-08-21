@@ -27,6 +27,12 @@ const TOOLS: ToolCard[] = [
     downloadLabel: 'Baixar app Android (.apk)',
   },
   {
+    path: '/imagens',
+    icon: 'image',
+    title: 'Editor de Imagens',
+    description: 'Importe imagens, gere contorno tipo sticker com margem e cor ajustáveis e exporte em PNG — tudo no navegador.',
+  },
+  {
     path: '/bolo-3d',
     icon: 'cake',
     title: 'Simulador de Bolo 3D',
