@@ -15,6 +15,7 @@ interface ImportedImage {
 }
 
 const MAX_MARGIN_MM = 20;
+const MAX_GAP_MM = 10;
 const DEFAULT_WIDTH_MM = 100;
 const EXPORT_DPI = 300;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
@@ -23,44 +24,63 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** Silhueta da imagem (canal alpha) preenchida numa cor sólida. */
+function buildSilhouette(img: HTMLImageElement, color: string): HTMLCanvasElement {
+  const sil = document.createElement('canvas');
+  sil.width = img.naturalWidth;
+  sil.height = img.naturalHeight;
+  const sctx = sil.getContext('2d')!;
+  sctx.drawImage(img, 0, 0);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = color;
+  sctx.fillRect(0, 0, sil.width, sil.height);
+  // reforça o alpha das bordas suavizadas pra silhueta não ficar translúcida
+  sctx.globalCompositeOperation = 'source-over';
+  sctx.drawImage(sil, 0, 0);
+  sctx.drawImage(sil, 0, 0);
+  return sil;
+}
+
+/** Carimba a silhueta dilatada por um raio: a união dos deslocamentos da forma
+ * cheia em todos os raios até `radius` cobre a dilatação inteira. */
+function stampDilated(ctx: CanvasRenderingContext2D, sil: HTMLCanvasElement, offset: number, radius: number): void {
+  const angleSteps = 16;
+  const radialStep = Math.max(1, Math.floor(radius / 14));
+  for (let r = radius; r > 0; r -= radialStep) {
+    for (let a = 0; a < angleSteps; a++) {
+      const t = (a / angleSteps) * Math.PI * 2;
+      ctx.drawImage(sil, offset + Math.cos(t) * r, offset + Math.sin(t) * r);
+    }
+  }
+  ctx.drawImage(sil, offset, offset);
+}
+
 /** Gera a imagem com contorno tipo "sticker": dilata a silhueta (canal alpha)
- * na cor escolhida e desenha a imagem original por cima. Em imagens sem
+ * na cor escolhida e desenha a imagem original por cima, opcionalmente com uma
+ * faixa branca (gapPx) separando a imagem do contorno colorido. Em imagens sem
  * transparência o contorno vira uma moldura ao redor do retângulo. */
-function buildOutline(img: HTMLImageElement, marginPx: number, color: string): HTMLCanvasElement {
+function buildOutline(img: HTMLImageElement, marginPx: number, gapPx: number, color: string): HTMLCanvasElement {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   const m = Math.max(0, Math.round(marginPx));
+  const g = Math.max(0, Math.round(gapPx));
+  const total = m + g;
   const out = document.createElement('canvas');
-  out.width = w + m * 2;
-  out.height = h + m * 2;
+  out.width = w + total * 2;
+  out.height = h + total * 2;
   const ctx = out.getContext('2d')!;
 
-  if (m > 0) {
-    const sil = document.createElement('canvas');
-    sil.width = w;
-    sil.height = h;
-    const sctx = sil.getContext('2d')!;
-    sctx.drawImage(img, 0, 0);
-    sctx.globalCompositeOperation = 'source-in';
-    sctx.fillStyle = color;
-    sctx.fillRect(0, 0, w, h);
-    // reforça o alpha das bordas suavizadas pra silhueta não ficar translúcida
-    sctx.globalCompositeOperation = 'source-over';
-    sctx.drawImage(sil, 0, 0);
-    sctx.drawImage(sil, 0, 0);
-
-    const angleSteps = 16;
-    const radialStep = Math.max(1, Math.floor(m / 14));
-    for (let r = m; r > 0; r -= radialStep) {
-      for (let a = 0; a < angleSteps; a++) {
-        const t = (a / angleSteps) * Math.PI * 2;
-        ctx.drawImage(sil, m + Math.cos(t) * r, m + Math.sin(t) * r);
-      }
+  if (total > 0) {
+    const sil = buildSilhouette(img, color);
+    stampDilated(ctx, sil, total, total);
+    if (g > 0) {
+      // faixa branca entre a imagem e o contorno colorido
+      const white = buildSilhouette(img, '#ffffff');
+      stampDilated(ctx, white, total, g);
     }
-    ctx.drawImage(sil, m, m);
   }
 
-  ctx.drawImage(img, m, m);
+  ctx.drawImage(img, total, total);
   return out;
 }
 
@@ -92,7 +112,7 @@ function buildOutline(img: HTMLImageElement, marginPx: number, color: string): H
               <span class="file-name">{{ sel.name }}</span>
               <span class="file-dims">
                 arte {{ formatMm(sel.widthMm) }} × {{ formatMm(artHeightMm(sel)) }} ·
-                com margem {{ formatMm(sel.widthMm + 2 * marginMm()) }} × {{ formatMm(artHeightMm(sel) + 2 * marginMm()) }}
+                com margem {{ formatMm(sel.widthMm + 2 * totalMarginMm()) }} × {{ formatMm(artHeightMm(sel) + 2 * totalMarginMm()) }}
               </span>
             </div>
             <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
@@ -168,6 +188,20 @@ function buildOutline(img: HTMLImageElement, marginPx: number, color: string): H
               <button class="btn" (click)="nudgeMargin(-0.5)" [disabled]="marginMm() <= 0">−0,5</button>
               <button class="btn" (click)="nudgeMargin(0.5)" [disabled]="marginMm() >= maxMarginMm">+0,5</button>
             </div>
+            <label class="field">
+              <span class="field-label">Espaço entre imagem e contorno <strong>{{ gapMm().toFixed(1) }} mm</strong></span>
+              <input
+                type="range"
+                min="0"
+                [max]="maxGapMm"
+                step="0.5"
+                [value]="gapMm()"
+                (input)="onGapInput($event)"
+              />
+            </label>
+            @if (gapMm() > 0) {
+              <p class="field-note">O espaço fica branco: a imagem, uma faixa em branco e só então o contorno na cor escolhida.</p>
+            }
             <label class="field">
               <span class="field-label">Suavização da linha de corte <strong>{{ smoothing() }}</strong></span>
               <input type="range" min="0" max="10" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
@@ -354,18 +388,22 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   @ViewChild('previewCanvas') previewCanvas?: ElementRef<HTMLCanvasElement>;
 
   readonly maxMarginMm = MAX_MARGIN_MM;
+  readonly maxGapMm = MAX_GAP_MM;
   readonly dpi = EXPORT_DPI;
   readonly swatches = SWATCHES;
 
   images = signal<ImportedImage[]>([]);
   selectedId = signal<string | null>(null);
   marginMm = signal(3);
+  gapMm = signal(0);
   smoothing = signal(4);
   fillHoles = signal(true);
   color = signal('#ffffff');
   dragOver = signal(false);
 
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
+  /** Margem total (espaço branco + contorno) em mm — o quanto a peça cresce por lado. */
+  totalMarginMm = computed(() => this.marginMm() + this.gapMm());
 
   private renderQueued = false;
 
@@ -458,6 +496,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  onGapInput(event: Event): void {
+    this.gapMm.set(Number((event.target as HTMLInputElement).value));
+    this.scheduleRender();
+  }
+
   onSmoothingInput(event: Event): void {
     this.smoothing.set(Number((event.target as HTMLInputElement).value));
     this.scheduleRender();
@@ -479,7 +522,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   private buildFor(item: ImportedImage): HTMLCanvasElement {
-    return buildOutline(item.img, this.marginMm() * this.pxPerMm(item), this.color());
+    const ppm = this.pxPerMm(item);
+    return buildOutline(item.img, this.marginMm() * ppm, this.gapMm() * ppm, this.color());
   }
 
   private traceFor(item: ImportedImage, outline: HTMLCanvasElement): Polygon[] {
@@ -532,7 +576,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sel = this.selected();
     if (!sel) return;
     const result = this.buildFor(sel);
-    const totalWMm = sel.widthMm + 2 * this.marginMm();
+    const totalWMm = sel.widthMm + 2 * this.totalMarginMm();
     const targetW = Math.round((totalWMm / 25.4) * EXPORT_DPI);
     const targetH = Math.round((targetW * result.height) / result.width);
     const out = document.createElement('canvas');
