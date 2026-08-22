@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, computed, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, WritableSignal, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -99,6 +99,12 @@ const MAX_TIERS = 3;
 const MINIMAP_CAKE_PX = 200;
 const MINIMAP_RULER_PX = 18;
 
+const MAX_PHOTO_MB = 20;
+const MAX_PHOTO_BYTES = MAX_PHOTO_MB * 1024 * 1024;
+/** Fotos de câmera chegam com milhares de pixels e cada topper vira um data URL
+ * dentro do DOM — sem reduzir, meia dúzia de fotos já pesa na memória da página. */
+const MAX_PHOTO_PX = 1600;
+
 function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -106,6 +112,25 @@ function uid(): string {
 function seededRandom(seed: number): number {
   const x = Math.sin(seed * 999.7) * 43758.5453;
   return x - Math.floor(x);
+}
+
+/** Reduz a imagem se ela for maior que MAX_PHOTO_PX, mantendo PNG (preserva
+ * transparência de recortes colados) e usando JPEG só para fotos. */
+function downscaleDataUrl(img: HTMLImageElement, original: string, mimeType: string): string {
+  const largest = Math.max(img.naturalWidth, img.naturalHeight);
+  if (!largest || largest <= MAX_PHOTO_PX) return original;
+  const scale = MAX_PHOTO_PX / largest;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return original;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return mimeType === 'image/jpeg' ? canvas.toDataURL('image/jpeg', 0.9) : canvas.toDataURL('image/png');
+}
+
+function hasFiles(data: DataTransfer | null): boolean {
+  return Array.from(data?.types ?? []).includes('Files');
 }
 
 @Component({
@@ -130,12 +155,22 @@ function seededRandom(seed: number): number {
         <div class="stage-wrap">
           <div
             class="stage"
+            [class.drop-active]="stageDropActive()"
             (pointerdown)="onPointerDown($event)"
             (pointermove)="onPointerMove($event)"
             (pointerup)="onPointerUp($event)"
             (pointercancel)="onPointerUp($event)"
+            (dragover)="onPhotoDragOver($event, stageDropActive)"
+            (dragleave)="onPhotoDragLeave($event, stageDropActive)"
+            (drop)="onStagePhotoDrop($event)"
           >
             <div class="ground-shadow"></div>
+            @if (stageDropActive()) {
+              <div class="drop-overlay">
+                <app-icon name="image" [size]="22" />
+                <span>Solte a foto para colar no bolo</span>
+              </div>
+            }
             <div class="scene" [style.transform]="'rotateX(' + tiltDeg() + 'deg)'">
               <div class="cake" [style.transform]="'rotateY(' + spinDeg() + 'deg)'">
                 @for (tier of tiers(); track tier.index) {
@@ -229,7 +264,7 @@ function seededRandom(seed: number): number {
               </div>
             </div>
           </div>
-          <p class="stage-hint">Arraste para girar o bolo &middot; clique nas velas para acender/assoprar</p>
+          <p class="stage-hint">Arraste para girar o bolo &middot; clique nas velas para acender/assoprar &middot; solte uma foto aqui para colá-la</p>
         </div>
 
         <aside class="controls">
@@ -281,7 +316,26 @@ function seededRandom(seed: number): number {
                 cm
               </span>
             </label>
-            <p class="hint">Copie uma imagem e pressione Ctrl+V para colar no topo do bolo.</p>
+            <div class="photo-actions">
+              <button class="photo-btn" type="button" (click)="photoInput.click()">
+                <app-icon name="image" [size]="14" /> Adicionar fotos
+              </button>
+              <input
+                #photoInput
+                class="file-input"
+                type="file"
+                accept="image/*"
+                multiple
+                (change)="onPhotoInputChange($event)"
+              />
+            </div>
+            <p class="hint">
+              Escolha fotos do dispositivo, arraste e solte sobre o bolo (ou sobre o mapa abaixo)
+              ou copie uma imagem e pressione Ctrl+V.
+            </p>
+            @if (photoError(); as err) {
+              <p class="photo-error">{{ err }}</p>
+            }
 
             <div class="minimap-wrap">
               <div class="minimap-ruler-top" [style.left.px]="minimapRulerPx">
@@ -297,10 +351,14 @@ function seededRandom(seed: number): number {
                 </div>
                 <div
                   class="minimap-cake"
+                  [class.drop-active]="minimapDropActive()"
                   [style.width.px]="minimapCakePx"
                   [style.height.px]="minimapCakePx"
                   [style.border-radius]="shape() === 'round' ? '50%' : '6%'"
                   [style.background-size.px]="widgetPxPerCm()"
+                  (dragover)="onPhotoDragOver($event, minimapDropActive)"
+                  (dragleave)="onPhotoDragLeave($event, minimapDropActive)"
+                  (drop)="onMinimapPhotoDrop($event)"
                 >
                   @for (t of topToppers(); track t.id) {
                     <div
@@ -387,7 +445,7 @@ function seededRandom(seed: number): number {
                 <button class="link-btn danger" (click)="removeTopper(sel.id)">Remover imagem</button>
               </div>
             } @else if (toppers().length === 0) {
-              <p class="empty-hint">Nenhuma imagem colada ainda.</p>
+              <p class="empty-hint">Nenhuma foto adicionada ainda.</p>
             }
           </section>
 
@@ -510,6 +568,13 @@ function seededRandom(seed: number): number {
       background: radial-gradient(circle at 50% 30%, var(--accent-soft), transparent 65%);
     }
     .stage:active { cursor: grabbing; }
+    .stage.drop-active { outline: 2px dashed var(--accent); outline-offset: -6px; }
+    .drop-overlay {
+      position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px; pointer-events: none;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--accent); font-size: 13px; font-weight: 700;
+    }
     .ground-shadow {
       position: absolute; left: 50%; bottom: 62px; width: 260px; height: 40px; transform: translateX(-50%);
       background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28), transparent 70%);
@@ -650,6 +715,7 @@ function seededRandom(seed: number): number {
         linear-gradient(to bottom, rgba(120, 120, 140, 0.16) 1px, transparent 1px);
       background-position: center;
     }
+    .minimap-cake.drop-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
     .minimap-topper {
       position: absolute; transform: translate(-50%, -50%); cursor: move;
       outline: 1px dashed transparent;
@@ -672,6 +738,16 @@ function seededRandom(seed: number): number {
     }
     .topper-img.selected { outline: 2px dashed rgba(255, 255, 255, 0.85); outline-offset: 2px; }
     .topper-img.wall { left: 50%; top: 50%; }
+
+    .photo-actions { margin: 4px 0 8px; }
+    .file-input { display: none; }
+    .photo-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+      border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 9px 10px;
+      background: var(--bg); color: var(--text); font-weight: 600; font-size: 13px;
+    }
+    .photo-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .photo-error { font-size: 12px; color: var(--danger, #d9534f); margin: 6px 0 0; }
 
     .topper-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .topper-fields label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
@@ -715,6 +791,9 @@ export class CakeSimulatorPageComponent implements OnDestroy {
   layerHeightCm = signal(7);
   toppers = signal<Topper[]>([]);
   selectedTopperId = signal<string | null>(null);
+  photoError = signal<string | null>(null);
+  stageDropActive = signal(false);
+  minimapDropActive = signal(false);
 
   shape = signal<Shape>('round');
   layerCount = signal(3);
@@ -1022,6 +1101,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     this.autoRotate.set(true);
     this.toppers.set([]);
     this.selectedTopperId.set(null);
+    this.photoError.set(null);
   }
 
   setTopDiameter(value: string): void {
@@ -1036,27 +1116,115 @@ export class CakeSimulatorPageComponent implements OnDestroy {
     this.layerHeightCm.set(Math.min(20, Math.max(2, n)));
   }
 
-  @HostListener('document:paste', ['$event'])
-  onPaste(event: ClipboardEvent): void {
-    const items = event.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (!item.type.startsWith('image/')) continue;
-      const file = item.getAsFile();
-      if (!file) continue;
-      event.preventDefault();
-      this.addTopperFromFile(file);
-      break;
-    }
+  /** Sem isso, soltar a foto fora da área do bolo faria o navegador abrir o arquivo
+   * e sair da página. */
+  @HostListener('document:dragover', ['$event'])
+  @HostListener('document:drop', ['$event'])
+  onDocumentDragEvent(event: DragEvent): void {
+    if (hasFiles(event.dataTransfer)) event.preventDefault();
   }
 
-  private addTopperFromFile(file: File): void {
+  @HostListener('document:dragleave', ['$event'])
+  onDocumentDragLeave(event: DragEvent): void {
+    if (event.relatedTarget) return;
+    this.stageDropActive.set(false);
+    this.minimapDropActive.set(false);
+  }
+
+  @HostListener('document:paste', ['$event'])
+  onPaste(event: ClipboardEvent): void {
+    const files: File[] = [];
+    for (const item of event.clipboardData?.items ?? []) {
+      if (!item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+    if (files.length === 0) return;
+    event.preventDefault();
+    this.addToppersFromFiles(files);
+  }
+
+  /** Botão "Adicionar fotos" — no celular o accept="image/*" também abre a câmera. */
+  onPhotoInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.addToppersFromFiles(Array.from(input.files ?? []));
+    // Zera pra permitir escolher o mesmo arquivo outra vez em seguida.
+    input.value = '';
+  }
+
+  onPhotoDragOver(event: DragEvent, active: WritableSignal<boolean>): void {
+    if (!hasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    active.set(true);
+  }
+
+  onPhotoDragLeave(event: DragEvent, active: WritableSignal<boolean>): void {
+    // dragleave também dispara ao passar por filhos; só desliga ao sair do elemento.
+    const next = event.relatedTarget as Node | null;
+    if (next && (event.currentTarget as HTMLElement).contains(next)) return;
+    active.set(false);
+  }
+
+  onStagePhotoDrop(event: DragEvent): void {
+    if (!hasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    this.stageDropActive.set(false);
+    this.addToppersFromFiles(Array.from(event.dataTransfer?.files ?? []));
+  }
+
+  /** Soltar no mapa do topo já posiciona a foto no ponto exato onde foi solta. */
+  onMinimapPhotoDrop(event: DragEvent): void {
+    if (!hasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.minimapDropActive.set(false);
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const pxPerCm = this.widgetPxPerCm();
+    this.addToppersFromFiles(Array.from(event.dataTransfer?.files ?? []), {
+      xCm: (event.clientX - rect.left - this.minimapCakePx / 2) / pxPerCm,
+      yCm: (event.clientY - rect.top - this.minimapCakePx / 2) / pxPerCm,
+    });
+  }
+
+  private addToppersFromFiles(files: File[], atCm?: { xCm: number; yCm: number }): void {
+    if (files.length === 0) return;
+    const images = files.filter((f) => f.type.startsWith('image/'));
+    const accepted = images.filter((f) => f.size <= MAX_PHOTO_BYTES);
+
+    if (images.length === 0) {
+      this.photoError.set('Escolha arquivos de imagem (JPG, PNG, GIF ou WebP).');
+      return;
+    }
+    if (accepted.length === 0) {
+      this.photoError.set(`Cada foto precisa ter no máximo ${MAX_PHOTO_MB} MB.`);
+      return;
+    }
+    if (accepted.length < images.length) {
+      this.photoError.set(`Algumas fotos passaram de ${MAX_PHOTO_MB} MB e foram ignoradas.`);
+    } else if (images.length < files.length) {
+      this.photoError.set('Arquivos que não são imagens foram ignorados.');
+    } else {
+      this.photoError.set(null);
+    }
+
+    accepted.forEach((file, i) => {
+      // Várias fotos soltas de uma vez ficam levemente deslocadas pra não se sobreporem.
+      const at = atCm ? { xCm: atCm.xCm + i * 0.6, yCm: atCm.yCm + i * 0.6 } : undefined;
+      this.addTopperFromFile(file, at);
+    });
+  }
+
+  private addTopperFromFile(file: File, atCm?: { xCm: number; yCm: number }): void {
     const reader = new FileReader();
+    reader.onerror = () => this.photoError.set('Não foi possível ler a imagem escolhida.');
     reader.onload = () => {
-      const src = reader.result as string;
+      const original = reader.result as string;
       const img = new Image();
+      img.onerror = () => this.photoError.set('Arquivo de imagem inválido ou corrompido.');
       img.onload = () => {
         const naturalRatio = img.naturalHeight / img.naturalWidth || 1;
+        const src = downscaleDataUrl(img, original, file.type);
         const widthCm = Math.min(this.topDiameterCm() * 0.5, 6);
         const existingOnTop = this.toppers().filter((t) => t.location === 'top').length;
         const spreadAngle = existingOnTop * 47;
@@ -1065,8 +1233,8 @@ export class CakeSimulatorPageComponent implements OnDestroy {
           id: uid(),
           src,
           naturalRatio,
-          xCm: Math.cos((spreadAngle * Math.PI) / 180) * spreadRadius,
-          yCm: Math.sin((spreadAngle * Math.PI) / 180) * spreadRadius,
+          xCm: atCm ? atCm.xCm : Math.cos((spreadAngle * Math.PI) / 180) * spreadRadius,
+          yCm: atCm ? atCm.yCm : Math.sin((spreadAngle * Math.PI) / 180) * spreadRadius,
           widthCm,
           orientation: 'standing',
           location: 'top',
@@ -1077,7 +1245,7 @@ export class CakeSimulatorPageComponent implements OnDestroy {
         this.toppers.update((arr) => [...arr, topper]);
         this.selectedTopperId.set(topper.id);
       };
-      img.src = src;
+      img.src = original;
     };
     reader.readAsDataURL(file);
   }
