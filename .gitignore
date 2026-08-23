@@ -7,4 +7,3 @@ data/db/*.db
 data/db/*.db-*
 .env
 backups/
-graphify-out/
