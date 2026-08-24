@@ -12,6 +12,8 @@ import {
   downscale, makeThumb,
 } from './raster';
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
+import { TemplateModeComponent } from './template-mode';
+import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
 
 /** Um clique de "remover fundo". Guardado em vez do bitmap resultante: ao abrir
@@ -71,7 +73,10 @@ interface Piece {
   scale: number;
 }
 
+type EditorMode = 'corte' | 'molde';
+
 interface Prefs {
+  modo: EditorMode;
   widthMm: number;
   marginMm: number;
   gapMm: number;
@@ -100,6 +105,7 @@ const SHEET_MARGIN_MM = 10;
 const SWATCHES = ['#ffffff', '#000000', '#6d5ef8', '#ff6b6b', '#ffd93d', '#4ecdc4'];
 const PREFS_KEY = 'imagem-editor-prefs';
 const DEFAULT_PREFS: Prefs = {
+  modo: 'corte',
   widthMm: 100, marginMm: 3, gapMm: 0, color: '#ffffff', shape: 'silhueta',
   smoothing: 4, fillHoles: true, outerOnly: false, brushMm: 4,
   openSections: { imagens: true, contorno: true },
@@ -154,13 +160,18 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent, DatePipe],
+  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent],
+  providers: [TemplateStore],
   template: `
     <div class="page">
       <header class="top-bar">
         <div class="brand">
           <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
           <h1><span class="brand-mark"><app-icon name="image" [size]="14" /></span> Editor de Imagens</h1>
+        </div>
+        <div class="mode-switch" role="tablist">
+          <button [class.active]="modo() === 'corte'" (click)="setModo('corte')">Print &amp; Cut</button>
+          <button [class.active]="modo() === 'molde'" (click)="setModo('molde')">Molde SVG</button>
         </div>
         <div class="top-bar-actions">
           <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
@@ -170,6 +181,7 @@ function loadPrefs(): Prefs {
       </header>
 
       <main class="content">
+        @if (modo() === 'corte') {
         <div class="preview-wrap">
           <div class="tabs">
             <button [class.active]="view() === 'peca'" (click)="setView('peca')">Peça</button>
@@ -269,7 +281,7 @@ function loadPrefs(): Prefs {
                 (input)="onProjectNameInput($event)"
               />
               <div class="btn-row">
-                <button class="btn primary" [disabled]="savingProject() || !images().length" (click)="saveProject()">
+                <button class="btn primary" [disabled]="savingProject() || (!images().length && !templates.hasTemplate())" (click)="saveProject()">
                   {{ savingProject() ? 'Salvando…' : projectId() ? 'Salvar' : 'Salvar novo' }}
                 </button>
                 <button class="btn" (click)="newProject()">Novo</button>
@@ -537,6 +549,9 @@ function loadPrefs(): Prefs {
             }
           </section>
         </aside>
+        } @else {
+          <app-template-mode />
+        }
       </main>
     </div>
   `,
@@ -565,6 +580,14 @@ function loadPrefs(): Prefs {
       color: var(--text-muted); flex-shrink: 0;
     }
     .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+    .mode-switch { display: flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .mode-switch button {
+      border: none; background: none; color: var(--text-muted);
+      font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px;
+    }
+    .mode-switch button:hover { color: var(--accent); }
+    .mode-switch button.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+
     .user-email { font-size: 12px; color: var(--text-muted); }
     .logout { display: flex; align-items: center; gap: 5px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 600; }
     .logout:hover { color: var(--danger); }
@@ -758,8 +781,9 @@ function loadPrefs(): Prefs {
     .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 
     @media (max-width: 900px) {
-      .top-bar { padding: 12px 16px; }
+      .top-bar { padding: 12px 16px; flex-wrap: wrap; }
       .user-email { display: none; }
+      .mode-switch button { padding: 5px 9px; font-size: 11px; }
       .content { grid-template-columns: 1fr; padding: 16px 16px 48px; }
       .preview-wrap { top: 0; z-index: 5; padding: 12px; }
       .preview-stage, .drop-zone { height: clamp(180px, 34dvh, 320px); }
@@ -781,6 +805,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private prefs = loadPrefs();
 
+  modo = signal<EditorMode>(this.prefs.modo ?? 'corte');
   images = signal<ImportedImage[]>([]);
   selectedId = signal<string | null>(null);
   view = signal<'peca' | 'folha'>('peca');
@@ -820,6 +845,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public auth: AuthService,
     public theme: ThemeService,
     private projectsApi: ImageProjectsService,
+    public templates: TemplateStore,
   ) {}
 
   ngAfterViewInit(): void {
@@ -951,6 +977,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (!id) return;
     this.images.update((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
     this.scheduleRender();
+  }
+
+  setModo(modo: EditorMode): void {
+    if (this.modo() === modo) return;
+    this.modo.set(modo);
+    this.prefs.modo = modo;
+    this.savePrefs();
   }
 
   setView(view: 'peca' | 'folha'): void {
@@ -1568,7 +1601,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private serialize(): string {
     return JSON.stringify({
-      version: 1,
+      version: 2,
       smoothing: this.smoothing(),
       fillHoles: this.fillHoles(),
       sheetSize: this.sheetSize(),
@@ -1589,14 +1622,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         copies: i.copies,
         outerOnly: i.outerOnly,
       })),
+      // O molde entra no mesmo projeto: um documento do Editor de Imagens tem os dois modos.
+      molde: this.templates.serialize(),
     });
   }
 
   async saveProject(): Promise<void> {
     if (this.savingProject()) return;
     const name = this.projectName().trim() || 'Projeto sem nome';
-    if (!this.images().length) {
-      this.projectStatus.set('Importe ao menos uma imagem antes de salvar.');
+    if (!this.images().length && !this.templates.hasTemplate()) {
+      this.projectStatus.set('Importe ao menos uma imagem (ou um molde) antes de salvar.');
       return;
     }
     this.savingProject.set(true);
@@ -1612,7 +1647,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     } catch (err: unknown) {
       const status = (err as { status?: number }).status;
       this.projectStatus.set(status === 413
-        ? 'Projeto grande demais pro servidor — remova imagens ou reduza a quantidade.'
+        ? 'Projeto grande demais pro servidor — remova imagens, reduza a quantidade ou tire fotos do molde.'
         : 'Falha ao salvar. Tente de novo.');
     } finally {
       this.savingProject.set(false);
@@ -1627,6 +1662,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         smoothing?: number; fillHoles?: boolean; sheetSize?: SheetSize;
         orientation?: SheetOrientation; spacingMm?: number;
         images?: (Partial<ImportedImage> & { original: string })[];
+        molde?: TemplateProjectData | null;
       };
 
       this.images.set([]);
@@ -1642,6 +1678,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         const { name, original, ...rest } = stored;
         const img = await loadImage(original);
         this.addImage(name ?? 'imagem', img, { ...rest, originalDataUrl: original });
+      }
+
+      // Projetos salvos antes do modo molde (version 1) simplesmente não têm a seção.
+      if (data.molde?.svg) {
+        this.templates.hydrate(data.molde);
+        if (!data.images?.length) this.setModo('molde');
+      } else {
+        this.templates.clear();
       }
 
       this.projectId.set(dto.id);
@@ -1665,6 +1709,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   newProject(): void {
+    this.templates.clear();
     this.images.set([]);
     this.pieceCache.clear();
     this.selectedId.set(null);

@@ -30,7 +30,7 @@ const TOOLS: ToolCard[] = [
     path: '/imagens',
     icon: 'image',
     title: 'Editor de Imagens',
-    description: 'Print & cut pra ScanNCut: contorno com margem em mm, remoção de fundo, folha de montagem A4/A3 e exports em PNG 300 DPI, PDF e SVG de corte.',
+    description: 'Print & cut pra ScanNCut (contorno, remoção de fundo, folha A4/A3) e moldes SVG: encaixe fotos nos buracos do molde, em camadas com ordem e transparência.',
   },
   {
     path: '/bolo-3d',

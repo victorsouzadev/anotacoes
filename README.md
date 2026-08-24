@@ -18,6 +18,13 @@ inicial, sem exigir outro login nem outro deploy.
   funciona 100% offline e, opcionalmente, sincroniza com a mesma conta do hub pra
   ver as mesmas tarefas no navegador. Ver [mobile/README.md](mobile/README.md).
 
+- **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
+  com margem em mm, remoção de fundo, folha de montagem A4/A3 e exports em PNG 300
+  DPI, PDF e SVG de corte) e **moldes SVG** (você sobe o próprio molde e encaixa
+  fotos nos buracos dele, em camadas com ordem e transparência).
+- **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
+  granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
+
 Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md](DEPLOY.md)).
 
 ## Stack
@@ -132,6 +139,50 @@ mesmos dados.
   um LLM (Claude Desktop, Claude Code etc.) usar direto, autenticando contra o
   mesmo `/api/auth` e `/api/tasks` do web/Android — ver [mcp/README.md](mcp/README.md).
 
+### Editor de Imagens
+
+Uma rota (`/imagens`), dois modos, escolhidos no seletor do cabeçalho. Os dois
+convivem no mesmo projeto salvo (`/api/imagens/projetos`, um JSON opaco de até 9 MB
+com as artes embutidas em data URL).
+
+**Print & Cut** — o fluxo original, pra recortadora ScanNCut:
+
+- Importa PNG/JPG, remove fundo por clique (flood fill com tolerância), borracha e
+  remoção de linhas de corte individuais.
+- Contorno com margem em mm, na silhueta da arte ou numa forma analítica
+  (retângulo, arredondado, elipse), com suavização e preenchimento de vãos.
+- Folha de montagem A4/A3 (shelf packing) com cópias por peça.
+- Exporta PNG 300 DPI (com DPI gravado no arquivo), PDF no tamanho físico e SVG só
+  com as linhas de corte — as posições batem entre impressão e corte.
+
+**Molde SVG** — encaixar fotos num molde pronto:
+
+- Você **sobe o próprio `.svg`** (molduras, colagens, gabaritos). O arquivo passa
+  por saneamento antes de entrar na página: `<script>`, handlers `on*`,
+  `<foreignObject>` e qualquer referência externa são removidos, o `<style>` interno
+  vira `style` inline (senão as regras dele valeriam pro app inteiro) e todos os
+  `id` ganham prefixo, pra não colidir com os ícones da app.
+- **Encaixes** são descobertos por convenção de nome — `id`, rótulo do Inkscape ou
+  `data-slot` contendo *foto/photo/slot/imagem/image/mask/placeholder* — e, pra
+  qualquer molde sem essa convenção, clicando na forma ("Marcar encaixe").
+- A foto é **recortada no contorno da forma** (`clipPath` com um `<use>` do próprio
+  elemento do molde) e preenche o espaço; dá pra arrastar, dar zoom, girar,
+  espelhar e alternar entre preencher e caber.
+- Um encaixe aceita **várias fotos empilhadas**, cada uma com **ordem** (em SVG não
+  há `z-index`: a ordem no documento é reescrita a cada mudança), **opacidade** e
+  escolha de ficar **na frente ou atrás** do desenho do molde — as camadas de trás
+  entram antes do conteúdo do molde, as da frente depois.
+- Exporta **SVG** (fotos embutidas, tamanho em mm, editável no Inkscape/Illustrator),
+  **PNG** 300 DPI e **PDF** no tamanho físico.
+
+### Simulador de Bolo 3D
+
+Monta um bolo em CSS 3D (`perspective` + `preserve-3d`, cada camada é um prisma de
+N faces): camadas, formato, sabores, cobertura, granulado, cerejas e velas que
+acendem. Fotos entram por botão, arrastar-e-soltar ou `Ctrl+V` e são posicionadas
+em cm, no topo ou na parede, com um minimapa 2D com régua. Não persiste nada — é
+uma brincadeira de sessão.
+
 ## Modelo de dados (visão geral)
 
 Uma **nota** (`NoteRecord`) tem metadados (`título`, `pasta`, datas) e uma lista de
@@ -201,6 +252,12 @@ notas-vps/
 ├── docker-compose.yml / .local.yml / .vps.yml
 └── DEPLOY.md
 ```
+
+O modo Molde SVG do Editor de Imagens mora em `frontend/src/app/features/imagem/`:
+`svg-template.ts` (parse, saneamento, geometria e serialização — sem Angular, com
+testes em `svg-template.spec.ts`), `template-store.ts` (estado em signals, provido
+pela page pra sobreviver à troca de modo) e `template-mode.ts` (o componente do
+palco e do painel).
 
 Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
 com uma rota lazy-loaded em `app.routes.ts`, um card na tela `features/hub/hub.page.ts`,
