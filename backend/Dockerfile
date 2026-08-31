@@ -7,6 +7,9 @@ COPY Notas.Api/ Notas.Api/
 RUN dotnet publish Notas.Api/Notas.Api.csproj -c Release -o /app --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
+# A imagem Alpine não traz o banco de fusos horários. A ferramenta de finanças
+# precisa dele para saber que dia é "hoje" no fuso do usuário em vez de em UTC.
+RUN apk add --no-cache tzdata
 WORKDIR /app
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080

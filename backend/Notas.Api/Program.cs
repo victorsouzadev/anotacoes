@@ -30,16 +30,22 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 // fallback heurístico local quando nenhuma chave de API está configurada.
 builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
 builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(ExtracaoOptions.SectionName));
+builder.Services.Configure<FinancasOptions>(builder.Configuration.GetSection(FinancasOptions.SectionName));
+builder.Services.AddSingleton<FinancasClock>();
+
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"];
 if (!string.IsNullOrWhiteSpace(anthropicApiKey))
 {
-    builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>();
+    var timeout = builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20);
+    builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>(
+        c => c.Timeout = TimeSpan.FromSeconds(Math.Clamp(timeout, 5, 120)));
 }
 else
 {
     builder.Services.AddSingleton<ILlmExtractor, HeuristicLlmExtractor>();
 }
 builder.Services.AddScoped<TransacaoExtractionService>();
+builder.Services.AddScoped<OrcamentoService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -54,6 +60,19 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+
+    // Lançamento por texto livre é o único endpoint que custa dinheiro por chamada
+    // (uma requisição ao LLM). O limite é por usuário autenticado, não por IP, para
+    // que um token vazado não consiga queimar a chave da API em laço.
+    o.AddPolicy("financas-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
         }));
 });
@@ -78,8 +97,11 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
 }
 
-app.UseRateLimiter();
+// A autenticação vem antes do limitador porque a política "financas-ia" particiona
+// por usuário: com a ordem invertida, ctx.User estaria vazio e todo mundo atrás do
+// mesmo IP dividiria a mesma cota.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
@@ -87,6 +109,7 @@ app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapFoldersEndpoints();
 app.MapFinancasEndpoints();
+app.MapOrcamentoEndpoints();
 app.MapTasksEndpoints();
 app.MapImagemEndpoints();
 

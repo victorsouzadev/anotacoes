@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -28,45 +29,26 @@ public class AnthropicLlmExtractor : ILlmExtractor
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
-            throw new InvalidOperationException(
+            throw new LlmIndisponivelException(
                 "Anthropic:ApiKey não configurada. Defina a variável de ambiente ANTHROPIC_API_KEY " +
                 "ou configure Anthropic:ApiKey em appsettings/secrets.");
         }
 
-        var requestBody = new
-        {
-            model = _options.Model,
-            max_tokens = _options.MaxTokens,
-            system = PromptBuilder.SystemPrompt,
-            messages = new[]
-            {
-                new { role = "user", content = PromptBuilder.BuildUserPrompt(textoLivre, dataEnvio) }
-            }
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl);
-        request.Headers.Add("x-api-key", _options.ApiKey);
-        request.Headers.Add("anthropic-version", _options.ApiVersion);
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("Falha ao chamar API da Anthropic: {StatusCode} {Body}", response.StatusCode, body);
-            throw new ExtracaoInvalidaException($"Falha ao chamar o LLM: {response.StatusCode}");
-        }
+        var body = await EnviarComRetentativaAsync(textoLivre, dataEnvio, cancellationToken);
 
         using var doc = JsonDocument.Parse(body);
-        var text = doc.RootElement
-            .GetProperty("content")[0]
-            .GetProperty("text")
-            .GetString();
+        if (!doc.RootElement.TryGetProperty("content", out var content)
+            || content.ValueKind != JsonValueKind.Array
+            || content.GetArrayLength() == 0
+            || !content[0].TryGetProperty("text", out var textProp))
+        {
+            throw new LlmIndisponivelException("Resposta do LLM em formato inesperado.");
+        }
 
+        var text = textProp.GetString();
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new ExtracaoInvalidaException("Resposta vazia do LLM.");
+            throw new LlmIndisponivelException("Resposta vazia do LLM.");
         }
 
         var json = ExtractJson(text);
@@ -86,6 +68,70 @@ public class AnthropicLlmExtractor : ILlmExtractor
             throw new ExtracaoInvalidaException("LLM retornou um JSON inválido.");
         }
     }
+
+    // Erros transitórios (429, 5xx, timeout) merecem uma segunda tentativa com
+    // espera curta; erros 4xx de configuração/entrada não, porque repetir não muda
+    // o resultado e só faz o usuário esperar mais.
+    private async Task<string> EnviarComRetentativaAsync(string textoLivre, DateOnly dataEnvio, CancellationToken cancellationToken)
+    {
+        var requestBody = new
+        {
+            model = _options.Model,
+            max_tokens = _options.MaxTokens,
+            temperature = 0,
+            system = PromptBuilder.SystemPrompt,
+            messages = new[]
+            {
+                new { role = "user", content = PromptBuilder.BuildUserPrompt(textoLivre, dataEnvio) }
+            }
+        };
+        var payload = JsonSerializer.Serialize(requestBody);
+
+        for (var tentativa = 1; ; tentativa++)
+        {
+            var ultima = tentativa > _options.MaxTentativas;
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl);
+                request.Headers.Add("x-api-key", _options.ApiKey);
+                request.Headers.Add("anthropic-version", _options.ApiVersion);
+                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (response.IsSuccessStatusCode) return body;
+
+                _logger.LogError("Falha ao chamar API da Anthropic (tentativa {Tentativa}): {StatusCode} {Body}",
+                    tentativa, response.StatusCode, body);
+
+                if (ultima || !EhTransitorio(response.StatusCode))
+                {
+                    throw new LlmIndisponivelException(
+                        $"O serviço de interpretação não respondeu ({(int)response.StatusCode}).");
+                }
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // TaskCanceledException sem cancelamento do cliente = timeout do HttpClient.
+                _logger.LogError(ex, "Timeout ao chamar API da Anthropic (tentativa {Tentativa}).", tentativa);
+                if (ultima) throw new LlmIndisponivelException("O serviço de interpretação demorou demais para responder.", ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Erro de rede ao chamar API da Anthropic (tentativa {Tentativa}).", tentativa);
+                if (ultima) throw new LlmIndisponivelException("Não foi possível contatar o serviço de interpretação.", ex);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(400 * tentativa), cancellationToken);
+        }
+    }
+
+    private static bool EhTransitorio(HttpStatusCode status) =>
+        status == HttpStatusCode.TooManyRequests
+        || status == HttpStatusCode.RequestTimeout
+        || (int)status >= 500;
 
     // O prompt instrui o modelo a devolver somente JSON, mas alguns modelos podem
     // envolver a resposta em blocos de código markdown. Esta função extrai apenas

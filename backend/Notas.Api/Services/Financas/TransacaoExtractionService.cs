@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using Notas.Api.Data;
 using Notas.Api.Services.Financas.Llm;
@@ -11,6 +12,10 @@ public class ExtracaoOptions
     // Limiar de confiança abaixo do qual o lançamento é marcado como
     // "pendente_revisao". Configurável via appsettings.
     public float LimiarConfianca { get; set; } = 0.6f;
+
+    // Quantos dias no futuro uma data extraída pode estar antes de ser rejeitada.
+    // Alguma folga cobre lançamentos agendados; anos à frente são erro de extração.
+    public int MaxDiasNoFuturo { get; set; } = 370;
 }
 
 // Orquestra a extração via LLM e a validação/normalização do resultado antes
@@ -19,11 +24,13 @@ public class TransacaoExtractionService
 {
     private readonly ILlmExtractor _extractor;
     private readonly ExtracaoOptions _options;
+    private readonly FinancasClock _clock;
 
-    public TransacaoExtractionService(ILlmExtractor extractor, IOptions<ExtracaoOptions> options)
+    public TransacaoExtractionService(ILlmExtractor extractor, IOptions<ExtracaoOptions> options, FinancasClock clock)
     {
         _extractor = extractor;
         _options = options.Value;
+        _clock = clock;
     }
 
     public async Task<Transacao> ExtrairTransacaoAsync(string textoLivre, string userId, CancellationToken cancellationToken = default)
@@ -33,13 +40,13 @@ public class TransacaoExtractionService
             throw new ExtracaoInvalidaException("O texto do lançamento não pode ser vazio.");
         }
 
-        var dataEnvio = DateOnly.FromDateTime(DateTime.UtcNow);
-        var bruto = await _extractor.ExtrairAsync(textoLivre, dataEnvio, cancellationToken);
+        var hoje = _clock.Hoje();
+        var bruto = await _extractor.ExtrairAsync(textoLivre, hoje, cancellationToken);
 
-        return Validar(bruto, textoLivre, userId, dataEnvio);
+        return Validar(bruto, textoLivre, userId, hoje);
     }
 
-    private Transacao Validar(ExtracaoLlmResult bruto, string textoOriginal, string userId, DateOnly dataEnvio)
+    private Transacao Validar(ExtracaoLlmResult bruto, string textoOriginal, string userId, DateOnly hoje)
     {
         if (string.IsNullOrWhiteSpace(bruto.Descricao))
         {
@@ -48,7 +55,13 @@ public class TransacaoExtractionService
 
         if (bruto.Valor is null || bruto.Valor <= 0)
         {
-            throw new ExtracaoInvalidaException("Campo obrigatório ausente ou inválido: valor.");
+            throw new ExtracaoInvalidaException(
+                "Não identifiquei um valor no texto. Inclua a quantia, por exemplo: \"gastei 45 reais no mercado\".");
+        }
+
+        if (bruto.Valor > 99_999_999m)
+        {
+            throw new ExtracaoInvalidaException("Valor acima do limite suportado.");
         }
 
         if (!TryParseTipo(bruto.Tipo, out var tipo))
@@ -56,16 +69,12 @@ public class TransacaoExtractionService
             throw new ExtracaoInvalidaException($"Campo 'tipo' inválido: '{bruto.Tipo}'. Esperado 'receita' ou 'despesa'.");
         }
 
-        if (!TryParseCategoria(bruto.Categoria, out var categoria))
+        if (!CategoriaInfo.TryParse(bruto.Categoria, out var categoria))
         {
             throw new ExtracaoInvalidaException($"Campo 'categoria' inválido: '{bruto.Categoria}'.");
         }
 
-        DateOnly data = dataEnvio;
-        if (!string.IsNullOrWhiteSpace(bruto.Data) && !DateOnly.TryParse(bruto.Data, out data))
-        {
-            throw new ExtracaoInvalidaException($"Campo 'data' inválido: '{bruto.Data}'. Esperado formato ISO 8601 (AAAA-MM-DD).");
-        }
+        var data = ParseData(bruto.Data, hoje);
 
         FormaPagamento? formaPagamento = null;
         if (!string.IsNullOrWhiteSpace(bruto.FormaPagamento))
@@ -77,8 +86,7 @@ public class TransacaoExtractionService
             formaPagamento = forma;
         }
 
-        var confianca = bruto.Confianca ?? 0f;
-        confianca = Math.Clamp(confianca, 0f, 1f);
+        var confianca = Math.Clamp(bruto.Confianca ?? 0f, 0f, 1f);
 
         var status = confianca < _options.LimiarConfianca
             ? StatusTransacao.PendenteRevisao
@@ -88,19 +96,46 @@ public class TransacaoExtractionService
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Descricao = bruto.Descricao.Trim(),
-            Valor = Math.Round(bruto.Valor.Value, 2),
+            Descricao = Truncar(bruto.Descricao.Trim(), 500),
+            Valor = Math.Round(bruto.Valor.Value, 2, MidpointRounding.AwayFromZero),
             Tipo = tipo,
             Categoria = categoria,
             Data = data,
             FormaPagamento = formaPagamento,
-            TextoOriginal = textoOriginal,
+            TextoOriginal = Truncar(textoOriginal, 1000),
             ConfiancaIa = confianca,
             Status = status,
-            Observacoes = bruto.Observacoes,
+            Observacoes = string.IsNullOrWhiteSpace(bruto.Observacoes) ? null : Truncar(bruto.Observacoes.Trim(), 500),
             CriadoEm = DateTime.UtcNow
         };
     }
+
+    // Parsing estrito em ISO 8601: depender da cultura do processo faria "05/07"
+    // virar 7 de maio num servidor com cultura invariante.
+    private DateOnly ParseData(string? bruto, DateOnly hoje)
+    {
+        if (string.IsNullOrWhiteSpace(bruto)) return hoje;
+
+        if (!DateOnly.TryParseExact(bruto.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var data))
+        {
+            throw new ExtracaoInvalidaException($"Campo 'data' inválido: '{bruto}'. Esperado formato ISO 8601 (AAAA-MM-DD).");
+        }
+
+        if (data > hoje.AddDays(_options.MaxDiasNoFuturo))
+        {
+            throw new ExtracaoInvalidaException($"Data muito distante no futuro: '{bruto}'.");
+        }
+
+        if (data < hoje.AddYears(-50))
+        {
+            throw new ExtracaoInvalidaException($"Data muito antiga: '{bruto}'.");
+        }
+
+        return data;
+    }
+
+    private static string Truncar(string valor, int max) =>
+        valor.Length <= max ? valor : valor[..max];
 
     private static bool TryParseTipo(string? valor, out TipoTransacao tipo)
     {
@@ -108,30 +143,8 @@ public class TransacaoExtractionService
         if (string.IsNullOrWhiteSpace(valor)) return false;
         switch (valor.Trim().ToLowerInvariant())
         {
-            case "receita": tipo = TipoTransacao.Receita; return true;
-            case "despesa": tipo = TipoTransacao.Despesa; return true;
-            default: return false;
-        }
-    }
-
-    private static bool TryParseCategoria(string? valor, out Categoria categoria)
-    {
-        categoria = Categoria.Outros;
-        if (string.IsNullOrWhiteSpace(valor)) return false;
-        var normalizado = valor.Trim().ToLowerInvariant().Replace("-", "_").Replace(" ", "_");
-        switch (normalizado)
-        {
-            case "alimentacao": categoria = Categoria.Alimentacao; return true;
-            case "transporte": categoria = Categoria.Transporte; return true;
-            case "moradia": categoria = Categoria.Moradia; return true;
-            case "saude": categoria = Categoria.Saude; return true;
-            case "educacao": categoria = Categoria.Educacao; return true;
-            case "lazer": categoria = Categoria.Lazer; return true;
-            case "compras": categoria = Categoria.Compras; return true;
-            case "contas_servicos" or "contas" or "servicos": categoria = Categoria.ContasServicos; return true;
-            case "salario": categoria = Categoria.Salario; return true;
-            case "investimentos": categoria = Categoria.Investimentos; return true;
-            case "outros": categoria = Categoria.Outros; return true;
+            case "receita" or "entrada": tipo = TipoTransacao.Receita; return true;
+            case "despesa" or "saida" or "saída": tipo = TipoTransacao.Despesa; return true;
             default: return false;
         }
     }
@@ -141,14 +154,13 @@ public class TransacaoExtractionService
         forma = default;
         switch (valor.Trim().ToLowerInvariant())
         {
-            case "cartao":
-            case "cartão":
+            case "cartao" or "cartão" or "credito" or "crédito" or "debito" or "débito":
                 forma = FormaPagamento.Cartao; return true;
             case "pix":
                 forma = FormaPagamento.Pix; return true;
-            case "dinheiro":
+            case "dinheiro" or "especie" or "espécie":
                 forma = FormaPagamento.Dinheiro; return true;
-            case "boleto":
+            case "boleto" or "fatura":
                 forma = FormaPagamento.Boleto; return true;
             default:
                 return false;
