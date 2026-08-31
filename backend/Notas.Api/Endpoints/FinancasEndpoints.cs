@@ -55,9 +55,25 @@ public static class FinancasEndpoints
 
         // GET /api/financas/transacoes — lista transações com filtros de período, categoria e tipo.
         transacoes.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct,
-            DateOnly? dataInicio, DateOnly? dataFim, Categoria? categoria, TipoTransacao? tipo,
-            StatusTransacao? status, int? ano, int? mes, int? limite) =>
+            DateOnly? dataInicio, DateOnly? dataFim, string? categoria, string? tipo,
+            string? status, int? ano, int? mes, int? limite) =>
         {
+            // Os filtros chegam como texto e são convertidos aqui: o binding de enum
+            // da query string é sensível a maiúsculas, então `tipo=despesa` — o mesmo
+            // formato que a API devolve nas respostas — seria recusado com 400.
+            if (!TryParseFiltro<TipoTransacao>(tipo, out var tipoFiltro))
+                return Results.BadRequest(new { erro = $"Tipo inválido: '{tipo}'." });
+            if (!TryParseFiltro<StatusTransacao>(status, out var statusFiltro))
+                return Results.BadRequest(new { erro = $"Situação inválida: '{status}'." });
+
+            Categoria? categoriaFiltro = null;
+            if (!string.IsNullOrWhiteSpace(categoria))
+            {
+                if (!CategoriaInfo.TryParse(categoria, out var c))
+                    return Results.BadRequest(new { erro = $"Categoria inválida: '{categoria}'." });
+                categoriaFiltro = c;
+            }
+
             var userId = user.UserId();
             var query = db.Transacoes.AsNoTracking().Where(t => t.UserId == userId);
 
@@ -71,9 +87,9 @@ public static class FinancasEndpoints
 
             if (dataInicio.HasValue) query = query.Where(t => t.Data >= dataInicio.Value);
             if (dataFim.HasValue) query = query.Where(t => t.Data <= dataFim.Value);
-            if (categoria.HasValue) query = query.Where(t => t.Categoria == categoria.Value);
-            if (tipo.HasValue) query = query.Where(t => t.Tipo == tipo.Value);
-            if (status.HasValue) query = query.Where(t => t.Status == status.Value);
+            if (categoriaFiltro.HasValue) query = query.Where(t => t.Categoria == categoriaFiltro.Value);
+            if (tipoFiltro.HasValue) query = query.Where(t => t.Tipo == tipoFiltro.Value);
+            if (statusFiltro.HasValue) query = query.Where(t => t.Status == statusFiltro.Value);
 
             var resultado = await query
                 .OrderByDescending(t => t.Data)
@@ -226,13 +242,15 @@ public static class FinancasEndpoints
 
         // GET /api/financas/dashboard/categorias?ano=&mes=&tipo=despesa — gastos agrupados por categoria (padrão: despesas do mês atual).
         dashboard.MapGet("/categorias", async (ClaimsPrincipal user, AppDbContext db, FinancasClock clock,
-            CancellationToken ct, int? ano, int? mes, TipoTransacao? tipo) =>
+            CancellationToken ct, int? ano, int? mes, string? tipo) =>
         {
             if (mes is < 1 or > 12) return Results.BadRequest(new { erro = $"Mês inválido: {mes}." });
+            if (!TryParseFiltro<TipoTransacao>(tipo, out var tipoFiltro))
+                return Results.BadRequest(new { erro = $"Tipo inválido: '{tipo}'." });
 
             var userId = user.UserId();
             var (anoRef, mesRef) = clock.ResolverMes(ano, mes);
-            var tipoRef = tipo ?? TipoTransacao.Despesa;
+            var tipoRef = tipoFiltro ?? TipoTransacao.Despesa;
 
             var (inicio, fim) = FinancasClock.LimitesDoMes(anoRef, mesRef);
 
@@ -294,6 +312,22 @@ public static class FinancasEndpoints
 
             return Results.Ok(resultado);
         });
+    }
+
+    // Ausente = sem filtro; presente e inválido = erro para o cliente, em vez de um
+    // filtro silenciosamente ignorado.
+    private static bool TryParseFiltro<T>(string? valor, out T? resultado) where T : struct, Enum
+    {
+        resultado = null;
+        if (string.IsNullOrWhiteSpace(valor)) return true;
+
+        if (!Enum.TryParse<T>(valor.Trim(), ignoreCase: true, out var convertido) || !Enum.IsDefined(convertido))
+        {
+            return false;
+        }
+
+        resultado = convertido;
+        return true;
     }
 
     private static (DateOnly Inicio, List<(string Chave, string Rotulo)> Chaves) JanelaMensal(DateOnly hoje, int periodos)

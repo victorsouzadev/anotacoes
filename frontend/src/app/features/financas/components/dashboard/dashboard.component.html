@@ -1,40 +1,67 @@
 <div class="dashboard">
-  <div class="cards-resumo" *ngIf="resumo as r">
-    <div class="card resumo-card">
-      <span class="label">Saldo do mês</span>
-      <span class="valor" [class.negativo]="r.saldo < 0">R$ {{ r.saldo.toFixed(2) }}</span>
+  @if (resumo(); as r) {
+    <div class="cards-resumo">
+      <div class="card resumo-card destaque">
+        <span class="label">Saldo do mês</span>
+        <span class="valor" [class.negativo]="r.saldo < 0" [class.positivo]="r.saldo > 0">
+          {{ r.saldo | currency }}
+        </span>
+        @if (r.variacaoPercentualSaldo !== null) {
+          <span class="comparativo" [class.negativo]="r.variacaoPercentualSaldo < 0"
+                [class.positivo]="r.variacaoPercentualSaldo >= 0">
+            {{ r.variacaoPercentualSaldo >= 0 ? '▲' : '▼' }}
+            {{ r.variacaoPercentualSaldo | number: '1.0-1' }}% vs. mês anterior
+          </span>
+        } @else {
+          <span class="comparativo neutro">sem mês anterior para comparar</span>
+        }
+      </div>
+
+      <div class="card resumo-card">
+        <span class="label">Receitas</span>
+        <span class="valor positivo">{{ r.totalReceitas | currency }}</span>
+      </div>
+
+      <div class="card resumo-card">
+        <span class="label">Despesas</span>
+        <span class="valor negativo">{{ r.totalDespesas | currency }}</span>
+      </div>
+
+      <div class="card resumo-card">
+        <span class="label">Maior gasto</span>
+        <span class="valor texto">{{ r.maiorCategoriaGastoRotulo ?? '—' }}</span>
+        @if (r.maiorCategoriaGasto) {
+          <span class="comparativo neutro">{{ r.maiorCategoriaGastoValor | currency }}</span>
+        }
+      </div>
+
+      <div class="card resumo-card">
+        <span class="label">Lançamentos</span>
+        <span class="valor texto">{{ r.quantidadeLancamentos }}</span>
+        @if (r.quantidadePendentes > 0) {
+          <span class="comparativo alerta">{{ r.quantidadePendentes }} a revisar</span>
+        }
+      </div>
     </div>
-    <div class="card resumo-card">
-      <span class="label">Receitas</span>
-      <span class="valor positivo">R$ {{ r.totalReceitas.toFixed(2) }}</span>
-    </div>
-    <div class="card resumo-card">
-      <span class="label">Despesas</span>
-      <span class="valor negativo">R$ {{ r.totalDespesas.toFixed(2) }}</span>
-    </div>
-    <div class="card resumo-card">
-      <span class="label">Maior categoria de gasto</span>
-      <span class="valor">{{ r.maiorCategoriaGasto ?? '—' }}</span>
-    </div>
-    <div class="card resumo-card">
-      <span class="label">Vs. mês anterior</span>
-      <span class="valor" [class.negativo]="r.variacaoPercentualSaldo < 0" [class.positivo]="r.variacaoPercentualSaldo >= 0">
-        {{ r.variacaoPercentualSaldo >= 0 ? '+' : '' }}{{ r.variacaoPercentualSaldo.toFixed(1) }}%
-      </span>
-    </div>
-  </div>
+  }
 
   <div class="graficos">
     <div class="card grafico-card">
       <h2>Gastos por categoria</h2>
-      <p class="vazio" *ngIf="categorias.length === 0">Sem despesas no período.</p>
-      <canvas #pizzaCanvas [style.display]="categorias.length ? 'block' : 'none'"></canvas>
+      @if (semDespesas()) {
+        <p class="vazio">Sem despesas no período.</p>
+      } @else {
+        <div class="canvas-wrap"><canvas #pizzaCanvas></canvas></div>
+      }
     </div>
 
     <div class="card grafico-card">
       <h2>Receitas x Despesas</h2>
-      <p class="vazio" *ngIf="tendencias.length === 0">Sem dados de tendência.</p>
-      <canvas #linhaCanvas [style.display]="tendencias.length ? 'block' : 'none'"></canvas>
+      @if (semTendencias()) {
+        <p class="vazio">Ainda não há histórico suficiente.</p>
+      } @else {
+        <div class="canvas-wrap"><canvas #linhaCanvas></canvas></div>
+      }
     </div>
   </div>
 </div>

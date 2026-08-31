@@ -1,122 +1,159 @@
-import { CommonModule } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import {
   AfterViewInit,
+  ChangeDetectionStrategy,
   Component,
   ElementRef,
-  Input,
-  OnChanges,
   OnDestroy,
-  ViewChild,
+  computed,
+  effect,
+  inject,
+  input,
+  viewChild,
 } from '@angular/core';
-import { Chart, ChartConfiguration, registerables } from 'chart.js';
+import { Chart, ChartConfiguration } from 'chart.js';
+import { ThemeService } from '../../../../core/theme.service';
+import { opcoesBase, paletaAtual, registrarChartJs } from '../../chart-theme';
 import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from '../../models/dashboard.model';
-
-Chart.register(...registerables);
-
-const CORES_CATEGORIA = [
-  '#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed',
-  '#0891b2', '#db2777', '#65a30d', '#4b5563', '#ea580c', '#0f766e',
-];
 
 @Component({
   selector: 'app-financas-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CurrencyPipe, DecimalPipe],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DashboardComponent implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() resumo: ResumoResponse | null = null;
-  @Input() categorias: CategoriaResumo[] = [];
-  @Input() tendencias: TendenciaPeriodo[] = [];
+export class DashboardComponent implements AfterViewInit, OnDestroy {
+  readonly resumo = input<ResumoResponse | null>(null);
+  readonly categorias = input<CategoriaResumo[]>([]);
+  readonly tendencias = input<TendenciaPeriodo[]>([]);
 
-  @ViewChild('pizzaCanvas') pizzaCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('linhaCanvas') linhaCanvas?: ElementRef<HTMLCanvasElement>;
+  private readonly pizzaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pizzaCanvas');
+  private readonly linhaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('linhaCanvas');
 
-  private pizzaChart?: Chart;
-  private linhaChart?: Chart;
+  private readonly theme = inject(ThemeService);
+
+  private pizzaChart?: Chart<'doughnut'>;
+  private linhaChart?: Chart<'line'>;
   private viewPronta = false;
 
-  ngAfterViewInit(): void {
-    this.viewPronta = true;
-    this.renderizarGraficos();
+  // Quando o tema é "system", trocar o modo do sistema operacional não muda a
+  // preferência salva — só a media query. Os gráficos precisam dos dois sinais.
+  private readonly mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  private readonly aoTrocarTemaDoSistema = () => this.renderizar();
+
+  readonly semDespesas = computed(() => this.categorias().length === 0);
+  readonly semTendencias = computed(() => this.tendencias().every((t) => t.receitas === 0 && t.despesas === 0));
+
+  constructor() {
+    this.mediaQuery.addEventListener('change', this.aoTrocarTemaDoSistema);
+
+    effect(() => {
+      // Lê os sinais para que o efeito seja reexecutado quando qualquer um mudar.
+      this.categorias();
+      this.tendencias();
+      this.theme.pref();
+      if (this.viewPronta) void this.renderizar();
+    });
   }
 
-  ngOnChanges(): void {
-    if (this.viewPronta) {
-      this.renderizarGraficos();
-    }
+  async ngAfterViewInit(): Promise<void> {
+    this.viewPronta = true;
+    await this.renderizar();
   }
 
   ngOnDestroy(): void {
+    this.mediaQuery.removeEventListener('change', this.aoTrocarTemaDoSistema);
     this.pizzaChart?.destroy();
     this.linhaChart?.destroy();
   }
 
-  private renderizarGraficos(): void {
+  private async renderizar(): Promise<void> {
+    await registrarChartJs();
     this.renderizarPizza();
     this.renderizarLinha();
   }
 
   private renderizarPizza(): void {
-    if (!this.pizzaCanvas) return;
+    const canvas = this.pizzaCanvas()?.nativeElement;
+    this.pizzaChart?.destroy();
+    this.pizzaChart = undefined;
 
-    const config: ChartConfiguration<'pie'> = {
-      type: 'pie',
+    const categorias = this.categorias();
+    if (!canvas || categorias.length === 0) return;
+
+    const paleta = paletaAtual();
+    const config: ChartConfiguration<'doughnut'> = {
+      type: 'doughnut',
       data: {
-        labels: this.categorias.map((c) => c.categoria),
+        labels: categorias.map((c) => c.categoriaRotulo),
         datasets: [
           {
-            data: this.categorias.map((c) => c.total),
-            backgroundColor: this.categorias.map((_, i) => CORES_CATEGORIA[i % CORES_CATEGORIA.length]),
+            data: categorias.map((c) => c.total),
+            backgroundColor: categorias.map((_, i) => paleta.categorias[i % paleta.categorias.length]),
+            // A borda na cor da superfície separa as fatias sem desenhar linha.
+            borderColor: paleta.superficie,
+            borderWidth: 2,
           },
         ],
       },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: 'bottom' },
-        },
-      },
+      options: { ...opcoesBase<'doughnut'>(paleta), cutout: '58%' },
     };
 
-    this.pizzaChart?.destroy();
-    this.pizzaChart = new Chart(this.pizzaCanvas.nativeElement, config);
+    this.pizzaChart = new Chart(canvas, config);
   }
 
   private renderizarLinha(): void {
-    if (!this.linhaCanvas) return;
+    const canvas = this.linhaCanvas()?.nativeElement;
+    this.linhaChart?.destroy();
+    this.linhaChart = undefined;
+
+    const tendencias = this.tendencias();
+    if (!canvas || tendencias.length === 0) return;
+
+    const paleta = paletaAtual();
+    const base = opcoesBase<'line'>(paleta);
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
       data: {
-        labels: this.tendencias.map((t) => t.periodo),
+        labels: tendencias.map((t) => t.periodoRotulo),
         datasets: [
           {
             label: 'Receitas',
-            data: this.tendencias.map((t) => t.receitas),
-            borderColor: '#16a34a',
-            backgroundColor: 'rgba(22, 163, 74, 0.1)',
+            data: tendencias.map((t) => t.receitas),
+            borderColor: paleta.positivo,
+            backgroundColor: 'transparent',
+            pointBackgroundColor: paleta.positivo,
             tension: 0.3,
           },
           {
             label: 'Despesas',
-            data: this.tendencias.map((t) => t.despesas),
-            borderColor: '#dc2626',
-            backgroundColor: 'rgba(220, 38, 38, 0.1)',
+            data: tendencias.map((t) => t.despesas),
+            borderColor: paleta.negativo,
+            backgroundColor: 'transparent',
+            pointBackgroundColor: paleta.negativo,
             tension: 0.3,
           },
         ],
       },
       options: {
-        responsive: true,
-        plugins: {
-          legend: { position: 'bottom' },
+        ...base,
+        scales: {
+          x: { ticks: { color: paleta.texto }, grid: { color: paleta.grade } },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: paleta.texto,
+              callback: (v) => `R$ ${Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`,
+            },
+            grid: { color: paleta.grade },
+          },
         },
       },
     };
 
-    this.linhaChart?.destroy();
-    this.linhaChart = new Chart(this.linhaCanvas.nativeElement, config);
+    this.linhaChart = new Chart(canvas, config);
   }
 }

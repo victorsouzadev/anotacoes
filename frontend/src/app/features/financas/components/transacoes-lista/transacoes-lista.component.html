@@ -1,41 +1,129 @@
 <div class="card lista">
-  <h2>Lançamentos recentes</h2>
+  <header class="cabecalho">
+    <h2>Lançamentos</h2>
+    @if (total() > 0) { <span class="contagem">{{ total() }}</span> }
+  </header>
 
-  <p class="vazio" *ngIf="transacoes.length === 0">Nenhum lançamento ainda.</p>
+  @if (erro(); as e) {
+    <p class="erro" role="alert">{{ e }}</p>
+  }
+
+  @if (total() === 0) {
+    <p class="vazio">Nenhum lançamento neste período.</p>
+  }
 
   <ul>
-    <li *ngFor="let t of transacoes" [class.pendente]="t.status === 'pendente_revisao'">
-      <div class="info">
-        <span class="descricao">{{ t.descricao }}</span>
-        <span class="meta">{{ t.data }} · {{ t.categoria }}</span>
-      </div>
+    @for (t of transacoes(); track t.id) {
+      <li [class.pendente]="t.status === 'pendente_revisao'" [class.ocupado]="salvandoId() === t.id">
+        @if (editandoId() === t.id && rascunho) {
+          <!-- Edição inline: sem isso, um valor extraído errado só podia ser
+               confirmado como está ou excluído. -->
+          <form class="edicao" (ngSubmit)="salvarEdicao(t)">
+            <div class="campo largo">
+              <label [attr.for]="'desc-' + t.id">Descrição</label>
+              <input [id]="'desc-' + t.id" [(ngModel)]="rascunho.descricao" name="descricao" maxlength="500" />
+            </div>
 
-      <div class="valor" [class.receita]="t.tipo === 'receita'" [class.despesa]="t.tipo === 'despesa'">
-        {{ t.tipo === 'receita' ? '+' : '-' }} R$ {{ t.valor.toFixed(2) }}
-      </div>
+            <div class="campo">
+              <label [attr.for]="'valor-' + t.id">Valor</label>
+              <input [id]="'valor-' + t.id" type="number" step="0.01" min="0.01"
+                     [(ngModel)]="rascunho.valor" name="valor" />
+            </div>
 
-      <div class="status-badge" [class.pendente]="t.status === 'pendente_revisao'">
-        {{ t.status === 'pendente_revisao' ? 'pendente' : 'confirmado' }}
-      </div>
+            <div class="campo">
+              <label [attr.for]="'tipo-' + t.id">Tipo</label>
+              <select [id]="'tipo-' + t.id" [(ngModel)]="rascunho.tipo" name="tipo">
+                <option value="despesa">Despesa</option>
+                <option value="receita">Receita</option>
+              </select>
+            </div>
 
-      <div class="acoes">
-        <button
-          type="button"
-          *ngIf="t.status === 'pendente_revisao'"
-          (click)="confirmar(t)"
-          title="Confirmar lançamento"
-        >
-          <app-icon name="check" [size]="14" />
-        </button>
-        <button
-          type="button"
-          (click)="remover(t)"
-          [disabled]="removendoId === t.id"
-          title="Remover lançamento"
-        >
-          <app-icon name="x" [size]="14" />
-        </button>
-      </div>
-    </li>
+            <div class="campo">
+              <label [attr.for]="'cat-' + t.id">Categoria</label>
+              <select [id]="'cat-' + t.id" [(ngModel)]="rascunho.categoria" name="categoria">
+                @for (c of categorias; track c.valor) {
+                  <option [value]="c.valor">{{ c.rotulo }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="campo">
+              <label [attr.for]="'data-' + t.id">Data</label>
+              <input [id]="'data-' + t.id" type="date" [(ngModel)]="rascunho.data" name="data" />
+            </div>
+
+            <div class="campo">
+              <label [attr.for]="'forma-' + t.id">Pagamento</label>
+              <select [id]="'forma-' + t.id" [(ngModel)]="rascunho.formaPagamento" name="formaPagamento">
+                <option value="">—</option>
+                @for (f of formasPagamento; track f.valor) {
+                  <option [value]="f.valor">{{ f.rotulo }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="campo largo">
+              <label [attr.for]="'obs-' + t.id">Observações</label>
+              <input [id]="'obs-' + t.id" [(ngModel)]="rascunho.observacoes" name="observacoes" maxlength="500" />
+            </div>
+
+            <div class="acoes-edicao">
+              <button type="button" class="secundario" (click)="cancelarEdicao()">Cancelar</button>
+              <button type="submit" class="primario" [disabled]="salvandoId() === t.id">
+                {{ salvandoId() === t.id ? 'Salvando...' : 'Salvar' }}
+              </button>
+            </div>
+          </form>
+        } @else if (confirmandoExclusaoId() === t.id) {
+          <div class="confirmacao-exclusao">
+            <span>Excluir <strong>{{ t.descricao }}</strong>? Não dá para desfazer.</span>
+            <div class="acoes-edicao">
+              <button type="button" class="secundario" (click)="cancelarExclusao()">Cancelar</button>
+              <button type="button" class="perigo" (click)="remover(t)" [disabled]="salvandoId() === t.id">
+                {{ salvandoId() === t.id ? 'Excluindo...' : 'Excluir' }}
+              </button>
+            </div>
+          </div>
+        } @else {
+          <div class="info">
+            <span class="descricao">{{ t.descricao }}</span>
+            <span class="meta">
+              {{ t.data | date: 'dd/MM/yyyy' }} · {{ t.categoriaRotulo }}
+              @if (t.formaPagamento) { · {{ t.formaPagamento }} }
+            </span>
+            @if (t.observacoes) { <span class="observacoes">{{ t.observacoes }}</span> }
+          </div>
+
+          <div class="valor" [class.receita]="t.tipo === 'receita'" [class.despesa]="t.tipo === 'despesa'">
+            {{ t.tipo === 'receita' ? '+' : '−' }} {{ t.valor | currency }}
+          </div>
+
+          @if (t.status === 'pendente_revisao') {
+            <div class="status-badge pendente"
+                 [title]="'Confiança da extração: ' + rotuloConfianca(t.confiancaIa)">
+              revisar
+            </div>
+          } @else {
+            <div class="status-badge">ok</div>
+          }
+
+          <div class="acoes">
+            @if (t.status === 'pendente_revisao') {
+              <button type="button" (click)="confirmar(t)" [disabled]="salvandoId() === t.id"
+                      title="Confirmar lançamento" aria-label="Confirmar lançamento">
+                <app-icon name="check" [size]="14" />
+              </button>
+            }
+            <button type="button" (click)="editar(t)" title="Editar lançamento" aria-label="Editar lançamento">
+              <app-icon name="edit" [size]="14" />
+            </button>
+            <button type="button" class="excluir" (click)="pedirConfirmacaoExclusao(t)"
+                    title="Excluir lançamento" aria-label="Excluir lançamento">
+              <app-icon name="delete" [size]="14" />
+            </button>
+          </div>
+        }
+      </li>
+    }
   </ul>
 </div>

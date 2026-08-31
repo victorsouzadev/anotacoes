@@ -1,5 +1,5 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AtualizarTransacaoRequest,
@@ -10,9 +10,8 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class TransacaoService {
+  private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/financas/transacoes';
-
-  constructor(private readonly http: HttpClient) {}
 
   criar(request: CriarTransacaoRequest): Observable<Transacao> {
     return this.http.post<Transacao>(this.baseUrl, request);
@@ -20,10 +19,11 @@ export class TransacaoService {
 
   listar(filtro: ListarTransacoesFiltro = {}): Observable<Transacao[]> {
     let params = new HttpParams();
-    if (filtro.dataInicio) params = params.set('dataInicio', filtro.dataInicio);
-    if (filtro.dataFim) params = params.set('dataFim', filtro.dataFim);
-    if (filtro.categoria) params = params.set('categoria', filtro.categoria);
-    if (filtro.tipo) params = params.set('tipo', filtro.tipo);
+    for (const [chave, valor] of Object.entries(filtro)) {
+      if (valor !== undefined && valor !== null && valor !== '') {
+        params = params.set(chave, valor as string | number);
+      }
+    }
     return this.http.get<Transacao[]>(this.baseUrl, { params });
   }
 

@@ -76,15 +76,18 @@
   background: var(--accent-soft);
   border: 1px solid var(--border);
   color: var(--accent-dark);
+  cursor: pointer;
   border-radius: 999px;
   padding: 0.3rem 0.75rem;
   font-size: 0.8rem;
 }
 
+/* Cores por token: os valores fixos anteriores (fundo branco-rosado, texto
+   vinho) ficavam ilegíveis no tema escuro. */
 .lancamento-form .erro {
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  color: var(--negativo);
+  background: color-mix(in srgb, var(--negativo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negativo) 30%, transparent);
   padding: 0.6rem 0.9rem;
   border-radius: var(--radius-sm);
   margin-top: 1rem;
@@ -93,11 +96,11 @@
 .lancamento-form .confirmacao {
   margin-top: 1rem;
   padding: 0.75rem 0.9rem;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: color-mix(in srgb, var(--positivo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--positivo) 30%, transparent);
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
-  color: #14532d;
+  color: var(--text);
 }
 
 .lancamento-form .status {
@@ -105,11 +108,12 @@
   display: inline-block;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
-  background: #16a34a;
+  background: var(--positivo);
   color: #fff;
   font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .lancamento-form .status.pendente {
-  background: #d97706;
+  background: var(--atencao);
 }
