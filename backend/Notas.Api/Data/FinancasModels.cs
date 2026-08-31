@@ -87,3 +87,43 @@ public class OrcamentoItem
     public Categoria Categoria { get; set; }
     public decimal Percentual { get; set; }
 }
+
+// Meta de reserva: "juntar R$ 10.000 até dezembro". O progresso vem de aportes
+// explícitos, e não da soma de tudo que foi para a categoria Investimentos —
+// com mais de uma meta ativa essa soma seria contada duas vezes.
+public class MetaReserva
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string UserId { get; set; } = "";
+
+    public string Nome { get; set; } = "";
+    public decimal ValorAlvo { get; set; }
+
+    /// <summary>Prazo opcional. Sem ele a meta não tem ritmo exigido, só progresso.</summary>
+    public DateOnly? DataAlvo { get; set; }
+
+    public string? Observacoes { get; set; }
+
+    public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+    public DateTime? ConcluidaEm { get; set; }
+    public DateTime? ArquivadaEm { get; set; }
+
+    public List<MetaAporte> Aportes { get; set; } = new();
+}
+
+// Um depósito na meta. Pode ser avulso ou vinculado a uma transação de
+// investimento já lançada — o vínculo é único, para o mesmo dinheiro não ser
+// contado em duas metas.
+public class MetaAporte
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid MetaId { get; set; }
+
+    public decimal Valor { get; set; }
+    public DateOnly Data { get; set; }
+    public string? Observacoes { get; set; }
+
+    public Guid? TransacaoId { get; set; }
+
+    public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+}

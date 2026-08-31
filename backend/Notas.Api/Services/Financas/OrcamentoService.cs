@@ -135,6 +135,56 @@ public class OrcamentoService
             origem.Observacoes), ct);
     }
 
+    // ---------------------------------------------------------------- histórico
+
+    // Evolução dos últimos meses: quanto foi planejado e quanto saiu de fato.
+    // Meses sem orçamento entram assim mesmo, com o realizado, senão a série teria
+    // buracos justamente onde o usuário não se planejou.
+    public async Task<List<HistoricoMesResponse>> HistoricoAsync(
+        string userId, int meses, CancellationToken ct = default)
+    {
+        var quantidade = Math.Clamp(meses, 1, 36);
+        var hoje = _clock.Hoje();
+        var primeiroMes = new DateOnly(hoje.Year, hoje.Month, 1).AddMonths(-(quantidade - 1));
+        var (_, ultimoDia) = FinancasClock.LimitesDoMes(hoje.Year, hoje.Month);
+
+        var orcamentos = await _db.Orcamentos.AsNoTracking()
+            .Include(o => o.Itens)
+            .Where(o => o.UserId == userId)
+            .ToListAsync(ct);
+
+        var despesas = await _db.Transacoes.AsNoTracking()
+            .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa
+                        && t.Data >= primeiroMes && t.Data <= ultimoDia)
+            .ToListAsync(ct);
+
+        var realizadoPorMes = despesas
+            .GroupBy(t => (t.Data.Year, t.Data.Month))
+            .ToDictionary(g => g.Key, g => g.Sum(t => t.Valor));
+
+        var resultado = new List<HistoricoMesResponse>(quantidade);
+        for (var i = 0; i < quantidade; i++)
+        {
+            var mes = primeiroMes.AddMonths(i);
+            var orcamento = orcamentos.FirstOrDefault(o => o.Ano == mes.Year && o.Mes == mes.Month);
+            var realizado = realizadoPorMes.GetValueOrDefault((mes.Year, mes.Month));
+            var total = orcamento?.ValorTotal ?? 0m;
+            var utilizado = Percentual(realizado, total);
+
+            var situacao = orcamento is null ? "sem_orcamento"
+                : realizado > total ? "estourado"
+                : utilizado >= 80m ? "atencao"
+                : "ok";
+
+            resultado.Add(new HistoricoMesResponse(
+                mes.Year, mes.Month,
+                mes.ToString("MMM/yy", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")),
+                orcamento is not null, total, realizado, utilizado, situacao));
+        }
+
+        return resultado;
+    }
+
     // ------------------------------------------------------------ acompanhamento
 
     public async Task<AcompanhamentoResponse> AcompanharAsync(string userId, int ano, int mes, CancellationToken ct = default)

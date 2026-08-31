@@ -25,7 +25,15 @@ public class AnthropicLlmExtractor : ILlmExtractor
         _logger = logger;
     }
 
-    public async Task<ExtracaoLlmResult> ExtrairAsync(string textoLivre, DateOnly dataEnvio, CancellationToken cancellationToken = default)
+    public string Provedor => "anthropic";
+
+    // A API de mensagens da Anthropic aceita imagens, mas este extrator existe só
+    // como caminho alternativo ao da OpenRouter; a entrada multimodal ficou
+    // concentrada lá para não manter dois formatos de anexo.
+    public bool SuportaAnexos => false;
+
+    public async Task<IReadOnlyList<ExtracaoLlmResult>> ExtrairAsync(
+        EntradaExtracao entrada, DateOnly dataEnvio, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
@@ -34,7 +42,7 @@ public class AnthropicLlmExtractor : ILlmExtractor
                 "ou configure Anthropic:ApiKey em appsettings/secrets.");
         }
 
-        var body = await EnviarComRetentativaAsync(textoLivre, dataEnvio, cancellationToken);
+        var body = await EnviarComRetentativaAsync(entrada, dataEnvio, cancellationToken);
 
         using var doc = JsonDocument.Parse(body);
         if (!doc.RootElement.TryGetProperty("content", out var content)
@@ -51,28 +59,13 @@ public class AnthropicLlmExtractor : ILlmExtractor
             throw new LlmIndisponivelException("Resposta vazia do LLM.");
         }
 
-        var json = ExtractJson(text);
-
-        try
-        {
-            var resultado = JsonSerializer.Deserialize<ExtracaoLlmResult>(json, JsonOptions);
-            if (resultado is null)
-            {
-                throw new ExtracaoInvalidaException("Não foi possível desserializar a resposta do LLM.");
-            }
-            return resultado;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "JSON inválido retornado pelo LLM: {Json}", json);
-            throw new ExtracaoInvalidaException("LLM retornou um JSON inválido.");
-        }
+        return RespostaLlmParser.Parse(text, JsonOptions, _logger);
     }
 
     // Erros transitórios (429, 5xx, timeout) merecem uma segunda tentativa com
     // espera curta; erros 4xx de configuração/entrada não, porque repetir não muda
     // o resultado e só faz o usuário esperar mais.
-    private async Task<string> EnviarComRetentativaAsync(string textoLivre, DateOnly dataEnvio, CancellationToken cancellationToken)
+    private async Task<string> EnviarComRetentativaAsync(EntradaExtracao entrada, DateOnly dataEnvio, CancellationToken cancellationToken)
     {
         var requestBody = new
         {
@@ -82,7 +75,7 @@ public class AnthropicLlmExtractor : ILlmExtractor
             system = PromptBuilder.SystemPrompt,
             messages = new[]
             {
-                new { role = "user", content = PromptBuilder.BuildUserPrompt(textoLivre, dataEnvio) }
+                new { role = "user", content = PromptBuilder.BuildUserPrompt(entrada, dataEnvio) }
             }
         };
         var payload = JsonSerializer.Serialize(requestBody);
@@ -133,18 +126,4 @@ public class AnthropicLlmExtractor : ILlmExtractor
         || status == HttpStatusCode.RequestTimeout
         || (int)status >= 500;
 
-    // O prompt instrui o modelo a devolver somente JSON, mas alguns modelos podem
-    // envolver a resposta em blocos de código markdown. Esta função extrai apenas
-    // o objeto JSON, para tornar o parsing resiliente.
-    private static string ExtractJson(string text)
-    {
-        var trimmed = text.Trim();
-        var start = trimmed.IndexOf('{');
-        var end = trimmed.LastIndexOf('}');
-        if (start < 0 || end < 0 || end < start)
-        {
-            return trimmed;
-        }
-        return trimmed.Substring(start, end - start + 1);
-    }
 }

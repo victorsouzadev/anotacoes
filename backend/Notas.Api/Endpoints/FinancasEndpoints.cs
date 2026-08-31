@@ -12,6 +12,21 @@ public static class FinancasEndpoints
 {
     public static void MapFinancasEndpoints(this IEndpointRouteBuilder app)
     {
+        // GET /api/financas/capacidades — sem chave de LLM não há leitura de
+        // arquivo, e a interface precisa saber disso para não oferecer um botão
+        // que só devolveria erro.
+        app.MapGet("/api/financas/capacidades", (TransacaoExtractionService extraction,
+            Microsoft.Extensions.Options.IOptions<FinancasOptions> opcoes) =>
+        {
+            var limites = opcoes.Value;
+            return Results.Ok(new CapacidadesResponse(
+                extraction.Provedor,
+                extraction.SuportaAnexos,
+                limites.MaxArquivosPorImportacao,
+                limites.MaxTamanhoArquivoMb,
+                AnexoValidator.ExtensoesAceitas.ToArray()));
+        }).RequireAuthorization();
+
         var transacoes = app.MapGroup("/api/financas/transacoes").RequireAuthorization();
 
         // POST /api/financas/transacoes — recebe texto livre, aciona o LLM, retorna a transação estruturada.
@@ -52,6 +67,96 @@ public static class FinancasEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/financas/transacoes/{transacao.Id}", TransacaoResponse.FromEntity(transacao));
         }).RequireRateLimiting("financas-ia");
+
+        // POST /api/financas/transacoes/importar — foto de cupom, PDF de extrato,
+        // CSV de fatura. Um cupom rende um lançamento; um extrato rende dezenas,
+        // então este endpoint sempre devolve uma lista.
+        //
+        // Os lançamentos entram como "pendente de revisão" independentemente da
+        // confiança do modelo: ler um documento é bem mais sujeito a erro que
+        // interpretar uma frase digitada, e o usuário deve conferir antes de os
+        // números entrarem no orçamento.
+        transacoes.MapPost("/importar", async (HttpRequest request, ClaimsPrincipal user, AppDbContext db,
+            TransacaoExtractionService extractionService, Microsoft.Extensions.Options.IOptions<FinancasOptions> opcoes,
+            CancellationToken ct) =>
+        {
+            var limites = opcoes.Value;
+
+            if (!request.HasFormContentType)
+                return Results.BadRequest(new { erro = "Envie os arquivos como multipart/form-data." });
+
+            var form = await request.ReadFormAsync(ct);
+            var arquivos = form.Files;
+            var texto = (form["texto"].ToString() ?? "").Trim();
+
+            if (arquivos.Count == 0)
+                return Results.BadRequest(new { erro = "Envie ao menos um arquivo." });
+
+            if (arquivos.Count > limites.MaxArquivosPorImportacao)
+                return Results.BadRequest(new { erro = $"Envie no máximo {limites.MaxArquivosPorImportacao} arquivos por vez." });
+
+            if (texto.Length > limites.MaxTamanhoTexto)
+                return Results.BadRequest(new { erro = $"A observação passa de {limites.MaxTamanhoTexto} caracteres." });
+
+            var maxPorArquivo = (long)limites.MaxTamanhoArquivoMb * 1024 * 1024;
+            if (arquivos.Sum(a => a.Length) > (long)limites.MaxTamanhoTotalMb * 1024 * 1024)
+                return Results.BadRequest(new { erro = $"O total enviado passa de {limites.MaxTamanhoTotalMb} MB." });
+
+            var anexos = new List<AnexoExtracao>(arquivos.Count);
+            foreach (var arquivo in arquivos)
+            {
+                if (arquivo.Length == 0)
+                    return Results.BadRequest(new { erro = $"O arquivo '{arquivo.FileName}' está vazio." });
+
+                if (arquivo.Length > maxPorArquivo)
+                    return Results.BadRequest(new { erro = $"'{arquivo.FileName}' passa de {limites.MaxTamanhoArquivoMb} MB." });
+
+                if (!AnexoValidator.TryResolverTipo(arquivo.FileName, arquivo.ContentType, out var mime, out var erroTipo))
+                    return Results.BadRequest(new { erro = erroTipo });
+
+                using var memoria = new MemoryStream();
+                await arquivo.CopyToAsync(memoria, ct);
+
+                var anexo = new AnexoExtracao(Path.GetFileName(arquivo.FileName), mime, memoria.ToArray());
+                if (!AnexoValidator.ConteudoEhTextoLegivel(anexo))
+                    return Results.BadRequest(new { erro = $"Não consegui ler '{arquivo.FileName}' como texto (o arquivo precisa estar em UTF-8)." });
+
+                anexos.Add(anexo);
+            }
+
+            ResultadoExtracao resultado;
+            try
+            {
+                resultado = await extractionService.ExtrairAsync(new EntradaExtracao(texto, anexos), user.UserId(), ct);
+            }
+            catch (ExtracaoInvalidaException ex)
+            {
+                return Results.UnprocessableEntity(new { erro = ex.Message });
+            }
+            catch (LlmIndisponivelException ex)
+            {
+                return Results.Problem(title: "Serviço de interpretação indisponível", detail: ex.Message,
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            var atingiuLimite = resultado.Transacoes.Count > limites.MaxLancamentosPorImportacao;
+            var aCriar = resultado.Transacoes.Take(limites.MaxLancamentosPorImportacao).ToList();
+
+            foreach (var transacao in aCriar)
+            {
+                transacao.Status = StatusTransacao.PendenteRevisao;
+            }
+
+            db.Transacoes.AddRange(aCriar);
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new ImportacaoResponse(
+                aCriar.Count,
+                aCriar.Select(TransacaoResponse.FromEntity).ToList(),
+                resultado.Descartes.ToList(),
+                atingiuLimite));
+        }).RequireRateLimiting("financas-importacao")
+          .DisableAntiforgery();
 
         // GET /api/financas/transacoes — lista transações com filtros de período, categoria e tipo.
         transacoes.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct,

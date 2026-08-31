@@ -50,6 +50,18 @@ public record AcompanhamentoResponse(
     List<AcompanhamentoItemResponse> Itens,
     List<AcompanhamentoGrupoResponse> Grupos);
 
+// Uma linha do histórico: o mês, o que foi planejado e o que de fato saiu.
+public record HistoricoMesResponse(
+    int Ano,
+    int Mes,
+    string Rotulo,
+    bool TemOrcamento,
+    decimal ValorTotal,
+    decimal TotalRealizado,
+    decimal PercentualUtilizado,
+    // "ok" | "atencao" | "estourado" | "sem_orcamento"
+    string Situacao);
+
 // Modelo de distribuição pronto (ex.: 50/30/20), oferecido na tela de cadastro.
 public record ModeloOrcamentoResponse(
     string Id, string Nome, string Descricao, List<OrcamentoItemResponse> Itens);

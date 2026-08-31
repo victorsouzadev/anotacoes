@@ -13,7 +13,9 @@ public class HeuristicLlmExtractorTests
     private static readonly DateOnly Hoje = new(2026, 8, 31);
 
     private static ExtracaoLlmResult Extrair(string texto) =>
-        new HeuristicLlmExtractor().ExtrairAsync(texto, Hoje).GetAwaiter().GetResult();
+        new HeuristicLlmExtractor()
+            .ExtrairAsync(EntradaExtracao.DeTexto(texto), Hoje)
+            .GetAwaiter().GetResult()[0];
 
     [Theory]
     [InlineData("gastei 45 reais no mercado hoje", 45)]
@@ -115,10 +117,15 @@ public class TransacaoExtractionServiceTests
     // o validador isoladamente.
     private sealed class ExtratorFixo : ILlmExtractor
     {
-        private readonly ExtracaoLlmResult _resultado;
-        public ExtratorFixo(ExtracaoLlmResult resultado) => _resultado = resultado;
-        public Task<ExtracaoLlmResult> ExtrairAsync(string t, DateOnly d, CancellationToken ct = default)
-            => Task.FromResult(_resultado);
+        private readonly ExtracaoLlmResult[] _resultados;
+        public ExtratorFixo(params ExtracaoLlmResult[] resultados) => _resultados = resultados;
+
+        public string Provedor => "fixo";
+        public bool SuportaAnexos => true;
+
+        public Task<IReadOnlyList<ExtracaoLlmResult>> ExtrairAsync(
+            EntradaExtracao entrada, DateOnly d, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ExtracaoLlmResult>>(_resultados);
     }
 
     private static ExtracaoLlmResult Valido() => new()

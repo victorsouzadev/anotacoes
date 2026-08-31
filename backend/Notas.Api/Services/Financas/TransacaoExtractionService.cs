@@ -18,6 +18,11 @@ public class ExtracaoOptions
     public int MaxDiasNoFuturo { get; set; } = 370;
 }
 
+// Lançamentos aproveitados e o motivo de cada um que foi descartado — um extrato
+// pode ter linhas que não são movimentação, e a interface precisa poder dizer
+// quantas ficaram de fora.
+public record ResultadoExtracao(IReadOnlyList<Transacao> Transacoes, IReadOnlyList<string> Descartes);
+
 // Orquestra a extração via LLM e a validação/normalização do resultado antes
 // da persistência.
 public class TransacaoExtractionService
@@ -33,6 +38,9 @@ public class TransacaoExtractionService
         _clock = clock;
     }
 
+    public string Provedor => _extractor.Provedor;
+    public bool SuportaAnexos => _extractor.SuportaAnexos;
+
     public async Task<Transacao> ExtrairTransacaoAsync(string textoLivre, string userId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(textoLivre))
@@ -40,10 +48,66 @@ public class TransacaoExtractionService
             throw new ExtracaoInvalidaException("O texto do lançamento não pode ser vazio.");
         }
 
-        var hoje = _clock.Hoje();
-        var bruto = await _extractor.ExtrairAsync(textoLivre, hoje, cancellationToken);
+        var resultado = await ExtrairAsync(EntradaExtracao.DeTexto(textoLivre), userId, cancellationToken);
+        return resultado.Transacoes[0];
+    }
 
-        return Validar(bruto, textoLivre, userId, hoje);
+    // Um texto digitado rende um lançamento; um extrato pode render dezenas. Uma
+    // linha inválida no meio de um documento longo não invalida o documento
+    // inteiro: ela é descartada e as demais seguem.
+    public async Task<ResultadoExtracao> ExtrairAsync(
+        EntradaExtracao entrada, string userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(entrada.Texto) && !entrada.TemAnexos)
+        {
+            throw new ExtracaoInvalidaException("Envie um texto ou um arquivo para registrar o lançamento.");
+        }
+
+        if (entrada.TemAnexos && !_extractor.SuportaAnexos)
+        {
+            throw new LlmIndisponivelException(
+                "A leitura de imagens e arquivos precisa de uma chave de API configurada " +
+                "(OPENROUTER_API_KEY). Sem ela, só o lançamento por texto está disponível.");
+        }
+
+        var hoje = _clock.Hoje();
+        var brutos = await _extractor.ExtrairAsync(entrada, hoje, cancellationToken);
+
+        var textoOriginal = MontarTextoOriginal(entrada);
+        var transacoes = new List<Transacao>(brutos.Count);
+        var descartes = new List<string>();
+        ExtracaoInvalidaException? primeiroErro = null;
+
+        foreach (var bruto in brutos)
+        {
+            try
+            {
+                transacoes.Add(Validar(bruto, textoOriginal, userId, hoje));
+            }
+            catch (ExtracaoInvalidaException ex)
+            {
+                primeiroErro ??= ex;
+                descartes.Add(ex.Message);
+            }
+        }
+
+        if (transacoes.Count == 0)
+        {
+            // Nada aproveitável: devolve o motivo do primeiro descarte, que é mais
+            // útil do que um "não encontrei nada" genérico.
+            throw primeiroErro ?? new ExtracaoInvalidaException(
+                "Não encontrei nenhum lançamento no que foi enviado.");
+        }
+
+        return new ResultadoExtracao(transacoes, descartes);
+    }
+
+    private static string MontarTextoOriginal(EntradaExtracao entrada)
+    {
+        if (!entrada.TemAnexos) return entrada.Texto;
+
+        var nomes = string.Join(", ", entrada.Anexos.Select(a => a.NomeArquivo));
+        return string.IsNullOrWhiteSpace(entrada.Texto) ? $"[arquivo] {nomes}" : $"{entrada.Texto} [arquivo] {nomes}";
     }
 
     private Transacao Validar(ExtracaoLlmResult bruto, string textoOriginal, string userId, DateOnly hoje)

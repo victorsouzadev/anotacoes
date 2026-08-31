@@ -44,6 +44,11 @@ public static class OrcamentoEndpoints
                 Results.Ok(await service.AcompanharAsync(user.UserId(), anoRef, mesRef, ct)));
         });
 
+        // GET /api/financas/orcamentos/historico?meses=12 — evolução planejado x realizado.
+        grupo.MapGet("/historico", async (ClaimsPrincipal user, OrcamentoService service,
+            CancellationToken ct, int? meses) =>
+            Results.Ok(await service.HistoricoAsync(user.UserId(), meses ?? 12, ct)));
+
         // GET /api/financas/orcamentos/modelos?valorTotal= — distribuições prontas, já em reais.
         grupo.MapGet("/modelos", (decimal? valorTotal) =>
         {

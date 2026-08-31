@@ -14,6 +14,16 @@ public class FinancasOptions
     // Teto do texto livre aceito no POST de lançamento. Protege o custo da chamada
     // ao LLM e o tamanho das colunas.
     public int MaxTamanhoTexto { get; set; } = 500;
+
+    // Limites da importação por arquivo. Cada byte enviado vira token cobrado, e
+    // uma imagem de celular passa fácil dos 5 MB.
+    public int MaxArquivosPorImportacao { get; set; } = 5;
+    public int MaxTamanhoArquivoMb { get; set; } = 10;
+    public int MaxTamanhoTotalMb { get; set; } = 25;
+
+    // Teto de lançamentos criados de uma vez por um único documento, para um PDF
+    // gigante (ou um modelo alucinando) não despejar centenas de linhas na conta.
+    public int MaxLancamentosPorImportacao { get; set; } = 200;
 }
 
 // Relógio da ferramenta: resolve "hoje" e os limites de um mês no fuso do usuário,

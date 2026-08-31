@@ -52,8 +52,16 @@ public partial class HeuristicLlmExtractor : ILlmExtractor
     private static readonly string[] PalavrasDespesa =
         { "gastei", "paguei", "comprei", "pagamento de", "torrei", "debitou", "saiu da conta" };
 
-    public Task<ExtracaoLlmResult> ExtrairAsync(string textoLivre, DateOnly dataEnvio, CancellationToken cancellationToken = default)
+    public string Provedor => "heuristico";
+
+    // Regex não lê foto de cupom nem PDF: quem tenta importar arquivo sem um LLM
+    // configurado recebe um erro claro, em vez de um resultado inventado.
+    public bool SuportaAnexos => false;
+
+    public Task<IReadOnlyList<ExtracaoLlmResult>> ExtrairAsync(
+        EntradaExtracao entrada, DateOnly dataEnvio, CancellationToken cancellationToken = default)
     {
+        var textoLivre = entrada.Texto;
         var textoLower = textoLivre.ToLowerInvariant();
 
         var tipo = DetectarTipo(textoLower);
@@ -64,7 +72,7 @@ public partial class HeuristicLlmExtractor : ILlmExtractor
 
         var descricao = MontarDescricao(textoLivre);
 
-        return Task.FromResult(new ExtracaoLlmResult
+        var resultado = new ExtracaoLlmResult
         {
             Descricao = descricao,
             Valor = valor,
@@ -74,7 +82,9 @@ public partial class HeuristicLlmExtractor : ILlmExtractor
             FormaPagamento = formaPagamento,
             Confianca = CalcularConfianca(valor, valorAncorado, categoria, dataExplicita),
             Observacoes = null
-        });
+        };
+
+        return Task.FromResult<IReadOnlyList<ExtracaoLlmResult>>(new[] { resultado });
     }
 
     // A confiança é deliberadamente conservadora: este extrator é um fallback local

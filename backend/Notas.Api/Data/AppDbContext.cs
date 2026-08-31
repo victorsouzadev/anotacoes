@@ -52,6 +52,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transacao> Transacoes => Set<Transacao>();
     public DbSet<Orcamento> Orcamentos => Set<Orcamento>();
     public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
+    public DbSet<MetaReserva> MetasReserva => Set<MetaReserva>();
+    public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -145,6 +147,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Percentual).HasColumnType("decimal(7,4)");
             // Uma categoria não pode aparecer duas vezes no mesmo orçamento.
             e.HasIndex(i => new { i.OrcamentoId, i.Categoria }).IsUnique();
+        });
+
+        b.Entity<MetaReserva>(e =>
+        {
+            e.ToTable("financas_metas");
+            e.Property(m => m.Nome).IsRequired().HasMaxLength(120);
+            e.Property(m => m.ValorAlvo).HasColumnType("decimal(12,2)");
+            e.Property(m => m.Observacoes).HasMaxLength(500);
+            e.HasIndex(m => m.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(m => m.Aportes).WithOne().HasForeignKey(a => a.MetaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MetaAporte>(e =>
+        {
+            e.ToTable("financas_meta_aportes");
+            e.Property(a => a.Valor).HasColumnType("decimal(12,2)");
+            e.Property(a => a.Observacoes).HasMaxLength(500);
+            e.HasIndex(a => a.MetaId);
+            // Índice único filtrado: uma transação de investimento só pode alimentar
+            // uma meta, mas vários aportes avulsos (TransacaoId nulo) convivem.
+            e.HasIndex(a => a.TransacaoId).IsUnique().HasFilter("\"TransacaoId\" IS NOT NULL");
+            e.HasOne<Transacao>().WithMany().HasForeignKey(a => a.TransacaoId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<TaskCategory>(e =>
