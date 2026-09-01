@@ -1,0 +1,171 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+}
+
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+.ajuda { font-size: 12.5px; color: var(--text-muted); margin: 0 0 12px; line-height: 1.5; }
+
+.indisponivel {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+.indisponivel code {
+  font-size: 11.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ------------------------------------------------------- área de arrasto */
+
+.area-arrastar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 24px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+  text-align: center;
+}
+.area-arrastar:hover, .area-arrastar.arrastando { border-color: var(--accent); background: var(--accent-soft); }
+
+/* O input cobre a área inteira para que o clique em qualquer ponto abra o
+   seletor, sem precisar de JS ligando label e input. */
+.area-arrastar input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.area-arrastar .icone { color: var(--accent); }
+.area-arrastar .chamada { font-size: 13px; font-weight: 600; }
+.area-arrastar .detalhe { font-size: 11px; color: var(--text-muted); }
+
+/* ---------------------------------------------------------- lista de arquivos */
+
+.arquivos { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.arquivos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color: var(--text-muted);
+}
+.arquivos .nome { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+.arquivos .tamanho { font-size: 11px; flex-shrink: 0; }
+.arquivos button {
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border: none; background: none; color: var(--text-muted);
+  border-radius: 5px; cursor: pointer; flex-shrink: 0;
+}
+.arquivos button:hover:not(:disabled) { color: var(--danger); }
+
+.observacao {
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.acoes button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.acoes button:disabled { opacity: 0.6; cursor: default; }
+.acoes .primario { background: var(--accent); border-color: var(--accent); color: #fff; }
+.acoes .primario:hover:not(:disabled) { background: var(--accent-dark); }
+.acoes .secundario { background: var(--surface); color: var(--text-muted); }
+
+.processando { font-size: 11.5px; color: var(--text-muted); text-align: right; margin: 6px 0 0; }
+
+/* ------------------------------------------------------------- resultado */
+
+.erro {
+  font-size: 12.5px;
+  color: var(--negativo);
+  background: color-mix(in srgb, var(--negativo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negativo) 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  margin: 12px 0 0;
+}
+
+.resultado {
+  margin-top: 12px;
+  padding: 11px 12px;
+  font-size: 12.5px;
+  background: color-mix(in srgb, var(--positivo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--positivo) 30%, transparent);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.previa { list-style: none; margin: 10px 0 0; padding: 0; }
+.previa li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--positivo) 25%, transparent);
+}
+.previa-desc { overflow-wrap: anywhere; }
+.previa-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.previa-valor {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--negativo);
+}
+.previa-valor.receita { color: var(--positivo); }
+
+.aviso { color: var(--atencao); font-weight: 600; margin: 10px 0 0; }
+
+.outro-mes { margin: 10px 0 0; }
+.outro-mes strong { text-transform: capitalize; }
+.outro-mes button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 6px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.descartes { margin-top: 10px; }
+.descartes summary { cursor: pointer; color: var(--text-muted); font-size: 11.5px; }
+.descartes ul { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--text-muted); }

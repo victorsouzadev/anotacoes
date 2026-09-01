@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   Acompanhamento,
   CategoriaOrcavel,
+  HistoricoMes,
   ModeloOrcamento,
   Orcamento,
   SalvarOrcamentoRequest,
@@ -21,13 +22,20 @@ export class OrcamentoService {
     });
   }
 
-  historico(): Observable<Orcamento[]> {
+  /** Todos os orçamentos já cadastrados, do mais recente para o mais antigo. */
+  listarTodos(): Observable<Orcamento[]> {
     return this.http.get<Orcamento[]>(this.baseUrl);
   }
 
   acompanhamento(ano: number, mes: number): Observable<Acompanhamento> {
     return this.http.get<Acompanhamento>(`${this.baseUrl}/acompanhamento`, {
       params: new HttpParams().set('ano', ano).set('mes', mes),
+    });
+  }
+
+  historico(meses = 12): Observable<HistoricoMes[]> {
+    return this.http.get<HistoricoMes[]>(`${this.baseUrl}/historico`, {
+      params: new HttpParams().set('meses', meses),
     });
   }
 

@@ -38,6 +38,14 @@
                 [class.ativa]="aba() === 'orcamento'" (click)="trocarAba('orcamento')">
           Orçamento
         </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'metas'"
+                [class.ativa]="aba() === 'metas'" (click)="trocarAba('metas')">
+          Metas
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'historico'"
+                [class.ativa]="aba() === 'historico'" (click)="trocarAba('historico')">
+          Histórico
+        </button>
       </nav>
     </div>
 
@@ -48,8 +56,37 @@
       </div>
     }
 
+    <!-- Alertas de orçamento: só o que piorou desde a última visita. -->
+    @if (alertas().length > 0) {
+      <div class="alertas" role="status">
+        <div class="alertas-lista">
+          @for (a of alertas(); track a.categoria) {
+            <p class="alerta-item" [class.estourado]="a.nivel === 'estourado'">
+              <app-icon [name]="a.nivel === 'estourado' ? 'x' : 'help'" [size]="13" />
+              {{ mensagemDoAlerta(a) }}
+            </p>
+          }
+        </div>
+        <button type="button" (click)="dispensarAlertas()" aria-label="Dispensar avisos">
+          <app-icon name="x" [size]="13" />
+        </button>
+      </div>
+    }
+
     @if (aba() === 'lancamentos') {
       <app-lancamento-form (lancamentoCriado)="recarregar()" />
+
+      <div class="linha-importar">
+        <button type="button" class="alternar-importacao" (click)="alternarImportacao()">
+          <app-icon name="paperclip" [size]="13" />
+          {{ mostrarImportacao() ? 'Ocultar importação de arquivo' : 'Importar de foto, PDF ou planilha' }}
+        </button>
+      </div>
+
+      @if (mostrarImportacao()) {
+        <app-importar [ano]="ano()" [mes]="mes()" (importado)="recarregar()"
+                      (irParaMes)="abrirMesNoOrcamento($event); trocarAba('lancamentos')" />
+      }
 
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
@@ -81,12 +118,21 @@
           @if (temFiltro()) {
             <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
           }
+
+          <button type="button" class="exportar" (click)="exportarCsv()"
+                  [disabled]="transacoes().length === 0" title="Baixar os lançamentos deste mês em CSV">
+            <app-icon name="download" [size]="13" /> Exportar CSV
+          </button>
         </div>
 
         <app-transacoes-lista [transacoes]="transacoes()" (alterado)="recarregar()" />
       }
-    } @else {
+    } @else if (aba() === 'orcamento') {
       <app-orcamento [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+    } @else if (aba() === 'metas') {
+      <app-metas />
+    } @else {
+      <app-historico-orcamentos (mesEscolhido)="abrirMesNoOrcamento($event)" />
     }
   </main>
 </div>

@@ -13,8 +13,10 @@ public class OpenRouterOptions
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1/chat/completions";
 
     // A OpenRouter usa estes dois cabeçalhos para atribuir o tráfego a um app.
+    // Sem acento de propósito: cabeçalho HTTP só aceita ASCII, e um valor com
+    // acento faz a requisição inteira falhar antes de sair da máquina.
     public string Referer { get; set; } = "https://github.com/victorsouzadev/anotacoes";
-    public string Titulo { get; set; } = "Anotações — Finanças";
+    public string Titulo { get; set; } = "Anotacoes - Financas";
 
     public int MaxTokens { get; set; } = 4096;
 

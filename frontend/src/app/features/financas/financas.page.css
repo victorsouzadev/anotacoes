@@ -146,6 +146,58 @@
   cursor: pointer;
 }
 
+/* ------------------------------------------------- alertas de orçamento */
+
+.alertas {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: color-mix(in srgb, var(--atencao) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--atencao) 32%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.alertas-lista { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.alerta-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--atencao);
+  margin: 0;
+}
+.alerta-item.estourado { color: var(--negativo); }
+.alertas > button {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.alertas > button:hover { opacity: 1; }
+
+/* ----------------------------------------------------------- importação */
+
+.linha-importar { display: flex; }
+.alternar-importacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.alternar-importacao:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ------------------------------------------------------------- filtros */
 
 .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -173,6 +225,25 @@
 }
 .filtros .limpar:hover { color: var(--accent); border-color: var(--accent); }
 
+.filtros .exportar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Empurrado para a direita: é ação sobre o resultado, não mais um filtro. */
+  margin-left: auto;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filtros .exportar:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.filtros .exportar:disabled { opacity: 0.5; cursor: default; }
+
 @media (max-width: 760px) {
   .top-bar { padding: 12px 16px; flex-wrap: wrap; }
   .user-email { display: none; }
@@ -181,4 +252,8 @@
   .abas { width: 100%; }
   .abas button { flex: 1; }
   .filtros select { flex: 1; min-width: 140px; }
+  .filtros .exportar { margin-left: 0; width: 100%; justify-content: center; }
+  /* Quatro abas não cabem lado a lado numa tela estreita. */
+  .abas { flex-wrap: wrap; }
+  .abas button { flex: 1 1 40%; }
 }

@@ -10,8 +10,10 @@ export interface PaletaGrafico {
   texto: string;
   grade: string;
   superficie: string;
+  acento: string;
   positivo: string;
   negativo: string;
+  atencao: string;
   categorias: string[];
 }
 
@@ -21,8 +23,10 @@ export function paletaAtual(): PaletaGrafico {
     texto: token('--text-muted', escuro ? '#9494a8' : '#7a7a8c'),
     grade: token('--grade', escuro ? 'rgba(236,236,243,0.1)' : 'rgba(28,28,38,0.08)'),
     superficie: token('--surface', escuro ? '#1f1f2b' : '#ffffff'),
+    acento: token('--accent', escuro ? '#8b7bff' : '#6d5ef8'),
     positivo: token('--positivo', escuro ? '#4ade80' : '#16a34a'),
     negativo: token('--negativo', escuro ? '#f87171' : '#dc2626'),
+    atencao: token('--atencao', escuro ? '#fbbf24' : '#d97706'),
     // Paleta categórica com contraste suficiente nos dois temas — as cores fixas
     // anteriores sumiam no fundo escuro.
     categorias: escuro

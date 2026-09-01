@@ -45,6 +45,62 @@ internal sealed class HandlerRoteirizado : HttpMessageHandler
     }
 }
 
+// Servidor HTTP mínimo e real, para exercitar a serialização dos cabeçalhos que
+// um handler falso em memória nunca chega a fazer.
+internal sealed class ServidorFalso : IDisposable
+{
+    private readonly System.Net.HttpListener _listener = new();
+    private readonly CancellationTokenSource _cts = new();
+
+    public List<string> CabecalhosRecebidos { get; } = new();
+    public string Url { get; }
+
+    public ServidorFalso()
+    {
+        var porta = 5400 + Random.Shared.Next(0, 400);
+        Url = $"http://127.0.0.1:{porta}/v1/chat/completions";
+        _listener.Prefixes.Add($"http://127.0.0.1:{porta}/");
+        _listener.Start();
+        _ = Task.Run(Atender);
+    }
+
+    private async Task Atender()
+    {
+        while (!_cts.IsCancellationRequested)
+        {
+            System.Net.HttpListenerContext ctx;
+            try { ctx = await _listener.GetContextAsync(); }
+            catch { return; }
+
+            foreach (var chave in new[] { "X-Title", "HTTP-Referer" })
+            {
+                var valor = ctx.Request.Headers[chave];
+                if (valor is not null) CabecalhosRecebidos.Add(valor);
+            }
+
+            var corpo = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new
+            {
+                choices = new[]
+                {
+                    new { message = new { content = """{"lancamentos":[{"descricao":"Mercado","valor":45,"tipo":"despesa","categoria":"alimentacao","data":"2026-08-31","confianca":0.9}]}""" } },
+                },
+            }));
+
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength64 = corpo.Length;
+            await ctx.Response.OutputStream.WriteAsync(corpo);
+            ctx.Response.Close();
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _listener.Close();
+        _cts.Dispose();
+    }
+}
+
 public class OpenRouterExtractorTests
 {
     private static readonly DateOnly Hoje = new(2026, 8, 31);
@@ -280,6 +336,43 @@ public class OpenRouterExtractorTests
 
         var ex = await Assert.ThrowsAsync<LlmIndisponivelException>(() => Extrair(semChave));
         Assert.Contains("OPENROUTER_API_KEY", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("Anotações — Finanças", "Anotacoes  Financas")]
+    [InlineData("Finanças", "Financas")]
+    [InlineData("São Paulo", "Sao Paulo")]
+    [InlineData("Anotacoes - Financas", "Anotacoes - Financas")]
+    [InlineData("", "")]
+    public void TituloEhReduzidoAAscii(string entrada, string esperado)
+    {
+        // Cabeçalho HTTP só aceita ASCII: um acento aqui faz toda requisição
+        // estourar antes de sair da máquina, com uma mensagem que não aponta
+        // para o appsettings.
+        Assert.Equal(esperado, OpenRouterLlmExtractor.SomenteAscii(entrada));
+    }
+
+    [Fact]
+    public async Task TituloComAcentoNaConfiguracaoNaoQuebraARequisicaoReal()
+    {
+        // Este teste sobe um servidor HTTP de verdade: o handler falso dos demais
+        // nunca serializa cabeçalho, então não pegaria o erro de codificação.
+        using var servidor = new ServidorFalso();
+        var opcoes = new OpenRouterOptions
+        {
+            ApiKey = "sk-teste",
+            BaseUrl = servidor.Url,
+            Titulo = "Anotações — Finanças",
+            Referer = "https://exemplo.com/anotações",
+        };
+
+        var extrator = new OpenRouterLlmExtractor(new HttpClient(), Options.Create(opcoes),
+            NullLogger<OpenRouterLlmExtractor>.Instance);
+
+        var r = await extrator.ExtrairAsync(EntradaExtracao.DeTexto("gastei 45 no mercado"), Hoje);
+
+        Assert.Single(r);
+        Assert.All(servidor.CabecalhosRecebidos, h => Assert.All(h, c => Assert.InRange(c, ' ', '~')));
     }
 
     [Fact]

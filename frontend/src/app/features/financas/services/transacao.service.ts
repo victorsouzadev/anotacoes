@@ -7,6 +7,7 @@ import {
   ListarTransacoesFiltro,
   Transacao,
 } from '../models/transacao.model';
+import { Capacidades, ImportacaoResponse } from '../models/importacao.model';
 
 @Injectable({ providedIn: 'root' })
 export class TransacaoService {
@@ -25,6 +26,22 @@ export class TransacaoService {
       }
     }
     return this.http.get<Transacao[]>(this.baseUrl, { params });
+  }
+
+  /** O que este servidor consegue fazer — sem chave de LLM não há leitura de arquivo. */
+  capacidades(): Observable<Capacidades> {
+    return this.http.get<Capacidades>('/api/financas/capacidades');
+  }
+
+  /** Importa lançamentos de foto de cupom, PDF de extrato ou planilha de fatura. */
+  importar(arquivos: File[], texto: string): Observable<ImportacaoResponse> {
+    const form = new FormData();
+    for (const arquivo of arquivos) {
+      form.append('arquivos', arquivo, arquivo.name);
+    }
+    if (texto.trim()) form.append('texto', texto.trim());
+
+    return this.http.post<ImportacaoResponse>(`${this.baseUrl}/importar`, form);
   }
 
   atualizar(id: string, request: AtualizarTransacaoRequest): Observable<Transacao> {

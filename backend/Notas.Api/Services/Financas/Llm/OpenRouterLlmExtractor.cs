@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -67,8 +68,8 @@ public class OpenRouterLlmExtractor : ILlmExtractor
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl);
                 request.Headers.Add("Authorization", $"Bearer {_options.ApiKey}");
-                request.Headers.Add("HTTP-Referer", _options.Referer);
-                request.Headers.Add("X-Title", _options.Titulo);
+                request.Headers.Add("HTTP-Referer", SomenteAscii(_options.Referer));
+                request.Headers.Add("X-Title", SomenteAscii(_options.Titulo));
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
                 using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
@@ -187,6 +188,29 @@ public class OpenRouterLlmExtractor : ILlmExtractor
         }
 
         return texto;
+    }
+
+    // Cabeçalho HTTP só aceita ASCII: um título configurado como "Finanças" faria
+    // toda requisição estourar em HttpRequestException antes de sair da máquina,
+    // e o erro ("Request headers must contain only ASCII characters") não sugere
+    // em nada que a causa está no appsettings.
+    public static string SomenteAscii(string valor)
+    {
+        if (string.IsNullOrEmpty(valor)) return "";
+
+        var normalizado = valor.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(normalizado.Length);
+
+        foreach (var c in normalizado)
+        {
+            // Remove o acento e mantém a letra base ("ç" -> "c"), preservando o
+            // texto legível em vez de simplesmente apagar o caractere.
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+            if (c is >= ' ' and <= '~') sb.Append(c);
+            else if (char.IsWhiteSpace(c)) sb.Append(' ');
+        }
+
+        return sb.ToString().Trim();
     }
 
     private static bool EhTransitorio(HttpStatusCode status) =>

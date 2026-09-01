@@ -67,6 +67,17 @@ export interface Acompanhamento {
   grupos: AcompanhamentoGrupo[];
 }
 
+export interface HistoricoMes {
+  ano: number;
+  mes: number;
+  rotulo: string;
+  temOrcamento: boolean;
+  valorTotal: number;
+  totalRealizado: number;
+  percentualUtilizado: number;
+  situacao: SituacaoItem;
+}
+
 export interface ModeloOrcamento {
   id: string;
   nome: string;

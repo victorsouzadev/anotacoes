@@ -6,15 +6,28 @@ import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { HistoricoComponent } from './components/historico/historico.component';
+import { ImportarComponent } from './components/importar/importar.component';
 import { LancamentoFormComponent } from './components/lancamento-form/lancamento-form.component';
+import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
 import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from './models/dashboard.model';
 import { CATEGORIAS, Categoria, TipoTransacao, Transacao } from './models/transacao.model';
 import { DashboardService } from './services/dashboard.service';
+import { OrcamentoService } from './services/orcamento.service';
 import { TransacaoService } from './services/transacao.service';
+import { nomeArquivoCsv, transacoesParaCsv } from './financas-csv';
+import { baixarCsv } from '../../shared/csv';
+import {
+  AlertaCategoria,
+  alertasNovos,
+  chaveDoEstado,
+  estadoDe,
+  mensagemDoAlerta,
+} from './alertas-orcamento';
 
-type Aba = 'lancamentos' | 'orcamento';
+type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
@@ -24,9 +37,12 @@ type Aba = 'lancamentos' | 'orcamento';
     FormsModule,
     IconComponent,
     LancamentoFormComponent,
+    ImportarComponent,
     DashboardComponent,
     TransacoesListaComponent,
     OrcamentoComponent,
+    MetasComponent,
+    HistoricoComponent,
   ],
   templateUrl: './financas.page.html',
   styleUrl: './financas.page.css',
@@ -35,6 +51,7 @@ type Aba = 'lancamentos' | 'orcamento';
 export class FinancasPageComponent {
   private readonly transacaoService = inject(TransacaoService);
   private readonly dashboardService = inject(DashboardService);
+  private readonly orcamentoService = inject(OrcamentoService);
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
 
@@ -53,6 +70,11 @@ export class FinancasPageComponent {
 
   readonly carregando = signal(true);
   readonly erro = signal<string | null>(null);
+
+  readonly mostrarImportacao = signal(false);
+  /** Categorias que acabaram de entrar em atenção ou estourar. */
+  readonly alertas = signal<AlertaCategoria[]>([]);
+  readonly mensagemDoAlerta = mensagemDoAlerta;
 
   // Filtros da lista. São signals, e não campos comuns, porque `temFiltro` é um
   // computed: sobre campos comuns ele nunca recalcularia e o botão de limpar
@@ -92,6 +114,66 @@ export class FinancasPageComponent {
 
   trocarAba(aba: Aba): void {
     this.aba.set(aba);
+  }
+
+  alternarImportacao(): void {
+    this.mostrarImportacao.update((v) => !v);
+  }
+
+  /** Vindo do histórico: abre o orçamento do mês clicado. */
+  abrirMesNoOrcamento(alvo: { ano: number; mes: number }): void {
+    this.ano.set(alvo.ano);
+    this.mes.set(alvo.mes);
+    this.aba.set('orcamento');
+    this.carregarTudo();
+  }
+
+  exportarCsv(): void {
+    const transacoes = this.transacoes();
+    if (transacoes.length === 0) return;
+
+    baixarCsv(nomeArquivoCsv('lancamentos', this.ano(), this.mes()), transacoesParaCsv(transacoes));
+  }
+
+  dispensarAlertas(): void {
+    this.alertas.set([]);
+  }
+
+  // Compara a situação de cada categoria com a da última verificação e avisa só o
+  // que piorou. Sem isso, toda recarga repetiria o mesmo aviso de uma categoria
+  // que já estava estourada, e o usuário aprenderia a ignorá-lo.
+  private verificarAlertas(): void {
+    this.orcamentoService.acompanhamento(this.ano(), this.mes()).subscribe({
+      next: (a) => {
+        if (!a.temOrcamento) return;
+
+        const chave = chaveDoEstado(this.ano(), this.mes());
+        const anterior = this.lerEstado(chave);
+
+        this.alertas.set(alertasNovos(a.itens, anterior));
+        this.gravarEstado(chave, estadoDe(a.itens));
+      },
+      // Alerta é acessório: falhar aqui não pode atrapalhar o resto da tela.
+      error: () => {},
+    });
+  }
+
+  private lerEstado(chave: string): ReturnType<typeof estadoDe> | null {
+    try {
+      const bruto = localStorage.getItem(chave);
+      return bruto ? JSON.parse(bruto) : null;
+    } catch {
+      // Modo privado ou armazenamento bloqueado: sem histórico, sem alerta.
+      return null;
+    }
+  }
+
+  private gravarEstado(chave: string, estado: ReturnType<typeof estadoDe>): void {
+    try {
+      localStorage.setItem(chave, JSON.stringify(estado));
+    } catch {
+      // Ignorado de propósito: o alerta é um extra, não pode quebrar a página.
+    }
   }
 
   // ----------------------------------------------------------- carregamento
@@ -145,6 +227,7 @@ export class FinancasPageComponent {
         this.resumoCategorias.set(categorias);
         this.tendencias.set(tendencias);
         this.carregando.set(false);
+        this.verificarAlertas();
       },
       error: () => {
         this.carregando.set(false);

@@ -1,4 +1,9 @@
 import { TaskItem } from '../models/task.model';
+import { csvEscape, toCsv } from '../../../shared/csv';
+
+// Reexportado porque a montagem do CSV de tarefas e a de finanças compartilham
+// as mesmas regras de escape.
+export { csvEscape };
 
 export type ViewFilter = 'all' | 'today' | 'overdue' | 'noDate';
 export type SortMode = 'dueDate' | 'priority' | 'created';
@@ -64,10 +69,6 @@ export function filterAndSortTasks(tasks: TaskItem[], opts: TaskFilterOptions): 
   return sorted;
 }
 
-export function csvEscape(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
 export function tasksToCsv(
   tasks: TaskItem[],
   categoryName: (t: TaskItem) => string,
@@ -84,5 +85,5 @@ export function tasksToCsv(
       t.isCompleted ? 'Sim' : 'Não',
     ]);
   }
-  return rows.map((r) => r.map(csvEscape).join(';')).join('\r\n');
+  return toCsv(rows);
 }
