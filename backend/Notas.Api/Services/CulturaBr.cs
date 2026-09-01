@@ -39,10 +39,19 @@ public static class CulturaBr
     /// </remarks>
     public static bool PtBrCompleto { get; } = FormataEmPortugues(Cultura);
 
-    private static bool FormataEmPortugues(CultureInfo cultura) =>
-        cultura.Name == "pt-BR"
-        && new DateTime(2000, 9, 1).ToString("MMM", cultura)
-            .StartsWith("set", StringComparison.OrdinalIgnoreCase);
+    private static bool FormataEmPortugues(CultureInfo cultura)
+    {
+        try
+        {
+            return cultura.Name == "pt-BR"
+                && new DateTime(2000, 9, 1).ToString("MMM", cultura)
+                    .StartsWith("set", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     private static CultureInfo Resolver()
     {
@@ -50,8 +59,13 @@ public static class CulturaBr
         {
             return CultureInfo.GetCultureInfo("pt-BR");
         }
-        catch (CultureNotFoundException)
+        catch (Exception)
         {
+            // Captura larga de propósito. Um inicializador estático que lança
+            // vira TypeInitializationException e derruba, com 500, todo endpoint
+            // da classe que o tocar — foi assim que a tela de finanças e o teste
+            // de conexão caíram. Nada aqui vale esse preço: na dúvida, invariante
+            // e o plano B em português assumem.
             return CultureInfo.InvariantCulture;
         }
     }

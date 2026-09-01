@@ -11,6 +11,21 @@ namespace Notas.Api.Tests;
 /// </summary>
 public class CulturaBrTests
 {
+    // Nenhum membro público desta classe pode lançar na inicialização: é o que
+    // transformaria uma formatação em 500 no endpoint inteiro.
+    [Fact]
+    public void NenhumMembroLancaNaInicializacao()
+    {
+        Assert.Null(Record.Exception(() =>
+        {
+            _ = CulturaBr.Cultura;
+            _ = CulturaBr.PtBrCompleto;
+            _ = CulturaBr.MesAbreviado(new DateOnly(2026, 9, 1));
+            _ = CulturaBr.Dinheiro(1234.5m);
+            _ = CulturaBr.SemAcentos("Educação");
+        }));
+    }
+
     [Fact]
     public void ResolverCultura_NaoLanca_MesmoSemIcu()
     {

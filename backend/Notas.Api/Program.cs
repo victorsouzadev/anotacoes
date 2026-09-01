@@ -142,6 +142,7 @@ app.MapGet("/api/health", async (AppDbContext db, CancellationToken ct) =>
         {
             status = "ok",
             banco = "ok",
+            versao = Environment.GetEnvironmentVariable("App__Versao") ?? "desconhecida",
             icu = Notas.Api.Services.CulturaBr.PtBrCompleto ? "ok" : "ausente",
             exemploMes = Notas.Api.Services.CulturaBr.MesAbreviado(DateOnly.FromDateTime(DateTime.UtcNow)),
         });

@@ -102,6 +102,7 @@ jobs:
             docker stop hermes || true
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build api
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build caddy
+            export APP_VERSAO=${{ github.sha }}
             docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
             docker start hermes || true
             docker image prune -f
@@ -111,6 +112,12 @@ jobs:
           sleep 5
           corpo=$(curl -sf http://${{ secrets.VPS_HOST }}:8090/api/health)
           echo "$corpo"
+          # Confirma que o container em pé é o desta execução, e não um que
+          # sobreviveu ao "up -d" — um deploy verde não prova substituição.
+          echo "$corpo" | grep -q '"versao":"${{ github.sha }}"' || {
+            echo "::error::A API respondeu, mas não é a build deste commit (${{ github.sha }})."
+            exit 1
+          }
           # Sem ICU o container sobe e responde /api/health normalmente, mas
           # qualquer endpoint que formate em pt-BR devolve 500 — foi assim que
           # o dashboard de finanças quebrou sem o deploy acusar nada.

@@ -11,6 +11,10 @@ services:
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
       - Llm__Provider=${LLM_PROVIDER:-}
+      # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
+      # como saber qual build está de pé sem entrar na VPS — e um deploy verde
+      # não prova, por si só, que o container foi substituído.
+      - App__Versao=${APP_VERSAO:-desconhecida}
     volumes:
       - ./data/db:/data/db
     healthcheck:
