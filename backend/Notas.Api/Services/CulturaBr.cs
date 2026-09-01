@@ -27,8 +27,22 @@ public static class CulturaBr
     /// </summary>
     public static CultureInfo Cultura { get; } = Resolver();
 
-    /// <summary><c>true</c> quando o pt-BR de verdade foi carregado.</summary>
-    public static bool IcuDisponivel { get; } = Cultura.Name == "pt-BR";
+    /// <summary>
+    /// <c>true</c> só quando o pt-BR foi carregado <em>com</em> os dados de
+    /// locale — ou seja, quando formatar de verdade produz português.
+    /// </summary>
+    /// <remarks>
+    /// Não basta perguntar se a cultura existe. No Alpine, o pacote
+    /// <c>icu-libs</c> traz a biblioteca mas só os dados do locale raiz: a
+    /// cultura pt-BR é criada sem lançar e mesmo assim <c>"MMM"</c> devolve
+    /// "Sep". Por isso a checagem é feita formatando uma data conhecida.
+    /// </remarks>
+    public static bool PtBrCompleto { get; } = FormataEmPortugues(Cultura);
+
+    private static bool FormataEmPortugues(CultureInfo cultura) =>
+        cultura.Name == "pt-BR"
+        && new DateTime(2000, 9, 1).ToString("MMM", cultura)
+            .StartsWith("set", StringComparison.OrdinalIgnoreCase);
 
     private static CultureInfo Resolver()
     {
@@ -43,10 +57,10 @@ public static class CulturaBr
     }
 
     /// <summary>Rótulo curto de competência, no formato <c>set./26</c>.</summary>
-    public static string MesAbreviado(DateOnly data) => MesAbreviado(data, IcuDisponivel);
+    public static string MesAbreviado(DateOnly data) => MesAbreviado(data, PtBrCompleto);
 
     /// <summary>Valor com milhar e dois decimais, no formato <c>1.234,50</c>.</summary>
-    public static string Dinheiro(decimal valor) => Dinheiro(valor, IcuDisponivel);
+    public static string Dinheiro(decimal valor) => Dinheiro(valor, PtBrCompleto);
 
     // Os overloads abaixo existem para que os testes consigam exercitar o
     // caminho sem ICU mesmo rodando numa máquina que tem ICU: o modo

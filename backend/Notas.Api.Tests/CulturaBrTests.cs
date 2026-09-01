@@ -103,6 +103,32 @@ public class CulturaBrTests
         Assert.Equal("cafe", CulturaBr.SemAcentos("caf\u0065\u0301"));
     }
 
+    // O caminho público tem de sair em português independentemente do que a
+    // máquina tenha instalado. É esta asserção que pega o caso do Alpine com
+    // icu-libs e sem icu-data-full, em que a cultura pt-BR existe mas devolve
+    // "Sep" — foi assim que a produção passou a mostrar "Sep/26".
+    [Fact]
+    public void MesAbreviado_SaiSempreEmPortugues()
+    {
+        string[] esperados =
+        [
+            "jan./26", "fev./26", "mar./26", "abr./26", "mai./26", "jun./26",
+            "jul./26", "ago./26", "set./26", "out./26", "nov./26", "dez./26",
+        ];
+
+        var obtidos = Enumerable.Range(0, 12)
+            .Select(i => CulturaBr.MesAbreviado(new DateOnly(2026, 1, 1).AddMonths(i)))
+            .ToArray();
+
+        Assert.Equal(esperados, obtidos);
+    }
+
+    [Fact]
+    public void Dinheiro_UsaSempreVirgulaComoSeparadorDecimal()
+    {
+        Assert.Equal("1.234,50", CulturaBr.Dinheiro(1234.5m));
+    }
+
     private static void SePuderCarregarPtBr(Action<CultureInfo> verificar)
     {
         CultureInfo cultura;
@@ -116,6 +142,11 @@ public class CulturaBrTests
             // de valor literal acima já cobrem o formato.
             return;
         }
+
+        // Cultura presente mas sem dados de locale (icu-libs sem icu-data-full):
+        // ela formataria em inglês e não serve como referência de pt-BR.
+        if (!new DateTime(2000, 9, 1).ToString("MMM", cultura)
+                .StartsWith("set", StringComparison.OrdinalIgnoreCase)) return;
 
         verificar(cultura);
     }

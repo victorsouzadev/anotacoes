@@ -12,9 +12,11 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
 #     no fuso do usuário em vez de em UTC.
 #   - icu-libs: sem ele o .NET sobe em modo globalization-invariant e qualquer
 #     cultura diferente da invariante (pt-BR, no nosso caso) lança
-#     CultureNotFoundException. O código já tem plano B, mas com o ICU os
-#     rótulos e valores saem formatados de verdade.
-RUN apk add --no-cache tzdata icu-libs
+#     CultureNotFoundException.
+#   - icu-data-full: o icu-libs sozinho traz só os dados do locale raiz, então
+#     GetCultureInfo("pt-BR") passa mas os meses saem em inglês ("Sep/26" em vez
+#     de "set./26"). Os dados de locale estão neste pacote separado.
+RUN apk add --no-cache tzdata icu-libs icu-data-full
 # A imagem base define DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true; instalar o
 # icu-libs sem desligar essa variável não muda nada.
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
