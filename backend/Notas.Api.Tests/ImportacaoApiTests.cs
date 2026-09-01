@@ -134,10 +134,11 @@ public class ImportacaoApiTests : IClassFixture<ImportacaoApiTests.Contexto>
     {
         var res = await Importar(Arquivo("cupom.png", "image/png", new byte[] { 1, 2, 3 }));
 
-        // 502, e não 422: o arquivo do usuário pode estar perfeito — falta
-        // configuração no servidor.
+        // 502, e não 422: o arquivo do usuário pode estar perfeito — falta a
+        // chave. E a mensagem aponta para a tela de Configurações, que é por onde
+        // ele resolve isso sozinho.
         Assert.Equal(HttpStatusCode.BadGateway, res.StatusCode);
-        Assert.Contains("OPENROUTER_API_KEY", await Erro(res));
+        Assert.Contains("Configurações", await Erro(res));
     }
 
     [Fact]

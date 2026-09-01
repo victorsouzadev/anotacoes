@@ -12,6 +12,10 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    echo "JWT_SECRET=$(openssl rand -hex 32)" > /opt/notas-vps/.env
    chmod 600 /opt/notas-vps/.env
    ```
+   **A chave também pode ser cadastrada pela própria interface** (`/configuracoes`),
+   por usuário — o que dispensa mexer no `.env` a cada troca de chave ou modelo. O
+   valor abaixo vale como padrão do servidor, para quem não cadastrou a sua.
+
    Para a ferramenta Finanças usar um LLM de verdade em vez do extrator heurístico
    local, adicionar a chave da OpenRouter (openrouter.ai) ao `.env`:
    ```bash
@@ -85,8 +89,12 @@ Sem rollback automático — se precisar reverter, reenviar a versão anterior d
 
 ### Alterar chaves ou variáveis sem novo deploy
 
-O `.env` fica **só na VPS** e não é enviado pelo deploy, então mudar uma chave não
-exige um novo push:
+O jeito mais simples de trocar chave ou modelo é pela tela `/configuracoes` da
+própria aplicação — a chave fica cifrada no banco, por usuário, e tem um botão de
+testar conexão antes de salvar.
+
+Para mexer no padrão do servidor, o `.env` fica **só na VPS** e não é enviado pelo
+deploy, então mudar uma chave não exige um novo push:
 
 ```bash
 ssh root@191.252.177.244

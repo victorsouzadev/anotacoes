@@ -27,6 +27,17 @@
   flex-shrink: 0;
 }
 .top-bar-actions { display: flex; align-items: center; gap: 14px; }
+.config-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.config-link:hover { border-color: var(--accent); color: var(--accent); }
 .theme-toggle {
   border: 1px solid var(--border);
   background: var(--bg);

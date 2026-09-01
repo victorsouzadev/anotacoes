@@ -54,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
     public DbSet<MetaReserva> MetasReserva => Set<MetaReserva>();
     public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
+    public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -170,6 +171,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // uma meta, mas vários aportes avulsos (TransacaoId nulo) convivem.
             e.HasIndex(a => a.TransacaoId).IsUnique().HasFilter("\"TransacaoId\" IS NOT NULL");
             e.HasOne<Transacao>().WithMany().HasForeignKey(a => a.TransacaoId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<ConfiguracaoIa>(e =>
+        {
+            e.ToTable("configuracoes_ia");
+            e.Property(c => c.Provedor).HasMaxLength(30);
+            e.Property(c => c.Modelo).HasMaxLength(120);
+            e.Property(c => c.ChaveApiSufixo).HasMaxLength(8);
+            // Uma configuração por usuário — o upsert do endpoint depende disso.
+            e.HasIndex(c => c.UserId).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<TaskCategory>(e =>

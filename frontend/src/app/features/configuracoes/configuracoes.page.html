@@ -1,0 +1,177 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="more" [size]="14" /></span> Configurações</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
+        <app-icon [name]="themeIconName()" [size]="16" />
+      </button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  <main class="content">
+    @if (carregando()) {
+      <p class="carregando">Carregando...</p>
+    } @else if (config(); as c) {
+
+      <!-- Estado atual em uma frase, antes de qualquer formulário. -->
+      <div class="card situacao" [class.ativa]="c.provedorEfetivo !== 'heuristico'">
+        <div>
+          <span class="label">Em uso agora</span>
+          <span class="valor">{{ rotuloDoProvedorEfetivo() }}</span>
+          @if (c.provedorEfetivo !== 'heuristico') {
+            <span class="detalhe">modelo {{ c.modeloEfetivo }}</span>
+          }
+        </div>
+        <div class="marcadores">
+          @if (c.suportaAnexos) {
+            <span class="marcador ok"><app-icon name="check" [size]="12" /> Lê cupom, PDF e planilha</span>
+          } @else {
+            <span class="marcador neutro">Só lançamento por texto</span>
+          }
+          @if (c.usandoChaveDoServidor) {
+            <span class="marcador neutro">Usando a chave do servidor</span>
+          }
+        </div>
+      </div>
+
+      @if (erro(); as e) { <p class="alerta erro" role="alert">{{ e }}</p> }
+      @if (sucesso(); as s) { <p class="alerta ok" role="status">{{ s }}</p> }
+
+      <div class="card">
+        <h2>Inteligência artificial</h2>
+        <p class="ajuda">
+          A ferramenta Finanças usa um modelo de linguagem para transformar o que você escreve
+          — e as fotos e PDFs que envia — em lançamentos. Cadastre a sua chave aqui para não
+          depender da chave do servidor.
+        </p>
+
+        <!-- Provedor -->
+        <fieldset class="campo-grupo">
+          <legend>Provedor</legend>
+          <div class="opcoes">
+            @for (p of provedores; track p.valor) {
+              <label class="opcao" [class.marcada]="provedor === p.valor">
+                <input type="radio" name="provedor" [value]="p.valor"
+                       [checked]="provedor === p.valor" (change)="aoMudarProvedor(p.valor)" />
+                <span class="opcao-corpo">
+                  <strong>{{ p.rotulo }}</strong>
+                  <span>{{ p.descricao }}</span>
+                </span>
+              </label>
+            }
+          </div>
+        </fieldset>
+
+        @if (precisaDeChave()) {
+          <!-- Chave -->
+          <div class="campo">
+            <label for="chave">Chave de API</label>
+
+            @if (c.chaveConfigurada) {
+              <div class="chave-salva">
+                <app-icon name="check" [size]="13" />
+                <span>Chave salva: <code>{{ c.chaveMascarada }}</code></span>
+                @if (!confirmandoRemocao()) {
+                  <button type="button" class="link-perigo" (click)="pedirRemocaoDaChave()">Remover</button>
+                } @else {
+                  <span class="confirmar">
+                    Remover a chave?
+                    <button type="button" class="link" (click)="cancelarRemocao()">cancelar</button>
+                    <button type="button" class="link-perigo" (click)="removerChave()">confirmar</button>
+                  </span>
+                }
+              </div>
+            }
+
+            <div class="campo-chave">
+              <input [id]="'chave'" [type]="mostrarChave() ? 'text' : 'password'"
+                     [(ngModel)]="chave" autocomplete="off" spellcheck="false"
+                     [placeholder]="c.chaveConfigurada ? 'Deixe em branco para manter a chave atual' : 'sk-or-v1-...'" />
+              <button type="button" (click)="alternarVisibilidadeDaChave()"
+                      [attr.aria-label]="mostrarChave() ? 'Ocultar chave' : 'Mostrar chave'"
+                      [title]="mostrarChave() ? 'Ocultar' : 'Mostrar'">
+                <app-icon name="eye" [size]="14" />
+              </button>
+            </div>
+
+            <p class="dica">
+              A chave é guardada cifrada no servidor e nunca é devolvida para o navegador —
+              por isso o campo aparece vazio mesmo com uma chave salva.
+              @if (provedor === 'openrouter') {
+                Pegue a sua em <code>openrouter.ai/keys</code>.
+              }
+            </p>
+          </div>
+
+          <!-- Modelo -->
+          <div class="campo">
+            <label for="modelo">Modelo</label>
+            <input id="modelo" [ngModel]="modelo" (ngModelChange)="aoMudarModelo($event)"
+                   spellcheck="false" placeholder="Deixe em branco para usar o padrão" />
+
+            @if (modeloEscolhidoLeImagens() === false) {
+              <p class="dica atencao">
+                Esse modelo só interpreta texto. Importar foto de cupom ou PDF de extrato
+                não vai funcionar com ele.
+              </p>
+            }
+
+            @if (modelosSugeridos().length > 0) {
+              <div class="sugestoes">
+                <span class="titulo-secao">Sugestões</span>
+                @for (m of modelosSugeridos(); track m.id) {
+                  <button type="button" class="sugestao" [class.marcada]="modelo === m.id"
+                          (click)="usarModeloSugerido(m.id)">
+                    <span class="sugestao-topo">
+                      <strong>{{ m.nome }}</strong>
+                      @if (m.leImagens) {
+                        <span class="etiqueta"><app-icon name="image" [size]="10" /> lê imagens</span>
+                      } @else {
+                        <span class="etiqueta neutra">só texto</span>
+                      }
+                    </span>
+                    <span class="sugestao-desc">{{ m.descricao }}</span>
+                    <code>{{ m.id }}</code>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="dica">{{ descricaoDoProvedor() }}</p>
+        }
+
+        <!-- Resultado do teste -->
+        @if (teste(); as t) {
+          <div class="resultado-teste" [class.ok]="t.ok" [class.falhou]="!t.ok">
+            <strong>{{ t.ok ? 'Funcionou' : 'Não funcionou' }}</strong>
+            <span>{{ t.mensagem }}</span>
+            @if (t.exemplo) {
+              <span class="exemplo">
+                Teste com “gastei 42,50 no mercado hoje” → <code>{{ t.exemplo }}</code>
+              </span>
+            }
+          </div>
+        }
+
+        <div class="acoes">
+          <button type="button" class="secundario" (click)="testar()" [disabled]="testando() || salvando()">
+            {{ testando() ? 'Testando...' : 'Testar conexão' }}
+          </button>
+          <button type="button" class="primario" (click)="salvar()" [disabled]="salvando()">
+            {{ salvando() ? 'Salvando...' : 'Salvar' }}
+          </button>
+        </div>
+
+        @if (c.atualizadoEm) {
+          <p class="atualizado">Atualizado em {{ c.atualizadoEm | date: 'dd/MM/yyyy HH:mm' }}</p>
+        }
+      </div>
+    }
+  </main>
+</div>

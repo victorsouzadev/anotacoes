@@ -9,6 +9,7 @@ using Notas.Api.Data;
 using Notas.Api.Endpoints;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
+using Notas.Api.Services.Seguranca;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,40 +35,23 @@ builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(Ext
 builder.Services.Configure<FinancasOptions>(builder.Configuration.GetSection(FinancasOptions.SectionName));
 builder.Services.AddSingleton<FinancasClock>();
 
-// Provedor de LLM: OpenRouter (padrão, e o único que lê imagem/PDF), Anthropic
-// direto, ou o extrator heurístico local quando não há chave nenhuma. `Llm:Provider`
-// força um provedor específico; sem ele, vale a primeira chave configurada.
-var openRouterKey = builder.Configuration["OpenRouter:ApiKey"];
-var anthropicKey = builder.Configuration["Anthropic:ApiKey"];
-var provedor = (builder.Configuration["Llm:Provider"] ?? "").Trim().ToLowerInvariant();
-if (provedor.Length == 0)
-{
-    provedor = !string.IsNullOrWhiteSpace(openRouterKey) ? "openrouter"
-        : !string.IsNullOrWhiteSpace(anthropicKey) ? "anthropic"
-        : "heuristico";
-}
+// Provedor de LLM: OpenRouter (o único que lê imagem/PDF), Anthropic direto, ou o
+// extrator heurístico local. O usuário pode cadastrar a própria chave e o próprio
+// modelo em Configurações; as variáveis de ambiente abaixo valem como padrão do
+// servidor para quem não configurou nada.
+// Os clientes HTTP são nomeados porque a escolha do provedor deixou de acontecer
+// na subida do processo: cada requisição resolve a chave e o modelo do usuário
+// (ver LlmExtractorFactory), então o extrator é construído sob demanda.
+builder.Services.AddHttpClient(nameof(OpenRouterLlmExtractor), c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
-switch (provedor)
-{
-    case "openrouter":
-        // O timeout do HttpClient cobre o maior caso (documento com anexos); o
-        // caso sem anexo é limitado por um CancellationToken mais curto dentro do
-        // extrator, para o usuário não esperar dois minutos por uma frase.
-        builder.Services.AddHttpClient<ILlmExtractor, OpenRouterLlmExtractor>(c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
-        break;
+builder.Services.AddHttpClient(nameof(AnthropicLlmExtractor), c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        Math.Clamp(builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20), 5, 120)));
 
-    case "anthropic":
-        builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>(c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                Math.Clamp(builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20), 5, 120)));
-        break;
-
-    default:
-        builder.Services.AddSingleton<ILlmExtractor, HeuristicLlmExtractor>();
-        break;
-}
+builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
+builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
 
 builder.Services.AddScoped<TransacaoExtractionService>();
 builder.Services.AddScoped<OrcamentoService>();
@@ -150,6 +134,7 @@ app.MapFoldersEndpoints();
 app.MapFinancasEndpoints();
 app.MapOrcamentoEndpoints();
 app.MapMetaEndpoints();
+app.MapConfiguracaoIaEndpoints();
 app.MapTasksEndpoints();
 app.MapImagemEndpoints();
 

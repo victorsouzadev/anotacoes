@@ -34,9 +34,12 @@ public class OpenRouterLlmExtractor : ILlmExtractor
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
+            // Mensagem escrita para quem está na tela de Configurações, que é por
+            // onde a chave se cadastra hoje — falar de variável de ambiente aqui
+            // mandaria o usuário para a VPS sem necessidade.
             throw new LlmIndisponivelException(
-                "OpenRouter:ApiKey não configurada. Defina a variável de ambiente OPENROUTER_API_KEY " +
-                "ou configure OpenRouter:ApiKey em appsettings/secrets.");
+                "Nenhuma chave da OpenRouter configurada. Cadastre a sua em Configurações "
+                + "(ou defina OPENROUTER_API_KEY no servidor, para valer como padrão).");
         }
 
         var body = await EnviarComRetentativaAsync(entrada, dataEnvio, cancellationToken);

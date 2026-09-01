@@ -38,8 +38,8 @@ public class AnthropicLlmExtractor : ILlmExtractor
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             throw new LlmIndisponivelException(
-                "Anthropic:ApiKey não configurada. Defina a variável de ambiente ANTHROPIC_API_KEY " +
-                "ou configure Anthropic:ApiKey em appsettings/secrets.");
+                "Nenhuma chave da Anthropic configurada. Cadastre a sua em Configurações "
+                + "(ou defina ANTHROPIC_API_KEY no servidor, para valer como padrão).");
         }
 
         var body = await EnviarComRetentativaAsync(entrada, dataEnvio, cancellationToken);

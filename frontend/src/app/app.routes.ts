@@ -27,6 +27,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/editor/editor.page').then((m) => m.EditorPageComponent),
   },
   {
+    path: 'configuracoes',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/configuracoes/configuracoes.page').then((m) => m.ConfiguracoesPageComponent),
+  },
+  {
     path: 'financas',
     canActivate: [authGuard],
     loadComponent: () => import('./features/financas/financas.page').then((m) => m.FinancasPageComponent),

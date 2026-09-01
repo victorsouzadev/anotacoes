@@ -14,7 +14,8 @@ inicial, sem exigir outro login nem outro deploy.
   por LLM via OpenRouter, com fallback heurístico local. Dashboard de receitas x
   despesas, **orçamento mensal** (um valor distribuído entre as categorias, com
   acompanhamento do planejado x realizado, histórico e alertas de estouro),
-  **metas de reserva** e exportação em CSV.
+  **metas de reserva** e exportação em CSV. Provedor, modelo e chave de API são
+  configuráveis pela própria interface, em `/configuracoes`.
 - **Tarefas** — tarefas com subtarefas, categorias, prioridade, recorrência,
   pomodoro e estatísticas. Versão web (`frontend/src/app/features/tasks`) **e**
   app Android nativo ([`mobile/`](mobile/), Kotlin/Compose, local-first) — o app
@@ -216,6 +217,7 @@ notas-vps/
 │   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
 │   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
 │   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks (Minimal APIs, um arquivo por ferramenta)
+│   ├── Services/Seguranca/           # cifra dos segredos guardados no banco (chaves de API)
 │   ├── Services/Financas/            # extração de lançamentos (OpenRouter/Anthropic + fallback
 │   │                                 # heurístico, com entrada de imagem/PDF/planilha), orçamento
 │   │                                 # (validação, rateio), metas e o relógio no fuso do usuário
@@ -284,7 +286,10 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `POST /api/folders` | Cria pasta |
 | `PUT /api/folders/{id}` | Renomeia pasta |
 | `DELETE /api/folders/{id}` | Exclui pasta (notas voltam a "sem pasta") |
-| `GET /api/financas/capacidades` | Diz se esta instalação lê arquivos (depende de haver chave de LLM) |
+| `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
+| `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |
+| `POST /api/configuracoes/ia/testar` | Faz uma extração real com a configuração informada, antes de salvar |
+| `DELETE /api/configuracoes/ia/chave` | Remove a chave cadastrada |
 | `POST /api/financas/transacoes` | Registra lançamento a partir de texto livre (aciona o LLM; limitado por usuário) |
 | `POST /api/financas/transacoes/importar` | Importa lançamentos de foto, PDF ou planilha (multipart; limite próprio) |
 | `GET /api/financas/transacoes` | Lista lançamentos (filtros: período, `ano`/`mes`, categoria, tipo, situação) |

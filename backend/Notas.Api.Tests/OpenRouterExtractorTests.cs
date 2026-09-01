@@ -335,7 +335,7 @@ public class OpenRouterExtractorTests
             Options.Create(new OpenRouterOptions { ApiKey = "" }), NullLogger<OpenRouterLlmExtractor>.Instance);
 
         var ex = await Assert.ThrowsAsync<LlmIndisponivelException>(() => Extrair(semChave));
-        Assert.Contains("OPENROUTER_API_KEY", ex.Message);
+        Assert.Contains("Configurações", ex.Message);
     }
 
     [Theory]

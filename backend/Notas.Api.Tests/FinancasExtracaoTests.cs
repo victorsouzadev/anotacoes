@@ -138,11 +138,28 @@ public class TransacaoExtractionServiceTests
         Confianca = 0.9f,
     };
 
+    // Fábrica de teste: devolve sempre o mesmo extrator, para exercitar o
+    // validador sem depender de banco nem de configuração de usuário.
+    private sealed class FabricaFixa : ILlmExtractorFactory
+    {
+        private readonly ILlmExtractor _extrator;
+        public FabricaFixa(ILlmExtractor extrator) => _extrator = extrator;
+
+        public Task<ConfiguracaoEfetiva> ResolverAsync(string userId, CancellationToken ct = default) =>
+            Task.FromResult(new ConfiguracaoEfetiva(_extrator.Provedor, "modelo-de-teste", true, true,
+                _extrator.SuportaAnexos));
+
+        public Task<ILlmExtractor> CriarAsync(string userId, CancellationToken ct = default) =>
+            Task.FromResult(_extrator);
+
+        public ILlmExtractor CriarAvulso(string provedor, string? chave, string? modelo) => _extrator;
+    }
+
     private static Transacao Executar(ExtracaoLlmResult bruto)
     {
         var clock = new FinancasClock(Options.Create(new FinancasOptions()));
         var service = new TransacaoExtractionService(
-            new ExtratorFixo(bruto), Options.Create(new ExtracaoOptions()), clock);
+            new FabricaFixa(new ExtratorFixo(bruto)), Options.Create(new ExtracaoOptions()), clock);
         return service.ExtrairTransacaoAsync("texto original", "user-1").GetAwaiter().GetResult();
     }
 

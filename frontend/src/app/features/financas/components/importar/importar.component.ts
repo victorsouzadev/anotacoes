@@ -1,6 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { IconComponent } from '../../../../shared/icon';
 import { Capacidades } from '../../models/importacao.model';
 import { Transacao } from '../../models/transacao.model';
@@ -9,7 +10,7 @@ import { TransacaoService } from '../../services/transacao.service';
 @Component({
   selector: 'app-importar',
   standalone: true,
-  imports: [FormsModule, IconComponent, CurrencyPipe, DatePipe],
+  imports: [FormsModule, RouterLink, IconComponent, CurrencyPipe, DatePipe],
   templateUrl: './importar.component.html',
   styleUrl: './importar.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

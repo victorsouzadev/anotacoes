@@ -5,6 +5,9 @@
       <h1><span class="brand-mark"><app-icon name="wallet" [size]="14" /></span> Finanças</h1>
     </div>
     <div class="top-bar-actions">
+      <a class="config-link" routerLink="/configuracoes" title="Configurar IA e chave de API">
+        <app-icon name="more" [size]="16" />
+      </a>
       <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
         <app-icon [name]="themeIconName()" [size]="16" />
       </button>

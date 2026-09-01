@@ -15,13 +15,17 @@ public static class FinancasEndpoints
         // GET /api/financas/capacidades — sem chave de LLM não há leitura de
         // arquivo, e a interface precisa saber disso para não oferecer um botão
         // que só devolveria erro.
-        app.MapGet("/api/financas/capacidades", (TransacaoExtractionService extraction,
-            Microsoft.Extensions.Options.IOptions<FinancasOptions> opcoes) =>
+        app.MapGet("/api/financas/capacidades", async (ClaimsPrincipal user,
+            TransacaoExtractionService extraction,
+            Microsoft.Extensions.Options.IOptions<FinancasOptions> opcoes,
+            CancellationToken ct) =>
         {
             var limites = opcoes.Value;
+            var config = await extraction.ResolverConfiguracaoAsync(user.UserId(), ct);
+
             return Results.Ok(new CapacidadesResponse(
-                extraction.Provedor,
-                extraction.SuportaAnexos,
+                config.Provedor,
+                config.SuportaAnexos,
                 limites.MaxArquivosPorImportacao,
                 limites.MaxTamanhoArquivoMb,
                 AnexoValidator.ExtensoesAceitas.ToArray()));

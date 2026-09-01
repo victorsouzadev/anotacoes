@@ -49,6 +49,9 @@ const TOOLS: ToolCard[] = [
       <header class="top-bar">
         <h1><span class="brand-mark"><app-icon name="grid" [size]="14" /></span> Ferramentas</h1>
         <div class="top-bar-actions">
+          <a class="config-link" routerLink="/configuracoes" title="Configurações">
+            <app-icon name="more" [size]="16" />
+          </a>
           <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
           <span class="user-email">{{ auth.user()?.email }}</span>
           <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
@@ -94,6 +97,17 @@ const TOOLS: ToolCard[] = [
       flex-shrink: 0;
     }
     .top-bar-actions { display: flex; align-items: center; gap: 14px; }
+    .config-link {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .config-link:hover { border-color: var(--accent); color: var(--accent); }
     .theme-toggle {
       border: 1px solid var(--border);
       background: var(--bg);

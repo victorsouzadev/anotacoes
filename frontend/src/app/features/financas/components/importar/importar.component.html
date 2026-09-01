@@ -5,8 +5,9 @@
     @if (!c.suportaAnexos) {
       <!-- Sem chave de LLM não adianta oferecer o seletor: o envio só devolveria erro. -->
       <p class="indisponivel">
-        Este servidor está sem chave de IA configurada, então lê apenas lançamentos por texto.
-        Para importar foto de cupom ou PDF de extrato, defina <code>OPENROUTER_API_KEY</code>.
+        A leitura de arquivos precisa de uma chave da OpenRouter. Sem ela, só o lançamento
+        por texto funciona.
+        <a routerLink="/configuracoes">Cadastrar a minha chave</a>
       </p>
     } @else {
       <p class="ajuda">

@@ -27,19 +27,21 @@ public record ResultadoExtracao(IReadOnlyList<Transacao> Transacoes, IReadOnlyLi
 // da persistência.
 public class TransacaoExtractionService
 {
-    private readonly ILlmExtractor _extractor;
+    private readonly ILlmExtractorFactory _factory;
     private readonly ExtracaoOptions _options;
     private readonly FinancasClock _clock;
 
-    public TransacaoExtractionService(ILlmExtractor extractor, IOptions<ExtracaoOptions> options, FinancasClock clock)
+    public TransacaoExtractionService(ILlmExtractorFactory factory, IOptions<ExtracaoOptions> options, FinancasClock clock)
     {
-        _extractor = extractor;
+        _factory = factory;
         _options = options.Value;
         _clock = clock;
     }
 
-    public string Provedor => _extractor.Provedor;
-    public bool SuportaAnexos => _extractor.SuportaAnexos;
+    // O provedor deixou de ser fixo no processo: cada usuário pode ter a própria
+    // chave e o próprio modelo, então a resolução acontece por requisição.
+    public Task<ConfiguracaoEfetiva> ResolverConfiguracaoAsync(string userId, CancellationToken ct = default) =>
+        _factory.ResolverAsync(userId, ct);
 
     public async Task<Transacao> ExtrairTransacaoAsync(string textoLivre, string userId, CancellationToken cancellationToken = default)
     {
@@ -63,15 +65,18 @@ public class TransacaoExtractionService
             throw new ExtracaoInvalidaException("Envie um texto ou um arquivo para registrar o lançamento.");
         }
 
-        if (entrada.TemAnexos && !_extractor.SuportaAnexos)
+        var configuracao = await _factory.ResolverAsync(userId, cancellationToken);
+
+        if (entrada.TemAnexos && !configuracao.SuportaAnexos)
         {
             throw new LlmIndisponivelException(
-                "A leitura de imagens e arquivos precisa de uma chave de API configurada " +
-                "(OPENROUTER_API_KEY). Sem ela, só o lançamento por texto está disponível.");
+                "A leitura de imagens e arquivos precisa de uma chave da OpenRouter configurada. " +
+                "Cadastre a sua em Configurações; sem ela, só o lançamento por texto funciona.");
         }
 
+        var extractor = await _factory.CriarAsync(userId, cancellationToken);
         var hoje = _clock.Hoje();
-        var brutos = await _extractor.ExtrairAsync(entrada, hoje, cancellationToken);
+        var brutos = await extractor.ExtrairAsync(entrada, hoje, cancellationToken);
 
         var textoOriginal = MontarTextoOriginal(entrada);
         var transacoes = new List<Transacao>(brutos.Count);
