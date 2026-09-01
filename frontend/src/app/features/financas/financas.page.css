@@ -1,0 +1,259 @@
+.page { min-height: 100dvh; background: var(--bg); }
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.hub-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.hub-link:hover { border-color: var(--accent); color: var(--accent); }
+.top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+.brand-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  flex-shrink: 0;
+}
+.top-bar-actions { display: flex; align-items: center; gap: 14px; }
+.theme-toggle {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.user-email { font-size: 12px; color: var(--text-muted); }
+.logout {
+  display: flex; align-items: center; gap: 5px;
+  border: none; background: none;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.logout:hover { color: var(--danger); }
+
+.content { max-width: 1080px; margin: 0 auto; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 16px; }
+.carregando { color: var(--text-muted); text-align: center; padding: 2rem 0; font-size: 13px; }
+
+/* ------------------------------------------------------- barra de mês */
+
+.barra-mes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.navegacao { display: flex; align-items: center; gap: 6px; }
+.navegacao button {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.navegacao button:hover { border-color: var(--accent); color: var(--accent); }
+.navegacao button.hoje {
+  width: auto;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+/* O ícone `chevron` do conjunto aponta para baixo; girar é o que dá as setas
+   laterais sem precisar de dois ícones novos. */
+.seta-esquerda { transform: rotate(90deg); }
+.seta-direita { transform: rotate(-90deg); }
+
+.mes-atual {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  min-width: 130px;
+  text-align: center;
+  /* O nome do mês vem minúsculo do toLocaleDateString em pt-BR. `capitalize`
+     subiria também o "de" ("Agosto De 2026"), então só a primeira letra sobe. */
+}
+.mes-atual::first-letter {
+  text-transform: uppercase;
+}
+
+.abas {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.abas button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.abas button:hover { color: var(--text); }
+.abas button.ativa { background: var(--accent); color: #fff; }
+
+/* --------------------------------------------------------- erro global */
+
+.erro-global {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--negativo);
+  background: color-mix(in srgb, var(--negativo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negativo) 30%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.erro-global button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------- alertas de orçamento */
+
+.alertas {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: color-mix(in srgb, var(--atencao) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--atencao) 32%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.alertas-lista { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.alerta-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--atencao);
+  margin: 0;
+}
+.alerta-item.estourado { color: var(--negativo); }
+.alertas > button {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.alertas > button:hover { opacity: 1; }
+
+/* ----------------------------------------------------------- importação */
+
+.linha-importar { display: flex; }
+.alternar-importacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.alternar-importacao:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ------------------------------------------------------------- filtros */
+
+.filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filtros select {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.filtros select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.filtros .limpar {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filtros .limpar:hover { color: var(--accent); border-color: var(--accent); }
+
+.filtros .exportar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Empurrado para a direita: é ação sobre o resultado, não mais um filtro. */
+  margin-left: auto;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filtros .exportar:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.filtros .exportar:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 760px) {
+  .top-bar { padding: 12px 16px; flex-wrap: wrap; }
+  .user-email { display: none; }
+  .content { padding: 16px 16px 32px; }
+  .barra-mes { justify-content: center; }
+  .abas { width: 100%; }
+  .abas button { flex: 1; }
+  .filtros select { flex: 1; min-width: 140px; }
+  .filtros .exportar { margin-left: 0; width: 100%; justify-content: center; }
+  /* Quatro abas não cabem lado a lado numa tela estreita. */
+  .abas { flex-wrap: wrap; }
+  .abas button { flex: 1 1 40%; }
+}

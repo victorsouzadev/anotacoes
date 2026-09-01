@@ -9,9 +9,12 @@ inicial, sem exigir outro login nem outro deploy.
 - **Notas** — notas manuscritas: desenho livre, texto, notas adesivas, checklists,
   formas e setas num canvas por página, com várias páginas por nota, pastas, busca,
   exportação de imagem, sincronização entre dispositivos e uso offline.
-- **Finanças** — lançamentos financeiros a partir de texto livre ("gastei 45 no
-  mercado hoje"), extraídos por LLM (com fallback heurístico local), com dashboard
-  de receitas x despesas, categorias e tendências.
+- **Finanças** — lançamentos a partir de texto livre ("gastei 45 no mercado hoje")
+  **ou de arquivos** (foto de cupom, PDF de extrato, planilha de fatura), interpretados
+  por LLM via OpenRouter, com fallback heurístico local. Dashboard de receitas x
+  despesas, **orçamento mensal** (um valor distribuído entre as categorias, com
+  acompanhamento do planejado x realizado, histórico e alertas de estouro),
+  **metas de reserva** e exportação em CSV.
 - **Tarefas** — tarefas com subtarefas, categorias, prioridade, recorrência,
   pomodoro e estatísticas. Versão web (`frontend/src/app/features/tasks`) **e**
   app Android nativo ([`mobile/`](mobile/), Kotlin/Compose, local-first) — o app
@@ -210,12 +213,15 @@ notas-vps/
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # bootstrap, JWT, forwarded headers, registro de cada ferramenta
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
-│   ├── Data/FinancasModels.cs        # EF Core: Transacao + enums (Finanças)
+│   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
 │   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
-│   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Tasks (Minimal APIs, um arquivo por ferramenta)
-│   ├── Services/Financas/            # extração de lançamentos (LLM Anthropic + fallback heurístico)
+│   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks (Minimal APIs, um arquivo por ferramenta)
+│   ├── Services/Financas/            # extração de lançamentos (OpenRouter/Anthropic + fallback
+│   │                                 # heurístico, com entrada de imagem/PDF/planilha), orçamento
+│   │                                 # (validação, rateio), metas e o relógio no fuso do usuário
 │   ├── Auth/TokenService.cs          # emissão/validação/rotação de JWT (login único, vale pra tudo)
-│   └── Dtos/                         # Dtos.cs (Notas) + FinancasDtos.cs + TasksDtos.cs
+│   └── Dtos/                         # Dtos.cs (Notas) + FinancasDtos.cs + OrcamentoDtos.cs
+│                                     # + MetaDtos.cs + TasksDtos.cs
 ├── frontend/src/app/
 │   ├── core/                         # auth, theme, interceptor/guard — compartilhados por todas as ferramentas
 │   ├── shared/                       # ícones e outros componentes usados em mais de uma ferramenta
@@ -232,7 +238,8 @@ notas-vps/
 │       │   ├── text-overlay.ts       # edição de texto/sticky (textarea sobreposto)
 │       │   ├── checklist-overlay.ts  # edição de checklist
 │       │   └── editor.page.ts        # página do editor, páginas múltiplas, autosave
-│       ├── financas/                 # lançamento por texto, dashboard, lista de transações
+│       ├── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
+│       │                             # orçamento, metas de reserva e histórico
 │       └── tasks/                    # lista, categorias, pomodoro, estatísticas, lixeira
 ├── mobile/                           # app Android nativo (Kotlin/Compose) da ferramenta Tarefas
 │   ├── app/src/main/java/com/organizador/app/
@@ -277,11 +284,26 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `POST /api/folders` | Cria pasta |
 | `PUT /api/folders/{id}` | Renomeia pasta |
 | `DELETE /api/folders/{id}` | Exclui pasta (notas voltam a "sem pasta") |
-| `POST /api/financas/transacoes` | Registra lançamento a partir de texto livre (aciona o LLM) |
-| `GET /api/financas/transacoes` | Lista lançamentos (filtros: período, categoria, tipo) |
+| `GET /api/financas/capacidades` | Diz se esta instalação lê arquivos (depende de haver chave de LLM) |
+| `POST /api/financas/transacoes` | Registra lançamento a partir de texto livre (aciona o LLM; limitado por usuário) |
+| `POST /api/financas/transacoes/importar` | Importa lançamentos de foto, PDF ou planilha (multipart; limite próprio) |
+| `GET /api/financas/transacoes` | Lista lançamentos (filtros: período, `ano`/`mes`, categoria, tipo, situação) |
 | `PATCH /api/financas/transacoes/{id}` | Corrige campos de um lançamento |
 | `DELETE /api/financas/transacoes/{id}` | Remove lançamento |
 | `GET /api/financas/dashboard/resumo` \| `categorias` \| `tendencias` | Totais e agregações para o dashboard |
+| `GET /api/financas/orcamentos` | Histórico de orçamentos do usuário |
+| `GET /api/financas/orcamentos/atual?ano=&mes=` | Orçamento de um mês (204 quando não há) |
+| `PUT /api/financas/orcamentos` | Cria ou substitui o orçamento do mês (a distribuição precisa somar 100%) |
+| `GET /api/financas/orcamentos/acompanhamento?ano=&mes=` | Planejado x realizado, por categoria e por grupo |
+| `GET /api/financas/orcamentos/modelos?valorTotal=` | Distribuições prontas (50/30/20 etc.), já em reais |
+| `GET /api/financas/orcamentos/categorias` | Categorias que entram na distribuição, com grupo e rótulo |
+| `POST /api/financas/orcamentos/copiar` | Replica a distribuição de um mês em outro |
+| `GET /api/financas/orcamentos/historico?meses=` | Planejado x realizado mês a mês |
+| `DELETE /api/financas/orcamentos/{ano}/{mes}` | Remove o orçamento do mês |
+| `GET /api/financas/metas` | Metas de reserva, com progresso, ritmo e projeção |
+| `POST /api/financas/metas` \| `PUT /api/financas/metas/{id}` | Cria ou edita uma meta |
+| `POST /api/financas/metas/{id}/aportes` | Registra aporte avulso ou vinculado a um lançamento de Investimentos |
+| `GET /api/financas/metas/investimentos-disponiveis` | Lançamentos de investimento ainda não vinculados a nenhuma meta |
 | `GET /api/tasks/categories` | Lista categorias (usado pela web e pelo sync do Android) |
 | `PUT /api/tasks/categories/{id}` | Upsert idempotente (id gerado no cliente) |
 | `DELETE /api/tasks/categories/{id}` | Exclui categoria (sem tombstone — ver limitações em "Tarefas" acima) |

@@ -50,6 +50,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<Transacao> Transacoes => Set<Transacao>();
+    public DbSet<Orcamento> Orcamentos => Set<Orcamento>();
+    public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
+    public DbSet<MetaReserva> MetasReserva => Set<MetaReserva>();
+    public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -122,6 +126,50 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.TextoOriginal).HasMaxLength(1000);
             e.HasIndex(t => new { t.UserId, t.Data });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Orcamento>(e =>
+        {
+            e.ToTable("financas_orcamentos");
+            e.Property(o => o.ValorTotal).HasColumnType("decimal(12,2)");
+            e.Property(o => o.Observacoes).HasMaxLength(500);
+            // No máximo um orçamento por mês por usuário — o upsert do endpoint
+            // depende disso.
+            e.HasIndex(o => new { o.UserId, o.Ano, o.Mes }).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(o => o.Itens).WithOne().HasForeignKey(i => i.OrcamentoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<OrcamentoItem>(e =>
+        {
+            e.ToTable("financas_orcamento_itens");
+            e.Property(i => i.Categoria).HasConversion<string>().HasMaxLength(30);
+            e.Property(i => i.Percentual).HasColumnType("decimal(7,4)");
+            // Uma categoria não pode aparecer duas vezes no mesmo orçamento.
+            e.HasIndex(i => new { i.OrcamentoId, i.Categoria }).IsUnique();
+        });
+
+        b.Entity<MetaReserva>(e =>
+        {
+            e.ToTable("financas_metas");
+            e.Property(m => m.Nome).IsRequired().HasMaxLength(120);
+            e.Property(m => m.ValorAlvo).HasColumnType("decimal(12,2)");
+            e.Property(m => m.Observacoes).HasMaxLength(500);
+            e.HasIndex(m => m.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(m => m.Aportes).WithOne().HasForeignKey(a => a.MetaId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MetaAporte>(e =>
+        {
+            e.ToTable("financas_meta_aportes");
+            e.Property(a => a.Valor).HasColumnType("decimal(12,2)");
+            e.Property(a => a.Observacoes).HasMaxLength(500);
+            e.HasIndex(a => a.MetaId);
+            // Índice único filtrado: uma transação de investimento só pode alimentar
+            // uma meta, mas vários aportes avulsos (TransacaoId nulo) convivem.
+            e.HasIndex(a => a.TransacaoId).IsUnique().HasFilter("\"TransacaoId\" IS NOT NULL");
+            e.HasOne<Transacao>().WithMany().HasForeignKey(a => a.TransacaoId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<TaskCategory>(e =>

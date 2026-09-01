@@ -1,127 +1,244 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { HistoricoComponent } from './components/historico/historico.component';
+import { ImportarComponent } from './components/importar/importar.component';
 import { LancamentoFormComponent } from './components/lancamento-form/lancamento-form.component';
+import { MetasComponent } from './components/metas/metas.component';
+import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
 import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from './models/dashboard.model';
-import { Transacao } from './models/transacao.model';
+import { CATEGORIAS, Categoria, TipoTransacao, Transacao } from './models/transacao.model';
 import { DashboardService } from './services/dashboard.service';
+import { OrcamentoService } from './services/orcamento.service';
 import { TransacaoService } from './services/transacao.service';
+import { nomeArquivoCsv, transacoesParaCsv } from './financas-csv';
+import { baixarCsv } from '../../shared/csv';
+import {
+  AlertaCategoria,
+  alertasNovos,
+  chaveDoEstado,
+  estadoDe,
+  mensagemDoAlerta,
+} from './alertas-orcamento';
+
+type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
   standalone: true,
   imports: [
     RouterLink,
+    FormsModule,
     IconComponent,
     LancamentoFormComponent,
+    ImportarComponent,
     DashboardComponent,
     TransacoesListaComponent,
+    OrcamentoComponent,
+    MetasComponent,
+    HistoricoComponent,
   ],
-  template: `
-    <div class="page">
-      <header class="top-bar">
-        <div class="brand">
-          <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
-          <h1><span class="brand-mark"><app-icon name="wallet" [size]="14" /></span> Finanças</h1>
-        </div>
-        <div class="top-bar-actions">
-          <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
-          <span class="user-email">{{ auth.user()?.email }}</span>
-          <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
-        </div>
-      </header>
-
-      <main class="content">
-        <app-lancamento-form (lancamentoCriado)="onLancamentoCriado()" />
-
-        @if (carregando) {
-          <p class="carregando">Carregando...</p>
-        } @else {
-          <app-financas-dashboard [resumo]="resumo" [categorias]="categorias" [tendencias]="tendencias" />
-          <app-transacoes-lista [transacoes]="transacoes" />
-        }
-      </main>
-    </div>
-  `,
-  styles: [`
-    .page { min-height: 100dvh; background: var(--bg); }
-    .top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 14px 28px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .hub-link {
-      display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text-muted);
-      text-decoration: none;
-    }
-    .hub-link:hover { border-color: var(--accent); color: var(--accent); }
-    .top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
-    .brand-mark {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 8px;
-      background: var(--accent); color: #fff;
-      flex-shrink: 0;
-    }
-    .top-bar-actions { display: flex; align-items: center; gap: 14px; }
-    .theme-toggle {
-      border: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: var(--radius-sm);
-      width: 32px; height: 32px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
-    .user-email { font-size: 12px; color: var(--text-muted); }
-    .logout { display: flex; align-items: center; gap: 5px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 600; }
-    .logout:hover { color: var(--danger); }
-    .content { max-width: 1080px; margin: 0 auto; padding: 24px 28px; }
-    .carregando { color: var(--text-muted); text-align: center; padding: 2rem 0; }
-
-    @media (max-width: 760px) {
-      .top-bar { padding: 12px 16px; flex-wrap: wrap; }
-      .user-email { display: none; }
-      .content { padding: 16px; }
-    }
-  `],
+  templateUrl: './financas.page.html',
+  styleUrl: './financas.page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class FinancasPageComponent implements OnInit {
-  transacoes: Transacao[] = [];
-  resumo: ResumoResponse | null = null;
-  categorias: CategoriaResumo[] = [];
-  tendencias: TendenciaPeriodo[] = [];
-  carregando = true;
+export class FinancasPageComponent {
+  private readonly transacaoService = inject(TransacaoService);
+  private readonly dashboardService = inject(DashboardService);
+  private readonly orcamentoService = inject(OrcamentoService);
+  readonly auth = inject(AuthService);
+  readonly theme = inject(ThemeService);
 
-  constructor(
-    private readonly transacaoService: TransacaoService,
-    private readonly dashboardService: DashboardService,
-    public auth: AuthService,
-    public theme: ThemeService,
-    private cdr: ChangeDetectorRef,
-  ) {}
+  readonly categorias = CATEGORIAS;
 
-  ngOnInit(): void {
+  readonly aba = signal<Aba>('lancamentos');
+
+  private readonly hoje = new Date();
+  readonly ano = signal(this.hoje.getFullYear());
+  readonly mes = signal(this.hoje.getMonth() + 1);
+
+  readonly transacoes = signal<Transacao[]>([]);
+  readonly resumo = signal<ResumoResponse | null>(null);
+  readonly resumoCategorias = signal<CategoriaResumo[]>([]);
+  readonly tendencias = signal<TendenciaPeriodo[]>([]);
+
+  readonly carregando = signal(true);
+  readonly erro = signal<string | null>(null);
+
+  readonly mostrarImportacao = signal(false);
+  /** Categorias que acabaram de entrar em atenção ou estourar. */
+  readonly alertas = signal<AlertaCategoria[]>([]);
+  readonly mensagemDoAlerta = mensagemDoAlerta;
+
+  // Filtros da lista. São signals, e não campos comuns, porque `temFiltro` é um
+  // computed: sobre campos comuns ele nunca recalcularia e o botão de limpar
+  // jamais apareceria.
+  readonly filtroCategoria = signal<Categoria | ''>('');
+  readonly filtroTipo = signal<TipoTransacao | ''>('');
+  readonly filtroStatus = signal<'' | 'PendenteRevisao'>('');
+
+  readonly nomeDoMes = computed(() =>
+    new Date(this.ano(), this.mes() - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+  );
+
+  readonly ehMesAtual = computed(() =>
+    this.ano() === this.hoje.getFullYear() && this.mes() === this.hoje.getMonth() + 1,
+  );
+
+  readonly temFiltro = computed(() => !!(this.filtroCategoria() || this.filtroTipo() || this.filtroStatus()));
+
+  constructor() {
     this.carregarTudo();
   }
 
-  onLancamentoCriado(): void {
+  // ------------------------------------------------------------ navegação
+
+  mudarMes(delta: number): void {
+    const data = new Date(this.ano(), this.mes() - 1 + delta, 1);
+    this.ano.set(data.getFullYear());
+    this.mes.set(data.getMonth() + 1);
     this.carregarTudo();
   }
+
+  irParaMesAtual(): void {
+    this.ano.set(this.hoje.getFullYear());
+    this.mes.set(this.hoje.getMonth() + 1);
+    this.carregarTudo();
+  }
+
+  trocarAba(aba: Aba): void {
+    this.aba.set(aba);
+  }
+
+  alternarImportacao(): void {
+    this.mostrarImportacao.update((v) => !v);
+  }
+
+  /** Vindo do histórico: abre o orçamento do mês clicado. */
+  abrirMesNoOrcamento(alvo: { ano: number; mes: number }): void {
+    this.ano.set(alvo.ano);
+    this.mes.set(alvo.mes);
+    this.aba.set('orcamento');
+    this.carregarTudo();
+  }
+
+  exportarCsv(): void {
+    const transacoes = this.transacoes();
+    if (transacoes.length === 0) return;
+
+    baixarCsv(nomeArquivoCsv('lancamentos', this.ano(), this.mes()), transacoesParaCsv(transacoes));
+  }
+
+  dispensarAlertas(): void {
+    this.alertas.set([]);
+  }
+
+  // Compara a situação de cada categoria com a da última verificação e avisa só o
+  // que piorou. Sem isso, toda recarga repetiria o mesmo aviso de uma categoria
+  // que já estava estourada, e o usuário aprenderia a ignorá-lo.
+  private verificarAlertas(): void {
+    this.orcamentoService.acompanhamento(this.ano(), this.mes()).subscribe({
+      next: (a) => {
+        if (!a.temOrcamento) return;
+
+        const chave = chaveDoEstado(this.ano(), this.mes());
+        const anterior = this.lerEstado(chave);
+
+        this.alertas.set(alertasNovos(a.itens, anterior));
+        this.gravarEstado(chave, estadoDe(a.itens));
+      },
+      // Alerta é acessório: falhar aqui não pode atrapalhar o resto da tela.
+      error: () => {},
+    });
+  }
+
+  private lerEstado(chave: string): ReturnType<typeof estadoDe> | null {
+    try {
+      const bruto = localStorage.getItem(chave);
+      return bruto ? JSON.parse(bruto) : null;
+    } catch {
+      // Modo privado ou armazenamento bloqueado: sem histórico, sem alerta.
+      return null;
+    }
+  }
+
+  private gravarEstado(chave: string, estado: ReturnType<typeof estadoDe>): void {
+    try {
+      localStorage.setItem(chave, JSON.stringify(estado));
+    } catch {
+      // Ignorado de propósito: o alerta é um extra, não pode quebrar a página.
+    }
+  }
+
+  // ----------------------------------------------------------- carregamento
+
+  aplicarFiltros(): void {
+    this.carregarTransacoes();
+  }
+
+  limparFiltros(): void {
+    this.filtroCategoria.set('');
+    this.filtroTipo.set('');
+    this.filtroStatus.set('');
+    this.carregarTransacoes();
+  }
+
+  /** Chamado quando um lançamento ou o orçamento muda, para refazer os agregados. */
+  recarregar(): void {
+    this.carregarTudo();
+  }
+
+  private carregarTransacoes(): void {
+    this.transacaoService.listar(this.filtroAtual()).subscribe({
+      next: (transacoes) => this.transacoes.set(transacoes),
+      error: () => this.erro.set('Não foi possível carregar os lançamentos.'),
+    });
+  }
+
+  private filtroAtual() {
+    return {
+      ano: this.ano(),
+      mes: this.mes(),
+      categoria: this.filtroCategoria() || undefined,
+      tipo: this.filtroTipo() || undefined,
+      status: this.filtroStatus() || undefined,
+    };
+  }
+
+  private carregarTudo(): void {
+    this.carregando.set(true);
+    this.erro.set(null);
+
+    forkJoin({
+      transacoes: this.transacaoService.listar(this.filtroAtual()),
+      resumo: this.dashboardService.resumo(this.ano(), this.mes()),
+      categorias: this.dashboardService.categorias(this.ano(), this.mes()),
+      tendencias: this.dashboardService.tendencias(),
+    }).subscribe({
+      next: ({ transacoes, resumo, categorias, tendencias }) => {
+        this.transacoes.set(transacoes);
+        this.resumo.set(resumo);
+        this.resumoCategorias.set(categorias);
+        this.tendencias.set(tendencias);
+        this.carregando.set(false);
+        this.verificarAlertas();
+      },
+      error: () => {
+        this.carregando.set(false);
+        // Falhar em silêncio faria um erro de servidor parecer "você não tem
+        // lançamentos", que é exatamente a leitura errada.
+        this.erro.set('Não foi possível carregar seus dados financeiros. Verifique a conexão e tente de novo.');
+      },
+    });
+  }
+
+  // ------------------------------------------------------------------ tema
 
   themeIconName(): IconName {
     switch (this.theme.pref()) {
@@ -137,28 +254,5 @@ export class FinancasPageComponent implements OnInit {
       case 'light': return 'Tema: claro (clique para automático)';
       default: return 'Tema: automático (clique para escuro)';
     }
-  }
-
-  private carregarTudo(): void {
-    this.carregando = true;
-    forkJoin({
-      transacoes: this.transacaoService.listar(),
-      resumo: this.dashboardService.resumo(),
-      categorias: this.dashboardService.categorias(),
-      tendencias: this.dashboardService.tendencias(),
-    }).subscribe({
-      next: ({ transacoes, resumo, categorias, tendencias }) => {
-        this.transacoes = transacoes;
-        this.resumo = resumo;
-        this.categorias = categorias;
-        this.tendencias = tendencias;
-        this.carregando = false;
-        this.cdr.markForCheck();
-      },
-      error: () => {
-        this.carregando = false;
-        this.cdr.markForCheck();
-      },
-    });
   }
 }

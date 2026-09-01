@@ -1,0 +1,274 @@
+<div class="orcamento">
+  @if (erro(); as e) { <p class="alerta erro" role="alert">{{ e }}</p> }
+
+  @if (carregando()) {
+    <p class="carregando">Carregando orçamento...</p>
+  } @else if (editando()) {
+
+    <!-- ============================ FORMULÁRIO ============================ -->
+    <div class="card editor">
+      <header class="editor-topo">
+        <h2>Distribuir o orçamento de {{ nomeDoMes() }}</h2>
+        <button type="button" class="fechar" (click)="fecharEdicao()" aria-label="Fechar">
+          <app-icon name="x" [size]="15" />
+        </button>
+      </header>
+
+      <div class="campo-total">
+        <label for="valor-total">Quanto você tem para o mês</label>
+        <input id="valor-total" type="number" min="0" step="0.01" [(ngModel)]="valorTotal"
+               placeholder="0,00" (ngModelChange)="aviso.set(null)" />
+        <p class="dica">Normalmente a renda prevista. As fatias abaixo são percentuais desse valor.</p>
+      </div>
+
+      @if (modelos().length > 0) {
+        <div class="modelos">
+          <span class="titulo-secao">Começar de um modelo</span>
+          <div class="modelos-lista">
+            @for (m of modelos(); track m.id) {
+              <button type="button" class="modelo" (click)="aplicarModelo(m)">
+                <strong>{{ m.nome }}</strong>
+                <span>{{ m.descricao }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      @if (aviso(); as a) { <p class="alerta info">{{ a }}</p> }
+
+      <!-- Medidor de fechamento: a distribuição só é aceita somando 100%. -->
+      <div class="medidor" [class.fechado]="distribuicaoFechada()"
+           [class.excedido]="restanteParaCem() < 0">
+        <div class="medidor-barra">
+          <div class="medidor-preenchido" [style.width.%]="larguraBarra(somaPercentual())"></div>
+        </div>
+        <div class="medidor-texto">
+          <strong>{{ somaPercentual() | number: '1.0-2' }}%</strong> distribuídos
+          @if (distribuicaoFechada()) {
+            <span class="ok">· fechado</span>
+          } @else if (restanteParaCem() > 0) {
+            <span class="pendente">· faltam {{ restanteParaCem() | number: '1.0-2' }}%</span>
+            <button type="button" class="link" (click)="ajustarParaCem()">distribuir o resto</button>
+          } @else {
+            <span class="excesso">· passou {{ -restanteParaCem() | number: '1.0-2' }}%</span>
+            <button type="button" class="link" (click)="ajustarParaCem()">ajustar para 100%</button>
+          }
+        </div>
+      </div>
+
+      @for (g of linhasPorGrupo(); track g.grupo) {
+        <div class="grupo">
+          <div class="grupo-cabecalho">
+            <span class="grupo-nome">{{ g.rotulo }}</span>
+            <span class="grupo-percentual">{{ g.percentual | number: '1.0-2' }}%</span>
+          </div>
+
+          @for (linha of g.itens; track linha.categoria) {
+            <div class="linha">
+              <span class="linha-nome">{{ linha.rotulo }}</span>
+
+              <input class="slider" type="range" min="0" max="100" step="0.5"
+                     [ngModel]="linha.percentual" [ngModelOptions]="{ standalone: true }"
+                     (ngModelChange)="aoMudarPercentual(linha.categoria, $event)"
+                     [attr.aria-label]="'Percentual de ' + linha.rotulo" />
+
+              <div class="linha-percentual">
+                <input type="number" min="0" max="100" step="0.01"
+                       [ngModel]="linha.percentual" [ngModelOptions]="{ standalone: true }"
+                       (ngModelChange)="aoMudarPercentual(linha.categoria, $event)"
+                       [attr.aria-label]="'Percentual de ' + linha.rotulo + ' em número'" />
+                <span class="sufixo">%</span>
+              </div>
+
+              <!-- Editar em reais é mais natural para gastos fixos, como aluguel. -->
+              <div class="linha-valor">
+                <span class="prefixo">R$</span>
+                <input type="number" min="0" step="0.01"
+                       [ngModel]="valorDaLinha(linha)" [ngModelOptions]="{ standalone: true }"
+                       (ngModelChange)="aoMudarValor(linha.categoria, $event)"
+                       [attr.aria-label]="'Valor de ' + linha.rotulo + ' em reais'" />
+              </div>
+
+              <button type="button" class="remover" (click)="removerLinha(linha.categoria)"
+                      [attr.aria-label]="'Remover ' + linha.rotulo" title="Remover categoria">
+                <app-icon name="x" [size]="13" />
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      @if (linhas().length === 0) {
+        <p class="vazio">Escolha um modelo acima ou adicione categorias uma a uma.</p>
+      }
+
+      @if (categoriasNaoUsadas().length > 0) {
+        <div class="adicionar">
+          <select [(ngModel)]="categoriaParaAdicionar" aria-label="Categoria para adicionar">
+            <option value="">Adicionar categoria...</option>
+            @for (c of categoriasNaoUsadas(); track c.categoria) {
+              <option [value]="c.categoria">{{ c.rotulo }} · {{ rotuloGrupo[c.grupo] }}</option>
+            }
+          </select>
+          <button type="button" class="secundario" (click)="adicionarCategoria()"
+                  [disabled]="!categoriaParaAdicionar">
+            <app-icon name="plus" [size]="13" /> Adicionar
+          </button>
+        </div>
+      }
+
+      <div class="campo-obs">
+        <label for="obs-orcamento">Observações</label>
+        <input id="obs-orcamento" [(ngModel)]="observacoes" maxlength="500"
+               placeholder="Opcional — ex.: mês com viagem marcada" />
+      </div>
+
+      <div class="acoes-editor">
+        <button type="button" class="secundario" (click)="fecharEdicao()">Cancelar</button>
+        <button type="button" class="primario" (click)="salvar()" [disabled]="salvando()">
+          {{ salvando() ? 'Salvando...' : 'Salvar orçamento' }}
+        </button>
+      </div>
+    </div>
+
+  } @else if (!orcamento()) {
+
+    <!-- ======================== SEM ORÇAMENTO AINDA ======================= -->
+    <div class="card vazio-estado">
+      <span class="icone"><app-icon name="wallet" [size]="20" /></span>
+      <h2>Nenhum orçamento para {{ nomeDoMes() }}</h2>
+      <p>
+        Informe quanto você tem para o mês e distribua entre as categorias.
+        Depois a ferramenta acompanha o quanto de cada fatia já foi gasto.
+      </p>
+      <div class="acoes-vazio">
+        <button type="button" class="primario" (click)="abrirEdicao()">Criar orçamento</button>
+        <button type="button" class="secundario" (click)="copiarDoMesAnterior()" [disabled]="salvando()">
+          Copiar do mês anterior
+        </button>
+      </div>
+
+      @if (acompanhamento(); as a) {
+        @if (a.totalRealizado > 0) {
+          <p class="ja-gasto">
+            Neste mês já foram registrados <strong>{{ a.totalRealizado | currency }}</strong> em despesas.
+          </p>
+        }
+      }
+    </div>
+
+  } @else if (acompanhamento(); as a) {
+
+    <!-- ========================= ACOMPANHAMENTO ========================== -->
+    <div class="card resumo-orcamento">
+      <header class="resumo-topo">
+        <div>
+          <span class="label">Orçamento de {{ nomeDoMes() }}</span>
+          <span class="total">{{ a.valorTotal | currency }}</span>
+        </div>
+        <div class="acoes-topo">
+          <button type="button" class="secundario" (click)="abrirEdicao()">
+            <app-icon name="edit" [size]="13" /> Editar
+          </button>
+          @if (confirmandoRemocao()) {
+            <button type="button" class="perigo" (click)="remover()" [disabled]="salvando()">
+              Confirmar exclusão
+            </button>
+            <button type="button" class="secundario" (click)="confirmandoRemocao.set(false)">Cancelar</button>
+          } @else {
+            <button type="button" class="secundario perigo-hover" (click)="confirmandoRemocao.set(true)">
+              <app-icon name="delete" [size]="13" /> Excluir
+            </button>
+          }
+        </div>
+      </header>
+
+      <div class="totais">
+        <div class="total-item">
+          <span class="label">Gasto</span>
+          <span class="valor">{{ a.totalRealizado | currency }}</span>
+        </div>
+        <div class="total-item">
+          <span class="label">Disponível</span>
+          <span class="valor" [class.negativo]="a.saldoDisponivel < 0"
+                [class.positivo]="a.saldoDisponivel >= 0">{{ a.saldoDisponivel | currency }}</span>
+        </div>
+        <div class="total-item">
+          <span class="label">Projeção do mês</span>
+          <span class="valor" [class.negativo]="a.projecaoFimDoMes > a.valorTotal">
+            {{ a.projecaoFimDoMes | currency }}
+          </span>
+        </div>
+      </div>
+
+      <div class="barra-geral">
+        <div class="barra">
+          <div class="preenchida" [class.excedida]="a.percentualUtilizado > 100"
+               [style.width.%]="larguraBarra(a.percentualUtilizado)"></div>
+          <!-- Marca de onde o gasto "deveria" estar se fosse uniforme no mês. -->
+          @if (a.percentualDoMesDecorrido > 0 && a.percentualDoMesDecorrido < 100) {
+            <div class="marca-ritmo" [style.left.%]="a.percentualDoMesDecorrido"
+                 [title]="'Hoje: ' + (a.percentualDoMesDecorrido | number: '1.0-0') + '% do mês'"></div>
+          }
+        </div>
+        <span class="barra-legenda">{{ a.percentualUtilizado | number: '1.0-0' }}% do orçamento</span>
+      </div>
+
+      @if (diagnostico(); as d) {
+        <p class="diagnostico" [class.ok]="d.tom === 'ok'" [class.atencao]="d.tom === 'atencao'"
+           [class.estourado]="d.tom === 'estourado'">{{ d.texto }}</p>
+      }
+    </div>
+
+    <div class="card categorias">
+      <h2>Por categoria</h2>
+      <ul>
+        @for (item of a.itens; track item.categoria) {
+          <li [class.sem-orcamento]="item.situacao === 'sem_orcamento'">
+            <div class="cat-topo">
+              <span class="cat-nome">
+                {{ item.categoriaRotulo }}
+                @if (item.situacao === 'sem_orcamento') {
+                  <span class="tag-fora">fora do orçamento</span>
+                }
+              </span>
+              <span class="cat-valores">
+                <strong [class.estourado]="item.situacao === 'estourado'">{{ item.valorRealizado | currency }}</strong>
+                @if (item.valorPlanejado > 0) {
+                  <span class="cat-planejado">&nbsp;de {{ item.valorPlanejado | currency }}</span>
+                }
+              </span>
+            </div>
+
+            @if (item.valorPlanejado > 0) {
+              <div class="barra fina">
+                <div class="preenchida" [class.atencao]="item.situacao === 'atencao'"
+                     [class.excedida]="item.situacao === 'estourado'"
+                     [style.width.%]="larguraBarra(item.percentualUtilizado)"></div>
+              </div>
+              <div class="cat-rodape">
+                <span>{{ item.percentualUtilizado | number: '1.0-0' }}% usado · {{ item.percentual | number: '1.0-2' }}% do total</span>
+                <span [class.negativo]="item.valorRestante < 0">
+                  {{ item.valorRestante < 0 ? 'excedeu ' : 'restam ' }}
+                  {{ (item.valorRestante < 0 ? -item.valorRestante : item.valorRestante) | currency }}
+                </span>
+              </div>
+            }
+          </li>
+        }
+      </ul>
+
+      @if (a.grupos.length > 0) {
+        <div class="grupos-resumo">
+          @for (g of a.grupos; track g.grupo) {
+            <div class="grupo-chip">
+              <span class="grupo-chip-nome">{{ g.grupoRotulo }}</span>
+              <span class="grupo-chip-valor">{{ g.valorRealizado | currency }} / {{ g.valorPlanejado | currency }}</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

@@ -1,0 +1,239 @@
+<div class="metas">
+  @if (erro(); as e) { <p class="alerta erro" role="alert">{{ e }}</p> }
+
+  @if (carregando()) {
+    <p class="carregando">Carregando metas...</p>
+  } @else {
+
+    @if (ativas().length > 0) {
+      <div class="card resumo-geral">
+        <div>
+          <span class="label">Guardado nas metas ativas</span>
+          <span class="total">{{ totalGuardado() | currency }}</span>
+          <span class="de">de {{ totalAlvo() | currency }}</span>
+        </div>
+        <button type="button" class="primario" (click)="novaMeta()">
+          <app-icon name="plus" [size]="13" /> Nova meta
+        </button>
+      </div>
+    }
+
+    <!-- ============================== FORMULÁRIO ============================== -->
+    @if (criandoNova() || editandoId()) {
+      <div class="card formulario">
+        <h2>{{ editandoId() ? 'Editar meta' : 'Nova meta de reserva' }}</h2>
+
+        <div class="campos">
+          <div class="campo largo">
+            <label for="meta-nome">Para quê</label>
+            <input id="meta-nome" [(ngModel)]="nome" maxlength="120"
+                   placeholder="Ex.: Reserva de emergência, Viagem, Entrada do carro" />
+          </div>
+
+          <div class="campo">
+            <label for="meta-alvo">Quanto juntar</label>
+            <input id="meta-alvo" type="number" min="0.01" step="0.01" [(ngModel)]="valorAlvo" placeholder="0,00" />
+          </div>
+
+          <div class="campo">
+            <label for="meta-data">Até quando <span class="opcional">(opcional)</span></label>
+            <input id="meta-data" type="date" [(ngModel)]="dataAlvo" />
+          </div>
+
+          <div class="campo largo">
+            <label for="meta-obs">Observações</label>
+            <input id="meta-obs" [(ngModel)]="observacoes" maxlength="500" placeholder="Opcional" />
+          </div>
+        </div>
+
+        <div class="acoes">
+          <button type="button" class="secundario" (click)="cancelarFormulario()">Cancelar</button>
+          <button type="button" class="primario" (click)="salvar()" [disabled]="salvando()">
+            {{ salvando() ? 'Salvando...' : 'Salvar meta' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- ============================ ESTADO VAZIO ============================= -->
+    @if (metas().length === 0 && !criandoNova()) {
+      <div class="card vazio-estado">
+        <span class="icone"><app-icon name="cake" [size]="20" /></span>
+        <h2>Nenhuma meta ainda</h2>
+        <p>
+          Defina quanto quer juntar e até quando. A ferramenta calcula o depósito mensal
+          necessário e acompanha o ritmo, aproveitando os lançamentos de Investimentos
+          que você já registra.
+        </p>
+        <button type="button" class="primario" (click)="novaMeta()">Criar primeira meta</button>
+      </div>
+    }
+
+    <!-- =============================== METAS ================================ -->
+    @for (meta of ativas().concat(concluidas()).concat(arquivadas()); track meta.id) {
+      <div class="card meta" [class.concluida]="meta.concluida" [class.arquivada]="meta.arquivada">
+        <header class="meta-topo">
+          <div class="meta-identidade">
+            <span class="meta-nome">{{ meta.nome }}</span>
+            <span class="etiqueta" [class]="tomDaSituacao(meta.situacao)">
+              {{ rotuloSituacao[meta.situacao] }}
+            </span>
+            @if (meta.arquivada) { <span class="etiqueta neutro">Arquivada</span> }
+          </div>
+
+          <div class="meta-acoes">
+            @if (!meta.concluida && !meta.arquivada) {
+              <button type="button" class="secundario" (click)="abrirAporte(meta)">
+                <app-icon name="plus" [size]="13" /> Aporte
+              </button>
+            }
+            <button type="button" class="icone-btn" (click)="editar(meta)" aria-label="Editar meta" title="Editar">
+              <app-icon name="edit" [size]="13" />
+            </button>
+            <button type="button" class="icone-btn" (click)="arquivar(meta)"
+                    [attr.aria-label]="meta.arquivada ? 'Desarquivar meta' : 'Arquivar meta'"
+                    [title]="meta.arquivada ? 'Desarquivar' : 'Arquivar'">
+              <app-icon name="folder" [size]="13" />
+            </button>
+            <button type="button" class="icone-btn perigo" (click)="pedirRemocao(meta)"
+                    aria-label="Excluir meta" title="Excluir">
+              <app-icon name="delete" [size]="13" />
+            </button>
+          </div>
+        </header>
+
+        @if (confirmandoRemocaoId() === meta.id) {
+          <div class="confirmar-remocao">
+            <span>Excluir <strong>{{ meta.nome }}</strong> e todos os aportes registrados nela?</span>
+            <div class="acoes">
+              <button type="button" class="secundario" (click)="cancelarRemocao()">Cancelar</button>
+              <button type="button" class="perigo" (click)="remover(meta)">Excluir</button>
+            </div>
+          </div>
+        }
+
+        <div class="valores">
+          <span class="acumulado">{{ meta.valorAcumulado | currency }}</span>
+          <span class="alvo">de {{ meta.valorAlvo | currency }}</span>
+          <span class="percentual">{{ meta.percentualConcluido | number: '1.0-0' }}%</span>
+        </div>
+
+        <div class="barra">
+          <div class="preenchida" [class.ok]="meta.concluida"
+               [style.width.%]="larguraBarra(meta.percentualConcluido)"></div>
+        </div>
+
+        @if (!meta.concluida) {
+          <div class="indicadores">
+            <div class="indicador">
+              <span class="label">Falta</span>
+              <span class="valor">{{ meta.valorRestante | currency }}</span>
+            </div>
+
+            @if (meta.aporteMensalNecessario !== null) {
+              <div class="indicador">
+                <span class="label">Por mês, até o prazo</span>
+                <span class="valor" [class.alerta]="meta.situacao === 'atrasada'">
+                  {{ meta.aporteMensalNecessario | currency }}
+                </span>
+                <span class="detalhe">{{ meta.mesesRestantes }} {{ meta.mesesRestantes === 1 ? 'mês' : 'meses' }}</span>
+              </div>
+            }
+
+            <div class="indicador">
+              <span class="label">Seu ritmo atual</span>
+              <span class="valor">{{ meta.ritmoMensalAtual | currency }}<span class="por-mes">/mês</span></span>
+            </div>
+
+            @if (meta.previsaoDeConclusao) {
+              <div class="indicador">
+                <span class="label">Nesse ritmo, fecha em</span>
+                <span class="valor texto">{{ meta.previsaoDeConclusao | date: 'MMM/yy' }}</span>
+              </div>
+            }
+          </div>
+
+          @if (meta.situacao === 'atrasada') {
+            <p class="diagnostico alerta">
+              No ritmo atual a meta não fecha no prazo. Seriam necessários
+              {{ meta.aporteMensalNecessario | currency }} por mês.
+            </p>
+          } @else if (meta.situacao === 'vencida') {
+            <p class="diagnostico alerta">O prazo já passou. Ajuste a data ou o valor da meta.</p>
+          } @else if (meta.situacao === 'no_ritmo') {
+            <p class="diagnostico ok">No ritmo para fechar no prazo.</p>
+          }
+        } @else {
+          <p class="diagnostico ok">Meta batida. 🎉</p>
+        }
+
+        <!-- ============================= APORTE ============================== -->
+        @if (aportandoId() === meta.id) {
+          <div class="form-aporte">
+            <span class="titulo-secao">Registrar aporte</span>
+
+            @if (investimentos().length > 0) {
+              <div class="campo largo">
+                <label [attr.for]="'inv-' + meta.id">
+                  Aproveitar um investimento já lançado
+                </label>
+                <select [id]="'inv-' + meta.id" [(ngModel)]="aporteTransacaoId">
+                  <option value="">Registrar um valor avulso...</option>
+                  @for (i of investimentos(); track i.id) {
+                    <option [value]="i.id">
+                      {{ i.data | date: 'dd/MM' }} — {{ i.descricao }} ({{ i.valor | currency }})
+                    </option>
+                  }
+                </select>
+              </div>
+            }
+
+            @if (!aporteTransacaoId) {
+              <div class="campo">
+                <label [attr.for]="'ap-valor-' + meta.id">Valor</label>
+                <input [id]="'ap-valor-' + meta.id" type="number" min="0.01" step="0.01"
+                       [(ngModel)]="aporteValor" placeholder="0,00" />
+              </div>
+              <div class="campo">
+                <label [attr.for]="'ap-data-' + meta.id">Data</label>
+                <input [id]="'ap-data-' + meta.id" type="date" [(ngModel)]="aporteData" />
+              </div>
+            }
+
+            <div class="acoes">
+              <button type="button" class="secundario" (click)="fecharAporte()">Cancelar</button>
+              <button type="button" class="primario" (click)="aportar(meta)" [disabled]="salvando()">
+                {{ salvando() ? 'Registrando...' : 'Registrar' }}
+              </button>
+            </div>
+          </div>
+        }
+
+        @if (meta.aportes.length > 0) {
+          <details class="lista-aportes">
+            <summary>{{ meta.aportes.length }} {{ meta.aportes.length === 1 ? 'aporte' : 'aportes' }}</summary>
+            <ul>
+              @for (a of meta.aportes; track a.id) {
+                <li>
+                  <span class="aporte-data">{{ a.data | date: 'dd/MM/yyyy' }}</span>
+                  <span class="aporte-valor">{{ a.valor | currency }}</span>
+                  @if (a.transacaoId) { <span class="aporte-tag">do extrato</span> }
+                  <button type="button" (click)="removerAporte(meta, a.id)"
+                          aria-label="Remover aporte" title="Remover aporte">
+                    <app-icon name="x" [size]="12" />
+                  </button>
+                </li>
+              }
+            </ul>
+          </details>
+        }
+      </div>
+    }
+
+    @if (metas().length > 0 || mostrarArquivadas()) {
+      <button type="button" class="link-arquivadas" (click)="alternarArquivadas()">
+        {{ mostrarArquivadas() ? 'Ocultar metas arquivadas' : 'Mostrar metas arquivadas' }}
+      </button>
+    }
+  }
+</div>

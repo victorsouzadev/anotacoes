@@ -1,0 +1,104 @@
+<div class="card importar">
+  <h2>Importar de um arquivo</h2>
+
+  @if (capacidades(); as c) {
+    @if (!c.suportaAnexos) {
+      <!-- Sem chave de LLM não adianta oferecer o seletor: o envio só devolveria erro. -->
+      <p class="indisponivel">
+        Este servidor está sem chave de IA configurada, então lê apenas lançamentos por texto.
+        Para importar foto de cupom ou PDF de extrato, defina <code>OPENROUTER_API_KEY</code>.
+      </p>
+    } @else {
+      <p class="ajuda">
+        Foto de cupom, PDF de extrato ou planilha de fatura. Um cupom vira um lançamento;
+        um extrato vira vários — todos entram para revisão antes de contar no orçamento.
+      </p>
+
+      <label class="area-arrastar" [class.arrastando]="arrastando()"
+             (dragover)="aoArrastarSobre($event)" (dragleave)="aoSairDoArrasto()" (drop)="aoSoltar($event)">
+        <input type="file" multiple [accept]="accept" (change)="aoEscolher($event)" [disabled]="enviando()" />
+        <span class="icone"><app-icon name="paperclip" [size]="18" /></span>
+        <span class="chamada">Arraste os arquivos aqui ou clique para escolher</span>
+        <span class="detalhe">
+          Até {{ c.maxArquivos }} arquivos, {{ c.maxTamanhoArquivoMb }} MB cada · {{ c.extensoesAceitas.join(' ') }}
+        </span>
+      </label>
+
+      @if (arquivos().length > 0) {
+        <ul class="arquivos">
+          @for (arquivo of arquivos(); track arquivo.name + arquivo.size; let i = $index) {
+            <li>
+              <app-icon name="paperclip" [size]="13" />
+              <span class="nome">{{ arquivo.name }}</span>
+              <span class="tamanho">{{ tamanho(arquivo) }}</span>
+              <button type="button" (click)="remover(i)" [disabled]="enviando()"
+                      [attr.aria-label]="'Remover ' + arquivo.name">
+                <app-icon name="x" [size]="12" />
+              </button>
+            </li>
+          }
+        </ul>
+
+        <input class="observacao" [(ngModel)]="observacao" maxlength="500" [disabled]="enviando()"
+               placeholder="Contexto opcional — ex.: “fatura do cartão de agosto”" />
+
+        <div class="acoes">
+          <button type="button" class="secundario" (click)="limpar()" [disabled]="enviando()">Limpar</button>
+          <button type="button" class="primario" (click)="enviar()" [disabled]="enviando()">
+            {{ enviando() ? 'Lendo o arquivo...' : 'Importar ' + arquivos().length + (arquivos().length > 1 ? ' arquivos' : ' arquivo') }}
+          </button>
+        </div>
+
+        @if (enviando()) {
+          <p class="processando">
+            Isso pode levar até um minuto em documentos com muitas páginas.
+          </p>
+        }
+      }
+    }
+  }
+
+  @if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+  @if (criadas().length > 0) {
+    <div class="resultado">
+      <strong>{{ criadas().length }} {{ criadas().length > 1 ? 'lançamentos importados' : 'lançamento importado' }}</strong>
+      — confira os valores na lista abaixo antes de confirmar.
+
+      <ul class="previa">
+        @for (t of criadas(); track t.id) {
+          <li>
+            <span class="previa-desc">{{ t.descricao }}</span>
+            <span class="previa-meta">{{ t.data | date: 'dd/MM' }} · {{ t.categoriaRotulo }}</span>
+            <span class="previa-valor" [class.receita]="t.tipo === 'receita'">
+              {{ t.tipo === 'receita' ? '+' : '−' }} {{ t.valor | currency }}
+            </span>
+          </li>
+        }
+      </ul>
+
+      @if (emOutroMes()) {
+        <p class="outro-mes">
+          Esses lançamentos são de <strong>{{ nomeDoMesImportado() }}</strong>, e a tela está em outro mês.
+          <button type="button" (click)="abrirMesImportado()">Ver {{ nomeDoMesImportado() }}</button>
+        </p>
+      }
+
+      @if (atingiuLimite()) {
+        <p class="aviso">
+          O documento tinha mais lançamentos do que o limite por importação. Divida o arquivo
+          para trazer o restante.
+        </p>
+      }
+
+      @if (descartes().length > 0) {
+        <details class="descartes">
+          <summary>{{ descartes().length }} {{ descartes().length > 1 ? 'linhas não aproveitadas' : 'linha não aproveitada' }}</summary>
+          <ul>
+            @for (d of descartes(); track $index) { <li>{{ d }}</li> }
+          </ul>
+        </details>
+      }
+    </div>
+  }
+</div>

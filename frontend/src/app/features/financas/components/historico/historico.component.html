@@ -1,0 +1,93 @@
+<div class="historico">
+  @if (erro(); as e) { <p class="alerta erro" role="alert">{{ e }}</p> }
+
+  @if (carregando()) {
+    <p class="carregando">Carregando histórico...</p>
+  } @else {
+    <div class="card">
+      <header class="topo">
+        <h2>Planejado x realizado</h2>
+        <div class="janelas">
+          @for (opcao of [6, 12, 24]; track opcao) {
+            <button type="button" [class.ativa]="janela() === opcao" (click)="mudarJanela(opcao)">
+              {{ opcao }}m
+            </button>
+          }
+        </div>
+      </header>
+
+      @if (!temDados()) {
+        <p class="vazio">Ainda não há meses com orçamento ou lançamentos para comparar.</p>
+      } @else {
+        <div class="canvas-wrap"><canvas #barrasCanvas></canvas></div>
+
+        <ul class="legenda">
+          <li><span class="marca planejado"></span>Planejado</li>
+          <li><span class="marca ok"></span>Gasto, dentro do previsto</li>
+          <li><span class="marca atencao"></span>Gasto, perto do limite</li>
+          <li><span class="marca estourado"></span>Gasto acima do orçamento</li>
+        </ul>
+
+        <div class="indicadores">
+          <div class="indicador">
+            <span class="label">Total gasto no período</span>
+            <span class="valor">{{ totalRealizado() | currency }}</span>
+          </div>
+          <div class="indicador">
+            <span class="label">Uso médio do orçamento</span>
+            <span class="valor">{{ mediaUtilizacao() | number: '1.0-0' }}%</span>
+            <span class="detalhe">{{ comOrcamento().length }} {{ comOrcamento().length === 1 ? 'mês orçado' : 'meses orçados' }}</span>
+          </div>
+          <div class="indicador">
+            <span class="label">Meses estourados</span>
+            <span class="valor" [class.alerta]="mesesEstourados() > 0">{{ mesesEstourados() }}</span>
+          </div>
+        </div>
+      }
+    </div>
+
+    @if (temDados()) {
+      <div class="card tabela-card">
+        <h2>Mês a mês</h2>
+        <div class="rolagem">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Mês</th>
+                <th scope="col" class="num">Planejado</th>
+                <th scope="col" class="num">Gasto</th>
+                <th scope="col" class="num">Diferença</th>
+                <th scope="col" class="num">Uso</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of meses(); track m.ano * 100 + m.mes) {
+                <tr [class]="classeDaSituacao(m.situacao)" (click)="abrirMes(m)"
+                    tabindex="0" (keydown.enter)="abrirMes(m)"
+                    [attr.aria-label]="'Abrir orçamento de ' + m.rotulo">
+                  <th scope="row">{{ m.rotulo }}</th>
+                  <td class="num">
+                    @if (m.temOrcamento) { {{ m.valorTotal | currency }} } @else { <span class="sem">sem orçamento</span> }
+                  </td>
+                  <td class="num">{{ m.totalRealizado | currency }}</td>
+                  <td class="num">
+                    @if (m.temOrcamento) {
+                      <span [class.negativo]="m.totalRealizado > m.valorTotal"
+                            [class.positivo]="m.totalRealizado <= m.valorTotal">
+                        {{ m.valorTotal - m.totalRealizado | currency }}
+                      </span>
+                    } @else { — }
+                  </td>
+                  <td class="num">
+                    @if (m.temOrcamento) { {{ m.percentualUtilizado | number: '1.0-0' }}% } @else { — }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="dica-tabela">Clique num mês para abrir o orçamento dele.</p>
+      </div>
+    }
+  }
+</div>

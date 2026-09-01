@@ -106,6 +106,83 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("tasks_kanban_lanes", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.MetaAporte", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("MetaId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TransacaoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Valor")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MetaId");
+
+                    b.HasIndex("TransacaoId")
+                        .IsUnique()
+                        .HasFilter("\"TransacaoId\" IS NOT NULL");
+
+                    b.ToTable("financas_meta_aportes", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ArquivadaEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ConcluidaEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("DataAlvo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ValorAlvo")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("financas_metas", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Note", b =>
                 {
                     b.Property<string>("Id")
@@ -144,6 +221,68 @@ namespace Notas.Api.Data.Migrations
                     b.HasIndex("UserId", "UpdatedAt");
 
                     b.ToTable("notes", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ano")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Mes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ValorTotal")
+                        .HasColumnType("decimal(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Ano", "Mes")
+                        .IsUnique();
+
+                    b.ToTable("financas_orcamentos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.OrcamentoItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Categoria")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OrcamentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Percentual")
+                        .HasColumnType("decimal(7,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrcamentoId", "Categoria")
+                        .IsUnique();
+
+                    b.ToTable("financas_orcamento_itens", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.RefreshToken", b =>
@@ -484,6 +623,29 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.MetaAporte", b =>
+                {
+                    b.HasOne("Notas.Api.Data.MetaReserva", null)
+                        .WithMany("Aportes")
+                        .HasForeignKey("MetaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Notas.Api.Data.Transacao", null)
+                        .WithMany()
+                        .HasForeignKey("TransacaoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Note", b =>
                 {
                     b.HasOne("Notas.Api.Data.Folder", null)
@@ -494,6 +656,24 @@ namespace Notas.Api.Data.Migrations
                     b.HasOne("Notas.Api.Data.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.OrcamentoItem", b =>
+                {
+                    b.HasOne("Notas.Api.Data.Orcamento", null)
+                        .WithMany("Itens")
+                        .HasForeignKey("OrcamentoId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -567,6 +747,16 @@ namespace Notas.Api.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
+                {
+                    b.Navigation("Aportes");
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

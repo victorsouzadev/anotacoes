@@ -32,9 +32,21 @@ public class ExtracaoLlmResult
     public string? Observacoes { get; set; }
 }
 
+// O texto do usuário não pôde ser interpretado como um lançamento. Culpa da
+// entrada — vira 422 para o cliente.
 public class ExtracaoInvalidaException : Exception
 {
     public ExtracaoInvalidaException(string message) : base(message)
+    {
+    }
+}
+
+// O provedor de LLM falhou, expirou ou está mal configurado. Não é culpa do texto
+// do usuário — vira 502/503, e não 422, para não dizer "não entendi" quando na
+// verdade a API caiu.
+public class LlmIndisponivelException : Exception
+{
+    public LlmIndisponivelException(string message, Exception? inner = null) : base(message, inner)
     {
     }
 }

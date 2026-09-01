@@ -1,0 +1,138 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="wallet" [size]="14" /></span> Finanças</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
+        <app-icon [name]="themeIconName()" [size]="16" />
+      </button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <!-- Navegação de mês: o dashboard e o orçamento sempre olham a mesma competência. -->
+    <div class="barra-mes">
+      <div class="navegacao">
+        <button type="button" (click)="mudarMes(-1)" aria-label="Mês anterior">
+          <app-icon name="chevron" [size]="15" class="seta-esquerda" />
+        </button>
+        <span class="mes-atual">{{ nomeDoMes() }}</span>
+        <button type="button" (click)="mudarMes(1)" aria-label="Próximo mês">
+          <app-icon name="chevron" [size]="15" class="seta-direita" />
+        </button>
+        @if (!ehMesAtual()) {
+          <button type="button" class="hoje" (click)="irParaMesAtual()">Hoje</button>
+        }
+      </div>
+
+      <nav class="abas" role="tablist">
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'lancamentos'"
+                [class.ativa]="aba() === 'lancamentos'" (click)="trocarAba('lancamentos')">
+          Lançamentos
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'orcamento'"
+                [class.ativa]="aba() === 'orcamento'" (click)="trocarAba('orcamento')">
+          Orçamento
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'metas'"
+                [class.ativa]="aba() === 'metas'" (click)="trocarAba('metas')">
+          Metas
+        </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'historico'"
+                [class.ativa]="aba() === 'historico'" (click)="trocarAba('historico')">
+          Histórico
+        </button>
+      </nav>
+    </div>
+
+    @if (erro(); as e) {
+      <div class="erro-global" role="alert">
+        <span>{{ e }}</span>
+        <button type="button" (click)="recarregar()">Tentar de novo</button>
+      </div>
+    }
+
+    <!-- Alertas de orçamento: só o que piorou desde a última visita. -->
+    @if (alertas().length > 0) {
+      <div class="alertas" role="status">
+        <div class="alertas-lista">
+          @for (a of alertas(); track a.categoria) {
+            <p class="alerta-item" [class.estourado]="a.nivel === 'estourado'">
+              <app-icon [name]="a.nivel === 'estourado' ? 'x' : 'help'" [size]="13" />
+              {{ mensagemDoAlerta(a) }}
+            </p>
+          }
+        </div>
+        <button type="button" (click)="dispensarAlertas()" aria-label="Dispensar avisos">
+          <app-icon name="x" [size]="13" />
+        </button>
+      </div>
+    }
+
+    @if (aba() === 'lancamentos') {
+      <app-lancamento-form (lancamentoCriado)="recarregar()" />
+
+      <div class="linha-importar">
+        <button type="button" class="alternar-importacao" (click)="alternarImportacao()">
+          <app-icon name="paperclip" [size]="13" />
+          {{ mostrarImportacao() ? 'Ocultar importação de arquivo' : 'Importar de foto, PDF ou planilha' }}
+        </button>
+      </div>
+
+      @if (mostrarImportacao()) {
+        <app-importar [ano]="ano()" [mes]="mes()" (importado)="recarregar()"
+                      (irParaMes)="abrirMesNoOrcamento($event); trocarAba('lancamentos')" />
+      }
+
+      @if (carregando()) {
+        <p class="carregando">Carregando...</p>
+      } @else {
+        <app-financas-dashboard
+          [resumo]="resumo()"
+          [categorias]="resumoCategorias()"
+          [tendencias]="tendencias()" />
+
+        <div class="filtros">
+          <select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event); aplicarFiltros()" aria-label="Filtrar por tipo">
+            <option value="">Todos os tipos</option>
+            <option value="despesa">Despesas</option>
+            <option value="receita">Receitas</option>
+          </select>
+
+          <select [ngModel]="filtroCategoria()" (ngModelChange)="filtroCategoria.set($event); aplicarFiltros()" aria-label="Filtrar por categoria">
+            <option value="">Todas as categorias</option>
+            @for (c of categorias; track c.valor) {
+              <option [value]="c.valor">{{ c.rotulo }}</option>
+            }
+          </select>
+
+          <select [ngModel]="filtroStatus()" (ngModelChange)="filtroStatus.set($event); aplicarFiltros()" aria-label="Filtrar por situação">
+            <option value="">Todas as situações</option>
+            <option value="PendenteRevisao">Só os que precisam de revisão</option>
+          </select>
+
+          @if (temFiltro()) {
+            <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
+          }
+
+          <button type="button" class="exportar" (click)="exportarCsv()"
+                  [disabled]="transacoes().length === 0" title="Baixar os lançamentos deste mês em CSV">
+            <app-icon name="download" [size]="13" /> Exportar CSV
+          </button>
+        </div>
+
+        <app-transacoes-lista [transacoes]="transacoes()" (alterado)="recarregar()" />
+      }
+    } @else if (aba() === 'orcamento') {
+      <app-orcamento [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+    } @else if (aba() === 'metas') {
+      <app-metas />
+    } @else {
+      <app-historico-orcamentos (mesEscolhido)="abrirMesNoOrcamento($event)" />
+    }
+  </main>
+</div>

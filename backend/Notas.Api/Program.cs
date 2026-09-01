@@ -26,20 +26,52 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-// Ferramenta "Finanças": extração de lançamentos via LLM (Anthropic), com
-// fallback heurístico local quando nenhuma chave de API está configurada.
+// Ferramenta "Finanças": extração de lançamentos por LLM, com fallback heurístico
+// local quando nenhuma chave de API está configurada.
 builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
+builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(ExtracaoOptions.SectionName));
-var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"];
-if (!string.IsNullOrWhiteSpace(anthropicApiKey))
+builder.Services.Configure<FinancasOptions>(builder.Configuration.GetSection(FinancasOptions.SectionName));
+builder.Services.AddSingleton<FinancasClock>();
+
+// Provedor de LLM: OpenRouter (padrão, e o único que lê imagem/PDF), Anthropic
+// direto, ou o extrator heurístico local quando não há chave nenhuma. `Llm:Provider`
+// força um provedor específico; sem ele, vale a primeira chave configurada.
+var openRouterKey = builder.Configuration["OpenRouter:ApiKey"];
+var anthropicKey = builder.Configuration["Anthropic:ApiKey"];
+var provedor = (builder.Configuration["Llm:Provider"] ?? "").Trim().ToLowerInvariant();
+if (provedor.Length == 0)
 {
-    builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>();
+    provedor = !string.IsNullOrWhiteSpace(openRouterKey) ? "openrouter"
+        : !string.IsNullOrWhiteSpace(anthropicKey) ? "anthropic"
+        : "heuristico";
 }
-else
+
+switch (provedor)
 {
-    builder.Services.AddSingleton<ILlmExtractor, HeuristicLlmExtractor>();
+    case "openrouter":
+        // O timeout do HttpClient cobre o maior caso (documento com anexos); o
+        // caso sem anexo é limitado por um CancellationToken mais curto dentro do
+        // extrator, para o usuário não esperar dois minutos por uma frase.
+        builder.Services.AddHttpClient<ILlmExtractor, OpenRouterLlmExtractor>(c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+        break;
+
+    case "anthropic":
+        builder.Services.AddHttpClient<ILlmExtractor, AnthropicLlmExtractor>(c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                Math.Clamp(builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20), 5, 120)));
+        break;
+
+    default:
+        builder.Services.AddSingleton<ILlmExtractor, HeuristicLlmExtractor>();
+        break;
 }
+
 builder.Services.AddScoped<TransacaoExtractionService>();
+builder.Services.AddScoped<OrcamentoService>();
+builder.Services.AddScoped<MetaService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -55,6 +87,32 @@ builder.Services.AddRateLimiter(o =>
         {
             PermitLimit = 20,
             Window = TimeSpan.FromMinutes(1),
+        }));
+
+    // Lançamento por texto livre é o único endpoint que custa dinheiro por chamada
+    // (uma requisição ao LLM). O limite é por usuário autenticado, não por IP, para
+    // que um token vazado não consiga queimar a chave da API em laço.
+    o.AddPolicy("financas-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+
+    // Importar arquivo custa muito mais que interpretar uma frase: uma foto de
+    // cupom vale milhares de tokens e um PDF de extrato, dezenas de milhares.
+    // O limite é bem mais apertado que o do lançamento por texto.
+    o.AddPolicy("financas-importacao", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(5),
         }));
 });
 
@@ -78,8 +136,11 @@ using (var scope = app.Services.CreateScope())
     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
 }
 
-app.UseRateLimiter();
+// A autenticação vem antes do limitador porque a política "financas-ia" particiona
+// por usuário: com a ordem invertida, ctx.User estaria vazio e todo mundo atrás do
+// mesmo IP dividiria a mesma cota.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
@@ -87,6 +148,8 @@ app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapFoldersEndpoints();
 app.MapFinancasEndpoints();
+app.MapOrcamentoEndpoints();
+app.MapMetaEndpoints();
 app.MapTasksEndpoints();
 app.MapImagemEndpoints();
 
