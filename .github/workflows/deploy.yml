@@ -109,4 +109,12 @@ jobs:
       - name: Verifica saúde da API
         run: |
           sleep 5
-          curl -sf http://${{ secrets.VPS_HOST }}:8090/api/health
+          corpo=$(curl -sf http://${{ secrets.VPS_HOST }}:8090/api/health)
+          echo "$corpo"
+          # Sem ICU o container sobe e responde /api/health normalmente, mas
+          # qualquer endpoint que formate em pt-BR devolve 500 — foi assim que
+          # o dashboard de finanças quebrou sem o deploy acusar nada.
+          echo "$corpo" | grep -q '"icu":"ok"' || {
+            echo "::error::A imagem subiu sem ICU (modo globalization-invariant)."
+            exit 1
+          }
