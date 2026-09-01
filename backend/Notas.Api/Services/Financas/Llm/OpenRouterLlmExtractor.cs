@@ -163,7 +163,22 @@ public class OpenRouterLlmExtractor : ILlmExtractor
 
     private static string LerConteudo(string corpo)
     {
-        using var doc = JsonDocument.Parse(corpo);
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(corpo);
+        }
+        catch (JsonException)
+        {
+            // Um proxy no caminho pode devolver HTML de erro com status 200. Sem
+            // isto, a exceção de parsing escaparia como falha genérica, sem dizer
+            // que a resposta sequer era JSON.
+            throw new LlmIndisponivelException(
+                $"O provedor devolveu uma resposta que não é JSON: {Truncar(corpo.Trim(), 200)}");
+        }
+
+        using (doc)
+        {
         var raiz = doc.RootElement;
 
         // A OpenRouter devolve 200 com um objeto de erro quando o provedor
@@ -191,6 +206,7 @@ public class OpenRouterLlmExtractor : ILlmExtractor
         }
 
         return texto;
+        }
     }
 
     // Cabeçalho HTTP só aceita ASCII: um título configurado como "Finanças" faria

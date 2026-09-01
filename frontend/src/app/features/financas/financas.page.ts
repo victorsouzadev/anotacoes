@@ -19,6 +19,7 @@ import { OrcamentoService } from './services/orcamento.service';
 import { TransacaoService } from './services/transacao.service';
 import { nomeArquivoCsv, transacoesParaCsv } from './financas-csv';
 import { baixarCsv } from '../../shared/csv';
+import { mensagemDeErro } from '../../core/erro-http';
 import {
   AlertaCategoria,
   alertasNovos,
@@ -197,7 +198,7 @@ export class FinancasPageComponent {
   private carregarTransacoes(): void {
     this.transacaoService.listar(this.filtroAtual()).subscribe({
       next: (transacoes) => this.transacoes.set(transacoes),
-      error: () => this.erro.set('Não foi possível carregar os lançamentos.'),
+      error: (err) => this.erro.set(mensagemDeErro(err, 'Não foi possível carregar os lançamentos')),
     });
   }
 
@@ -229,11 +230,13 @@ export class FinancasPageComponent {
         this.carregando.set(false);
         this.verificarAlertas();
       },
-      error: () => {
+      error: (err) => {
         this.carregando.set(false);
         // Falhar em silêncio faria um erro de servidor parecer "você não tem
-        // lançamentos", que é exatamente a leitura errada.
-        this.erro.set('Não foi possível carregar seus dados financeiros. Verifique a conexão e tente de novo.');
+        // lançamentos", que é exatamente a leitura errada. E a mensagem precisa
+        // dizer o que aconteceu: "verifique a conexão" manda procurar no lugar
+        // errado quando quem falhou foi o servidor.
+        this.erro.set(mensagemDeErro(err, 'Não foi possível carregar seus dados financeiros'));
       },
     });
   }

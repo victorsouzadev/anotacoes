@@ -101,8 +101,9 @@ public static class ConfiguracaoIaEndpoints
         // apareceria na primeira tentativa de lançar algo, sem dizer o motivo.
         grupo.MapPost("/testar", async (TestarConfiguracaoIaRequest req, ClaimsPrincipal user,
             ILlmExtractorFactory factory, IProtetorDeSegredos protetor, AppDbContext db,
-            Services.Financas.FinancasClock clock, CancellationToken ct) =>
+            Services.Financas.FinancasClock clock, ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
+            var logger = loggerFactory.CreateLogger("ConfiguracaoIa.Testar");
             var provedor = LlmExtractorFactory.Normalizar(
                 string.IsNullOrWhiteSpace(req.Provedor) ? null : req.Provedor);
 
@@ -146,6 +147,15 @@ public static class ConfiguracaoIaEndpoints
                 // pé e o problema é o modelo escolhido.
                 return Results.Ok(new TestarConfiguracaoIaResponse(
                     false, $"O provedor respondeu, mas a resposta não pôde ser interpretada: {ex.Message}", null));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Este endpoint existe para diagnosticar: devolver 500 faria a tela
+                // mostrar "não foi possível testar" e esconder justamente a causa
+                // que o usuário veio descobrir.
+                logger.LogError(ex, "Falha inesperada ao testar a configuração de IA.");
+                return Results.Ok(new TestarConfiguracaoIaResponse(
+                    false, $"Falha inesperada ao testar: {ex.GetType().Name} — {ex.Message}", null));
             }
         }).RequireRateLimiting("financas-ia");
     }

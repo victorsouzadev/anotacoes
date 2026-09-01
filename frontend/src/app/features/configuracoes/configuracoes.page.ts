@@ -12,6 +12,7 @@ import {
   TesteConexao,
 } from './configuracao-ia.model';
 import { ConfiguracaoIaService } from './configuracao-ia.service';
+import { mensagemDeErro } from '../../core/erro-http';
 
 @Component({
   selector: 'app-configuracoes-page',
@@ -76,9 +77,9 @@ export class ConfiguracoesPageComponent {
         this.aplicar(c);
         this.carregando.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.carregando.set(false);
-        this.erro.set('Não foi possível carregar as configurações.');
+        this.erro.set(mensagemDeErro(err, 'Não foi possível carregar as configurações'));
       },
     });
   }
@@ -132,7 +133,7 @@ export class ConfiguracoesPageComponent {
         },
         error: (err) => {
           this.salvando.set(false);
-          this.erro.set(err?.error?.erro ?? 'Não foi possível salvar a configuração.');
+          this.erro.set(mensagemDeErro(err, 'Não foi possível salvar a configuração'));
         },
       });
   }
@@ -151,9 +152,9 @@ export class ConfiguracoesPageComponent {
           this.testando.set(false);
           this.teste.set(r);
         },
-        error: () => {
+        error: (err) => {
           this.testando.set(false);
-          this.erro.set('Não foi possível testar a conexão agora.');
+          this.erro.set(mensagemDeErro(err, 'Não foi possível testar a conexão'));
         },
       });
   }
@@ -173,9 +174,9 @@ export class ConfiguracoesPageComponent {
         this.aplicar(c);
         this.sucesso.set('Chave removida.');
       },
-      error: () => {
+      error: (err) => {
         this.confirmandoRemocao.set(false);
-        this.erro.set('Não foi possível remover a chave.');
+        this.erro.set(mensagemDeErro(err, 'Não foi possível remover a chave'));
       },
     });
   }

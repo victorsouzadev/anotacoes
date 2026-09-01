@@ -127,7 +127,22 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+// O health check toca o banco de propósito: um "ok" que não consulta nada passa
+// mesmo com o SQLite inacessível, e o deploy daria por bem-sucedido um servidor
+// que responde erro em toda tela.
+app.MapGet("/api/health", async (AppDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT 1", ct);
+        return Results.Ok(new { status = "ok", banco = "ok" });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { status = "degradado", banco = "falhou", erro = ex.Message },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+});
 app.MapAuthEndpoints();
 app.MapNotesEndpoints();
 app.MapFoldersEndpoints();

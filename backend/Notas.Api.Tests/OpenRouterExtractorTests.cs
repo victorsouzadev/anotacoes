@@ -311,6 +311,20 @@ public class OpenRouterExtractorTests
     }
 
     [Fact]
+    public async Task CorpoQueNaoEhJsonViraErroDeProvedorComTrecho()
+    {
+        // Um proxy no caminho pode devolver HTML de erro com status 200; sem
+        // tratamento, isso escaparia como falha genérica e a tela de diagnóstico
+        // não diria que a resposta sequer era JSON.
+        var (extrator, _) = Montar(h => h.Responde(HttpStatusCode.OK,
+            "<html><body>502 Bad Gateway</body></html>"));
+
+        var ex = await Assert.ThrowsAsync<LlmIndisponivelException>(() => Extrair(extrator));
+        Assert.Contains("não é JSON", ex.Message);
+        Assert.Contains("502 Bad Gateway", ex.Message);
+    }
+
+    [Fact]
     public async Task RespostaSemJsonViraExtracaoInvalida()
     {
         var (extrator, _) = Montar(h => h.RespondeOk("Desculpe, não consegui identificar nada."));
