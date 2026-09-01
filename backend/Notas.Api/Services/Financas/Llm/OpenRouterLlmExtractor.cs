@@ -217,14 +217,13 @@ public class OpenRouterLlmExtractor : ILlmExtractor
     {
         if (string.IsNullOrEmpty(valor)) return "";
 
-        var normalizado = valor.Normalize(NormalizationForm.FormD);
+        // Remove o acento e mantém a letra base ("ç" -> "c"), preservando o
+        // texto legível em vez de simplesmente apagar o caractere.
+        var normalizado = CulturaBr.SemAcentos(valor);
         var sb = new StringBuilder(normalizado.Length);
 
         foreach (var c in normalizado)
         {
-            // Remove o acento e mantém a letra base ("ç" -> "c"), preservando o
-            // texto legível em vez de simplesmente apagar o caractere.
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
             if (c is >= ' ' and <= '~') sb.Append(c);
             else if (char.IsWhiteSpace(c)) sb.Append(' ');
         }

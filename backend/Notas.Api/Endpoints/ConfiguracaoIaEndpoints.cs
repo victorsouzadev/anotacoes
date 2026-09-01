@@ -131,7 +131,7 @@ public static class ConfiguracaoIaEndpoints
                 var primeiro = resultado[0];
                 // Formato brasileiro: o exemplo é lido por quem está na tela, e
                 // "R$ 42.50" pareceria um valor diferente.
-                var valor = (primeiro.Valor ?? 0m).ToString("N2", CulturaBr);
+                var valor = Services.CulturaBr.Dinheiro(primeiro.Valor ?? 0m);
                 var exemplo = $"{primeiro.Descricao} — R$ {valor} ({primeiro.Categoria})";
 
                 return Results.Ok(new TestarConfiguracaoIaResponse(
@@ -159,9 +159,6 @@ public static class ConfiguracaoIaEndpoints
             }
         }).RequireRateLimiting("financas-ia");
     }
-
-    private static readonly System.Globalization.CultureInfo CulturaBr =
-        System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
 
     private static ConfiguracaoIaResponse Montar(ConfiguracaoIa? config, ConfiguracaoEfetiva efetiva)
     {

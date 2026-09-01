@@ -72,9 +72,7 @@ public static class CategoriaInfo
     // "contas-servicos" e "CONTAS_SERVICOS" caiam todos no mesmo caso.
     private static string Normalizar(string valor)
     {
-        var semAcento = string.Concat(valor.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD)
-            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
-                        != System.Globalization.UnicodeCategory.NonSpacingMark));
+        var semAcento = CulturaBr.SemAcentos(valor.Trim().ToLowerInvariant());
 
         var partes = semAcento.Split(new[] { ' ', '-', '/', '_' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(p => p != "e");

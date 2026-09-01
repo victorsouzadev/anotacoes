@@ -33,6 +33,14 @@ jobs:
       - run: dotnet restore
       - run: dotnet build --no-restore --configuration Release
       - run: dotnet test --no-build --configuration Release
+      # A imagem de produção já roda com ICU, mas a suíte também precisa passar
+      # sem ele: foi um GetCultureInfo("pt-BR") em campo static que derrubou o
+      # dashboard de finanças com 500 quando o container subiu em modo
+      # globalization-invariant.
+      - name: Testes em modo globalization-invariant
+        run: dotnet test --no-build --configuration Release
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
 
   frontend-build:
     runs-on: ubuntu-latest

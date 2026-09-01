@@ -178,7 +178,7 @@ public class OrcamentoService
 
             resultado.Add(new HistoricoMesResponse(
                 mes.Year, mes.Month,
-                mes.ToString("MMM/yy", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")),
+                Services.CulturaBr.MesAbreviado(mes),
                 orcamento is not null, total, realizado, utilizado, situacao));
         }
 

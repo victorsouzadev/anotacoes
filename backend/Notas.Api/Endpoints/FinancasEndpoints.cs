@@ -444,7 +444,7 @@ public static class FinancasEndpoints
         var primeiroMes = new DateOnly(hoje.Year, hoje.Month, 1).AddMonths(-(periodos - 1));
         var chaves = Enumerable.Range(0, periodos)
             .Select(i => primeiroMes.AddMonths(i))
-            .Select(d => (ChaveMensal(d), d.ToString("MMM/yy", CulturaBr)))
+            .Select(d => (ChaveMensal(d), Services.CulturaBr.MesAbreviado(d)))
             .ToList();
         return (primeiroMes, chaves);
     }
@@ -460,7 +460,6 @@ public static class FinancasEndpoints
         return (primeira, chaves);
     }
 
-    private static readonly CultureInfo CulturaBr = CultureInfo.GetCultureInfo("pt-BR");
 
     private static DateOnly InicioDaSemana(DateOnly data) =>
         data.AddDays(-(((int)data.DayOfWeek + 6) % 7));
