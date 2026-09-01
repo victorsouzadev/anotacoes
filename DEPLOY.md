@@ -12,10 +12,19 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    echo "JWT_SECRET=$(openssl rand -hex 32)" > /opt/notas-vps/.env
    chmod 600 /opt/notas-vps/.env
    ```
-   Opcional — para a ferramenta Finanças usar o LLM real (Anthropic Claude) em vez
-   do extrator heurístico local, adicionar também ao `.env`:
+   Para a ferramenta Finanças usar um LLM de verdade em vez do extrator heurístico
+   local, adicionar a chave da OpenRouter (openrouter.ai) ao `.env`:
    ```bash
-   echo "ANTHROPIC_API_KEY=sk-ant-..." >> /opt/notas-vps/.env
+   echo "OPENROUTER_API_KEY=sk-or-v1-..." >> /opt/notas-vps/.env
+   ```
+   Sem nenhuma chave o lançamento por texto continua funcionando pelo extrator
+   heurístico, mas **importar foto de cupom, PDF de extrato ou planilha exige a
+   chave** — é o LLM que lê o documento.
+
+   Alternativas (opcionais), no mesmo `.env`:
+   ```bash
+   echo "ANTHROPIC_API_KEY=sk-ant-..." >> /opt/notas-vps/.env   # chama a Anthropic direto; não lê arquivos
+   echo "LLM_PROVIDER=openrouter" >> /opt/notas-vps/.env         # força um provedor: openrouter | anthropic | heuristico
    ```
 
 2. Enviar os arquivos do projeto (do Windows):
@@ -73,6 +82,25 @@ docker start hermes
 ```
 
 Sem rollback automático — se precisar reverter, reenviar a versão anterior do código e repetir o build.
+
+### Alterar chaves ou variáveis sem novo deploy
+
+O `.env` fica **só na VPS** e não é enviado pelo deploy, então mudar uma chave não
+exige um novo push:
+
+```bash
+ssh root@191.252.177.244
+cd /opt/notas-vps
+echo "OPENROUTER_API_KEY=sk-or-v1-..." >> .env
+docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+```
+
+Conferir qual provedor ficou ativo (é preciso estar autenticado):
+
+```bash
+curl -H "authorization: Bearer <token>" http://127.0.0.1:8090/api/financas/capacidades
+# {"provedor":"openrouter","suportaAnexos":true,...}
+```
 
 ## Deploy automático (CI/CD via GitHub Actions)
 
