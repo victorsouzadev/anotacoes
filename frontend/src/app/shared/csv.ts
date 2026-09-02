@@ -1,3 +1,5 @@
+import { baixarBlob } from './download';
+
 /** Escapa um campo para CSV: aspas duplicadas e o valor inteiro entre aspas. */
 export function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -19,20 +21,5 @@ export function toCsv(rows: string[][]): string {
  * vira "AlimentaÃ§Ã£o".
  */
 export function baixarCsv(nomeArquivo: string, conteudo: string): void {
-  const blob = new Blob(['﻿' + conteudo], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-
-  // O link precisa estar no documento: um elemento solto tem o clique ignorado
-  // em parte dos navegadores.
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = nomeArquivo;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-
-  // Revogar na mesma volta do laço de eventos cancela o download antes de ele
-  // começar; a liberação fica para depois que o navegador já leu o blob.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  baixarBlob(nomeArquivo, new Blob(['\ufeff' + conteudo], { type: 'text/csv;charset=utf-8;' }));
 }

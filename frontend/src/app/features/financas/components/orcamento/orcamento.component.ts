@@ -13,6 +13,7 @@ import {
 } from '../../models/orcamento.model';
 import { Categoria } from '../../models/transacao.model';
 import { OrcamentoService } from '../../services/orcamento.service';
+import { Tom, exportarOrcamentoPng } from '../../orcamento-imagem';
 import {
   LinhaDistribuicao,
   ajustarParaCem,
@@ -25,6 +26,13 @@ import {
 } from './distribuicao';
 
 const ORDEM_GRUPOS: GrupoCategoria[] = ['Essenciais', 'EstiloDeVida', 'Futuro'];
+
+/** O diagnóstico da tela em termos das cores do cartão exportado. */
+const TOM_DO_DIAGNOSTICO: Record<'ok' | 'atencao' | 'estourado', Tom> = {
+  ok: 'positivo',
+  atencao: 'atencao',
+  estourado: 'negativo',
+};
 
 @Component({
   selector: 'app-orcamento',
@@ -51,6 +59,8 @@ export class OrcamentoComponent {
   readonly acompanhamento = signal<Acompanhamento | null>(null);
   readonly modelos = signal<ModeloOrcamento[]>([]);
   readonly categoriasDisponiveis = signal<CategoriaOrcavel[]>([]);
+
+  readonly exportandoImagem = signal(false);
 
   readonly editando = signal(false);
   readonly confirmandoRemocao = signal(false);
@@ -286,6 +296,36 @@ export class OrcamentoComponent {
         this.erro.set('Não foi possível excluir o orçamento.');
       },
     });
+  }
+
+  // ---------------------------------------------------------------- imagem
+
+  /**
+   * Exporta o acompanhamento como PNG. O trabalho é do módulo orcamento-imagem;
+   * aqui só entram os dados da tela e o estado do botão.
+   */
+  async exportarImagem(): Promise<void> {
+    const orcamento = this.orcamento();
+    const acompanhamento = this.acompanhamento();
+    if (!orcamento || !acompanhamento || this.exportandoImagem()) return;
+
+    this.exportandoImagem.set(true);
+    this.erro.set(null);
+
+    try {
+      const d = this.diagnostico();
+      await exportarOrcamentoPng({
+        nomeDoMes: this.nomeDoMes(),
+        orcamento,
+        acompanhamento,
+        diagnostico: d ? { tom: TOM_DO_DIAGNOSTICO[d.tom], texto: d.texto } : null,
+        geradoEm: new Date(),
+      });
+    } catch {
+      this.erro.set('Não foi possível gerar a imagem do orçamento neste navegador.');
+    } finally {
+      this.exportandoImagem.set(false);
+    }
   }
 
   private mesAnterior(): { ano: number; mes: number } {
