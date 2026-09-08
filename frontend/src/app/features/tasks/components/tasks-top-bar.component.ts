@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/auth.service';
 import { ThemeService } from '../../../core/theme.service';
 import { IconComponent, IconName } from '../../../shared/icon';
@@ -39,10 +39,15 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
 
         <div class="activity-menu">
           @if (activities.running(); as running) {
-            <button class="activity-toggle running" (click)="finishActivity()" title="Finalizar atividade">
-              <app-icon name="pomodoro" [size]="13" />
-              {{ running.name }} · {{ elapsedLabel(running) }}
-            </button>
+            <div class="activity-running-group">
+              <button class="activity-toggle running" (click)="openFocus(running)" title="Abrir tela de foco">
+                <app-icon name="pomodoro" [size]="13" />
+                {{ running.name }} · {{ elapsedLabel(running) }}
+              </button>
+              <button class="activity-finish" (click)="finishActivity()" title="Finalizar atividade">
+                <app-icon name="x" [size]="12" />
+              </button>
+            </div>
           } @else {
             <button class="activity-toggle" (click)="showActivityForm = !showActivityForm" title="Iniciar atividade">
               <app-icon name="plus" [size]="13" /> Atividade
@@ -140,6 +145,18 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
     .activity-toggle:hover { border-color: var(--accent); color: var(--accent); }
     .activity-toggle.running { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); font-variant-numeric: tabular-nums; }
 
+    .activity-running-group { display: flex; align-items: center; gap: 2px; }
+    .activity-running-group .activity-toggle.running { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
+    .activity-finish {
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--accent);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      padding: 6px 8px;
+    }
+    .activity-finish:hover { background: var(--accent); color: #fff; }
+
     .activity-panel {
       position: absolute;
       top: calc(100% + 6px);
@@ -227,6 +244,7 @@ export class TasksTopBarComponent implements OnInit, OnDestroy {
     public store: TasksStoreService,
     public pomodoro: PomodoroService,
     public activities: TaskActivitiesService,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -263,10 +281,15 @@ export class TasksTopBarComponent implements OnInit, OnDestroy {
 
   startActivity(): void {
     if (!this.activityName.trim()) return;
-    this.activities.start(this.activityName, this.activityTaskId);
+    const activity = this.activities.start(this.activityName, this.activityTaskId);
     this.activityName = '';
     this.activityTaskId = null;
     this.showActivityForm = false;
+    this.router.navigate(['/tasks/foco', activity.id]);
+  }
+
+  openFocus(activity: TaskActivity): void {
+    this.router.navigate(['/tasks/foco', activity.id]);
   }
 
   finishActivity(): void {

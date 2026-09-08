@@ -52,6 +52,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/tasks/pomodoro/tasks-pomodoro.page').then((m) => m.TasksPomodoroPageComponent),
   },
   {
+    path: 'tasks/foco/:activityId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/tasks/foco/tasks-foco.page').then((m) => m.TasksFocoPageComponent),
+  },
+  {
     path: 'tasks/estatisticas',
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/statistics/tasks-statistics.page').then((m) => m.TasksStatisticsPageComponent),

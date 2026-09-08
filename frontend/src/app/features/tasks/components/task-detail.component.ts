@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { IconComponent } from '../../../shared/icon';
 import { activityDurationSeconds, decodeRecurrence, formatDuration, totalTimeSpent } from '../models/task.model';
 import { TaskActivity, TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
@@ -41,7 +42,11 @@ export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
   private nowTick = signal(Date.now());
   private tickInterval?: ReturnType<typeof setInterval>;
 
-  constructor(public store: TasksStoreService, public activitiesService: TaskActivitiesService) {}
+  constructor(
+    public store: TasksStoreService,
+    public activitiesService: TaskActivitiesService,
+    private router: Router,
+  ) {}
 
   ngOnInit(): void {
     this.tickInterval = setInterval(() => this.nowTick.set(Date.now()), 1000);
@@ -86,7 +91,9 @@ export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   startActivity(): void {
-    this.activitiesService.start(this.task.title, this.task.id);
+    const activity = this.activitiesService.start(this.task.title, this.task.id);
+    this.close.emit();
+    this.router.navigate(['/tasks/foco', activity.id]);
   }
 
   finishActivity(): void {

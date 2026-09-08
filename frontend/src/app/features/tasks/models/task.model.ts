@@ -74,6 +74,15 @@ export interface TaskItem extends Omit<TaskItemWire, 'subtasks'> {
   subtasks: Subtask[];
 }
 
+/** Move o item de `from` pra `to` sem mutar o array original — usado no drag-and-drop de subtarefas. */
+export function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || from >= items.length || to < 0 || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
 export const POMODORO_WORK_SECONDS = 25 * 60;
 
 export function totalTimeSpent(completedPomodoros: number): number {
