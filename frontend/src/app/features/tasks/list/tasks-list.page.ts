@@ -11,7 +11,7 @@ import { TasksStoreService, TaskStateSnapshot } from '../services/tasks-store.se
 import { TaskTemplate, TaskTemplatesService } from '../services/task-templates.service';
 import { TaskNotificationsService } from '../services/task-notifications.service';
 import { TasksFilterStateService } from '../services/tasks-filter-state.service';
-import { NO_CATEGORY, SortMode, ViewFilter, filterAndSortTasks, tasksToCsv } from './task-filters';
+import { NO_CATEGORY, SortMode, TaskGroup, ViewFilter, filterAndSortTasks, groupTasksByFirstCategory, tasksToCsv } from './task-filters';
 
 @Component({
   selector: 'app-tasks-list-page',
@@ -30,6 +30,7 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
   expandedId: string | null = null;
   searchTerm = '';
   showCategoryFilter = false;
+  expandedCompletedGroups = new Set<string>();
 
   showForm = false;
   formTask: TaskItem | null = null;
@@ -96,6 +97,36 @@ export class TasksListPageComponent implements OnInit, OnDestroy {
       searchTerm: this.searchTerm,
       sortMode: this.sortMode,
     });
+  }
+
+  groups(): TaskGroup[] {
+    return groupTasksByFirstCategory(this.visibleTasks(), this.store.categories());
+  }
+
+  groupKey(group: TaskGroup): string {
+    return group.categoryId ?? NO_CATEGORY;
+  }
+
+  categoryColor(group: TaskGroup): string {
+    return this.store.categories().find((c) => c.id === group.categoryId)?.colorHex ?? 'transparent';
+  }
+
+  pendingTasks(group: TaskGroup): TaskItem[] {
+    return group.tasks.filter((t) => !t.isCompleted);
+  }
+
+  completedTasks(group: TaskGroup): TaskItem[] {
+    return group.tasks.filter((t) => t.isCompleted);
+  }
+
+  isCompletedExpanded(group: TaskGroup): boolean {
+    return this.expandedCompletedGroups.has(this.groupKey(group));
+  }
+
+  toggleCompletedGroup(group: TaskGroup): void {
+    const key = this.groupKey(group);
+    if (this.expandedCompletedGroups.has(key)) this.expandedCompletedGroups.delete(key);
+    else this.expandedCompletedGroups.add(key);
   }
 
   categoryFilterLabel(): string {

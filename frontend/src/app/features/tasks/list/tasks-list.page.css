@@ -297,7 +297,52 @@
 .list {
   display: flex;
   flex-direction: column;
+  gap: 20px;
+}
+
+.category-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.category-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.category-group-header .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.category-group-header .name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.category-group-header .count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.show-completed-toggle {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 2px;
+}
+
+.show-completed-toggle:hover {
+  color: var(--accent);
 }
 
 .task-card {

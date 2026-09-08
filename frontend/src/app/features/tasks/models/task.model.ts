@@ -7,12 +7,34 @@ export interface TaskCategory {
   updatedAt: string;
 }
 
-// Raia do quadro Kanban — independente de categoria, o usuário monta o próprio fluxo
-// (ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer outra sequência).
-export interface KanbanLane {
+// Projeto/quadro Kanban criado pelo usuário. Tem suas próprias raias e sua própria lista de
+// tarefas participantes (via TaskProjectMembership) — nada é puxado automaticamente.
+export interface TaskProject {
   id: string;
   name: string;
   colorHex: string;
+  position: number;
+  updatedAt: string;
+}
+
+// Raia do quadro Kanban de um projeto — independente de categoria, o usuário monta o próprio fluxo
+// (ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer outra sequência).
+export interface KanbanLane {
+  id: string;
+  projectId: string;
+  name: string;
+  colorHex: string;
+  position: number;
+  updatedAt: string;
+}
+
+// Vínculo N:N entre tarefa e projeto — guarda raia/posição próprias desse vínculo, já que a mesma
+// tarefa pode estar em vários projetos simultaneamente, cada um com seu próprio quadro.
+export interface TaskProjectMembership {
+  id: string;
+  taskId: string;
+  projectId: string;
+  kanbanLaneId: string | null;
   position: number;
   updatedAt: string;
 }
@@ -31,7 +53,6 @@ export interface TaskItemWire {
   dueDate: string | null;
   priority: Priority;
   categoryIds: string[];
-  kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
   isCompleted: boolean;

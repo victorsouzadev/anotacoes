@@ -1,4 +1,4 @@
-import { TaskItem } from '../models/task.model';
+import { TaskCategory, TaskItem } from '../models/task.model';
 import { csvEscape, toCsv } from '../../../shared/csv';
 
 // Reexportado porque a montagem do CSV de tarefas e a de finanças compartilham
@@ -67,6 +67,40 @@ export function filterAndSortTasks(tasks: TaskItem[], opts: TaskFilterOptions): 
       break;
   }
   return sorted;
+}
+
+export interface TaskGroup {
+  categoryId: string | null;
+  label: string;
+  tasks: TaskItem[];
+}
+
+/**
+ * Agrupa as tarefas pela primeira categoria de cada uma (sem duplicar em vários grupos),
+ * respeitando a ordem das categorias recebida e deixando "Sem categoria" por último.
+ */
+export function groupTasksByFirstCategory(tasks: TaskItem[], categories: TaskCategory[]): TaskGroup[] {
+  const byCategoryId = new Map<string, TaskItem[]>();
+  const noCategory: TaskItem[] = [];
+
+  for (const task of tasks) {
+    const firstId = task.categoryIds[0];
+    if (!firstId) {
+      noCategory.push(task);
+      continue;
+    }
+    const bucket = byCategoryId.get(firstId);
+    if (bucket) bucket.push(task);
+    else byCategoryId.set(firstId, [task]);
+  }
+
+  const groups: TaskGroup[] = [];
+  for (const category of categories) {
+    const bucket = byCategoryId.get(category.id);
+    if (bucket && bucket.length > 0) groups.push({ categoryId: category.id, label: category.name, tasks: bucket });
+  }
+  if (noCategory.length > 0) groups.push({ categoryId: null, label: 'Sem categoria', tasks: noCategory });
+  return groups;
 }
 
 export function tasksToCsv(

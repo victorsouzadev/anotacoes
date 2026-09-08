@@ -2,6 +2,14 @@
   <app-tasks-top-bar />
 
   <main class="content">
+    <div class="board-header">
+      <a class="back-link" routerLink="/tasks/projetos">&larr; Projetos</a>
+      @if (project(); as project) {
+        <span class="dot" [style.background]="project.colorHex"></span>
+        <h2>{{ project.name }}</h2>
+      }
+    </div>
+
     <div class="kanban-toolbar">
       <div class="group-tabs">
         <button [class.active]="groupBy === 'lanes'" (click)="groupBy = 'lanes'">Raias</button>
@@ -32,6 +40,28 @@
         }
       </div>
 
+      <div class="add-existing-menu">
+        <button type="button" class="add-existing-toggle" (click)="showAddExisting = !showAddExisting">
+          <app-icon name="plus" [size]="14" /> Adicionar tarefa existente
+        </button>
+        @if (showAddExisting) {
+          <div class="add-existing-panel" (click)="$event.stopPropagation()">
+            <input [(ngModel)]="addExistingSearch" placeholder="Buscar tarefa…" autofocus />
+            <div class="add-existing-list">
+              @for (t of tasksNotInProject(); track t.id) {
+                <button type="button" class="add-existing-item" (click)="addExistingTask(t)">{{ t.title }}</button>
+              } @empty {
+                <p class="empty-hint">Nenhuma tarefa encontrada.</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <button class="new-task-btn primary" (click)="openCreateForm()">
+        <app-icon name="plus" [size]="14" /> Nova tarefa
+      </button>
+
       @if (groupBy === 'lanes') {
         <button class="new-lane-btn" (click)="showNewLane = !showNewLane">
           <app-icon name="plus" [size]="14" /> Nova raia
@@ -60,7 +90,7 @@
 
     @if (store.loading()) {
       <p class="empty">Carregando…</p>
-    } @else if (groupBy === 'lanes' && store.kanbanLanes().length === 0) {
+    } @else if (groupBy === 'lanes' && store.lanesFor(projectId).length === 0) {
       <p class="empty">Nenhuma raia criada ainda. Use "Nova raia" pra montar seu fluxo (ex.: A fazer / Em andamento / Feito).</p>
     } @else {
       <div class="board">
@@ -126,6 +156,9 @@
                       <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
                     </div>
                   </div>
+                  <button class="remove-from-project" (click)="removeFromProject(task, $event)" title="Remover do projeto">
+                    <app-icon name="x" [size]="12" />
+                  </button>
                   <select class="move-select" (click)="$event.stopPropagation()" (change)="onMoveSelect(task, $event)" title="Mover pra outra coluna (útil em telas de toque, onde arrastar não funciona)">
                     <option value="" selected disabled>Mover…</option>
                     @for (target of columns(); track target.id) {
@@ -149,7 +182,7 @@
     <app-task-detail [task]="detailTask" (close)="closeDetail()" (edit)="editFromDetail()" />
   }
 
-  @if (showForm && formTask) {
+  @if (showForm) {
     <app-task-form [task]="formTask" [template]="null" (save)="onSave($event)" (cancel)="closeForm()" />
   }
 </div>

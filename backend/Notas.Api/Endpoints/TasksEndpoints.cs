@@ -70,6 +70,53 @@ public static class TasksEndpoints
             return Results.NoContent();
         });
 
+        var projects = app.MapGroup("/api/tasks/projects").RequireAuthorization();
+
+        projects.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+            await db.TaskProjects.AsNoTracking()
+                .Where(p => p.UserId == user.UserId())
+                .OrderBy(p => p.Position)
+                .Select(p => ToDto(p))
+                .ToListAsync());
+
+        projects.MapPut("/{id}", async (string id, TaskProjectUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var name = req.Name?.Trim() ?? "";
+            if (name.Length is 0 or > 100)
+                return Results.BadRequest(new { error = "Nome inválido." });
+
+            var userId = user.UserId();
+            var project = await db.TaskProjects.FirstOrDefaultAsync(p => p.Id == id && p.UserId == userId);
+            if (project is null)
+            {
+                if (await db.TaskProjects.AnyAsync(p => p.Id == id))
+                    return Results.Conflict(new { error = "Id em uso." });
+                project = new TaskProject { Id = id, UserId = userId };
+                db.TaskProjects.Add(project);
+            }
+            else if (project.UpdatedAt >= req.UpdatedAt)
+            {
+                return Results.Ok(ToDto(project));
+            }
+
+            project.Name = name;
+            project.ColorHex = req.ColorHex;
+            project.Position = req.Position;
+            project.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(ToDto(project));
+        });
+
+        projects.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var project = await db.TaskProjects.FirstOrDefaultAsync(p => p.Id == id && p.UserId == user.UserId());
+            if (project is null) return Results.NotFound();
+            db.TaskProjects.Remove(project);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
         var lanes = app.MapGroup("/api/tasks/kanban-lanes").RequireAuthorization();
 
         lanes.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -86,6 +133,9 @@ public static class TasksEndpoints
                 return Results.BadRequest(new { error = "Nome inválido." });
 
             var userId = user.UserId();
+            if (!await db.TaskProjects.AnyAsync(p => p.Id == req.ProjectId && p.UserId == userId))
+                return Results.BadRequest(new { error = "Projeto inválido." });
+
             var lane = await db.KanbanLanes.FirstOrDefaultAsync(l => l.Id == id && l.UserId == userId);
             if (lane is null)
             {
@@ -99,6 +149,7 @@ public static class TasksEndpoints
                 return Results.Ok(ToDto(lane));
             }
 
+            lane.ProjectId = req.ProjectId;
             lane.Name = name;
             lane.ColorHex = req.ColorHex;
             lane.Position = req.Position;
@@ -113,6 +164,63 @@ public static class TasksEndpoints
             var lane = await db.KanbanLanes.FirstOrDefaultAsync(l => l.Id == id && l.UserId == user.UserId());
             if (lane is null) return Results.NotFound();
             db.KanbanLanes.Remove(lane);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+
+        var memberships = app.MapGroup("/api/tasks/project-memberships").RequireAuthorization();
+
+        memberships.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+            await db.TaskProjectMemberships.AsNoTracking()
+                .Where(m => m.UserId == user.UserId())
+                .OrderBy(m => m.Position)
+                .Select(m => ToDto(m))
+                .ToListAsync());
+
+        memberships.MapPut("/{id}", async (string id, TaskProjectMembershipUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var userId = user.UserId();
+
+            if (!await db.TaskItems.AnyAsync(t => t.Id == req.TaskId && t.UserId == userId))
+                return Results.BadRequest(new { error = "Tarefa inválida." });
+            if (!await db.TaskProjects.AnyAsync(p => p.Id == req.ProjectId && p.UserId == userId))
+                return Results.BadRequest(new { error = "Projeto inválido." });
+
+            var kanbanLaneId = req.KanbanLaneId;
+            if (kanbanLaneId is not null &&
+                !await db.KanbanLanes.AnyAsync(l => l.Id == kanbanLaneId && l.ProjectId == req.ProjectId && l.UserId == userId))
+                kanbanLaneId = null;
+
+            var membership = await db.TaskProjectMemberships.FirstOrDefaultAsync(m => m.Id == id && m.UserId == userId);
+            if (membership is null)
+            {
+                if (await db.TaskProjectMemberships.AnyAsync(m => m.Id == id))
+                    return Results.Conflict(new { error = "Id em uso." });
+                if (await db.TaskProjectMemberships.AnyAsync(m => m.TaskId == req.TaskId && m.ProjectId == req.ProjectId && m.UserId == userId))
+                    return Results.Conflict(new { error = "Tarefa já está no projeto." });
+                membership = new TaskProjectMembership { Id = id, UserId = userId };
+                db.TaskProjectMemberships.Add(membership);
+            }
+            else if (membership.UpdatedAt >= req.UpdatedAt)
+            {
+                return Results.Ok(ToDto(membership));
+            }
+
+            membership.TaskId = req.TaskId;
+            membership.ProjectId = req.ProjectId;
+            membership.KanbanLaneId = kanbanLaneId;
+            membership.Position = req.Position;
+            membership.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(ToDto(membership));
+        });
+
+        memberships.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var membership = await db.TaskProjectMemberships.FirstOrDefaultAsync(m => m.Id == id && m.UserId == user.UserId());
+            if (membership is null) return Results.NotFound();
+            db.TaskProjectMemberships.Remove(membership);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
@@ -285,11 +393,6 @@ public static class TasksEndpoints
                 .Select(c => c.Id)
                 .ToListAsync();
 
-        var kanbanLaneId = req.KanbanLaneId;
-        if (kanbanLaneId is not null &&
-            !await db.KanbanLanes.AnyAsync(l => l.Id == kanbanLaneId && l.UserId == userId))
-            kanbanLaneId = null;
-
         var task = await db.TaskItems.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
         var isNew = task is null;
         if (task is null)
@@ -304,7 +407,7 @@ public static class TasksEndpoints
             return Results.Ok(ToDto(task));
         }
 
-        Apply(task, req, categoryIds, kanbanLaneId);
+        Apply(task, req, categoryIds);
 
         try
         {
@@ -319,7 +422,7 @@ public static class TasksEndpoints
             if (existing is null) throw;
             if (existing.UpdatedAt < req.UpdatedAt)
             {
-                Apply(existing, req, categoryIds, kanbanLaneId);
+                Apply(existing, req, categoryIds);
                 await db.SaveChangesAsync();
             }
             task = existing;
@@ -327,14 +430,13 @@ public static class TasksEndpoints
         return Results.Ok(ToDto(task));
     }
 
-    private static void Apply(TaskItem task, TaskItemUpsertRequest req, List<string> categoryIds, string? kanbanLaneId)
+    private static void Apply(TaskItem task, TaskItemUpsertRequest req, List<string> categoryIds)
     {
         task.Title = req.Title.Trim();
         task.Description = req.Description;
         task.DueDate = req.DueDate;
         task.Priority = req.Priority;
         task.CategoryIds = JsonSerializer.Serialize(categoryIds);
-        task.KanbanLaneId = kanbanLaneId;
         task.IsRecurring = req.IsRecurring;
         task.RecurrenceRule = req.RecurrenceRule;
         task.IsCompleted = req.IsCompleted;
@@ -352,10 +454,15 @@ public static class TasksEndpoints
 
     private static TaskCategoryDto ToDto(TaskCategory c) => new(c.Id, c.Name, c.ColorHex, c.UpdatedAt);
 
-    private static KanbanLaneDto ToDto(KanbanLane l) => new(l.Id, l.Name, l.ColorHex, l.Position, l.UpdatedAt);
+    private static TaskProjectDto ToDto(TaskProject p) => new(p.Id, p.Name, p.ColorHex, p.Position, p.UpdatedAt);
+
+    private static KanbanLaneDto ToDto(KanbanLane l) => new(l.Id, l.ProjectId, l.Name, l.ColorHex, l.Position, l.UpdatedAt);
+
+    private static TaskProjectMembershipDto ToDto(TaskProjectMembership m) =>
+        new(m.Id, m.TaskId, m.ProjectId, m.KanbanLaneId, m.Position, m.UpdatedAt);
 
     private static TaskItemDto ToDto(TaskItem t) => new(
-        t.Id, t.Title, t.Description, t.DueDate, t.Priority, ParseCategoryIds(t.CategoryIds), t.KanbanLaneId, t.IsRecurring, t.RecurrenceRule,
+        t.Id, t.Title, t.Description, t.DueDate, t.Priority, ParseCategoryIds(t.CategoryIds), t.IsRecurring, t.RecurrenceRule,
         t.IsCompleted, t.CreatedAt, t.CompletedAt, t.DeletedAt, t.CompletedPomodoros, t.Position,
         t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.UpdatedAt);
 

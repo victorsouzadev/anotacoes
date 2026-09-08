@@ -105,70 +105,99 @@
       <p class="empty">Nenhuma tarefa por aqui.</p>
     } @else {
       <div class="list">
-        @for (task of visibleTasks(); track task.id) {
-          <div class="task-card" [class.completed]="task.isCompleted" [class.selected]="isSelected(task.id)" (click)="toggleExpanded(task)">
-            @if (selectionMode) {
-              <button class="check" [class.done]="isSelected(task.id)" (click)="toggleSelected(task.id); $event.stopPropagation()">
-                @if (isSelected(task.id)) { <app-icon name="check" [size]="13" /> }
-              </button>
-            } @else {
-              <button class="check" [class.done]="task.isCompleted" (click)="toggleComplete(task, $event)">
-                @if (task.isCompleted) { <app-icon name="check" [size]="13" /> }
-              </button>
-            }
-
-            <div class="info">
-              <button type="button" class="title" (click)="openDetail(task, $event)">{{ task.title }}</button>
-              @if (task.description) {
-                <span class="description">{{ task.description }}</span>
+        @for (group of groups(); track groupKey(group)) {
+          <section class="category-group">
+            <div class="category-group-header">
+              @if (group.categoryId) {
+                <span class="dot" [style.background]="categoryColor(group)"></span>
               }
-              <div class="meta">
-                @if (task.dueDate) {
-                  <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
-                }
-                <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
-                @for (cat of store.categoriesFor(task); track cat.id) {
-                  <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
-                }
-                @if (subtaskProgress(task); as progress) {
-                  <span class="chip subtasks">{{ progress }}</span>
-                }
-                @if (task.isRecurring) {
-                  <span class="chip recurring">↻</span>
-                }
-                @if (task.completedPomodoros > 0) {
-                  <span class="chip pomodoros"><app-icon name="pomodoro" [size]="10" /> {{ task.completedPomodoros }}</span>
-                }
-              </div>
+              <span class="name">{{ group.label }}</span>
+              <span class="count">{{ group.tasks.length }}</span>
             </div>
 
-            @if (!selectionMode) {
-              <div class="actions" (click)="$event.stopPropagation()">
-                <button (click)="openDetail(task, $event)" title="Visualizar"><app-icon name="eye" [size]="15" /></button>
-                <button (click)="startPomodoro(task, $event)" title="Iniciar pomodoro"><app-icon name="pomodoro" [size]="15" /></button>
-                <button (click)="duplicateTask(task, $event)" title="Duplicar"><app-icon name="duplicate" [size]="15" /></button>
-                <button (click)="openEdit(task, $event)" title="Editar"><app-icon name="edit" [size]="15" /></button>
-                <button (click)="moveToTrash(task, $event)" title="Mover pra lixeira"><app-icon name="delete" [size]="15" /></button>
-              </div>
+            @for (task of pendingTasks(group); track task.id) {
+              <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task }" />
             }
-          </div>
 
-          @if (expandedId === task.id && task.subtasks.length > 0) {
-            <ul class="subtask-list" (click)="$event.stopPropagation()">
-              @for (s of task.subtasks; track $index) {
-                <li>
-                  <button class="check small" [class.done]="s.isCompleted" (click)="toggleSubtask(task, $index, $event)">
-                    @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
-                  </button>
-                  <span [class.done]="s.isCompleted">{{ s.title }}</span>
-                </li>
+            @if (completedTasks(group).length > 0) {
+              @if (isCompletedExpanded(group)) {
+                @for (task of completedTasks(group); track task.id) {
+                  <ng-container *ngTemplateOutlet="taskRow; context: { $implicit: task }" />
+                }
+                <button type="button" class="show-completed-toggle" (click)="toggleCompletedGroup(group)">Ocultar concluídas</button>
+              } @else {
+                <button type="button" class="show-completed-toggle" (click)="toggleCompletedGroup(group)">
+                  Mostrar {{ completedTasks(group).length }} concluída(s)
+                </button>
               }
-            </ul>
-          }
+            }
+          </section>
         }
       </div>
     }
   </main>
+
+  <ng-template #taskRow let-task>
+    <div class="task-card" [class.completed]="task.isCompleted" [class.selected]="isSelected(task.id)" (click)="toggleExpanded(task)">
+      @if (selectionMode) {
+        <button class="check" [class.done]="isSelected(task.id)" (click)="toggleSelected(task.id); $event.stopPropagation()">
+          @if (isSelected(task.id)) { <app-icon name="check" [size]="13" /> }
+        </button>
+      } @else {
+        <button class="check" [class.done]="task.isCompleted" (click)="toggleComplete(task, $event)">
+          @if (task.isCompleted) { <app-icon name="check" [size]="13" /> }
+        </button>
+      }
+
+      <div class="info">
+        <button type="button" class="title" (click)="openDetail(task, $event)">{{ task.title }}</button>
+        @if (task.description) {
+          <span class="description">{{ task.description }}</span>
+        }
+        <div class="meta">
+          @if (task.dueDate) {
+            <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
+          }
+          <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
+          @for (cat of store.categoriesFor(task); track cat.id) {
+            <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
+          }
+          @if (subtaskProgress(task); as progress) {
+            <span class="chip subtasks">{{ progress }}</span>
+          }
+          @if (task.isRecurring) {
+            <span class="chip recurring">↻</span>
+          }
+          @if (task.completedPomodoros > 0) {
+            <span class="chip pomodoros"><app-icon name="pomodoro" [size]="10" /> {{ task.completedPomodoros }}</span>
+          }
+        </div>
+      </div>
+
+      @if (!selectionMode) {
+        <div class="actions" (click)="$event.stopPropagation()">
+          <button (click)="openDetail(task, $event)" title="Visualizar"><app-icon name="eye" [size]="15" /></button>
+          <button (click)="startPomodoro(task, $event)" title="Iniciar pomodoro"><app-icon name="pomodoro" [size]="15" /></button>
+          <button (click)="duplicateTask(task, $event)" title="Duplicar"><app-icon name="duplicate" [size]="15" /></button>
+          <button (click)="openEdit(task, $event)" title="Editar"><app-icon name="edit" [size]="15" /></button>
+          <button (click)="moveToTrash(task, $event)" title="Mover pra lixeira"><app-icon name="delete" [size]="15" /></button>
+        </div>
+      }
+    </div>
+
+    @if (expandedId === task.id && task.subtasks.length > 0) {
+      <ul class="subtask-list" (click)="$event.stopPropagation()">
+        @for (s of task.subtasks; track $index) {
+          <li>
+            <button class="check small" [class.done]="s.isCompleted" (click)="toggleSubtask(task, $index, $event)">
+              @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
+            </button>
+            <span [class.done]="s.isCompleted">{{ s.title }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </ng-template>
 
   @if (showForm) {
     <app-task-form

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TaskItem } from '../models/task.model';
-import { NO_CATEGORY, csvEscape, filterAndSortTasks, tasksToCsv } from './task-filters';
+import { TaskCategory, TaskItem } from '../models/task.model';
+import { NO_CATEGORY, csvEscape, filterAndSortTasks, groupTasksByFirstCategory, tasksToCsv } from './task-filters';
 
 function task(overrides: Partial<TaskItem> = {}): TaskItem {
   return {
@@ -10,7 +10,6 @@ function task(overrides: Partial<TaskItem> = {}): TaskItem {
     dueDate: null,
     priority: 'Medium',
     categoryIds: [],
-    kanbanLaneId: null,
     isRecurring: false,
     recurrenceRule: null,
     isCompleted: false,
@@ -158,6 +157,40 @@ describe('filterAndSortTasks', () => {
       now,
     });
     expect(result.map((t) => t.id)).toEqual(['sooner', 'later', 'no-date']);
+  });
+});
+
+describe('groupTasksByFirstCategory', () => {
+  function category(id: string, name: string): TaskCategory {
+    return { id, name, colorHex: '#000', updatedAt: '2026-01-01T00:00:00.000Z' };
+  }
+
+  it('agrupa pela primeira categoria da tarefa, sem duplicar em outros grupos', () => {
+    const categories = [category('cat1', 'Trabalho'), category('cat2', 'Casa')];
+    const tasks = [
+      task({ id: 'a', categoryIds: ['cat1', 'cat2'] }),
+      task({ id: 'b', categoryIds: ['cat2'] }),
+    ];
+    const groups = groupTasksByFirstCategory(tasks, categories);
+    expect(groups.map((g) => g.label)).toEqual(['Trabalho', 'Casa']);
+    expect(groups[0].tasks.map((t) => t.id)).toEqual(['a']);
+    expect(groups[1].tasks.map((t) => t.id)).toEqual(['b']);
+  });
+
+  it('coloca tarefas sem categoria num grupo "Sem categoria" por último', () => {
+    const categories = [category('cat1', 'Trabalho')];
+    const tasks = [task({ id: 'a', categoryIds: [] }), task({ id: 'b', categoryIds: ['cat1'] })];
+    const groups = groupTasksByFirstCategory(tasks, categories);
+    expect(groups.map((g) => g.label)).toEqual(['Trabalho', 'Sem categoria']);
+    expect(groups[1].categoryId).toBeNull();
+    expect(groups[1].tasks.map((t) => t.id)).toEqual(['a']);
+  });
+
+  it('omite grupos de categorias sem nenhuma tarefa', () => {
+    const categories = [category('cat1', 'Trabalho'), category('cat2', 'Casa')];
+    const tasks = [task({ id: 'a', categoryIds: ['cat1'] })];
+    const groups = groupTasksByFirstCategory(tasks, categories);
+    expect(groups.map((g) => g.label)).toEqual(['Trabalho']);
   });
 });
 
