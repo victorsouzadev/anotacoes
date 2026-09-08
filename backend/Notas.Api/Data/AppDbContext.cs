@@ -59,7 +59,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
+    public DbSet<TaskProject> TaskProjects => Set<TaskProject>();
     public DbSet<KanbanLane> KanbanLanes => Set<KanbanLane>();
+    public DbSet<TaskProjectMembership> TaskProjectMemberships => Set<TaskProjectMembership>();
     public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
@@ -193,13 +195,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        b.Entity<TaskProject>(e =>
+        {
+            e.ToTable("tasks_projects");
+            e.Property(p => p.Name).IsRequired().HasMaxLength(100);
+            e.Property(p => p.ColorHex).IsRequired().HasMaxLength(20);
+            e.HasIndex(p => p.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<KanbanLane>(e =>
         {
             e.ToTable("tasks_kanban_lanes");
             e.Property(l => l.Name).IsRequired().HasMaxLength(100);
             e.Property(l => l.ColorHex).IsRequired().HasMaxLength(20);
-            e.HasIndex(l => new { l.UserId, l.Position });
+            e.HasIndex(l => new { l.ProjectId, l.Position });
             e.HasOne<User>().WithMany().HasForeignKey(l => l.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskProject>().WithMany().HasForeignKey(l => l.ProjectId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<TaskItem>(e =>
@@ -213,7 +225,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.CategoryIds).IsRequired();
             e.HasIndex(t => new { t.UserId, t.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<KanbanLane>().WithMany().HasForeignKey(t => t.KanbanLaneId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<TaskProjectMembership>(e =>
+        {
+            e.ToTable("tasks_project_memberships");
+            e.HasIndex(m => new { m.TaskId, m.ProjectId }).IsUnique();
+            e.HasIndex(m => new { m.ProjectId, m.Position });
+            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskItem>().WithMany().HasForeignKey(m => m.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<TaskProject>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<KanbanLane>().WithMany().HasForeignKey(m => m.KanbanLaneId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<TaskComment>(e =>

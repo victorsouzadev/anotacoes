@@ -17,14 +17,40 @@ public class TaskCategory
     public DateTime UpdatedAt { get; set; }
 }
 
-// Raia do quadro Kanban — independente de categoria (o usuário organiza o Kanban do jeito que
-// quiser, ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer fluxo próprio).
-public class KanbanLane
+// Projeto/quadro Kanban criado pelo usuário. Cada projeto tem suas próprias raias e sua própria
+// lista de tarefas participantes (via TaskProjectMembership) — nada é puxado automaticamente.
+public class TaskProject
 {
     public string Id { get; set; } = "";
     public string UserId { get; set; } = "";
     public string Name { get; set; } = "";
     public string ColorHex { get; set; } = "";
+    public int Position { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+// Raia do quadro Kanban de um projeto — independente de categoria (o usuário organiza o quadro do
+// jeito que quiser, ex.: "A fazer"/"Em andamento"/"Feito" ou qualquer fluxo próprio).
+public class KanbanLane
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string ProjectId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ColorHex { get; set; } = "";
+    public int Position { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+// Vínculo N:N entre tarefa e projeto. Guarda raia/posição próprias desse vínculo, já que a mesma
+// tarefa pode estar em vários projetos simultaneamente, cada um com seu próprio quadro.
+public class TaskProjectMembership
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string TaskId { get; set; } = "";
+    public string ProjectId { get; set; } = "";
+    public string? KanbanLaneId { get; set; }
     public int Position { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -40,7 +66,6 @@ public class TaskItem
     // JSON opaco (array de ids de TaskCategory) — mesma estratégia do campo Subtasks: o backend só
     // valida contra as categorias existentes do usuário no upsert, não modela como FK/join table.
     public string CategoryIds { get; set; } = "[]";
-    public string? KanbanLaneId { get; set; }
     public bool IsRecurring { get; set; }
     public string? RecurrenceRule { get; set; }
     public bool IsCompleted { get; set; }

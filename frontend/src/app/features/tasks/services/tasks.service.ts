@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskItemWire } from '../models/task.model';
+import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskItemWire, TaskProject, TaskProjectMembership } from '../models/task.model';
 
 function toView(wire: TaskItemWire): TaskItem {
   let subtasks: Subtask[] = [];
@@ -19,7 +19,6 @@ export interface TaskUpsertInput {
   dueDate: string | null;
   priority: TaskItem['priority'];
   categoryIds: string[];
-  kanbanLaneId: string | null;
   isRecurring: boolean;
   recurrenceRule: string | null;
   isCompleted: boolean;
@@ -54,18 +53,52 @@ export class TasksService {
     return firstValueFrom(this.http.delete<void>(`/api/tasks/categories/${id}`));
   }
 
+  listProjects(): Promise<TaskProject[]> {
+    return firstValueFrom(this.http.get<TaskProject[]>('/api/tasks/projects'));
+  }
+
+  upsertProject(id: string, name: string, colorHex: string, position: number, updatedAt: string): Promise<TaskProject> {
+    return firstValueFrom(
+      this.http.put<TaskProject>(`/api/tasks/projects/${id}`, { name, colorHex, position, updatedAt }),
+    );
+  }
+
+  deleteProject(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/tasks/projects/${id}`));
+  }
+
   listKanbanLanes(): Promise<KanbanLane[]> {
     return firstValueFrom(this.http.get<KanbanLane[]>('/api/tasks/kanban-lanes'));
   }
 
-  upsertKanbanLane(id: string, name: string, colorHex: string, position: number, updatedAt: string): Promise<KanbanLane> {
+  upsertKanbanLane(
+    id: string, projectId: string, name: string, colorHex: string, position: number, updatedAt: string,
+  ): Promise<KanbanLane> {
     return firstValueFrom(
-      this.http.put<KanbanLane>(`/api/tasks/kanban-lanes/${id}`, { name, colorHex, position, updatedAt }),
+      this.http.put<KanbanLane>(`/api/tasks/kanban-lanes/${id}`, { projectId, name, colorHex, position, updatedAt }),
     );
   }
 
   deleteKanbanLane(id: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`/api/tasks/kanban-lanes/${id}`));
+  }
+
+  listMemberships(): Promise<TaskProjectMembership[]> {
+    return firstValueFrom(this.http.get<TaskProjectMembership[]>('/api/tasks/project-memberships'));
+  }
+
+  upsertMembership(
+    id: string, taskId: string, projectId: string, kanbanLaneId: string | null, position: number, updatedAt: string,
+  ): Promise<TaskProjectMembership> {
+    return firstValueFrom(
+      this.http.put<TaskProjectMembership>(`/api/tasks/project-memberships/${id}`, {
+        taskId, projectId, kanbanLaneId, position, updatedAt,
+      }),
+    );
+  }
+
+  deleteMembership(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/tasks/project-memberships/${id}`));
   }
 
   async listTasks(): Promise<TaskItem[]> {

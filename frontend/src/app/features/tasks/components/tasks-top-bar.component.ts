@@ -22,7 +22,7 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
       </div>
       <nav class="tabs">
         <a routerLink="/tasks" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Lista</a>
-        <a routerLink="/tasks/kanban" routerLinkActive="active">Kanban</a>
+        <a routerLink="/tasks/projetos" routerLinkActive="active">Projetos</a>
         <a routerLink="/tasks/calendario" routerLinkActive="active">Calendário</a>
         <a routerLink="/tasks/categorias" routerLinkActive="active">Categorias</a>
         <a routerLink="/tasks/pomodoro" routerLinkActive="active">Pomodoro</a>

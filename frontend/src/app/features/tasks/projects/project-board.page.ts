@@ -1,15 +1,16 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { IconComponent } from '../../../shared/icon';
 import { TasksTopBarComponent } from '../components/tasks-top-bar.component';
 import { TaskFormComponent, TaskFormResult } from '../components/task-form.component';
 import { TaskDetailComponent } from '../components/task-detail.component';
-import { CATEGORY_COLORS, KanbanLane, TaskItem } from '../models/task.model';
+import { CATEGORY_COLORS, KanbanLane, TaskItem, TaskProject, TaskProjectMembership } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
 import { TasksFilterStateService } from '../services/tasks-filter-state.service';
 import { NO_CATEGORY } from '../list/task-filters';
-import { reorderIds } from './kanban-logic';
+import { reorderIds } from '../kanban/kanban-logic';
 
 type GroupBy = 'lanes' | 'status';
 
@@ -26,18 +27,21 @@ interface KanbanColumn {
 }
 
 @Component({
-  selector: 'app-tasks-kanban-page',
+  selector: 'app-project-board-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, TasksTopBarComponent, IconComponent, TaskFormComponent, TaskDetailComponent],
-  templateUrl: './tasks-kanban.page.html',
-  styleUrl: './tasks-kanban.page.css',
+  imports: [CommonModule, FormsModule, RouterLink, TasksTopBarComponent, IconComponent, TaskFormComponent, TaskDetailComponent],
+  templateUrl: './project-board.page.html',
+  styleUrl: './project-board.page.css',
 })
-export class TasksKanbanPageComponent implements OnInit {
+export class ProjectBoardPageComponent implements OnInit {
   readonly colors = CATEGORY_COLORS;
   readonly NO_CATEGORY = NO_CATEGORY;
 
+  projectId = '';
   groupBy: GroupBy = 'lanes';
   showCategoryFilter = false;
+  showAddExisting = false;
+  addExistingSearch = '';
 
   draggingTaskId: string | null = null;
   dragOverColumn: string | null = null;
@@ -57,16 +61,28 @@ export class TasksKanbanPageComponent implements OnInit {
   detailTask: TaskItem | null = null;
   showForm = false;
   formTask: TaskItem | null = null;
+  creatingTask = false;
 
   constructor(
     public store: TasksStoreService,
     public filterState: TasksFilterStateService,
+    private route: ActivatedRoute,
+    private router: Router,
     private cdr: ChangeDetectorRef,
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.projectId = this.route.snapshot.paramMap.get('id') ?? '';
     await this.store.reload();
+    if (!this.project()) {
+      await this.router.navigateByUrl('/tasks/projetos');
+      return;
+    }
     this.cdr.markForCheck();
+  }
+
+  project(): TaskProject | undefined {
+    return this.store.projects().find((p) => p.id === this.projectId);
   }
 
   columns(): KanbanColumn[] {
@@ -76,32 +92,64 @@ export class TasksKanbanPageComponent implements OnInit {
         { id: STATUS_DONE, name: 'Concluída', colorHex: null, lane: null },
       ];
     }
-    const lanes = this.store.kanbanLanes();
+    const lanes = this.store.lanesFor(this.projectId);
     return [
       { id: NO_LANE, name: 'Sem raia', colorHex: null, lane: null },
       ...lanes.map((l) => ({ id: l.id, name: l.name, colorHex: l.colorHex, lane: l })),
     ];
   }
 
-  private columnOf(task: TaskItem): string | null {
-    if (this.groupBy === 'status') return task.isCompleted ? STATUS_DONE : STATUS_TODO;
-    return task.kanbanLaneId ?? NO_LANE;
+  private membershipFor(taskId: string): TaskProjectMembership | undefined {
+    return this.store.membershipsFor(this.projectId).find((m) => m.taskId === taskId);
   }
 
-  tasksFor(columnId: string) {
+  private columnOf(task: TaskItem, membership: TaskProjectMembership | undefined): string | null {
+    if (this.groupBy === 'status') return task.isCompleted ? STATUS_DONE : STATUS_TODO;
+    return membership?.kanbanLaneId ?? NO_LANE;
+  }
+
+  tasksFor(columnId: string): TaskItem[] {
     const ids = this.filterState.categoryFilterIds();
     const wantsNoCategory = ids.includes(NO_CATEGORY);
     const wantedIds = ids.filter((id) => id !== NO_CATEGORY);
+    const tasksById = new Map(this.store.tasks().map((t) => [t.id, t]));
+    return this.store
+      .membershipsFor(this.projectId)
+      .map((m) => ({ membership: m, task: tasksById.get(m.taskId) }))
+      .filter((x): x is { membership: TaskProjectMembership; task: TaskItem } => !!x.task && !x.task.deletedAt)
+      .filter((x) => this.columnOf(x.task, x.membership) === columnId)
+      .filter(
+        (x) =>
+          ids.length === 0 ||
+          (wantsNoCategory && x.task.categoryIds.length === 0) ||
+          x.task.categoryIds.some((id) => wantedIds.includes(id)),
+      )
+      .sort((a, b) => a.membership.position - b.membership.position)
+      .map((x) => x.task);
+  }
+
+  tasksNotInProject(): TaskItem[] {
+    const memberTaskIds = new Set(this.store.membershipsFor(this.projectId).map((m) => m.taskId));
+    const term = this.addExistingSearch.trim().toLowerCase();
     return this.store
       .activeTasks()
-      .filter((t) => this.columnOf(t) === columnId)
-      .filter(
-        (t) =>
-          ids.length === 0 ||
-          (wantsNoCategory && t.categoryIds.length === 0) ||
-          t.categoryIds.some((id) => wantedIds.includes(id)),
-      )
-      .sort((a, b) => a.position - b.position);
+      .filter((t) => !memberTaskIds.has(t.id))
+      .filter((t) => !term || t.title.toLowerCase().includes(term))
+      .slice(0, 30);
+  }
+
+  async addExistingTask(task: TaskItem): Promise<void> {
+    await this.store.addTaskToProject(task.id, this.projectId);
+    this.cdr.markForCheck();
+  }
+
+  async removeFromProject(task: TaskItem, event: Event): Promise<void> {
+    event.stopPropagation();
+    const membership = this.membershipFor(task.id);
+    if (!membership) return;
+    if (!confirm(`Remover "${task.title}" deste projeto? A tarefa continua existindo em /tasks.`)) return;
+    await this.store.removeTaskFromProject(membership);
+    this.cdr.markForCheck();
   }
 
   categoryFilterLabel(): string {
@@ -125,7 +173,7 @@ export class TasksKanbanPageComponent implements OnInit {
     return !!task.dueDate && !task.isCompleted && new Date(task.dueDate).getTime() < Date.now();
   }
 
-  // --- Abrir/editar tarefa ---
+  // --- Abrir/criar/editar tarefa ---
 
   openDetail(task: TaskItem, event: Event): void {
     event.stopPropagation();
@@ -141,17 +189,30 @@ export class TasksKanbanPageComponent implements OnInit {
     this.detailTask = null;
     if (task) {
       this.formTask = task;
+      this.creatingTask = false;
       this.showForm = true;
     }
+  }
+
+  openCreateForm(): void {
+    this.formTask = null;
+    this.creatingTask = true;
+    this.showForm = true;
   }
 
   closeForm(): void {
     this.showForm = false;
     this.formTask = null;
+    this.creatingTask = false;
   }
 
   async onSave(result: TaskFormResult): Promise<void> {
-    if (this.formTask) await this.store.updateTask(this.formTask, result);
+    if (this.creatingTask) {
+      const created = await this.store.createTask(result);
+      await this.store.addTaskToProject(created.id, this.projectId);
+    } else if (this.formTask) {
+      await this.store.updateTask(this.formTask, result);
+    }
     this.closeForm();
     this.cdr.markForCheck();
   }
@@ -211,16 +272,17 @@ export class TasksKanbanPageComponent implements OnInit {
     const reordered = reorderIds(targetColumnIds, id, targetTaskId);
 
     await this.assignColumn(task, columnId);
-    await this.store.reorder(reordered);
+    await this.store.reorderMemberships(this.projectId, reordered);
     this.cdr.markForCheck();
   }
 
   private async assignColumn(task: TaskItem, columnId: string): Promise<void> {
-    if (this.columnOf(task) === columnId) return;
+    const membership = this.membershipFor(task.id);
+    if (!membership || this.columnOf(task, membership) === columnId) return;
     if (this.groupBy === 'status') {
       await this.store.setCompleted(task, columnId === STATUS_DONE);
     } else {
-      await this.store.setTaskLane(task, columnId === NO_LANE ? null : columnId);
+      await this.store.setMembershipLane(membership, columnId === NO_LANE ? null : columnId);
     }
   }
 
@@ -233,7 +295,7 @@ export class TasksKanbanPageComponent implements OnInit {
     if (!value) return;
     await this.assignColumn(task, value);
     const targetColumnIds = [...this.tasksFor(value).map((t) => t.id), task.id];
-    await this.store.reorder(targetColumnIds);
+    await this.store.reorderMemberships(this.projectId, targetColumnIds);
     this.cdr.markForCheck();
   }
 
@@ -242,7 +304,7 @@ export class TasksKanbanPageComponent implements OnInit {
   async addLane(): Promise<void> {
     const name = this.newLaneName.trim();
     if (!name) return;
-    await this.store.createLane(name, this.newLaneColor);
+    await this.store.createLane(this.projectId, name, this.newLaneColor);
     this.newLaneName = '';
     this.newLaneColor = CATEGORY_COLORS[0];
     this.showNewLane = false;
@@ -301,8 +363,8 @@ export class TasksKanbanPageComponent implements OnInit {
     const draggedId = this.draggingLaneId;
     this.draggingLaneId = null;
     if (!draggedId || draggedId === lane.id) return;
-    const ids = this.store.kanbanLanes().map((l) => l.id);
-    await this.store.reorderLanes(reorderIds(ids, draggedId, lane.id));
+    const ids = this.store.lanesFor(this.projectId).map((l) => l.id);
+    await this.store.reorderLanes(this.projectId, reorderIds(ids, draggedId, lane.id));
     this.cdr.markForCheck();
   }
 }

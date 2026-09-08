@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../../core/uuid';
-import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem } from '../models/task.model';
+import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskProject, TaskProjectMembership } from '../models/task.model';
 import { TaskUpsertInput, TasksService } from './tasks.service';
 
 export interface TaskStateSnapshot {
@@ -18,7 +18,6 @@ type TaskDraft = Partial<
     | 'dueDate'
     | 'priority'
     | 'categoryIds'
-    | 'kanbanLaneId'
     | 'isRecurring'
     | 'recurrenceRule'
     | 'locationLabel'
@@ -28,7 +27,9 @@ type TaskDraft = Partial<
 @Injectable({ providedIn: 'root' })
 export class TasksStoreService {
   categories = signal<TaskCategory[]>([]);
+  projects = signal<TaskProject[]>([]);
   kanbanLanes = signal<KanbanLane[]>([]);
+  memberships = signal<TaskProjectMembership[]>([]);
   tasks = signal<TaskItem[]>([]);
   loading = signal(true);
 
@@ -43,13 +44,17 @@ export class TasksStoreService {
 
   async reload(): Promise<void> {
     this.loading.set(true);
-    const [categories, lanes, tasks] = await Promise.all([
+    const [categories, projects, lanes, memberships, tasks] = await Promise.all([
       this.api.listCategories(),
+      this.api.listProjects(),
       this.api.listKanbanLanes(),
+      this.api.listMemberships(),
       this.api.listTasks(),
     ]);
     this.categories.set(categories);
+    this.projects.set(projects);
     this.kanbanLanes.set(lanes);
+    this.memberships.set(memberships);
     this.tasks.set(tasks);
     this.loading.set(false);
   }
@@ -59,8 +64,25 @@ export class TasksStoreService {
     return task.categoryIds.map((id) => byId.get(id)).filter((c): c is TaskCategory => !!c);
   }
 
-  laneFor(task: TaskItem): KanbanLane | undefined {
-    return task.kanbanLaneId ? this.kanbanLanes().find((l) => l.id === task.kanbanLaneId) : undefined;
+  lanesFor(projectId: string): KanbanLane[] {
+    return this.kanbanLanes()
+      .filter((l) => l.projectId === projectId)
+      .sort((a, b) => a.position - b.position);
+  }
+
+  membershipsFor(projectId: string): TaskProjectMembership[] {
+    return this.memberships()
+      .filter((m) => m.projectId === projectId)
+      .sort((a, b) => a.position - b.position);
+  }
+
+  projectsFor(task: TaskItem): TaskProject[] {
+    const projectIds = new Set(this.memberships().filter((m) => m.taskId === task.id).map((m) => m.projectId));
+    return this.projects().filter((p) => projectIds.has(p.id));
+  }
+
+  laneForMembership(membership: TaskProjectMembership): KanbanLane | undefined {
+    return membership.kanbanLaneId ? this.kanbanLanes().find((l) => l.id === membership.kanbanLaneId) : undefined;
   }
 
   async createTask(draft: TaskDraft): Promise<TaskItem> {
@@ -73,7 +95,6 @@ export class TasksStoreService {
       dueDate: draft.dueDate ?? null,
       priority: draft.priority ?? 'Medium',
       categoryIds: draft.categoryIds ?? [],
-      kanbanLaneId: draft.kanbanLaneId ?? null,
       isRecurring: draft.isRecurring ?? false,
       recurrenceRule: draft.recurrenceRule ?? null,
       isCompleted: false,
@@ -122,6 +143,7 @@ export class TasksStoreService {
   async deleteForever(task: TaskItem): Promise<void> {
     await this.api.deleteTaskForever(task.id);
     this.tasks.update((list) => list.filter((t) => t.id !== task.id));
+    this.memberships.update((list) => list.filter((m) => m.taskId !== task.id));
   }
 
   async duplicateTask(task: TaskItem): Promise<TaskItem> {
@@ -131,7 +153,6 @@ export class TasksStoreService {
       dueDate: task.dueDate,
       priority: task.priority,
       categoryIds: task.categoryIds,
-      kanbanLaneId: task.kanbanLaneId,
       isRecurring: task.isRecurring,
       recurrenceRule: task.recurrenceRule,
       locationLabel: task.locationLabel,
@@ -234,16 +255,40 @@ export class TasksStoreService {
     );
   }
 
-  async createLane(name: string, colorHex: string): Promise<KanbanLane> {
+  async createProject(name: string, colorHex: string): Promise<TaskProject> {
     const id = uuid();
-    const position = Math.max(-1, ...this.kanbanLanes().map((l) => l.position)) + 1;
-    const lane = await this.api.upsertKanbanLane(id, name.trim(), colorHex, position, new Date().toISOString());
+    const position = Math.max(-1, ...this.projects().map((p) => p.position)) + 1;
+    const project = await this.api.upsertProject(id, name.trim(), colorHex, position, new Date().toISOString());
+    this.projects.update((list) => [...list, project].sort((a, b) => a.position - b.position));
+    return project;
+  }
+
+  async renameProject(project: TaskProject, name: string, colorHex: string): Promise<void> {
+    const updated = await this.api.upsertProject(project.id, name.trim(), colorHex, project.position, new Date().toISOString());
+    this.projects.update((list) =>
+      list.map((p) => (p.id === project.id ? updated : p)).sort((a, b) => a.position - b.position),
+    );
+  }
+
+  async deleteProject(project: TaskProject): Promise<void> {
+    await this.api.deleteProject(project.id);
+    this.projects.update((list) => list.filter((p) => p.id !== project.id));
+    this.kanbanLanes.update((list) => list.filter((l) => l.projectId !== project.id));
+    this.memberships.update((list) => list.filter((m) => m.projectId !== project.id));
+  }
+
+  async createLane(projectId: string, name: string, colorHex: string): Promise<KanbanLane> {
+    const id = uuid();
+    const position = Math.max(-1, ...this.lanesFor(projectId).map((l) => l.position)) + 1;
+    const lane = await this.api.upsertKanbanLane(id, projectId, name.trim(), colorHex, position, new Date().toISOString());
     this.kanbanLanes.update((list) => [...list, lane].sort((a, b) => a.position - b.position));
     return lane;
   }
 
   async renameLane(lane: KanbanLane, name: string, colorHex: string): Promise<void> {
-    const updated = await this.api.upsertKanbanLane(lane.id, name.trim(), colorHex, lane.position, new Date().toISOString());
+    const updated = await this.api.upsertKanbanLane(
+      lane.id, lane.projectId, name.trim(), colorHex, lane.position, new Date().toISOString(),
+    );
     this.kanbanLanes.update((list) =>
       list.map((l) => (l.id === lane.id ? updated : l)).sort((a, b) => a.position - b.position),
     );
@@ -252,16 +297,16 @@ export class TasksStoreService {
   async deleteLane(lane: KanbanLane): Promise<void> {
     await this.api.deleteKanbanLane(lane.id);
     this.kanbanLanes.update((list) => list.filter((l) => l.id !== lane.id));
-    this.tasks.update((list) => list.map((t) => (t.kanbanLaneId === lane.id ? { ...t, kanbanLaneId: null } : t)));
+    this.memberships.update((list) => list.map((m) => (m.kanbanLaneId === lane.id ? { ...m, kanbanLaneId: null } : m)));
   }
 
-  async reorderLanes(orderedIds: string[]): Promise<void> {
-    const byId = new Map(this.kanbanLanes().map((l) => [l.id, l]));
+  async reorderLanes(projectId: string, orderedIds: string[]): Promise<void> {
+    const byId = new Map(this.lanesFor(projectId).map((l) => [l.id, l]));
     const updated = await Promise.all(
       orderedIds.map(async (id, index) => {
         const lane = byId.get(id);
         if (!lane || lane.position === index) return lane;
-        return this.api.upsertKanbanLane(lane.id, lane.name, lane.colorHex, index, new Date().toISOString());
+        return this.api.upsertKanbanLane(lane.id, lane.projectId, lane.name, lane.colorHex, index, new Date().toISOString());
       }),
     );
     this.kanbanLanes.update((list) => {
@@ -271,9 +316,43 @@ export class TasksStoreService {
     });
   }
 
-  async setTaskLane(task: TaskItem, kanbanLaneId: string | null): Promise<void> {
-    if (task.kanbanLaneId === kanbanLaneId) return;
-    await this.save(task, { kanbanLaneId });
+  async addTaskToProject(taskId: string, projectId: string): Promise<TaskProjectMembership> {
+    const id = uuid();
+    const position = Math.max(-1, ...this.membershipsFor(projectId).map((m) => m.position)) + 1;
+    const membership = await this.api.upsertMembership(id, taskId, projectId, null, position, new Date().toISOString());
+    this.memberships.update((list) => [...list, membership]);
+    return membership;
+  }
+
+  async removeTaskFromProject(membership: TaskProjectMembership): Promise<void> {
+    await this.api.deleteMembership(membership.id);
+    this.memberships.update((list) => list.filter((m) => m.id !== membership.id));
+  }
+
+  async setMembershipLane(membership: TaskProjectMembership, kanbanLaneId: string | null): Promise<void> {
+    if (membership.kanbanLaneId === kanbanLaneId) return;
+    const updated = await this.api.upsertMembership(
+      membership.id, membership.taskId, membership.projectId, kanbanLaneId, membership.position, new Date().toISOString(),
+    );
+    this.memberships.update((list) => list.map((m) => (m.id === membership.id ? updated : m)));
+  }
+
+  async reorderMemberships(projectId: string, orderedIds: string[]): Promise<void> {
+    const byId = new Map(this.membershipsFor(projectId).map((m) => [m.id, m]));
+    const updated = await Promise.all(
+      orderedIds.map(async (id, index) => {
+        const membership = byId.get(id);
+        if (!membership || membership.position === index) return membership;
+        return this.api.upsertMembership(
+          membership.id, membership.taskId, membership.projectId, membership.kanbanLaneId, index, new Date().toISOString(),
+        );
+      }),
+    );
+    this.memberships.update((list) => {
+      const merged = new Map(list.map((m) => [m.id, m]));
+      for (const membership of updated) if (membership) merged.set(membership.id, membership);
+      return [...merged.values()];
+    });
   }
 
   /** Aplica um patch parcial numa tarefa e persiste — sempre reenvia o objeto inteiro (upsert idempotente). */
@@ -286,7 +365,6 @@ export class TasksStoreService {
       dueDate: draft.dueDate !== undefined ? draft.dueDate : task.dueDate,
       priority: draft.priority ?? task.priority,
       categoryIds: draft.categoryIds !== undefined ? draft.categoryIds : task.categoryIds,
-      kanbanLaneId: draft.kanbanLaneId !== undefined ? draft.kanbanLaneId : task.kanbanLaneId,
       isRecurring: draft.isRecurring ?? task.isRecurring,
       recurrenceRule: draft.recurrenceRule !== undefined ? draft.recurrenceRule : task.recurrenceRule,
       subtasks: draft.subtasks ?? task.subtasks,
@@ -299,7 +377,6 @@ export class TasksStoreService {
       dueDate: merged.dueDate,
       priority: merged.priority,
       categoryIds: merged.categoryIds,
-      kanbanLaneId: merged.kanbanLaneId,
       isRecurring: merged.isRecurring,
       recurrenceRule: merged.recurrenceRule,
       isCompleted: merged.isCompleted,
