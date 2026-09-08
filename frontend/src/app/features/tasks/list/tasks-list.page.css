@@ -353,6 +353,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-bottom: 1px solid var(--divider);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-card);
   padding: 12px 14px;
   cursor: pointer;
@@ -360,8 +361,20 @@
   transition: border-color 0.15s, background-color 220ms ease, box-shadow 220ms ease;
 }
 
+/* Prioridade vira um traço na borda esquerda, não mais uma pill no meio das tags —
+ * "Low" não precisa de sinal nenhum, só High/Medium competem por atenção. */
+.task-card.priority-high {
+  border-left-color: var(--negativo);
+}
+
+.task-card.priority-medium {
+  border-left-color: var(--atencao);
+}
+
 .task-card:hover {
-  border-color: var(--accent);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .task-card.completed {
@@ -373,7 +386,9 @@
 }
 
 .task-card.selected {
-  border-color: var(--accent);
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
   background: var(--accent-soft);
 }
 
@@ -441,8 +456,25 @@
 
 .meta {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Data: texto simples, sem pill — é informação de leitura rápida, não uma tag. */
+.due-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.due-date.overdue {
+  color: var(--negativo);
+  font-weight: 600;
 }
 
 .chip {
@@ -453,26 +485,6 @@
   background: var(--tag-bg);
   color: var(--tag-text);
   white-space: nowrap;
-}
-
-.chip.due.overdue {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.chip.priority.high {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.chip.priority.medium {
-  background: #fffbeb;
-  color: #b45309;
-}
-
-.chip.priority.low {
-  background: #f0fdf4;
-  color: #16a34a;
 }
 
 .chip.recurring {

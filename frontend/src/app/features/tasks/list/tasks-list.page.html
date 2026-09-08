@@ -138,7 +138,7 @@
   </main>
 
   <ng-template #taskRow let-task>
-    <div class="task-card" [class.completed]="task.isCompleted" [class.selected]="isSelected(task.id)" (click)="toggleExpanded(task)">
+    <div class="task-card" [class.completed]="task.isCompleted" [class.selected]="isSelected(task.id)" [class]="'priority-' + task.priority.toLowerCase()" (click)="toggleExpanded(task)">
       @if (selectionMode) {
         <button class="check" [class.done]="isSelected(task.id)" (click)="toggleSelected(task.id); $event.stopPropagation()">
           @if (isSelected(task.id)) { <app-icon name="check" [size]="13" /> }
@@ -156,9 +156,10 @@
         }
         <div class="meta">
           @if (task.dueDate) {
-            <span class="chip due" [class.overdue]="isOverdue(task)">{{ formatDueDate(task.dueDate) }}</span>
+            <span class="due-date" [class.overdue]="isOverdue(task)">
+              <app-icon name="calendar" [size]="11" />{{ formatDueDate(task.dueDate) }}
+            </span>
           }
-          <span class="chip priority" [class]="task.priority.toLowerCase()">{{ task.priority }}</span>
           @for (cat of store.categoriesFor(task); track cat.id) {
             <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
           }
