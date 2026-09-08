@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PomodoroService } from '../services/pomodoro.service';
+import { TaskNotificationsService } from '../services/task-notifications.service';
 
 @Component({
   selector: 'app-pomodoro-timer',
@@ -24,6 +25,21 @@ import { PomodoroService } from '../services/pomodoro.service';
             <span>Ciclos até a pausa longa</span>
             <input type="number" min="1" [(ngModel)]="cyclesUntilLongBreak" />
           </label>
+          <label class="checkbox-row">
+            <input type="checkbox" [(ngModel)]="soundEnabled" />
+            <span>Tocar som ao trocar de fase</span>
+          </label>
+
+          @if (notifications.supported && notifications.permission() === 'granted') {
+            <span class="notif-status">Notificações ativadas</span>
+          } @else if (notifications.supported && notifications.permission() === 'denied') {
+            <span class="notif-status">Notificações bloqueadas — libere nas configurações do navegador.</span>
+          } @else if (notifications.supported) {
+            <button type="button" class="notif-request" (click)="notifications.requestPermission()">
+              Ativar notificações
+            </button>
+          }
+
           <div class="settings-actions">
             <button class="secondary" (click)="showSettings = false">Cancelar</button>
             <button class="primary" (click)="saveSettings()">Salvar</button>
@@ -85,6 +101,14 @@ import { PomodoroService } from '../services/pomodoro.service';
       border: 1px solid var(--border); border-radius: var(--radius-sm);
       padding: 6px 8px; background: var(--bg); color: var(--text); font-size: 13px;
     }
+    .settings-panel .checkbox-row { flex-direction: row; align-items: center; gap: 8px; }
+    .settings-panel .checkbox-row input { width: auto; padding: 0; }
+    .notif-status { font-size: 11px; color: var(--text-muted); }
+    .notif-request {
+      align-self: flex-start; border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; font-weight: 600;
+    }
+    .notif-request:hover { border-color: var(--accent); color: var(--accent); }
     .settings-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .settings-actions button { border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; }
     .settings-actions .primary { border: none; background: var(--accent); color: #fff; }
@@ -104,8 +128,9 @@ export class PomodoroTimerComponent {
   shortBreakMinutes = 5;
   longBreakMinutes = 15;
   cyclesUntilLongBreak = 4;
+  soundEnabled = true;
 
-  constructor(public pomodoro: PomodoroService) {}
+  constructor(public pomodoro: PomodoroService, public notifications: TaskNotificationsService) {}
 
   toggleSettings(): void {
     if (!this.showSettings) {
@@ -113,6 +138,7 @@ export class PomodoroTimerComponent {
       this.shortBreakMinutes = Math.round(s.shortBreakSeconds / 60);
       this.longBreakMinutes = Math.round(s.longBreakSeconds / 60);
       this.cyclesUntilLongBreak = s.cyclesUntilLongBreak;
+      this.soundEnabled = s.soundEnabled;
     }
     this.showSettings = !this.showSettings;
   }
@@ -122,6 +148,7 @@ export class PomodoroTimerComponent {
       shortBreakSeconds: this.shortBreakMinutes * 60,
       longBreakSeconds: this.longBreakMinutes * 60,
       cyclesUntilLongBreak: this.cyclesUntilLongBreak,
+      soundEnabled: this.soundEnabled,
     });
     this.showSettings = false;
   }

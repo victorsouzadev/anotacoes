@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { POMODORO_WORK_SECONDS } from '../models/task.model';
 import { TasksStoreService } from './tasks-store.service';
+import { TaskNotificationsService } from './task-notifications.service';
 
 export type PomodoroPhase = 'work' | 'break';
 
@@ -8,12 +9,14 @@ export interface PomodoroSettings {
   shortBreakSeconds: number;
   longBreakSeconds: number;
   cyclesUntilLongBreak: number;
+  soundEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: PomodoroSettings = {
   shortBreakSeconds: 5 * 60,
   longBreakSeconds: 15 * 60,
   cyclesUntilLongBreak: 4,
+  soundEnabled: true,
 };
 
 const SETTINGS_KEY = 'tasks.pomodoro.settings.v1';
@@ -66,7 +69,10 @@ export class PomodoroService {
   private intervalId?: ReturnType<typeof setInterval>;
   private phaseEndAt: number | null = null;
 
-  constructor(private store: TasksStoreService) {
+  constructor(
+    private store: TasksStoreService,
+    private notifications: TaskNotificationsService,
+  ) {
     this.restoreState();
   }
 
@@ -80,6 +86,7 @@ export class PomodoroService {
       shortBreakSeconds: Math.max(60, partial.shortBreakSeconds ?? this.settings().shortBreakSeconds),
       longBreakSeconds: Math.max(60, partial.longBreakSeconds ?? this.settings().longBreakSeconds),
       cyclesUntilLongBreak: Math.max(1, Math.round(partial.cyclesUntilLongBreak ?? this.settings().cyclesUntilLongBreak)),
+      soundEnabled: partial.soundEnabled ?? this.settings().soundEnabled,
     };
     this.settings.set(next);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
@@ -122,7 +129,7 @@ export class PomodoroService {
     else this.persistState();
   }
 
-  private async completePhase(): Promise<void> {
+  private async completePhase(opts: { silent?: boolean } = {}): Promise<void> {
     if (this.intervalId) clearInterval(this.intervalId);
     this.intervalId = undefined;
 
@@ -145,6 +152,46 @@ export class PomodoroService {
 
     if (this.running()) this.intervalId = setInterval(() => this.tick(), 1000);
     this.persistState();
+
+    if (!opts.silent) {
+      this.playAlarm();
+      this.notifyPhaseComplete(this.phase());
+    }
+  }
+
+  /** Beep curto (2 tons ascendentes) via Web Audio API — sem depender de nenhum asset de áudio. */
+  private playAlarm(): void {
+    if (!this.settings().soundEnabled) return;
+    try {
+      const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioContextCtor();
+      const playTone = (freq: number, startAt: number, durationSec: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.001, startAt);
+        gain.gain.exponentialRampToValueAtTime(0.2, startAt + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startAt + durationSec);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startAt);
+        osc.stop(startAt + durationSec);
+      };
+      const now = ctx.currentTime;
+      playTone(660, now, 0.15);
+      playTone(880, now + 0.16, 0.2);
+      setTimeout(() => void ctx.close(), 500);
+    } catch {
+      // Web Audio indisponível (ambiente sem suporte) — silenciosamente ignora, o alarme não é essencial.
+    }
+  }
+
+  private notifyPhaseComplete(newPhase: PomodoroPhase): void {
+    if (this.notifications.permission() !== 'granted') return;
+    const title = newPhase === 'break' ? 'Hora da pausa! ☕' : 'De volta ao foco! 🎯';
+    const body = newPhase === 'break' ? 'Você completou um pomodoro. Aproveite a pausa.' : 'A pausa acabou — bora focar de novo.';
+    new Notification(title, { body });
   }
 
   /** Carrega o estado salvo e, se a fase já tinha vencido (aba fechada), processa uma transição de alcance. */
@@ -162,7 +209,7 @@ export class PomodoroService {
       // (sem tentar simular vários ciclos perdidos em cascata) e recomeça a contagem a partir de agora.
       this.running.set(true);
       this.secondsLeft.set(0);
-      void this.completePhase();
+      void this.completePhase({ silent: true });
     } else if (saved.phaseEndAt != null) {
       this.running.set(true);
       this.phaseEndAt = saved.phaseEndAt;
