@@ -571,7 +571,7 @@ function loadPrefs(): Prefs {
     .top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: #fff; flex-shrink: 0;
+      width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--accent-contrast); flex-shrink: 0;
     }
     .top-bar-actions { display: flex; align-items: center; gap: 14px; }
     .theme-toggle {
@@ -621,7 +621,7 @@ function loadPrefs(): Prefs {
       border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
       padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
     }
-    .tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
     .preview-stage {
       display: flex; overflow: auto; overscroll-behavior: contain;
       height: clamp(280px, 52dvh, 560px); min-width: 0; border-radius: var(--radius); padding: 16px;
@@ -680,7 +680,7 @@ function loadPrefs(): Prefs {
       background: var(--accent-soft); color: var(--accent-dark);
       font-size: 11px; font-weight: 700;
     }
-    .panel-section.open .step { background: var(--accent); color: #fff; }
+    .panel-section.open .step { background: var(--accent); color: var(--accent-contrast); }
     .section-summary {
       flex: 1; min-width: 0; text-align: right;
       font-size: 11px; color: var(--text-muted);
@@ -701,7 +701,7 @@ function loadPrefs(): Prefs {
     }
     .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .btn:disabled { opacity: 0.5; cursor: default; }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
     .btn.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
     .btn.full { width: 100%; }
 

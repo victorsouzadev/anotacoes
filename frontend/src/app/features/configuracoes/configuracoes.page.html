@@ -43,6 +43,44 @@
       @if (sucesso(); as s) { <p class="alerta ok" role="status">{{ s }}</p> }
 
       <div class="card">
+        <div class="secao-topo">
+          <div>
+            <h2>Aparência</h2>
+            <p class="ajuda">Escolha um tema visual para o site. O Monocromático é o padrão e tem variação dia/noite.</p>
+          </div>
+          @if (theme.isMono()) {
+            <button class="theme-toggle grande" (click)="theme.cycle()" [title]="themeLabel()">
+              <app-icon [name]="themeIconName()" [size]="16" />
+              <span>{{ theme.pref() === 'dark' ? 'Noite' : theme.pref() === 'light' ? 'Dia' : 'Automático' }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="temas-grid">
+          @for (t of temas; track t.id) {
+            <button
+              type="button"
+              class="tema-opcao"
+              [class.selecionada]="theme.paletteId() === t.id"
+              (click)="escolherTema(t.id)"
+              [title]="t.name"
+            >
+              <span
+                class="tema-amostra"
+                [style.background]="t.preview.bg"
+              >
+                <span class="tema-amostra-accent" [style.background]="t.preview.accent"></span>
+              </span>
+              <span class="tema-nome">{{ t.name }}</span>
+              @if (theme.paletteId() === t.id) {
+                <span class="tema-check"><app-icon name="check" [size]="11" /></span>
+              }
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Inteligência artificial</h2>
         <p class="ajuda">
           A ferramenta Finanças usa um modelo de linguagem para transformar o que você escreve

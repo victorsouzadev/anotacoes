@@ -73,7 +73,7 @@ import { TaskNotificationsService } from '../services/task-notifications.service
     .time { font-size: 56px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
     .controls { display: flex; gap: 10px; }
     .controls button { border-radius: var(--radius-sm); padding: 10px 22px; font-size: 14px; font-weight: 600; }
-    .controls .primary { border: none; background: var(--accent); color: #fff; }
+    .controls .primary { border: none; background: var(--accent); color: var(--accent-contrast); }
     .controls .primary:hover { background: var(--accent-dark); }
     .controls .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
     .controls .secondary:hover { background: var(--bg); }
@@ -111,7 +111,7 @@ import { TaskNotificationsService } from '../services/task-notifications.service
     .notif-request:hover { border-color: var(--accent); color: var(--accent); }
     .settings-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .settings-actions button { border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; }
-    .settings-actions .primary { border: none; background: var(--accent); color: #fff; }
+    .settings-actions .primary { border: none; background: var(--accent); color: var(--accent-contrast); }
     .settings-actions .primary:hover { background: var(--accent-dark); }
     .settings-actions .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
 

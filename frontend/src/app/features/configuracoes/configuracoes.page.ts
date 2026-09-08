@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
+import { THEMES, ThemeDef } from '../../core/themes.data';
 import { IconComponent, IconName } from '../../shared/icon';
 import {
   ConfiguracaoIa,
@@ -28,6 +29,7 @@ export class ConfiguracoesPageComponent {
   readonly theme = inject(ThemeService);
 
   readonly provedores = PROVEDORES;
+  readonly temas: ThemeDef[] = THEMES;
 
   readonly config = signal<ConfiguracaoIa | null>(null);
   readonly carregando = signal(true);
@@ -193,6 +195,10 @@ export class ConfiguracoesPageComponent {
       case 'heuristico': return 'Interpretação local (sem IA)';
       default: return p ?? '—';
     }
+  }
+
+  escolherTema(id: string): void {
+    this.theme.setPalette(id);
   }
 
   themeIconName(): IconName {

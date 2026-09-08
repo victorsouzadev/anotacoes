@@ -98,7 +98,7 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
       width: 26px; height: 26px; border-radius: 8px;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-contrast);
       flex-shrink: 0;
     }
     .tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; min-width: 0; }
@@ -155,7 +155,7 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
       color: var(--accent-dark);
       padding: 6px 8px;
     }
-    .activity-finish:hover { background: var(--accent); color: #fff; }
+    .activity-finish:hover { background: var(--accent); color: var(--accent-contrast); }
 
     .activity-panel {
       position: absolute;
@@ -183,7 +183,7 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
     .activity-panel .primary {
       border: none;
       background: var(--accent);
-      color: #fff;
+      color: var(--accent-contrast);
       border-radius: var(--radius-sm);
       padding: 8px;
       font-size: 13px;

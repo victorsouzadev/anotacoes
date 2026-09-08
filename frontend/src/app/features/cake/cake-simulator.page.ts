@@ -539,7 +539,7 @@ function hasFiles(data: DataTransfer | null): boolean {
     .top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: #fff; flex-shrink: 0;
+      width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--accent-contrast); flex-shrink: 0;
     }
     .top-bar-actions { display: flex; align-items: center; gap: 14px; }
     .theme-toggle {
@@ -760,7 +760,7 @@ function hasFiles(data: DataTransfer | null): boolean {
     .actions { display: flex; flex-direction: column; gap: 10px; }
     .primary-btn {
       border: none; border-radius: var(--radius-sm); padding: 10px; background: var(--accent);
-      color: #fff; font-weight: 700; font-size: 13px;
+      color: var(--accent-contrast); font-weight: 700; font-size: 13px;
     }
     .primary-btn:hover { background: var(--accent-dark); }
     .secondary-btn {

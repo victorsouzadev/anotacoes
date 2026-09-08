@@ -103,7 +103,7 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; }
   cursor: pointer;
 }
 .acoes button:disabled { opacity: 0.6; cursor: default; }
-.acoes .primario { background: var(--accent); border-color: var(--accent); color: #fff; }
+.acoes .primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
 .acoes .primario:hover:not(:disabled) { background: var(--accent-dark); }
 .acoes .secundario { background: var(--surface); color: var(--text-muted); }
 

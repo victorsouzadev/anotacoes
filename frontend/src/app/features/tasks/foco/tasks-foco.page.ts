@@ -151,7 +151,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .header-actions { display: flex; align-items: center; gap: 16px; }
     .timer { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
     .finish {
-      border: none; background: var(--accent); color: #fff;
+      border: none; background: var(--accent); color: var(--accent-contrast);
       border-radius: var(--radius-sm); padding: 10px 16px; font-size: 13px; font-weight: 600;
     }
     .finish:hover { background: var(--accent-dark); }
@@ -194,7 +194,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
       padding: 8px 10px; background: var(--surface); color: var(--text); font-size: 13px;
     }
     .new-subtask-row .primary {
-      border: none; background: var(--accent); color: #fff;
+      border: none; background: var(--accent); color: var(--accent-contrast);
       border-radius: var(--radius-sm); padding: 8px 14px; font-size: 13px; font-weight: 600;
     }
     .new-subtask-row .primary:hover { background: var(--accent-dark); }

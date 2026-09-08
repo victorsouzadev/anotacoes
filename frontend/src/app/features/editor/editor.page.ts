@@ -214,7 +214,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       flex-shrink: 0;
       cursor: pointer;
     }
-    .page-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .page-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
     .page-color-dot {
       width: 10px; height: 10px;
       border-radius: 50%;

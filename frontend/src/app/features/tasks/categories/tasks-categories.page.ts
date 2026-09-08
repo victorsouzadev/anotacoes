@@ -86,7 +86,7 @@ import { TasksStoreService } from '../services/tasks-store.service';
     .color-picker { display: flex; gap: 5px; }
     .color-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; }
     .color-dot.selected { border-color: var(--text); }
-    .primary { border: none; background: var(--accent); color: #fff; border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; font-weight: 600; }
+    .primary { border: none; background: var(--accent); color: var(--accent-contrast); border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px; font-weight: 600; }
     .primary:hover { background: var(--accent-dark); }
     .list { display: flex; flex-direction: column; gap: 8px; }
     .row {

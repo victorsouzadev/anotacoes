@@ -43,7 +43,7 @@ h1 {
 
 .toc a:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 section {

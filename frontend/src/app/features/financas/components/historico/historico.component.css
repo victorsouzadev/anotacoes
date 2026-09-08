@@ -37,7 +37,7 @@ h2 { font-size: 13px; font-weight: 600; margin: 0; }
   cursor: pointer;
 }
 .janelas button:hover { color: var(--text); }
-.janelas button.ativa { background: var(--accent); color: #fff; }
+.janelas button.ativa { background: var(--accent); color: var(--accent-contrast); }
 
 /* Altura fixa no contêiner: sem isso o Chart.js responsivo cresce a cada
    redesenho, porque mede o pai que ele mesmo acabou de esticar. */

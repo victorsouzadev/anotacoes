@@ -212,13 +212,13 @@ const MOBILE_BREAKPOINT = 760;
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
       width: 26px; height: 26px; border-radius: 8px;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-contrast);
       flex-shrink: 0;
     }
     .new-note {
       display: flex; align-items: center; justify-content: center; gap: 6px;
       background: var(--accent);
-      color: #fff;
+      color: var(--accent-contrast);
       border: none;
       border-radius: var(--radius-sm);
       padding: 11px;
@@ -297,7 +297,7 @@ const MOBILE_BREAKPOINT = 760;
     .view-toggle { display: flex; border: 1px solid var(--border); border-radius: var(--radius); padding: 2px; background: var(--surface); }
     .view-toggle button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: none; background: none; border-radius: var(--radius-sm); color: var(--text-muted); }
     .view-toggle button:hover:not(.active) { background: var(--bg); }
-    .view-toggle button.active { background: var(--accent); color: #fff; }
+    .view-toggle button.active { background: var(--accent); color: var(--accent-contrast); }
     .sync-indicator { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
     .sync-indicator .dot { width: 6px; height: 6px; border-radius: 50%; background: #2ea44f; }
     .sync-indicator.syncing .dot { background: var(--accent); animation: pulse 1s infinite; }

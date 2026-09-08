@@ -93,7 +93,7 @@ const TOOLS: ToolCard[] = [
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
       width: 26px; height: 26px; border-radius: 8px;
-      background: var(--accent); color: #fff;
+      background: var(--accent); color: var(--accent-contrast);
       flex-shrink: 0;
     }
     .top-bar-actions { display: flex; align-items: center; gap: 14px; }

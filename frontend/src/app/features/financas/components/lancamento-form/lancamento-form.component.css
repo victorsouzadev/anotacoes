@@ -46,7 +46,7 @@
 
 .lancamento-form button[type='submit'] {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border: none;
   padding: 0.6rem 1.4rem;
   border-radius: var(--radius-sm);

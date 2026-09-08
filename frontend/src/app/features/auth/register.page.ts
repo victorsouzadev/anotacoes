@@ -65,7 +65,7 @@ import { ThemeService } from '../../core/theme.service';
     .brand-mark {
       display: inline-flex; align-items: center; justify-content: center;
       width: 32px; height: 32px; border-radius: 10px;
-      background: var(--accent); color: #fff; font-size: 15px;
+      background: var(--accent); color: var(--accent-contrast); font-size: 15px;
       box-shadow: var(--shadow-sm);
     }
     .card {
@@ -98,7 +98,7 @@ import { ThemeService } from '../../core/theme.service';
     }
     button[type=submit] {
       background: var(--accent);
-      color: #fff;
+      color: var(--accent-contrast);
       border: none;
       border-radius: var(--radius-sm);
       padding: 11px;

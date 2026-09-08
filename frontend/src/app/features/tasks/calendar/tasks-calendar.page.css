@@ -108,7 +108,7 @@
 
 .day.today .day-number {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border-radius: 999px;
 }
 
@@ -246,7 +246,7 @@
     height: 14px;
     border-radius: 999px;
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-contrast);
     font-size: 9px;
     font-weight: 700;
   }

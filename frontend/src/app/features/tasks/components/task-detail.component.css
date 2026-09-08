@@ -375,7 +375,7 @@
 .actions .primary {
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .actions .primary:hover {

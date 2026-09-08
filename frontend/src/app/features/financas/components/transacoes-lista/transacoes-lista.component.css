@@ -140,7 +140,7 @@ li.ocupado { opacity: 0.55; }
 .acoes-edicao button:disabled { opacity: 0.6; cursor: default; }
 .acoes-edicao .secundario { background: var(--surface); color: var(--text-muted); }
 .acoes-edicao .secundario:hover { color: var(--text); }
-.acoes-edicao .primario { background: var(--accent); border-color: var(--accent); color: #fff; }
+.acoes-edicao .primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
 .acoes-edicao .primario:hover:not(:disabled) { background: var(--accent-dark); }
 .acoes-edicao .perigo { background: var(--danger); border-color: var(--danger); color: #fff; }
 

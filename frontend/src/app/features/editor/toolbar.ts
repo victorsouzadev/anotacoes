@@ -66,7 +66,7 @@ import { IconComponent } from '../../shared/icon';
     }
     button:hover:not(.active) { background: var(--bg); }
     button:active { transform: scale(0.92); }
-    button.active { background: var(--accent); color: #fff; }
+    button.active { background: var(--accent); color: var(--accent-contrast); }
     @media (max-width: 560px) {
       button { width: 32px; height: 32px; }
     }

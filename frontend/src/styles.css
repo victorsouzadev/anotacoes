@@ -1,37 +1,76 @@
 * { box-sizing: border-box; }
 
+/* Fallback estático (Monocromático / dia) — usado só até o ThemeService aplicar os
+ * tokens via custom properties inline em <html> (ver core/theme.service.ts e
+ * core/themes.data.ts, que definem os ~30 temas selecionáveis nas configurações). */
 :root {
-  --accent: #6d5ef8;
-  --accent-dark: #5645e0;
-  --accent-soft: #efecff;
-  --bg: #f6f6fb;
+  --accent: #171717;
+  --accent-dark: #000000;
+  --accent-soft: rgba(23, 23, 23, 0.08);
+  --accent-contrast: #ffffff;
+  --bg: #ffffff;
+  --bg-card: #ffffff;
   --surface: #ffffff;
-  --border: #e8e8f0;
-  --text: #1c1c26;
-  --text-muted: #7a7a8c;
+  --border: #efefef;
+  --divider: #efefef;
+  --text: #171717;
+  --text-muted: rgba(23, 23, 23, 0.55);
   --danger: #e5484d;
   /* Cores semânticas de finanças: entram nos gráficos e nos indicadores de
-     orçamento, então precisam existir nos dois temas. */
+     orçamento, então precisam existir em todos os temas. */
   --positivo: #16a34a;
   --negativo: #dc2626;
   --atencao: #d97706;
   --grade: rgba(28, 28, 38, 0.08);
+  --font-heading: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --radius-sm: 8px;
-  --radius: 14px;
+  --radius: 10px;
   --radius-lg: 20px;
-  --shadow-sm: 0 1px 2px rgba(20, 20, 43, 0.04), 0 1px 1px rgba(20, 20, 43, 0.03);
-  --shadow: 0 6px 20px rgba(30, 30, 60, 0.08);
+  --radius-card: 10px;
+  --radius-check: 6px;
+  --shadow-sm: none;
+  --shadow: none;
   --shadow-lg: 0 20px 50px rgba(30, 30, 60, 0.14);
+  --checkbox-border: #a3a3a3;
+  --checkbox-fill: #171717;
+  --checkbox-icon: #ffffff;
+  --tag-bg: #f2f2f2;
+  --tag-text: #737373;
+  --fab-bg: #171717;
+  --fab-fg: #ffffff;
+  --card-border-width: 0px;
+  --card-border-style: solid;
+  --card-transform: none;
+  --card-backdrop: none;
+  --card-clip: none;
 }
 
 html, body {
   height: 100%;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+
+/* Camada genérica que os ~30 temas usam para "pintar" cartões sem precisar tocar em
+ * cada folha de estilo de feature: cada tema define os tokens abaixo (ver
+ * ThemeTokens em core/themes.data.ts) e essas regras os aplicam onde já existem
+ * classes .card / .task-card / .opcao / .sugestao pela base do site. */
+.card, .task-card, .opcao, .sugestao {
+  border-width: var(--card-border-width, 1px);
+  border-style: var(--card-border-style, solid);
+  transform: var(--card-transform, none);
+  backdrop-filter: var(--card-backdrop, none);
+  -webkit-backdrop-filter: var(--card-backdrop, none);
+  clip-path: var(--card-clip, none);
 }
 
 button {
@@ -56,47 +95,81 @@ a {
 
 /* Tema escuro: por padrão segue a preferência do sistema (prefers-color-scheme), mas
  * pode ser forçado independente do SO via [data-theme] no <html> (ver ThemeService) —
- * o atributo sempre tem prioridade sobre a media query, nos dois sentidos. */
+ * o atributo sempre tem prioridade sobre a media query, nos dois sentidos. Estes
+ * blocos são só o fallback estático do Monocromático/noite: assim que o
+ * ThemeService roda, ele sobrescreve tudo via style inline (para qualquer uma das
+ * ~30 paletas), inclusive quando a paleta ativa não é o Monocromático. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --accent: #8b7bff;
-    --accent-dark: #a396ff;
-    --accent-soft: rgba(139, 123, 255, 0.16);
-    --bg: #16161f;
-    --surface: #1f1f2b;
-    --border: #2c2c3a;
-    --text: #ececf3;
-    --text-muted: #9494a8;
+    --accent: #ededed;
+    --accent-dark: #ffffff;
+    --accent-soft: rgba(237, 237, 237, 0.1);
+    --accent-contrast: #111111;
+    --bg: #0e0e10;
+    --bg-card: #0e0e10;
+    --surface: #0e0e10;
+    --border: #232323;
+    --divider: #232323;
+    --text: #ededed;
+    --text-muted: rgba(237, 237, 237, 0.55);
     --positivo: #4ade80;
     --negativo: #f87171;
     --atencao: #fbbf24;
     --grade: rgba(236, 236, 243, 0.1);
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-    --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    --shadow-sm: none;
+    --shadow: none;
     --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+    --checkbox-border: #52525b;
+    --checkbox-fill: #ededed;
+    --checkbox-icon: #0e0e10;
+    --tag-bg: #1c1c1f;
+    --tag-text: #a1a1aa;
+    --fab-bg: #ededed;
+    --fab-fg: #0e0e10;
   }
   ::-webkit-scrollbar-thumb { background: #38384a; }
   ::-webkit-scrollbar-thumb:hover { background: #48485c; }
 }
 
 :root[data-theme="dark"] {
-  --accent: #8b7bff;
-  --accent-dark: #a396ff;
-  --accent-soft: rgba(139, 123, 255, 0.16);
-  --bg: #16161f;
-  --surface: #1f1f2b;
-  --border: #2c2c3a;
-  --text: #ececf3;
-  --text-muted: #9494a8;
+  --accent: #ededed;
+  --accent-dark: #ffffff;
+  --accent-soft: rgba(237, 237, 237, 0.1);
+  --accent-contrast: #111111;
+  --bg: #0e0e10;
+  --bg-card: #0e0e10;
+  --surface: #0e0e10;
+  --border: #232323;
+  --divider: #232323;
+  --text: #ededed;
+  --text-muted: rgba(237, 237, 237, 0.55);
   --positivo: #4ade80;
   --negativo: #f87171;
   --atencao: #fbbf24;
   --grade: rgba(236, 236, 243, 0.1);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-sm: none;
+  --shadow: none;
   --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --checkbox-border: #52525b;
+  --checkbox-fill: #ededed;
+  --checkbox-icon: #0e0e10;
+  --tag-bg: #1c1c1f;
+  --tag-text: #a1a1aa;
+  --fab-bg: #ededed;
+  --fab-fg: #0e0e10;
 }
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #38384a; }
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #48485c; }
 
-html { transition: background-color 0.15s; }
+/* Transição suave ao trocar de tema (paleta ou dia/noite). */
+html {
+  transition: background-color 220ms ease;
+}
+body, .card, .task-card, .opcao, .sugestao, button, input, select, textarea {
+  transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease, box-shadow 220ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  html, body, .card, .task-card, .opcao, .sugestao, button, input, select, textarea {
+    transition: none;
+  }
+}

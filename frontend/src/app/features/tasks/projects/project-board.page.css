@@ -156,7 +156,7 @@
 .new-task-btn.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .new-task-btn.primary:hover { background: var(--accent-dark); }
@@ -208,7 +208,7 @@
 .new-lane-form .primary {
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
   border-radius: var(--radius-sm);
   padding: 8px 16px;
   font-size: 13px;
@@ -249,7 +249,7 @@
 
 .group-tabs button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
 }
 
 .board {
