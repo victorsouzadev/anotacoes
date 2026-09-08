@@ -37,14 +37,13 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
         return body.GetProperty("accessToken").GetString()!;
     }
 
-    private static object TaskPayload(string title, DateTime updatedAt, string? kanbanLaneId = null) => new
+    private static object TaskPayload(string title, DateTime updatedAt) => new
     {
         title,
         description = (string?)null,
         dueDate = (DateTime?)null,
         priority = "Medium",
         categoryIds = Array.Empty<string>(),
-        kanbanLaneId,
         isRecurring = false,
         recurrenceRule = (string?)null,
         isCompleted = false,
@@ -61,11 +60,34 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
         updatedAt,
     };
 
-    private async Task<string> CreateLaneAsync(string name, int position = 0)
+    private async Task<string> CreateTaskAsync(HttpClient client, string title)
     {
         var id = Guid.NewGuid().ToString();
-        var res = await _client.PutAsJsonAsync($"/api/tasks/kanban-lanes/{id}", new
+        var res = await client.PutAsJsonAsync($"/api/tasks/items/{id}", TaskPayload(title, DateTime.UtcNow));
+        res.EnsureSuccessStatusCode();
+        return id;
+    }
+
+    private async Task<string> CreateProjectAsync(HttpClient client, string name = "Projeto")
+    {
+        var id = Guid.NewGuid().ToString();
+        var res = await client.PutAsJsonAsync($"/api/tasks/projects/{id}", new
         {
+            name,
+            colorHex = "#2563eb",
+            position = 0,
+            updatedAt = DateTime.UtcNow,
+        });
+        res.EnsureSuccessStatusCode();
+        return id;
+    }
+
+    private async Task<string> CreateLaneAsync(string projectId, string name, int position = 0, HttpClient? client = null)
+    {
+        var id = Guid.NewGuid().ToString();
+        var res = await (client ?? _client).PutAsJsonAsync($"/api/tasks/kanban-lanes/{id}", new
+        {
+            projectId,
             name,
             colorHex = "#2563eb",
             position,
@@ -75,11 +97,26 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
         return id;
     }
 
+    private async Task<HttpResponseMessage> UpsertMembershipAsync(
+        string taskId, string projectId, string? kanbanLaneId = null, int position = 0, HttpClient? client = null)
+    {
+        var id = Guid.NewGuid().ToString();
+        return await (client ?? _client).PutAsJsonAsync($"/api/tasks/project-memberships/{id}", new
+        {
+            taskId,
+            projectId,
+            kanbanLaneId,
+            position,
+            updatedAt = DateTime.UtcNow,
+        });
+    }
+
     [Fact]
     public async Task CreateLane_ThenList_ReturnsItOrderedByPosition()
     {
-        var idB = await CreateLaneAsync("B", position: 1);
-        var idA = await CreateLaneAsync("A", position: 0);
+        var projectId = await CreateProjectAsync(_client);
+        var idB = await CreateLaneAsync(projectId, "B", position: 1);
+        var idA = await CreateLaneAsync(projectId, "A", position: 0);
 
         var listRes = await _client.GetAsync("/api/tasks/kanban-lanes");
         var list = await listRes.Content.ReadFromJsonAsync<JsonElement>();
@@ -91,9 +128,11 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
     [Fact]
     public async Task CreateLane_EmptyName_ReturnsBadRequest()
     {
+        var projectId = await CreateProjectAsync(_client);
         var id = Guid.NewGuid().ToString();
         var res = await _client.PutAsJsonAsync($"/api/tasks/kanban-lanes/{id}", new
         {
+            projectId,
             name = "   ",
             colorHex = "#2563eb",
             position = 0,
@@ -103,51 +142,94 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
     }
 
     [Fact]
-    public async Task AssignTaskToLane_ThenDeleteLane_ClearsKanbanLaneIdOnTask()
+    public async Task CreateLane_WithInvalidProject_ReturnsBadRequest()
     {
-        var laneId = await CreateLaneAsync("Em andamento");
-        var taskId = Guid.NewGuid().ToString();
-        await _client.PutAsJsonAsync($"/api/tasks/items/{taskId}", TaskPayload("Tarefa", DateTime.UtcNow, laneId));
+        var id = Guid.NewGuid().ToString();
+        var res = await _client.PutAsJsonAsync($"/api/tasks/kanban-lanes/{id}", new
+        {
+            projectId = Guid.NewGuid().ToString(),
+            name = "Raia",
+            colorHex = "#2563eb",
+            position = 0,
+            updatedAt = DateTime.UtcNow,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
 
-        var before = await (await _client.GetAsync("/api/tasks/items")).Content.ReadFromJsonAsync<JsonElement>();
-        var beforeTask = before.EnumerateArray().First(t => t.GetProperty("id").GetString() == taskId);
-        Assert.Equal(laneId, beforeTask.GetProperty("kanbanLaneId").GetString());
+    [Fact]
+    public async Task AssignTaskToLane_ThenDeleteLane_ClearsLaneOnMembership()
+    {
+        var projectId = await CreateProjectAsync(_client);
+        var laneId = await CreateLaneAsync(projectId, "Em andamento");
+        var taskId = await CreateTaskAsync(_client, "Tarefa");
+
+        var membershipRes = await UpsertMembershipAsync(taskId, projectId, laneId);
+        membershipRes.EnsureSuccessStatusCode();
+        var membership = await membershipRes.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(laneId, membership.GetProperty("kanbanLaneId").GetString());
 
         var deleteRes = await _client.DeleteAsync($"/api/tasks/kanban-lanes/{laneId}");
         Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
 
-        var after = await (await _client.GetAsync("/api/tasks/items")).Content.ReadFromJsonAsync<JsonElement>();
-        var afterTask = after.EnumerateArray().First(t => t.GetProperty("id").GetString() == taskId);
-        Assert.Equal(JsonValueKind.Null, afterTask.GetProperty("kanbanLaneId").ValueKind);
+        var after = await (await _client.GetAsync("/api/tasks/project-memberships")).Content.ReadFromJsonAsync<JsonElement>();
+        var afterMembership = after.EnumerateArray().First(m => m.GetProperty("taskId").GetString() == taskId);
+        Assert.Equal(JsonValueKind.Null, afterMembership.GetProperty("kanbanLaneId").ValueKind);
     }
 
     [Fact]
-    public async Task CreateTask_WithKanbanLaneFromAnotherUser_IsIgnored()
+    public async Task CreateMembership_WithKanbanLaneFromAnotherProject_IsIgnored()
     {
-        var otherClient = _factory.CreateClient();
-        var otherToken = await RegisterAndGetToken();
-        otherClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", otherToken);
+        var projectId = await CreateProjectAsync(_client);
+        var otherProjectId = await CreateProjectAsync(_client, "Outro projeto");
+        var foreignLaneId = await CreateLaneAsync(otherProjectId, "Raia de outro projeto");
+        var taskId = await CreateTaskAsync(_client, "Tarefa");
 
-        var foreignLaneId = Guid.NewGuid().ToString();
-        await otherClient.PutAsJsonAsync($"/api/tasks/kanban-lanes/{foreignLaneId}", new
-        {
-            name = "Raia de outro usuário",
-            colorHex = "#000000",
-            position = 0,
-            updatedAt = DateTime.UtcNow,
-        });
+        var res = await UpsertMembershipAsync(taskId, projectId, foreignLaneId);
+        res.EnsureSuccessStatusCode();
+        var membership = await res.Content.ReadFromJsonAsync<JsonElement>();
 
-        var taskId = Guid.NewGuid().ToString();
-        var res = await _client.PutAsJsonAsync($"/api/tasks/items/{taskId}", TaskPayload("Tarefa", DateTime.UtcNow, foreignLaneId));
-        var created = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, membership.GetProperty("kanbanLaneId").ValueKind);
+    }
 
-        Assert.Equal(JsonValueKind.Null, created.GetProperty("kanbanLaneId").ValueKind);
+    [Fact]
+    public async Task CreateMembership_Twice_ForSameTaskAndProject_ReturnsConflict()
+    {
+        var projectId = await CreateProjectAsync(_client);
+        var taskId = await CreateTaskAsync(_client, "Tarefa");
+
+        var first = await UpsertMembershipAsync(taskId, projectId);
+        first.EnsureSuccessStatusCode();
+
+        var second = await UpsertMembershipAsync(taskId, projectId);
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteProject_CascadesLanesAndMemberships_ButKeepsTask()
+    {
+        var projectId = await CreateProjectAsync(_client);
+        var laneId = await CreateLaneAsync(projectId, "Raia");
+        var taskId = await CreateTaskAsync(_client, "Tarefa");
+        (await UpsertMembershipAsync(taskId, projectId, laneId)).EnsureSuccessStatusCode();
+
+        var deleteRes = await _client.DeleteAsync($"/api/tasks/projects/{projectId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+        var lanes = await (await _client.GetAsync("/api/tasks/kanban-lanes")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.DoesNotContain(lanes.EnumerateArray(), l => l.GetProperty("id").GetString() == laneId);
+
+        var memberships = await (await _client.GetAsync("/api/tasks/project-memberships")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.DoesNotContain(memberships.EnumerateArray(), m => m.GetProperty("projectId").GetString() == projectId);
+
+        var tasks = await (await _client.GetAsync("/api/tasks/items")).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(tasks.EnumerateArray(), t => t.GetProperty("id").GetString() == taskId);
     }
 
     [Fact]
     public async Task Lanes_FromAnotherUser_AreNotVisibleOrDeletable()
     {
-        var laneId = await CreateLaneAsync("Minha raia");
+        var projectId = await CreateProjectAsync(_client);
+        var laneId = await CreateLaneAsync(projectId, "Minha raia");
 
         var otherClient = _factory.CreateClient();
         var otherToken = await RegisterAndGetToken();
@@ -164,10 +246,12 @@ public class TasksKanbanLanesTests : IClassFixture<TasksApiFactory>, IAsyncLifet
     [Fact]
     public async Task RenameLane_UpdatesNameAndPosition()
     {
-        var laneId = await CreateLaneAsync("Nome original", position: 0);
+        var projectId = await CreateProjectAsync(_client);
+        var laneId = await CreateLaneAsync(projectId, "Nome original", position: 0);
 
         var renameRes = await _client.PutAsJsonAsync($"/api/tasks/kanban-lanes/{laneId}", new
         {
+            projectId,
             name = "Nome novo",
             colorHex = "#16a34a",
             position = 2,
