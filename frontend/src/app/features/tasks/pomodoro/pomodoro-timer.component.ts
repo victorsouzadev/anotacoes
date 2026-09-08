@@ -1,11 +1,36 @@
 import { Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { PomodoroService } from '../services/pomodoro.service';
 
 @Component({
   selector: 'app-pomodoro-timer',
   standalone: true,
+  imports: [FormsModule],
   template: `
     <div class="timer-card" [class.break]="pomodoro.phase() === 'break'">
+      <button class="settings-toggle" (click)="toggleSettings()" title="Configurar pausas">⚙</button>
+
+      @if (showSettings) {
+        <div class="settings-panel" (click)="$event.stopPropagation()">
+          <label>
+            <span>Pausa curta (min)</span>
+            <input type="number" min="1" [(ngModel)]="shortBreakMinutes" />
+          </label>
+          <label>
+            <span>Pausa longa (min)</span>
+            <input type="number" min="1" [(ngModel)]="longBreakMinutes" />
+          </label>
+          <label>
+            <span>Ciclos até a pausa longa</span>
+            <input type="number" min="1" [(ngModel)]="cyclesUntilLongBreak" />
+          </label>
+          <div class="settings-actions">
+            <button class="secondary" (click)="showSettings = false">Cancelar</button>
+            <button class="primary" (click)="saveSettings()">Salvar</button>
+          </div>
+        </div>
+      }
+
       <span class="phase-label">{{ pomodoro.phase() === 'work' ? 'Foco' : 'Pausa' }}</span>
       <span class="time">{{ pomodoro.formatTime(pomodoro.secondsLeft()) }}</span>
       <div class="controls">
@@ -17,13 +42,12 @@ import { PomodoroService } from '../services/pomodoro.service';
         <button class="secondary" (click)="pomodoro.reset()">Reiniciar</button>
       </div>
       <span class="cycles">{{ pomodoro.cyclesCompleted() }} pomodoro(s) concluído(s) nesta sessão</span>
-      @if (pomodoro.running()) {
-        <span class="persist-hint">O timer continua rodando mesmo se você mudar de página.</span>
-      }
+      <span class="persist-hint">O timer continua rodando mesmo se você mudar de página, recarregar ou fechar a aba.</span>
     </div>
   `,
   styles: [`
     .timer-card {
+      position: relative;
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
       padding: 40px 24px; display: flex; flex-direction: column; align-items: center; gap: 16px;
       box-shadow: var(--shadow-sm);
@@ -38,7 +62,34 @@ import { PomodoroService } from '../services/pomodoro.service';
     .controls .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
     .controls .secondary:hover { background: var(--bg); }
     .cycles { font-size: 12px; color: var(--text-muted); }
-    .persist-hint { font-size: 11px; color: var(--text-muted); }
+    .persist-hint { font-size: 11px; color: var(--text-muted); text-align: center; }
+
+    .settings-toggle {
+      position: absolute; top: 12px; right: 12px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text-muted); border-radius: var(--radius-sm);
+      width: 28px; height: 28px; font-size: 14px; line-height: 1;
+    }
+    .settings-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+    .settings-panel {
+      position: absolute; top: 46px; right: 12px; z-index: 10;
+      width: 220px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow-lg); padding: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+      text-align: left;
+    }
+    .settings-panel label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+    .settings-panel input {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 6px 8px; background: var(--bg); color: var(--text); font-size: 13px;
+    }
+    .settings-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .settings-actions button { border-radius: var(--radius-sm); padding: 6px 12px; font-size: 12px; font-weight: 600; }
+    .settings-actions .primary { border: none; background: var(--accent); color: #fff; }
+    .settings-actions .primary:hover { background: var(--accent-dark); }
+    .settings-actions .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
 
     @media (max-width: 480px) {
       .timer-card { padding: 28px 16px; }
@@ -49,5 +100,29 @@ import { PomodoroService } from '../services/pomodoro.service';
   `],
 })
 export class PomodoroTimerComponent {
+  showSettings = false;
+  shortBreakMinutes = 5;
+  longBreakMinutes = 15;
+  cyclesUntilLongBreak = 4;
+
   constructor(public pomodoro: PomodoroService) {}
+
+  toggleSettings(): void {
+    if (!this.showSettings) {
+      const s = this.pomodoro.settings();
+      this.shortBreakMinutes = Math.round(s.shortBreakSeconds / 60);
+      this.longBreakMinutes = Math.round(s.longBreakSeconds / 60);
+      this.cyclesUntilLongBreak = s.cyclesUntilLongBreak;
+    }
+    this.showSettings = !this.showSettings;
+  }
+
+  saveSettings(): void {
+    this.pomodoro.updateSettings({
+      shortBreakSeconds: this.shortBreakMinutes * 60,
+      longBreakSeconds: this.longBreakMinutes * 60,
+      cyclesUntilLongBreak: this.cyclesUntilLongBreak,
+    });
+    this.showSettings = false;
+  }
 }
