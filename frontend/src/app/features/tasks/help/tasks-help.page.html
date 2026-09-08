@@ -25,15 +25,25 @@
       <h2>Views</h2>
       <dl>
         <dt>Lista</dt>
-        <dd>Visão padrão. Cada tarefa é um card com prazo, prioridade, categoria, progresso de subtarefas e contagem de pomodoros.</dd>
-        <dt>Kanban</dt>
         <dd>
-          Colunas arrastáveis. O modo <strong>Raias</strong> é independente de categoria — você cria suas
-          próprias colunas (ex.: "A fazer" / "Em andamento" / "Feito", ou qualquer fluxo seu) pelo botão
+          Visão padrão. As tarefas aparecem agrupadas pela primeira categoria de cada uma (quem não
+          tem categoria cai no grupo "Sem categoria", sempre por último). Cada card mostra prazo,
+          prioridade, categoria, progresso de subtarefas e contagem de pomodoros. Tarefas concluídas
+          ficam escondidas por padrão dentro do grupo — use o botão "Mostrar N concluída(s)" pra
+          revelar as de um grupo específico.
+        </dd>
+        <dt>Projetos</dt>
+        <dd>
+          Substitui o antigo quadro Kanban único e automático. Aqui você cria quantos projetos quiser
+          em "Projetos", e cada um tem seu próprio quadro — nenhuma tarefa entra sozinha: você adiciona
+          as que já existem (busca por título) ou cria tarefas direto dentro do projeto. Dentro de um
+          projeto, o modo <strong>Raias</strong> é independente de categoria — você cria suas próprias
+          colunas (ex.: "A fazer" / "Em andamento" / "Feito", ou qualquer fluxo seu) pelo botão
           "Nova raia", renomeia clicando no nome da coluna, apaga pelo ícone de lixeira (as tarefas dela
           voltam pra "Sem raia") e reordena arrastando o cabeçalho da coluna. O modo <strong>Por status</strong>
           é um atalho fixo com duas colunas (A fazer / Concluída). Em qualquer modo, arraste um card pra
-          outra coluna pra mover a tarefa, e entre cards da mesma coluna pra reordenar manualmente.
+          outra coluna pra mover a tarefa, e entre cards da mesma coluna pra reordenar manualmente. Uma
+          mesma tarefa pode participar de vários projetos ao mesmo tempo, cada um com sua raia própria.
         </dd>
         <dt>Calendário</dt>
         <dd>Grade mensal com as tarefas posicionadas pelo prazo. Clique num dia pra ver a lista detalhada dele.</dd>
