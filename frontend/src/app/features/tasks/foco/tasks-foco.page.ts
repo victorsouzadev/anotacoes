@@ -5,6 +5,7 @@ import { Title } from '@angular/platform-browser';
 import { IconComponent } from '../../../shared/icon';
 import { PomodoroTimerComponent } from '../pomodoro/pomodoro-timer.component';
 import { NotesEditorComponent } from '../notes/notes-editor.component';
+import { FOCO_PANEL_LABELS, FocoColumn, FocoLayoutService, FocoPanelId } from './foco-layout.service';
 import { isNotesEmpty } from '../notes/notes-html';
 import { TaskActivitiesService } from '../services/task-activities.service';
 import { PomodoroService } from '../services/pomodoro.service';
@@ -31,10 +32,42 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
           @if (!act.endedAt) {
             <div class="header-actions">
               <span class="timer">{{ elapsedLabel(act) }}</span>
+              <button class="layout-btn" [class.active]="showLayoutSettings" (click)="showLayoutSettings = !showLayoutSettings" title="Configurar áreas do foco">
+                <app-icon name="grid-view" [size]="14" /> Áreas
+              </button>
               <button class="finish" (click)="finishActivity(act.id)">Finalizar atividade</button>
             </div>
           }
         </header>
+
+        @if (showLayoutSettings) {
+          <section class="layout-settings">
+            <div class="ls-head">
+              <h2>Áreas do modo foco</h2>
+              <div class="ls-head-actions">
+                <button (click)="layout.setCollapsedAll(true)">Recolher tudo</button>
+                <button (click)="layout.setCollapsedAll(false)">Expandir tudo</button>
+                <button (click)="layout.reset()">Restaurar padrão</button>
+                <button class="close" (click)="showLayoutSettings = false" title="Fechar"><app-icon name="x" [size]="12" /></button>
+              </div>
+            </div>
+            <p class="ls-hint">Arraste um painel pelo cabeçalho para movê-lo entre as áreas, ou use os botões abaixo.</p>
+            <ul class="ls-list">
+              @for (panel of layout.panels(); track panel.id) {
+                <li>
+                  <span class="ls-name">{{ panelLabels[panel.id] }}</span>
+                  <span class="ls-where">{{ panel.column === 'left' ? 'Esquerda' : 'Direita' }}</span>
+                  <button (click)="layout.moveBy(panel.id, -1)" title="Subir">&uarr;</button>
+                  <button (click)="layout.moveBy(panel.id, 1)" title="Descer">&darr;</button>
+                  <button (click)="layout.switchColumn(panel.id)" [title]="panel.column === 'left' ? 'Mover para a direita' : 'Mover para a esquerda'">
+                    {{ panel.column === 'left' ? '→' : '←' }}
+                  </button>
+                  <button (click)="layout.toggleCollapsed(panel.id)">{{ panel.collapsed ? 'Expandir' : 'Recolher' }}</button>
+                </li>
+              }
+            </ul>
+          </section>
+        }
 
         @if (otherRunning().length > 0) {
           <div class="other-running">
@@ -56,90 +89,135 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
               <a routerLink="/tasks">Voltar pra Tarefas</a>
             </div>
           } @else if (task(); as t) {
-            <div class="two-col">
-              <section class="col-info">
-                @if (t.description) {
-                  <p class="description">{{ t.description }}</p>
-                }
-
-                <div class="meta-row">
-                  @if (t.dueDate) {
-                    <span class="chip due" [class.overdue]="isOverdue(t)">
-                      <app-icon name="calendar" [size]="11" /> {{ formatDueDate(t.dueDate) }}
-                    </span>
-                  }
-                  <span class="chip priority" [class]="t.priority.toLowerCase()">{{ t.priority }}</span>
-                  @for (cat of store.categoriesFor(t); track cat.id) {
-                    <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
-                  }
-                </div>
-
-                <div class="stats-row">
-                  @if (t.subtasks.length > 0) {
-                    <div class="stat">
-                      <span class="stat-value">{{ completedSubtasks(t) }}/{{ t.subtasks.length }}</span>
-                      <span class="stat-label">subtarefas concluídas</span>
-                    </div>
-                  }
-                  @if (t.completedPomodoros > 0) {
-                    <div class="stat">
-                      <span class="stat-value">{{ formatDuration(totalTimeSpent(t.completedPomodoros)) }}</span>
-                      <span class="stat-label">{{ t.completedPomodoros }} pomodoro(s) nesta tarefa</span>
-                    </div>
-                  }
-                </div>
-              </section>
-
-              <section class="col-work">
-                <section class="section">
-                  <h2>Subtarefas</h2>
-                  <div class="new-subtask-row">
-                    <input
-                      [(ngModel)]="newSubtaskTitle"
-                      placeholder="Nova subtarefa"
-                      (keydown.enter)="addSubtask(t)"
-                    />
-                    <button class="primary" (click)="addSubtask(t)">Adicionar</button>
-                  </div>
-
-                  @if (t.subtasks.length === 0) {
-                    <p class="empty">Nenhuma subtarefa ainda.</p>
-                  } @else {
-                    <ul class="subtask-list">
-                      @for (s of t.subtasks; track $index) {
-                        <li
-                          class="subtask-row"
-                          [class.drag-over]="dragOverIndex === $index"
-                          draggable="true"
-                          (dragstart)="onDragStart($index)"
-                          (dragend)="onDragEnd()"
-                          (dragover)="onDragOver($index, $event)"
-                          (drop)="onDrop(t, $index, $event)"
+            <div class="two-col" [class.single]="!dragPanelId && (layout.left().length === 0 || layout.right().length === 0)">
+              @for (column of columns; track column) {
+                <section
+                  class="col"
+                  [class.col-left]="column === 'left'"
+                  [class.col-hidden]="layout.panelsIn(column).length === 0 && !dragPanelId"
+                  [class.drop-target]="dragPanelId && dropColumn === column && dropIndex === layout.panelsIn(column).length"
+                  (dragover)="onPanelDragOverColumn(column, $event)"
+                  (drop)="onPanelDrop($event)"
+                >
+                  @for (panel of layout.panelsIn(column); track panel.id) {
+                    <section
+                      class="panel"
+                      [class.collapsed]="panel.collapsed"
+                      [class.dragging]="dragPanelId === panel.id"
+                      [class.drop-before]="dragPanelId && dropColumn === column && dropIndex === $index"
+                      (dragover)="onPanelDragOver(column, $index, $event)"
+                      (drop)="onPanelDrop($event)"
+                    >
+                      <header
+                        class="panel-header"
+                        draggable="true"
+                        (dragstart)="onPanelDragStart(panel.id)"
+                        (dragend)="onPanelDragEnd()"
+                      >
+                        <button
+                          type="button"
+                          class="panel-toggle"
+                          (click)="layout.toggleCollapsed(panel.id)"
+                          [title]="panel.collapsed ? 'Expandir' : 'Recolher'"
                         >
-                          <span class="grip">::</span>
-                          <button type="button" class="check" [class.done]="s.isCompleted" (click)="toggleSubtask(t, $index)">
-                            @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
-                          </button>
-                          <span class="title" [class.done]="s.isCompleted">{{ s.title }}</span>
-                          <button type="button" class="remove" (click)="removeSubtask(t, $index)" title="Remover">
-                            <app-icon name="delete" [size]="13" />
-                          </button>
-                        </li>
+                          <span class="chevron" [class.open]="!panel.collapsed"><app-icon name="chevron" [size]="12" /></span>
+                          <h2>{{ panelLabels[panel.id] }}</h2>
+                        </button>
+                        <span class="panel-grip" title="Arraste para mover de área">::</span>
+                      </header>
+
+                      @if (!panel.collapsed) {
+                        <div class="panel-body">
+                          @switch (panel.id) {
+                            @case ('info') {
+                              @if (t.description) {
+                                <p class="description">{{ t.description }}</p>
+                              }
+
+                              <div class="meta-row">
+                                @if (t.dueDate) {
+                                  <span class="chip due" [class.overdue]="isOverdue(t)">
+                                    <app-icon name="calendar" [size]="11" /> {{ formatDueDate(t.dueDate) }}
+                                  </span>
+                                }
+                                <span class="chip priority" [class]="t.priority.toLowerCase()">{{ t.priority }}</span>
+                                @for (cat of store.categoriesFor(t); track cat.id) {
+                                  <span class="chip category" [style.background]="cat.colorHex + '22'" [style.color]="cat.colorHex">{{ cat.name }}</span>
+                                }
+                              </div>
+
+                              <div class="stats-row">
+                                @if (t.subtasks.length > 0) {
+                                  <div class="stat">
+                                    <span class="stat-value">{{ completedSubtasks(t) }}/{{ t.subtasks.length }}</span>
+                                    <span class="stat-label">subtarefas concluídas</span>
+                                  </div>
+                                }
+                                @if (t.completedPomodoros > 0) {
+                                  <div class="stat">
+                                    <span class="stat-value">{{ formatDuration(totalTimeSpent(t.completedPomodoros)) }}</span>
+                                    <span class="stat-label">{{ t.completedPomodoros }} pomodoro(s) nesta tarefa</span>
+                                  </div>
+                                }
+                              </div>
+                            }
+
+                            @case ('subtasks') {
+                              <div class="new-subtask-row">
+                                <input
+                                  [(ngModel)]="newSubtaskTitle"
+                                  placeholder="Nova subtarefa"
+                                  (keydown.enter)="addSubtask(t)"
+                                />
+                                <button class="primary" (click)="addSubtask(t)">Adicionar</button>
+                              </div>
+
+                              @if (t.subtasks.length === 0) {
+                                <p class="empty">Nenhuma subtarefa ainda.</p>
+                              } @else {
+                                <ul class="subtask-list">
+                                  @for (s of t.subtasks; track $index) {
+                                    <li
+                                      class="subtask-row"
+                                      [class.drag-over]="dragOverIndex === $index"
+                                      draggable="true"
+                                      (dragstart)="onDragStart($index)"
+                                      (dragend)="onDragEnd()"
+                                      (dragover)="onDragOver($index, $event)"
+                                      (drop)="onDrop(t, $index, $event)"
+                                    >
+                                      <span class="grip">::</span>
+                                      <button type="button" class="check" [class.done]="s.isCompleted" (click)="toggleSubtask(t, $index)">
+                                        @if (s.isCompleted) { <app-icon name="check" [size]="11" /> }
+                                      </button>
+                                      <span class="title" [class.done]="s.isCompleted">{{ s.title }}</span>
+                                      <button type="button" class="remove" (click)="removeSubtask(t, $index)" title="Remover">
+                                        <app-icon name="delete" [size]="13" />
+                                      </button>
+                                    </li>
+                                  }
+                                </ul>
+                              }
+                            }
+
+                            @case ('notes') {
+                              <app-notes-editor [task]="t" />
+                            }
+
+                            @case ('pomodoro') {
+                              <app-pomodoro-timer />
+                            }
+                          }
+                        </div>
                       }
-                    </ul>
+                    </section>
+                  }
+
+                  @if (layout.panelsIn(column).length === 0) {
+                    <p class="col-empty">Arraste um painel pra cá.</p>
                   }
                 </section>
-
-                <section class="section">
-                  <h2>Anotações</h2>
-                  <app-notes-editor [task]="t" />
-                </section>
-
-                <section class="section">
-                  <h2>Pomodoro</h2>
-                  <app-pomodoro-timer />
-                </section>
-              </section>
+              }
             </div>
           } @else {
             <p class="empty-standalone">
@@ -192,9 +270,63 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     }
     .other-chip:hover { border-color: var(--accent); color: var(--accent); }
 
+    .layout-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+      border-radius: var(--radius-sm); padding: 9px 12px; font-size: 13px; font-weight: 600;
+    }
+    .layout-btn:hover, .layout-btn.active { border-color: var(--accent); color: var(--accent); }
+
+    .layout-settings {
+      margin: 0 40px 16px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); padding: 14px 16px;
+    }
+    .ls-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .ls-head h2 { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+    .ls-head-actions { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+    .layout-settings button {
+      border: 1px solid var(--border); background: var(--bg); color: var(--text-muted);
+      border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12px; font-weight: 600;
+    }
+    .layout-settings button:hover { border-color: var(--accent); color: var(--accent); }
+    .layout-settings .close { display: inline-flex; align-items: center; padding: 5px 7px; }
+    .ls-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 10px; }
+    .ls-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .ls-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .ls-name { font-size: 13px; font-weight: 600; min-width: 96px; }
+    .ls-where { font-size: 12px; color: var(--text-muted); min-width: 64px; }
+
     .content { max-width: 1000px; padding: 8px 40px 40px; }
 
     .two-col { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 40px; align-items: start; }
+    /* Com uma das áreas vazia, a outra ocupa a largura toda em vez de ficar espremida em 320px. */
+    .two-col.single { grid-template-columns: minmax(0, 1fr); }
+    .col-hidden { display: none; }
+
+    .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
+    .col.drop-target { outline: 2px dashed var(--accent); outline-offset: 6px; }
+    .col-empty {
+      font-size: 12px; color: var(--text-muted); text-align: center;
+      border: 1px dashed var(--border); border-radius: var(--radius); padding: 18px 10px; margin: 0;
+    }
+
+    .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; border-radius: var(--radius); }
+    .panel.dragging { opacity: 0.45; }
+    .panel.drop-before { box-shadow: 0 -3px 0 var(--accent); }
+    .panel-header { display: flex; align-items: center; gap: 8px; cursor: grab; }
+    .panel-header:active { cursor: grabbing; }
+    .panel-toggle {
+      display: flex; align-items: center; gap: 6px;
+      border: none; background: none; padding: 0; color: var(--text-muted);
+    }
+    .panel-toggle h2 { font-size: 14px; margin: 0; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+    .panel-toggle:hover h2, .panel-toggle:hover .chevron { color: var(--accent); }
+    .chevron { display: inline-flex; transition: transform 0.15s ease; transform: rotate(-90deg); }
+    .chevron.open { transform: rotate(0deg); }
+    .panel-grip { margin-left: auto; color: var(--text-muted); font-size: 12px; letter-spacing: -1px; opacity: 0; }
+    .panel-header:hover .panel-grip { opacity: 1; }
+    .panel-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
     .ended-card {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -202,7 +334,6 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     }
     .ended-card .duration { color: var(--text-muted); font-size: 13px; }
 
-    .col-info { display: flex; flex-direction: column; gap: 20px; }
     .description { font-size: 14px; color: var(--text); line-height: 1.5; margin: 0; white-space: pre-wrap; }
 
     .meta-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -221,8 +352,6 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .stat-value { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
     .stat-label { font-size: 12px; color: var(--text-muted); }
 
-    .col-work { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
-    .section h2 { font-size: 14px; margin: 0 0 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
 
     .new-subtask-row { display: flex; gap: 8px; margin-bottom: 12px; }
     .new-subtask-row input {
@@ -265,6 +394,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     @media (max-width: 560px) {
       .foco-header { padding: 20px 16px 16px; }
       .other-running { padding: 0 16px 12px; }
+      .layout-settings { margin: 0 16px 12px; }
       .title-block h1 { font-size: 24px; }
       .timer { font-size: 22px; }
       .content { padding: 8px 16px 24px; }
@@ -276,9 +406,18 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   readonly activityDurationSeconds = activityDurationSeconds;
   readonly totalTimeSpent = totalTimeSpent;
 
+  readonly panelLabels = FOCO_PANEL_LABELS;
+  readonly columns: FocoColumn[] = ['left', 'right'];
+
   newSubtaskTitle = '';
+  showLayoutSettings = false;
   dragIndex: number | null = null;
   dragOverIndex: number | null = null;
+
+  /** Arrasto de painel entre as áreas (independente do arrasto de subtarefas). */
+  dragPanelId: FocoPanelId | null = null;
+  dropColumn: FocoColumn | null = null;
+  dropIndex: number | null = null;
 
   private activityIdSignal = signal('');
   private readonly baseTitle = document.title;
@@ -341,6 +480,7 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
     public activitiesService: TaskActivitiesService,
     public pomodoro: PomodoroService,
     public store: TasksStoreService,
+    public layout: FocoLayoutService,
     private title: Title,
   ) {
     effect(() => this.title.setTitle(this.pageTitle()));
@@ -416,6 +556,42 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
     await this.store.toggleSubtask(task, index);
   }
 
+  onPanelDragStart(panelId: FocoPanelId): void {
+    this.dragPanelId = panelId;
+    this.dropColumn = null;
+    this.dropIndex = null;
+  }
+
+  onPanelDragEnd(): void {
+    this.dragPanelId = null;
+    this.dropColumn = null;
+    this.dropIndex = null;
+  }
+
+  onPanelDragOver(column: FocoColumn, index: number, event: DragEvent): void {
+    if (!this.dragPanelId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropColumn = column;
+    this.dropIndex = index;
+  }
+
+  /** Soltar na área vazia da coluna (fora de qualquer painel) manda pro fim dela. */
+  onPanelDragOverColumn(column: FocoColumn, event: DragEvent): void {
+    if (!this.dragPanelId) return;
+    event.preventDefault();
+    this.dropColumn = column;
+    this.dropIndex = this.layout.panelsIn(column).length;
+  }
+
+  onPanelDrop(event: DragEvent): void {
+    if (!this.dragPanelId || this.dropColumn === null || this.dropIndex === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.layout.move(this.dragPanelId, this.dropColumn, this.dropIndex);
+    this.onPanelDragEnd();
+  }
+
   onDragStart(index: number): void {
     this.dragIndex = index;
   }
@@ -426,11 +602,13 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   }
 
   onDragOver(index: number, event: DragEvent): void {
+    if (this.dragPanelId) return; // arrasto de painel passando por cima da lista, não de subtarefa
     event.preventDefault();
     this.dragOverIndex = index;
   }
 
   async onDrop(task: TaskItem, index: number, event: DragEvent): Promise<void> {
+    if (this.dragPanelId) return;
     event.preventDefault();
     const from = this.dragIndex;
     this.dragIndex = null;
