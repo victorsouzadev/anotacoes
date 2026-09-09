@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FOCO_LAYOUT, FocoColumn, FocoPanelLayout, loadLayout, movePanel, normalizeLayout } from './foco-layout.service';
+import {
+  DEFAULT_FOCO_LAYOUT,
+  FocoColumn,
+  FocoPanelLayout,
+  loadLayout,
+  movePanel,
+  normalizeLayout,
+  normalizeState,
+} from './foco-layout.service';
 
 const layout = (): FocoPanelLayout[] => DEFAULT_FOCO_LAYOUT.map((p) => ({ ...p }));
 const idsIn = (list: FocoPanelLayout[], column: FocoColumn) =>
@@ -78,13 +86,36 @@ describe('movePanel', () => {
   });
 });
 
+describe('normalizeState', () => {
+  it('aceita o formato antigo, que era só o array de painéis', () => {
+    const state = normalizeState(movePanel(layout(), 'notes', 'left', 0));
+    expect(idsIn(state.panels, 'left')).toEqual(['notes', 'info']);
+    expect(state.collapsedColumns).toEqual([]);
+  });
+
+  it('mantém as áreas recolhidas, na ordem das colunas', () => {
+    const state = normalizeState({ panels: layout(), collapsedColumns: ['right', 'left'] });
+    expect(state.collapsedColumns).toEqual(['left', 'right']);
+  });
+
+  it('descarta área inexistente', () => {
+    const state = normalizeState({ panels: layout(), collapsedColumns: ['fundo'] });
+    expect(state.collapsedColumns).toEqual([]);
+  });
+});
+
 describe('loadLayout', () => {
   it('sobrevive a JSON corrompido no storage', () => {
-    expect(loadLayout({ getItem: () => '{{{' })).toEqual(DEFAULT_FOCO_LAYOUT);
+    expect(loadLayout({ getItem: () => '{{{' })).toEqual({ panels: DEFAULT_FOCO_LAYOUT, collapsedColumns: [] });
   });
 
   it('lê o que foi salvo', () => {
-    const saved = JSON.stringify(movePanel(layout(), 'notes', 'right', 0));
-    expect(idsIn(loadLayout({ getItem: () => saved }), 'right')).toEqual(['notes', 'pomodoro']);
+    const saved = JSON.stringify({
+      panels: movePanel(layout(), 'notes', 'right', 0),
+      collapsedColumns: ['left'],
+    });
+    const state = loadLayout({ getItem: () => saved });
+    expect(idsIn(state.panels, 'right')).toEqual(['notes', 'pomodoro']);
+    expect(state.collapsedColumns).toEqual(['left']);
   });
 });

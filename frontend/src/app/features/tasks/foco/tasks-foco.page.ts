@@ -45,13 +45,25 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
             <div class="ls-head">
               <h2>Áreas do modo foco</h2>
               <div class="ls-head-actions">
-                <button (click)="layout.setCollapsedAll(true)">Recolher tudo</button>
-                <button (click)="layout.setCollapsedAll(false)">Expandir tudo</button>
+                <button (click)="layout.setCollapsedAll(true)">Recolher painéis</button>
+                <button (click)="layout.setCollapsedAll(false)">Expandir painéis</button>
+                <button (click)="layout.setColumnsCollapsed(false)">Expandir áreas</button>
                 <button (click)="layout.reset()">Restaurar padrão</button>
                 <button class="close" (click)="showLayoutSettings = false" title="Fechar"><app-icon name="x" [size]="12" /></button>
               </div>
             </div>
             <p class="ls-hint">Arraste um painel pelo cabeçalho para movê-lo entre as áreas, ou use os botões abaixo.</p>
+            <ul class="ls-list ls-columns">
+              @for (column of columns; track column) {
+                <li>
+                  <span class="ls-name">{{ columnLabels[column] }}</span>
+                  <span class="ls-where">{{ layout.panelsIn(column).length }} painel(is)</span>
+                  <button (click)="layout.toggleColumnCollapsed(column)">
+                    {{ layout.isColumnCollapsed(column) ? 'Expandir área' : 'Recolher área' }}
+                  </button>
+                </li>
+              }
+            </ul>
             <ul class="ls-list">
               @for (panel of layout.panels(); track panel.id) {
                 <li>
@@ -94,11 +106,37 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
                   class="col"
                   [class.col-left]="column === 'left'"
                   [class.col-hidden]="layout.panelsIn(column).length === 0 && !dragPanelId"
+                  [class.col-collapsed]="isColumnCollapsed(column)"
                   [attr.aria-label]="'Área ' + columnLabels[column]"
                   [class.drop-target]="dragPanelId && dropColumn === column && dropIndex === layout.panelsIn(column).length"
                   (dragover)="onPanelDragOverColumn(column, $event)"
                   (drop)="onPanelDrop($event)"
                 >
+                  @if (isColumnCollapsed(column)) {
+                    <button
+                      type="button"
+                      class="col-collapsed-bar"
+                      (click)="layout.toggleColumnCollapsed(column)"
+                      [title]="'Expandir área ' + columnLabels[column]"
+                    >
+                      <app-icon name="chevron" [size]="12" />
+                      <span class="col-collapsed-label">
+                        {{ columnLabels[column] }} · {{ layout.panelsIn(column).length }}
+                      </span>
+                    </button>
+                  } @else {
+                  <header class="col-header">
+                    <button
+                      type="button"
+                      class="col-toggle"
+                      (click)="layout.toggleColumnCollapsed(column)"
+                      [title]="'Recolher área ' + columnLabels[column]"
+                    >
+                      <span class="chevron open"><app-icon name="chevron" [size]="11" /></span>
+                      {{ columnLabels[column] }}
+                    </button>
+                  </header>
+
                   @for (panel of layout.panelsIn(column); track panel.id) {
                     <section
                       class="panel"
@@ -216,6 +254,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
                   @if (layout.panelsIn(column).length === 0) {
                     <p class="col-empty">Arraste um painel pra cá.</p>
                   }
+                  }
                 </section>
               }
             </div>
@@ -295,6 +334,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .ls-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 10px; }
     .ls-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .ls-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .ls-columns { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
     .ls-name { font-size: 13px; font-weight: 600; min-width: 96px; }
     .ls-where { font-size: 12px; color: var(--text-muted); min-width: 64px; }
 
@@ -303,6 +343,30 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     /* Três áreas; as colunas visíveis vêm de gridTemplate(), pra área vazia não comer espaço. */
     .cols { display: grid; gap: 36px; align-items: start; }
     .col-hidden { display: none; }
+
+    .col-header { display: flex; align-items: center; }
+    .col-toggle {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: none; background: none; padding: 0;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .col-toggle:hover { color: var(--accent); }
+
+    .col.col-collapsed { gap: 0; }
+    .col-collapsed-bar {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      width: 100%; min-height: 170px; padding: 12px 4px;
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      background: var(--surface); color: var(--text-muted);
+    }
+    .col-collapsed-bar:hover { border-color: var(--accent); color: var(--accent); }
+    .col-collapsed-bar app-icon { transform: rotate(-90deg); }
+    .col-collapsed-label {
+      writing-mode: vertical-rl;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      white-space: nowrap;
+    }
 
     .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
     .col.drop-target { outline: 2px dashed var(--accent); outline-offset: 6px; }
@@ -562,8 +626,19 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   gridTemplate(): string {
     const visible = this.dragPanelId ? this.columns : this.layout.usedColumns();
     if (visible.length === 0) return 'minmax(0, 1fr)';
-    const hasCenter = visible.includes('center');
-    return visible.map((c) => (c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)')).join(' ');
+    const expanded = visible.filter((c) => !this.isColumnCollapsed(c));
+    const hasCenter = expanded.includes('center');
+    return visible
+      .map((c) => {
+        if (this.isColumnCollapsed(c)) return '44px';
+        return c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)';
+      })
+      .join(' ');
+  }
+
+  /** Área recolhida vira uma faixa fina; durante o arrasto ela reabre pra poder receber o painel. */
+  isColumnCollapsed(column: FocoColumn): boolean {
+    return !this.dragPanelId && this.layout.isColumnCollapsed(column);
   }
 
   onPanelDragStart(panelId: FocoPanelId): void {

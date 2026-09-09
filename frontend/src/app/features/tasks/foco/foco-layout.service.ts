@@ -26,6 +26,12 @@ export const FOCO_PANEL_LABELS: Record<FocoPanelId, string> = {
 
 const STORAGE_KEY = 'tasks.foco.layout.v1';
 
+/** Estado completo do layout: os painéis e quais áreas estão recolhidas. */
+export interface FocoLayoutState {
+  panels: FocoPanelLayout[];
+  collapsedColumns: FocoColumn[];
+}
+
 export const DEFAULT_FOCO_LAYOUT: FocoPanelLayout[] = [
   { id: 'info', column: 'left', collapsed: false },
   { id: 'subtasks', column: 'center', collapsed: false },
@@ -80,25 +86,55 @@ export function movePanel(
   return FOCO_COLUMNS.flatMap((c) => byColumn.get(c)!);
 }
 
-export function loadLayout(storage: Pick<Storage, 'getItem'>): FocoPanelLayout[] {
+/** Aceita tanto o formato antigo (só o array de painéis) quanto o atual, com as áreas recolhidas. */
+export function normalizeState(raw: unknown): FocoLayoutState {
+  const source: Partial<FocoLayoutState> = Array.isArray(raw)
+    ? { panels: raw as FocoPanelLayout[] }
+    : ((raw ?? {}) as Partial<FocoLayoutState>);
+  const collapsed = Array.isArray(source.collapsedColumns) ? source.collapsedColumns : [];
+  return {
+    panels: normalizeLayout(source.panels),
+    collapsedColumns: FOCO_COLUMNS.filter((c) => collapsed.includes(c)),
+  };
+}
+
+export function loadLayout(storage: Pick<Storage, 'getItem'>): FocoLayoutState {
   try {
     const raw = storage.getItem(STORAGE_KEY);
-    return normalizeLayout(raw ? JSON.parse(raw) : null);
+    return normalizeState(raw ? JSON.parse(raw) : null);
   } catch {
-    return normalizeLayout(null);
+    return normalizeState(null);
   }
 }
 
 /** Layout da tela de foco: em que coluna cada painel fica, em que ordem, e se está colapsado. */
 @Injectable({ providedIn: 'root' })
 export class FocoLayoutService {
-  panels = signal<FocoPanelLayout[]>(loadLayout(localStorage));
+  private state = signal<FocoLayoutState>(loadLayout(localStorage));
+
+  panels = computed(() => this.state().panels);
+  collapsedColumns = computed(() => this.state().collapsedColumns);
 
   /** Colunas que têm algum painel — usado pra não deixar coluna vazia comendo espaço. */
   usedColumns = computed(() => FOCO_COLUMNS.filter((c) => this.panels().some((p) => p.column === c)));
 
   panelsIn(column: FocoColumn): FocoPanelLayout[] {
     return this.panels().filter((p) => p.column === column);
+  }
+
+  isColumnCollapsed(column: FocoColumn): boolean {
+    return this.collapsedColumns().includes(column);
+  }
+
+  toggleColumnCollapsed(column: FocoColumn): void {
+    const collapsed = this.isColumnCollapsed(column)
+      ? this.collapsedColumns().filter((c) => c !== column)
+      : [...this.collapsedColumns(), column];
+    this.commit(this.panels(), collapsed);
+  }
+
+  setColumnsCollapsed(collapsed: boolean): void {
+    this.commit(this.panels(), collapsed ? [...FOCO_COLUMNS] : []);
   }
 
   isCollapsed(id: FocoPanelId): boolean {
@@ -143,11 +179,12 @@ export class FocoLayoutService {
   }
 
   reset(): void {
-    this.commit(DEFAULT_FOCO_LAYOUT.map((p) => ({ ...p })));
+    this.commit(DEFAULT_FOCO_LAYOUT.map((p) => ({ ...p })), []);
   }
 
-  private commit(panels: FocoPanelLayout[]): void {
-    this.panels.set(panels);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(panels));
+  private commit(panels: FocoPanelLayout[], collapsedColumns = this.collapsedColumns()): void {
+    const state: FocoLayoutState = { panels, collapsedColumns };
+    this.state.set(state);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 }
