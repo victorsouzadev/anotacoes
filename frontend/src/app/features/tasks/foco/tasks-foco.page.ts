@@ -45,51 +45,51 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
             <div class="ls-head">
               <h2>Áreas do modo foco</h2>
               <div class="ls-head-actions">
-                <button (click)="layout.setCollapsedAll(true)">Recolher painéis</button>
                 <button (click)="layout.setCollapsedAll(false)">Expandir painéis</button>
                 <button (click)="layout.setColumnsCollapsed(false)">Expandir áreas</button>
                 <button (click)="layout.reset()">Restaurar padrão</button>
                 <button class="close" (click)="showLayoutSettings = false" title="Fechar"><app-icon name="x" [size]="12" /></button>
               </div>
             </div>
-            <p class="ls-hint">Arraste um painel pelo cabeçalho para movê-lo entre as áreas, ou use os botões abaixo.</p>
-            <ul class="ls-list ls-columns">
-              @for (column of columns; track column) {
-                <li>
-                  <span class="ls-name">{{ columnLabels[column] }}</span>
-                  <span class="ls-where">{{ layout.panelsIn(column).length }} painel(is)</span>
-                  <button (click)="layout.toggleColumnCollapsed(column)">
-                    {{ layout.isColumnCollapsed(column) ? 'Expandir área' : 'Recolher área' }}
-                  </button>
-                </li>
-              }
-            </ul>
-            <ul class="ls-list">
-              @for (panel of layout.panels(); track panel.id) {
-                <li>
-                  <span class="ls-name">{{ panelLabels[panel.id] }}</span>
-                  <span class="ls-where">{{ columnLabels[panel.column] }}</span>
-                  <button (click)="layout.moveBy(panel.id, -1)" title="Subir">&uarr;</button>
-                  <button (click)="layout.moveBy(panel.id, 1)" title="Descer">&darr;</button>
-                  <button (click)="layout.shiftColumn(panel.id, -1)" [disabled]="!layout.canShift(panel.id, -1)" title="Mover para a área à esquerda">&larr;</button>
-                  <button (click)="layout.shiftColumn(panel.id, 1)" [disabled]="!layout.canShift(panel.id, 1)" title="Mover para a área à direita">&rarr;</button>
-                  <button (click)="layout.toggleCollapsed(panel.id)">{{ panel.collapsed ? 'Expandir' : 'Recolher' }}</button>
-                </li>
-              }
-            </ul>
-          </section>
-        }
 
-        @if (otherRunning().length > 0) {
-          <div class="other-running">
-            <span class="other-label">Também em andamento:</span>
-            @for (other of otherRunning(); track other.id) {
-              <button class="other-chip" (click)="openActivity(other.id)" [title]="'Ir para ' + other.name">
-                <app-icon name="pomodoro" [size]="11" />
-                {{ other.name }} · {{ elapsedLabel(other) }}
-              </button>
-            }
-          </div>
+            <div class="ls-areas">
+              @for (column of columns; track column) {
+                <section class="ls-area">
+                  <header class="ls-area-head">
+                    <span class="ls-area-name">{{ columnLabels[column] }}</span>
+                    <button
+                      class="ls-area-toggle"
+                      (click)="layout.toggleColumnCollapsed(column)"
+                      [title]="layout.isColumnCollapsed(column) ? 'Mostrar esta área' : 'Ocultar esta área'"
+                    >
+                      {{ layout.isColumnCollapsed(column) ? 'Oculta' : 'Visível' }}
+                    </button>
+                  </header>
+
+                  @if (layout.panelsIn(column).length === 0) {
+                    <p class="ls-area-empty">Nenhum painel aqui.</p>
+                  } @else {
+                    <ul class="ls-list">
+                      @for (panel of layout.panelsIn(column); track panel.id) {
+                        <li>
+                          <span class="ls-name">{{ panelLabels[panel.id] }}</span>
+                          <span class="ls-actions">
+                            <button (click)="layout.moveBy(panel.id, -1)" [disabled]="$first" title="Subir">&uarr;</button>
+                            <button (click)="layout.moveBy(panel.id, 1)" [disabled]="$last" title="Descer">&darr;</button>
+                            <button (click)="layout.shiftColumn(panel.id, -1)" [disabled]="!layout.canShift(panel.id, -1)" title="Mover para a área anterior">&larr;</button>
+                            <button (click)="layout.shiftColumn(panel.id, 1)" [disabled]="!layout.canShift(panel.id, 1)" title="Mover para a próxima área">&rarr;</button>
+                            <button class="ls-collapse" (click)="layout.toggleCollapsed(panel.id)">
+                              {{ panel.collapsed ? 'Expandir' : 'Recolher' }}
+                            </button>
+                          </span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </section>
+              }
+            </div>
+          </section>
         }
 
         <main class="content">
@@ -105,64 +105,15 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
                 <section
                   class="col"
                   [class.col-left]="column === 'left'"
-                  [class.col-hidden]="layout.panelsIn(column).length === 0 && !dragPanelId"
-                  [class.col-collapsed]="isColumnCollapsed(column)"
+                  [class.col-hidden]="!isColumnVisible(column)"
                   [attr.aria-label]="'Área ' + columnLabels[column]"
-                  [class.drop-target]="dragPanelId && dropColumn === column && dropIndex === layout.panelsIn(column).length"
-                  (dragover)="onPanelDragOverColumn(column, $event)"
-                  (drop)="onPanelDrop($event)"
                 >
-                  @if (isColumnCollapsed(column)) {
-                    <button
-                      type="button"
-                      class="col-collapsed-bar"
-                      (click)="layout.toggleColumnCollapsed(column)"
-                      [title]="'Expandir área ' + columnLabels[column]"
-                    >
-                      <app-icon name="chevron" [size]="12" />
-                      <span class="col-collapsed-label">
-                        {{ columnLabels[column] }} · {{ layout.panelsIn(column).length }}
-                      </span>
-                    </button>
-                  } @else {
-                  <header class="col-header">
-                    <button
-                      type="button"
-                      class="col-toggle"
-                      (click)="layout.toggleColumnCollapsed(column)"
-                      [title]="'Recolher área ' + columnLabels[column]"
-                    >
-                      <span class="chevron open"><app-icon name="chevron" [size]="11" /></span>
-                      {{ columnLabels[column] }}
-                    </button>
-                  </header>
-
                   @for (panel of layout.panelsIn(column); track panel.id) {
-                    <section
-                      class="panel"
-                      [class.collapsed]="panel.collapsed"
-                      [class.dragging]="dragPanelId === panel.id"
-                      [class.drop-before]="dragPanelId && dropColumn === column && dropIndex === $index"
-                      (dragover)="onPanelDragOver(column, $index, $event)"
-                      (drop)="onPanelDrop($event)"
-                    >
-                      <header
-                        class="panel-header"
-                        draggable="true"
-                        (dragstart)="onPanelDragStart(panel.id)"
-                        (dragend)="onPanelDragEnd()"
-                      >
-                        <button
-                          type="button"
-                          class="panel-toggle"
-                          (click)="layout.toggleCollapsed(panel.id)"
-                          [title]="panel.collapsed ? 'Expandir' : 'Recolher'"
-                        >
-                          <span class="chevron" [class.open]="!panel.collapsed"><app-icon name="chevron" [size]="12" /></span>
-                          <h2>{{ panelLabels[panel.id] }}</h2>
-                        </button>
-                        <span class="panel-grip" title="Arraste para mover de área">::</span>
-                      </header>
+                    <section class="panel" [class.collapsed]="panel.collapsed">
+                      <h2 class="panel-title">
+                        {{ panelLabels[panel.id] }}
+                        @if (panel.collapsed) { <span class="panel-collapsed-tag">recolhido</span> }
+                      </h2>
 
                       @if (!panel.collapsed) {
                         <div class="panel-body">
@@ -251,10 +202,6 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
                     </section>
                   }
 
-                  @if (layout.panelsIn(column).length === 0) {
-                    <p class="col-empty">Arraste um painel pra cá.</p>
-                  }
-                  }
                 </section>
               }
             </div>
@@ -331,12 +278,17 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .layout-settings button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
     .layout-settings button:disabled { opacity: 0.4; }
     .layout-settings .close { display: inline-flex; align-items: center; padding: 5px 7px; }
-    .ls-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 10px; }
+    .ls-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 12px; }
+    .ls-area { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--bg); }
+    .ls-area-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .ls-area-name { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+    .ls-area-toggle { margin-left: auto; }
+    .ls-area-empty { font-size: 12px; color: var(--text-muted); margin: 0; }
     .ls-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-    .ls-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .ls-columns { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-    .ls-name { font-size: 13px; font-weight: 600; min-width: 96px; }
-    .ls-where { font-size: 12px; color: var(--text-muted); min-width: 64px; }
+    .ls-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ls-name { font-size: 13px; font-weight: 600; }
+    .ls-actions { display: flex; gap: 4px; margin-left: auto; }
+    .ls-collapse { min-width: 68px; }
 
     .content { max-width: 1400px; padding: 8px 40px 40px; }
 
@@ -344,52 +296,22 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .cols { display: grid; gap: 36px; align-items: start; }
     .col-hidden { display: none; }
 
-    .col-header { display: flex; align-items: center; }
-    .col-toggle {
-      display: inline-flex; align-items: center; gap: 5px;
-      border: none; background: none; padding: 0;
-      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-      color: var(--text-muted);
-    }
-    .col-toggle:hover { color: var(--accent); }
-
-    .col.col-collapsed { gap: 0; }
-    .col-collapsed-bar {
-      display: flex; flex-direction: column; align-items: center; gap: 10px;
-      width: 100%; min-height: 170px; padding: 12px 4px;
-      border: 1px dashed var(--border); border-radius: var(--radius);
-      background: var(--surface); color: var(--text-muted);
-    }
-    .col-collapsed-bar:hover { border-color: var(--accent); color: var(--accent); }
-    .col-collapsed-bar app-icon { transform: rotate(-90deg); }
-    .col-collapsed-label {
-      writing-mode: vertical-rl;
-      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-      white-space: nowrap;
-    }
+    .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
+    .col-hidden { display: none; }
 
     .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
-    .col.drop-target { outline: 2px dashed var(--accent); outline-offset: 6px; }
     .col-empty {
       font-size: 12px; color: var(--text-muted); text-align: center;
       border: 1px dashed var(--border); border-radius: var(--radius); padding: 18px 10px; margin: 0;
     }
 
-    .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; border-radius: var(--radius); }
-    .panel.dragging { opacity: 0.45; }
-    .panel.drop-before { box-shadow: 0 -3px 0 var(--accent); }
-    .panel-header { display: flex; align-items: center; gap: 8px; cursor: grab; }
-    .panel-header:active { cursor: grabbing; }
-    .panel-toggle {
-      display: flex; align-items: center; gap: 6px;
-      border: none; background: none; padding: 0; color: var(--text-muted);
+    .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .panel-title {
+      font-size: 14px; margin: 0; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
     }
-    .panel-toggle h2 { font-size: 14px; margin: 0; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
-    .panel-toggle:hover h2, .panel-toggle:hover .chevron { color: var(--accent); }
-    .chevron { display: inline-flex; transition: transform 0.15s ease; transform: rotate(-90deg); }
-    .chevron.open { transform: rotate(0deg); }
-    .panel-grip { margin-left: auto; color: var(--text-muted); font-size: 12px; letter-spacing: -1px; opacity: 0; }
-    .panel-header:hover .panel-grip { opacity: 1; }
+    .panel.collapsed .panel-title { opacity: 0.6; }
+    .panel-collapsed-tag { font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; opacity: 0.8; }
     .panel-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
     .ended-card {
@@ -479,10 +401,6 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   dragIndex: number | null = null;
   dragOverIndex: number | null = null;
 
-  /** Arrasto de painel entre as áreas (independente do arrasto de subtarefas). */
-  dragPanelId: FocoPanelId | null = null;
-  dropColumn: FocoColumn | null = null;
-  dropIndex: number | null = null;
 
   private activityIdSignal = signal('');
   private readonly baseTitle = document.title;
@@ -623,58 +541,16 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
 
   /** Larguras das áreas visíveis: as laterais ficam estreitas e a central (quando existe) manda no
    * resto. Durante o arrasto todas aparecem, pra servirem de alvo. */
+  /** Só aparecem na tela as áreas com painel e não ocultadas nas configurações. */
+  isColumnVisible(column: FocoColumn): boolean {
+    return this.layout.panelsIn(column).length > 0 && !this.layout.isColumnCollapsed(column);
+  }
+
   gridTemplate(): string {
-    const visible = this.dragPanelId ? this.columns : this.layout.usedColumns();
+    const visible = this.columns.filter((c) => this.isColumnVisible(c));
     if (visible.length === 0) return 'minmax(0, 1fr)';
-    const expanded = visible.filter((c) => !this.isColumnCollapsed(c));
-    const hasCenter = expanded.includes('center');
-    return visible
-      .map((c) => {
-        if (this.isColumnCollapsed(c)) return '44px';
-        return c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)';
-      })
-      .join(' ');
-  }
-
-  /** Área recolhida vira uma faixa fina; durante o arrasto ela reabre pra poder receber o painel. */
-  isColumnCollapsed(column: FocoColumn): boolean {
-    return !this.dragPanelId && this.layout.isColumnCollapsed(column);
-  }
-
-  onPanelDragStart(panelId: FocoPanelId): void {
-    this.dragPanelId = panelId;
-    this.dropColumn = null;
-    this.dropIndex = null;
-  }
-
-  onPanelDragEnd(): void {
-    this.dragPanelId = null;
-    this.dropColumn = null;
-    this.dropIndex = null;
-  }
-
-  onPanelDragOver(column: FocoColumn, index: number, event: DragEvent): void {
-    if (!this.dragPanelId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.dropColumn = column;
-    this.dropIndex = index;
-  }
-
-  /** Soltar na área vazia da coluna (fora de qualquer painel) manda pro fim dela. */
-  onPanelDragOverColumn(column: FocoColumn, event: DragEvent): void {
-    if (!this.dragPanelId) return;
-    event.preventDefault();
-    this.dropColumn = column;
-    this.dropIndex = this.layout.panelsIn(column).length;
-  }
-
-  onPanelDrop(event: DragEvent): void {
-    if (!this.dragPanelId || this.dropColumn === null || this.dropIndex === null) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.layout.move(this.dragPanelId, this.dropColumn, this.dropIndex);
-    this.onPanelDragEnd();
+    const hasCenter = visible.includes('center');
+    return visible.map((c) => (c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)')).join(' ');
   }
 
   onDragStart(index: number): void {
@@ -687,13 +563,11 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   }
 
   onDragOver(index: number, event: DragEvent): void {
-    if (this.dragPanelId) return; // arrasto de painel passando por cima da lista, não de subtarefa
     event.preventDefault();
     this.dragOverIndex = index;
   }
 
   async onDrop(task: TaskItem, index: number, event: DragEvent): Promise<void> {
-    if (this.dragPanelId) return;
     event.preventDefault();
     const from = this.dragIndex;
     this.dragIndex = null;
