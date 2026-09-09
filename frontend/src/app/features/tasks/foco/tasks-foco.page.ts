@@ -5,7 +5,7 @@ import { Title } from '@angular/platform-browser';
 import { IconComponent } from '../../../shared/icon';
 import { PomodoroTimerComponent } from '../pomodoro/pomodoro-timer.component';
 import { NotesEditorComponent } from '../notes/notes-editor.component';
-import { FOCO_PANEL_LABELS, FocoColumn, FocoLayoutService, FocoPanelId } from './foco-layout.service';
+import { FOCO_COLUMNS, FOCO_COLUMN_LABELS, FOCO_PANEL_LABELS, FocoColumn, FocoLayoutService, FocoPanelId } from './foco-layout.service';
 import { isNotesEmpty } from '../notes/notes-html';
 import { TaskActivitiesService } from '../services/task-activities.service';
 import { PomodoroService } from '../services/pomodoro.service';
@@ -56,12 +56,11 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
               @for (panel of layout.panels(); track panel.id) {
                 <li>
                   <span class="ls-name">{{ panelLabels[panel.id] }}</span>
-                  <span class="ls-where">{{ panel.column === 'left' ? 'Esquerda' : 'Direita' }}</span>
+                  <span class="ls-where">{{ columnLabels[panel.column] }}</span>
                   <button (click)="layout.moveBy(panel.id, -1)" title="Subir">&uarr;</button>
                   <button (click)="layout.moveBy(panel.id, 1)" title="Descer">&darr;</button>
-                  <button (click)="layout.switchColumn(panel.id)" [title]="panel.column === 'left' ? 'Mover para a direita' : 'Mover para a esquerda'">
-                    {{ panel.column === 'left' ? '→' : '←' }}
-                  </button>
+                  <button (click)="layout.shiftColumn(panel.id, -1)" [disabled]="!layout.canShift(panel.id, -1)" title="Mover para a área à esquerda">&larr;</button>
+                  <button (click)="layout.shiftColumn(panel.id, 1)" [disabled]="!layout.canShift(panel.id, 1)" title="Mover para a área à direita">&rarr;</button>
                   <button (click)="layout.toggleCollapsed(panel.id)">{{ panel.collapsed ? 'Expandir' : 'Recolher' }}</button>
                 </li>
               }
@@ -89,12 +88,13 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
               <a routerLink="/tasks">Voltar pra Tarefas</a>
             </div>
           } @else if (task(); as t) {
-            <div class="two-col" [class.single]="!dragPanelId && (layout.left().length === 0 || layout.right().length === 0)">
+            <div class="cols" [style.grid-template-columns]="gridTemplate()">
               @for (column of columns; track column) {
                 <section
                   class="col"
                   [class.col-left]="column === 'left'"
                   [class.col-hidden]="layout.panelsIn(column).length === 0 && !dragPanelId"
+                  [attr.aria-label]="'Área ' + columnLabels[column]"
                   [class.drop-target]="dragPanelId && dropColumn === column && dropIndex === layout.panelsIn(column).length"
                   (dragover)="onPanelDragOverColumn(column, $event)"
                   (drop)="onPanelDrop($event)"
@@ -289,7 +289,8 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
       border: 1px solid var(--border); background: var(--bg); color: var(--text-muted);
       border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12px; font-weight: 600;
     }
-    .layout-settings button:hover { border-color: var(--accent); color: var(--accent); }
+    .layout-settings button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .layout-settings button:disabled { opacity: 0.4; }
     .layout-settings .close { display: inline-flex; align-items: center; padding: 5px 7px; }
     .ls-hint { font-size: 12px; color: var(--text-muted); margin: 8px 0 10px; }
     .ls-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -297,11 +298,10 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .ls-name { font-size: 13px; font-weight: 600; min-width: 96px; }
     .ls-where { font-size: 12px; color: var(--text-muted); min-width: 64px; }
 
-    .content { max-width: 1000px; padding: 8px 40px 40px; }
+    .content { max-width: 1400px; padding: 8px 40px 40px; }
 
-    .two-col { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 40px; align-items: start; }
-    /* Com uma das áreas vazia, a outra ocupa a largura toda em vez de ficar espremida em 320px. */
-    .two-col.single { grid-template-columns: minmax(0, 1fr); }
+    /* Três áreas; as colunas visíveis vêm de gridTemplate(), pra área vazia não comer espaço. */
+    .cols { display: grid; gap: 36px; align-items: start; }
     .col-hidden { display: none; }
 
     .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
@@ -388,7 +388,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     .subtask-row .remove:hover { background: var(--bg); color: var(--danger, #dc2626); }
 
     @media (max-width: 900px) {
-      .two-col { grid-template-columns: 1fr; gap: 28px; }
+      .cols { grid-template-columns: 1fr !important; gap: 28px; }
     }
 
     @media (max-width: 560px) {
@@ -407,7 +407,8 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   readonly totalTimeSpent = totalTimeSpent;
 
   readonly panelLabels = FOCO_PANEL_LABELS;
-  readonly columns: FocoColumn[] = ['left', 'right'];
+  readonly columnLabels = FOCO_COLUMN_LABELS;
+  readonly columns = FOCO_COLUMNS;
 
   newSubtaskTitle = '';
   showLayoutSettings = false;
@@ -554,6 +555,15 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
 
   async toggleSubtask(task: TaskItem, index: number): Promise<void> {
     await this.store.toggleSubtask(task, index);
+  }
+
+  /** Larguras das áreas visíveis: as laterais ficam estreitas e a central (quando existe) manda no
+   * resto. Durante o arrasto todas aparecem, pra servirem de alvo. */
+  gridTemplate(): string {
+    const visible = this.dragPanelId ? this.columns : this.layout.usedColumns();
+    if (visible.length === 0) return 'minmax(0, 1fr)';
+    const hasCenter = visible.includes('center');
+    return visible.map((c) => (c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)')).join(' ');
   }
 
   onPanelDragStart(panelId: FocoPanelId): void {

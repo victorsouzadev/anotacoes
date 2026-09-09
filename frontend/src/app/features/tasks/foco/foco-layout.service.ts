@@ -1,7 +1,15 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 export type FocoPanelId = 'info' | 'subtasks' | 'notes' | 'pomodoro';
-export type FocoColumn = 'left' | 'right';
+export type FocoColumn = 'left' | 'center' | 'right';
+
+export const FOCO_COLUMNS: FocoColumn[] = ['left', 'center', 'right'];
+
+export const FOCO_COLUMN_LABELS: Record<FocoColumn, string> = {
+  left: 'Esquerda',
+  center: 'Centro',
+  right: 'Direita',
+};
 
 export interface FocoPanelLayout {
   id: FocoPanelId;
@@ -20,8 +28,8 @@ const STORAGE_KEY = 'tasks.foco.layout.v1';
 
 export const DEFAULT_FOCO_LAYOUT: FocoPanelLayout[] = [
   { id: 'info', column: 'left', collapsed: false },
-  { id: 'subtasks', column: 'right', collapsed: false },
-  { id: 'notes', column: 'right', collapsed: false },
+  { id: 'subtasks', column: 'center', collapsed: false },
+  { id: 'notes', column: 'center', collapsed: false },
   { id: 'pomodoro', column: 'right', collapsed: false },
 ];
 
@@ -38,7 +46,7 @@ export function normalizeLayout(raw: unknown): FocoPanelLayout[] {
     seen.add(id);
     result.push({
       id,
-      column: item.column === 'left' ? 'left' : 'right',
+      column: FOCO_COLUMNS.includes(item.column as FocoColumn) ? (item.column as FocoColumn) : 'center',
       collapsed: item.collapsed === true,
     });
   }
@@ -62,13 +70,14 @@ export function movePanel(
   const moved = layout.find((p) => p.id === panelId);
   if (!moved) return layout;
 
-  const left = layout.filter((p) => p.column === 'left' && p.id !== panelId);
-  const right = layout.filter((p) => p.column === 'right' && p.id !== panelId);
-  const target = column === 'left' ? left : right;
+  const byColumn = new Map<FocoColumn, FocoPanelLayout[]>(
+    FOCO_COLUMNS.map((c) => [c, layout.filter((p) => p.column === c && p.id !== panelId)]),
+  );
+  const target = byColumn.get(column)!;
   const at = Math.max(0, Math.min(index, target.length));
   target.splice(at, 0, { ...moved, column });
 
-  return [...left, ...right];
+  return FOCO_COLUMNS.flatMap((c) => byColumn.get(c)!);
 }
 
 export function loadLayout(storage: Pick<Storage, 'getItem'>): FocoPanelLayout[] {
@@ -85,11 +94,11 @@ export function loadLayout(storage: Pick<Storage, 'getItem'>): FocoPanelLayout[]
 export class FocoLayoutService {
   panels = signal<FocoPanelLayout[]>(loadLayout(localStorage));
 
-  left = computed(() => this.panels().filter((p) => p.column === 'left'));
-  right = computed(() => this.panels().filter((p) => p.column === 'right'));
+  /** Colunas que têm algum painel — usado pra não deixar coluna vazia comendo espaço. */
+  usedColumns = computed(() => FOCO_COLUMNS.filter((c) => this.panels().some((p) => p.column === c)));
 
   panelsIn(column: FocoColumn): FocoPanelLayout[] {
-    return column === 'left' ? this.left() : this.right();
+    return this.panels().filter((p) => p.column === column);
   }
 
   isCollapsed(id: FocoPanelId): boolean {
@@ -100,12 +109,21 @@ export class FocoLayoutService {
     this.commit(movePanel(this.panels(), panelId, column, index));
   }
 
-  /** Manda o painel pra outra coluna, no fim dela — atalho dos botões ← / →. */
-  switchColumn(panelId: FocoPanelId): void {
+  /** Manda o painel pra coluna vizinha, no fim dela — atalho dos botões ← / →. */
+  shiftColumn(panelId: FocoPanelId, delta: number): void {
     const panel = this.panels().find((p) => p.id === panelId);
     if (!panel) return;
-    const target: FocoColumn = panel.column === 'left' ? 'right' : 'left';
+    const at = FOCO_COLUMNS.indexOf(panel.column) + delta;
+    if (at < 0 || at >= FOCO_COLUMNS.length) return;
+    const target = FOCO_COLUMNS[at];
     this.commit(movePanel(this.panels(), panelId, target, this.panelsIn(target).length));
+  }
+
+  canShift(panelId: FocoPanelId, delta: number): boolean {
+    const panel = this.panels().find((p) => p.id === panelId);
+    if (!panel) return false;
+    const at = FOCO_COLUMNS.indexOf(panel.column) + delta;
+    return at >= 0 && at < FOCO_COLUMNS.length;
   }
 
   moveBy(panelId: FocoPanelId, delta: number): void {

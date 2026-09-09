@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FOCO_LAYOUT, FocoPanelLayout, loadLayout, movePanel, normalizeLayout } from './foco-layout.service';
+import { DEFAULT_FOCO_LAYOUT, FocoColumn, FocoPanelLayout, loadLayout, movePanel, normalizeLayout } from './foco-layout.service';
 
 const layout = (): FocoPanelLayout[] => DEFAULT_FOCO_LAYOUT.map((p) => ({ ...p }));
-const idsIn = (list: FocoPanelLayout[], column: 'left' | 'right') =>
+const idsIn = (list: FocoPanelLayout[], column: FocoColumn) =>
   list.filter((p) => p.column === column).map((p) => p.id);
 
 describe('normalizeLayout', () => {
@@ -26,27 +26,43 @@ describe('normalizeLayout', () => {
     expect(result.map((p) => p.id)).toContain('notes');
   });
 
-  it('sanea valores inválidos', () => {
-    const result = normalizeLayout([{ id: 'info', column: 'meio', collapsed: 'sim' }]);
-    expect(result[0]).toEqual({ id: 'info', column: 'right', collapsed: false });
+  it('sanea valores inválidos, caindo na coluna do meio', () => {
+    const result = normalizeLayout([{ id: 'info', column: 'diagonal', collapsed: 'sim' }]);
+    expect(result[0]).toEqual({ id: 'info', column: 'center', collapsed: false });
+  });
+
+  it('aceita as três colunas', () => {
+    const result = normalizeLayout([
+      { id: 'info', column: 'left', collapsed: false },
+      { id: 'notes', column: 'center', collapsed: false },
+      { id: 'pomodoro', column: 'right', collapsed: false },
+    ]);
+    expect(result.slice(0, 3).map((p) => p.column)).toEqual(['left', 'center', 'right']);
   });
 });
 
 describe('movePanel', () => {
-  it('move para a outra coluna na posição pedida', () => {
+  it('move para outra coluna na posição pedida', () => {
     const result = movePanel(layout(), 'notes', 'left', 0);
     expect(idsIn(result, 'left')).toEqual(['notes', 'info']);
-    expect(idsIn(result, 'right')).toEqual(['subtasks', 'pomodoro']);
+    expect(idsIn(result, 'center')).toEqual(['subtasks']);
+  });
+
+  it('move para a coluna do meio sem mexer nas outras', () => {
+    const result = movePanel(layout(), 'pomodoro', 'center', 1);
+    expect(idsIn(result, 'center')).toEqual(['subtasks', 'pomodoro', 'notes']);
+    expect(idsIn(result, 'right')).toEqual([]);
+    expect(idsIn(result, 'left')).toEqual(['info']);
   });
 
   it('reordena dentro da mesma coluna', () => {
-    const result = movePanel(layout(), 'pomodoro', 'right', 0);
-    expect(idsIn(result, 'right')).toEqual(['pomodoro', 'subtasks', 'notes']);
+    const result = movePanel(layout(), 'notes', 'center', 0);
+    expect(idsIn(result, 'center')).toEqual(['notes', 'subtasks']);
   });
 
   it('prende o índice aos limites da coluna', () => {
-    const result = movePanel(layout(), 'info', 'right', 99);
-    expect(idsIn(result, 'right')).toEqual(['subtasks', 'notes', 'pomodoro', 'info']);
+    const result = movePanel(layout(), 'info', 'center', 99);
+    expect(idsIn(result, 'center')).toEqual(['subtasks', 'notes', 'info']);
     expect(idsIn(result, 'left')).toEqual([]);
   });
 
@@ -68,7 +84,7 @@ describe('loadLayout', () => {
   });
 
   it('lê o que foi salvo', () => {
-    const saved = JSON.stringify(movePanel(layout(), 'notes', 'left', 0));
-    expect(idsIn(loadLayout({ getItem: () => saved }), 'left')).toEqual(['notes', 'info']);
+    const saved = JSON.stringify(movePanel(layout(), 'notes', 'right', 0));
+    expect(idsIn(loadLayout({ getItem: () => saved }), 'right')).toEqual(['notes', 'pomodoro']);
   });
 });
