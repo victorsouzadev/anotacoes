@@ -1,6 +1,7 @@
-import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Title } from '@angular/platform-browser';
 import { IconComponent } from '../../../shared/icon';
 import { PomodoroTimerComponent } from '../pomodoro/pomodoro-timer.component';
 import { TaskActivitiesService } from '../services/task-activities.service';
@@ -32,6 +33,18 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
             </div>
           }
         </header>
+
+        @if (otherRunning().length > 0) {
+          <div class="other-running">
+            <span class="other-label">Também em andamento:</span>
+            @for (other of otherRunning(); track other.id) {
+              <button class="other-chip" (click)="openActivity(other.id)" [title]="'Ir para ' + other.name">
+                <app-icon name="pomodoro" [size]="11" />
+                {{ other.name }} · {{ elapsedLabel(other) }}
+              </button>
+            }
+          </div>
+        }
 
         <main class="content">
           @if (act.endedAt) {
@@ -156,6 +169,19 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
     }
     .finish:hover { background: var(--accent-dark); }
 
+    .other-running {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      padding: 0 40px 12px;
+    }
+    .other-label { font-size: 12px; color: var(--text-muted); }
+    .other-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text-muted);
+      border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .other-chip:hover { border-color: var(--accent); color: var(--accent); }
+
     .content { max-width: 1000px; padding: 8px 40px 40px; }
 
     .two-col { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 40px; align-items: start; }
@@ -228,6 +254,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
 
     @media (max-width: 560px) {
       .foco-header { padding: 20px 16px 16px; }
+      .other-running { padding: 0 16px 12px; }
       .title-block h1 { font-size: 24px; }
       .timer { font-size: 22px; }
       .content { padding: 8px 16px 24px; }
@@ -243,15 +270,52 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
   dragIndex: number | null = null;
   dragOverIndex: number | null = null;
 
-  private activityId = '';
+  private activityIdSignal = signal('');
+  private readonly baseTitle = document.title;
   private nowTick = signal(Date.now());
   private tickInterval?: ReturnType<typeof setInterval>;
 
-  activity = computed(() => this.activitiesService.activities().find((a) => a.id === this.activityId) ?? null);
+  activity = computed(() => this.activitiesService.activities().find((a) => a.id === this.activityIdSignal()) ?? null);
   task = computed(() => {
     const act = this.activity();
     if (!act?.taskId) return null;
     return this.store.tasks().find((t) => t.id === act.taskId) ?? null;
+  });
+
+  otherRunning = computed(() => this.activitiesService.runningAll().filter((a) => a.id !== this.activityIdSignal()));
+
+  /** Título da aba do navegador, com o máximo de informação útil sobre o foco atual. */
+  pageTitle = computed(() => {
+    const act = this.activity();
+    if (!act) return 'Foco · Tarefas';
+
+    const parts: string[] = [];
+    if (act.endedAt) {
+      parts.push(`✔ ${formatDuration(activityDurationSeconds(act))}`);
+      parts.push(act.name);
+    } else {
+      this.nowTick();
+      parts.push(`▶ ${formatDuration(activityDurationSeconds(act))}`);
+      parts.push(act.name);
+
+      if (this.pomodoro.running() || this.pomodoro.secondsLeft() < this.pomodoro.phaseTotalSeconds()) {
+        const phase = this.pomodoro.phase() === 'work' ? 'foco' : 'pausa';
+        const state = this.pomodoro.running() ? '' : ' pausado';
+        parts.push(`🍅 ${this.pomodoro.formatTime(this.pomodoro.secondsLeft())} ${phase}${state}`);
+      }
+    }
+
+    const t = this.task();
+    if (t) {
+      parts.push(t.title);
+      if (t.subtasks.length > 0) parts.push(`✓ ${this.completedSubtasks(t)}/${t.subtasks.length}`);
+      if (t.dueDate) parts.push(`${this.isOverdue(t) ? '⚠ atrasada' : 'vence'} ${this.formatDueDate(t.dueDate)}`);
+    }
+
+    const others = this.otherRunning().length;
+    if (others > 0) parts.push(`+${others} em andamento`);
+
+    return parts.join(' · ');
   });
 
   tintColor = computed(() => {
@@ -266,10 +330,19 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
     public activitiesService: TaskActivitiesService,
     public pomodoro: PomodoroService,
     public store: TasksStoreService,
-  ) {}
+    private title: Title,
+  ) {
+    effect(() => this.title.setTitle(this.pageTitle()));
+  }
 
   async ngOnInit(): Promise<void> {
-    this.activityId = this.route.snapshot.paramMap.get('activityId') ?? '';
+    this.activityIdSignal.set(this.route.snapshot.paramMap.get('activityId') ?? '');
+    this.route.paramMap.subscribe((params) => {
+      const id = params.get('activityId') ?? '';
+      this.activityIdSignal.set(id);
+      const current = this.activitiesService.activities().find((a) => a.id === id);
+      if (current?.taskId) this.pomodoro.setSelectedTask(current.taskId);
+    });
     if (this.store.tasks().length === 0) await this.store.reload();
 
     const act = this.activity();
@@ -284,6 +357,11 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.tickInterval) clearInterval(this.tickInterval);
+    this.title.setTitle(this.baseTitle);
+  }
+
+  openActivity(id: string): void {
+    this.router.navigate(['/tasks/foco', id]);
   }
 
   elapsedLabel(activity: TaskActivity): string {

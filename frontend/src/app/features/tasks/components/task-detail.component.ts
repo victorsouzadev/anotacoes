@@ -66,9 +66,8 @@ export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
     if (this.tickInterval) clearInterval(this.tickInterval);
   }
 
-  runningActivityForTask(): TaskActivity | null {
-    const running = this.activitiesService.running();
-    return running && running.taskId === this.task.id ? running : null;
+  runningActivitiesForTask(): TaskActivity[] {
+    return this.activitiesService.runningForTask(this.task.id);
   }
 
   finishedActivitiesForTask(): TaskActivity[] {
@@ -96,9 +95,13 @@ export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
     this.router.navigate(['/tasks/foco', activity.id]);
   }
 
-  finishActivity(): void {
-    const running = this.runningActivityForTask();
-    if (running) this.activitiesService.finish(running.id);
+  openFocus(activity: TaskActivity): void {
+    this.close.emit();
+    this.router.navigate(['/tasks/foco', activity.id]);
+  }
+
+  finishActivity(id: string): void {
+    this.activitiesService.finish(id);
   }
 
   private revokePreviews(): void {

@@ -38,22 +38,23 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
         }
 
         <div class="activity-menu">
-          @if (activities.running(); as running) {
-            <div class="activity-running-group">
-              <button class="activity-toggle running" (click)="openFocus(running)" title="Abrir tela de foco">
-                <app-icon name="pomodoro" [size]="13" />
-                {{ running.name }} · {{ elapsedLabel(running) }}
-              </button>
-              <button class="activity-finish" (click)="finishActivity()" title="Finalizar atividade">
-                <app-icon name="x" [size]="12" />
-              </button>
-            </div>
-          } @else {
-            <button class="activity-toggle" (click)="showActivityForm = !showActivityForm" title="Iniciar atividade">
+          <div class="activity-running-list">
+            @for (running of activities.runningAll(); track running.id) {
+              <div class="activity-running-group">
+                <button class="activity-toggle running" (click)="openFocus(running)" [title]="'Abrir tela de foco: ' + running.name">
+                  <app-icon name="pomodoro" [size]="13" />
+                  {{ running.name }} · {{ elapsedLabel(running) }}
+                </button>
+                <button class="activity-finish" (click)="finishActivity(running.id)" title="Finalizar atividade">
+                  <app-icon name="x" [size]="12" />
+                </button>
+              </div>
+            }
+            <button class="activity-toggle" (click)="showActivityForm = !showActivityForm" title="Iniciar mais uma atividade">
               <app-icon name="plus" [size]="13" /> Atividade
             </button>
-          }
-          @if (showActivityForm && !activities.running()) {
+          </div>
+          @if (showActivityForm) {
             <div class="activity-panel" (click)="$event.stopPropagation()">
               <input [(ngModel)]="activityName" placeholder="Nome da atividade" (keydown.enter)="startActivity()" autofocus />
               <select [(ngModel)]="activityTaskId">
@@ -145,7 +146,9 @@ import { TaskActivity, activityDurationSeconds } from '../models/task.model';
     .activity-toggle:hover { border-color: var(--accent); color: var(--accent); }
     .activity-toggle.running { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); font-variant-numeric: tabular-nums; }
 
+    .activity-running-list { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .activity-running-group { display: flex; align-items: center; gap: 2px; }
+    .activity-toggle.running { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
     .activity-running-group .activity-toggle.running { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-right: none; }
     .activity-finish {
       display: flex; align-items: center; justify-content: center;
@@ -292,8 +295,7 @@ export class TasksTopBarComponent implements OnInit, OnDestroy {
     this.router.navigate(['/tasks/foco', activity.id]);
   }
 
-  finishActivity(): void {
-    const running = this.activities.running();
-    if (running) this.activities.finish(running.id);
+  finishActivity(id: string): void {
+    this.activities.finish(id);
   }
 }

@@ -115,6 +115,13 @@ export class PomodoroService {
     this.persistState();
   }
 
+  /** Duração total da fase atual, útil pra saber se o timer já foi iniciado. */
+  phaseTotalSeconds(): number {
+    if (this.phase() === 'work') return POMODORO_WORK_SECONDS;
+    const isLong = this.cyclesCompleted() > 0 && this.cyclesCompleted() % this.settings().cyclesUntilLongBreak === 0;
+    return isLong ? this.settings().longBreakSeconds : this.settings().shortBreakSeconds;
+  }
+
   formatTime(totalSeconds: number): string {
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;

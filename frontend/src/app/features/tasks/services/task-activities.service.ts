@@ -17,7 +17,15 @@ export function loadActivities(storage: Pick<Storage, 'getItem'>): TaskActivity[
 export class TaskActivitiesService {
   activities = signal<TaskActivity[]>(loadActivities(localStorage));
 
-  running = computed(() => this.activities().find((a) => !a.endedAt) ?? null);
+  /** Todas as atividades em andamento, da mais recente para a mais antiga. */
+  runningAll = computed(() =>
+    this.activities()
+      .filter((a) => !a.endedAt)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+  );
+
+  /** Atividade em andamento mais recente (atalho para quando só uma interessa). */
+  running = computed(() => this.runningAll()[0] ?? null);
 
   finished = computed(() =>
     this.activities()
@@ -25,10 +33,8 @@ export class TaskActivitiesService {
       .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? '')),
   );
 
-  /** Inicia uma atividade nova, finalizando automaticamente uma anterior em andamento (só uma por vez). */
+  /** Inicia uma atividade nova. Várias atividades podem correr ao mesmo tempo. */
   start(name: string, taskId: string | null): TaskActivity {
-    const current = this.running();
-    if (current) this.finish(current.id);
     const activity: TaskActivity = {
       id: uuid(),
       name: name.trim() || 'Atividade',
@@ -50,6 +56,19 @@ export class TaskActivitiesService {
       this.persist(next);
       return next;
     });
+  }
+
+  finishAll(): void {
+    const now = new Date().toISOString();
+    this.activities.update((list) => {
+      const next = list.map((a) => (a.endedAt ? a : { ...a, endedAt: now }));
+      this.persist(next);
+      return next;
+    });
+  }
+
+  runningForTask(taskId: string): TaskActivity[] {
+    return this.runningAll().filter((a) => a.taskId === taskId);
   }
 
   remove(id: string): void {
