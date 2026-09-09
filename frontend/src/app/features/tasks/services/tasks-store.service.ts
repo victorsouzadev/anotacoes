@@ -1,6 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../../core/uuid';
 import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskProject, TaskProjectMembership } from '../models/task.model';
+import { stripNotesImages } from '../notes/notes-html';
 import { TaskUpsertInput, TasksService } from './tasks.service';
 
 export interface TaskStateSnapshot {
@@ -22,7 +23,7 @@ type TaskDraft = Partial<
     | 'recurrenceRule'
     | 'locationLabel'
   >
-> & { subtasks?: Subtask[] };
+> & { subtasks?: Subtask[]; notes?: string | null };
 
 @Injectable({ providedIn: 'root' })
 export class TasksStoreService {
@@ -108,6 +109,7 @@ export class TasksStoreService {
       locationRadiusMeters: null,
       locationLabel: draft.locationLabel ?? null,
       subtasks: draft.subtasks ?? [],
+      notes: draft.notes ?? null,
       updatedAt: now,
     });
     this.tasks.update((list) => [...list, created]);
@@ -157,6 +159,9 @@ export class TasksStoreService {
       recurrenceRule: task.recurrenceRule,
       locationLabel: task.locationLabel,
       subtasks: task.subtasks.map((s) => ({ ...s, isCompleted: false })),
+      // Os anexos não são duplicados junto, então a cópia leva o texto sem as imagens (que
+      // apontariam pra anexos da tarefa original).
+      notes: stripNotesImages(task.notes) || null,
     });
   }
 
@@ -368,6 +373,7 @@ export class TasksStoreService {
       isRecurring: draft.isRecurring ?? task.isRecurring,
       recurrenceRule: draft.recurrenceRule !== undefined ? draft.recurrenceRule : task.recurrenceRule,
       subtasks: draft.subtasks ?? task.subtasks,
+      notes: draft.notes !== undefined ? draft.notes : task.notes,
       ...overrides,
       updatedAt: now,
     };
@@ -390,6 +396,7 @@ export class TasksStoreService {
       locationRadiusMeters: merged.locationRadiusMeters,
       locationLabel: merged.locationLabel,
       subtasks: merged.subtasks,
+      notes: merged.notes,
       updatedAt: merged.updatedAt,
     });
     this.tasks.update((list) => list.map((t) => (t.id === task.id ? saved : t)));

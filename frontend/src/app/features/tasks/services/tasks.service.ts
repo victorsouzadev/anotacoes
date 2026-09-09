@@ -10,7 +10,7 @@ function toView(wire: TaskItemWire): TaskItem {
   } catch {
     subtasks = [];
   }
-  return { ...wire, subtasks };
+  return { ...wire, subtasks, notes: wire.notes ?? null };
 }
 
 export interface TaskUpsertInput {
@@ -32,6 +32,7 @@ export interface TaskUpsertInput {
   locationRadiusMeters: number | null;
   locationLabel: string | null;
   subtasks: Subtask[];
+  notes: string | null;
   updatedAt: string;
 }
 

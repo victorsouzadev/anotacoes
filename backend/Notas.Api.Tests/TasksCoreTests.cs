@@ -37,7 +37,7 @@ public class TasksCoreTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         return body.GetProperty("accessToken").GetString()!;
     }
 
-    private static object TaskPayload(string title, DateTime updatedAt, string? categoryId = null, bool isCompleted = false) => new
+    private static object TaskPayload(string title, DateTime updatedAt, string? categoryId = null, bool isCompleted = false, string? notes = null) => new
     {
         title,
         description = (string?)null,
@@ -57,8 +57,39 @@ public class TasksCoreTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         locationRadiusMeters = (float?)null,
         locationLabel = (string?)null,
         subtasks = "[]",
+        notes,
         updatedAt,
     };
+
+    [Fact]
+    public async Task Notes_AreStoredAndReturned()
+    {
+        var id = Guid.NewGuid().ToString();
+        var t0 = DateTime.UtcNow;
+        const string html = "<p>Rascunho da reunião</p><img data-attachment-id=\"abc\" alt=\"quadro\">";
+
+        var res = await _client.PutAsJsonAsync($"/api/tasks/items/{id}", TaskPayload("Com anotações", t0, notes: html));
+        var created = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(html, created.GetProperty("notes").GetString());
+
+        var listRes = await _client.GetAsync("/api/tasks/items");
+        var list = await listRes.Content.ReadFromJsonAsync<JsonElement>();
+        var found = list.EnumerateArray().First(t => t.GetProperty("id").GetString() == id);
+        Assert.Equal(html, found.GetProperty("notes").GetString());
+    }
+
+    [Fact]
+    public async Task Notes_CanBeClearedByLaterUpdate()
+    {
+        var id = Guid.NewGuid().ToString();
+        var t0 = DateTime.UtcNow;
+
+        await _client.PutAsJsonAsync($"/api/tasks/items/{id}", TaskPayload("Anotada", t0, notes: "<p>algo</p>"));
+        var res = await _client.PutAsJsonAsync($"/api/tasks/items/{id}", TaskPayload("Anotada", t0.AddMinutes(1)));
+        var updated = await res.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(JsonValueKind.Null, updated.GetProperty("notes").ValueKind);
+    }
 
     [Fact]
     public async Task CreateTask_ThenGetList_ReturnsIt()

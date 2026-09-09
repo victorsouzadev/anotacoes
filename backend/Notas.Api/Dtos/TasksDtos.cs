@@ -11,14 +11,14 @@ public record TaskItemDto(
     List<string> CategoryIds, bool IsRecurring, string? RecurrenceRule, bool IsCompleted,
     DateTime CreatedAt, DateTime? CompletedAt, DateTime? DeletedAt, int CompletedPomodoros,
     int Position, double? LocationLat, double? LocationLng, float? LocationRadiusMeters,
-    string? LocationLabel, string Subtasks, DateTime UpdatedAt);
+    string? LocationLabel, string Subtasks, string? Notes, DateTime UpdatedAt);
 
 public record TaskItemUpsertRequest(
     string Title, string? Description, DateTime? DueDate, TaskPriority Priority,
     List<string>? CategoryIds, bool IsRecurring, string? RecurrenceRule, bool IsCompleted,
     DateTime CreatedAt, DateTime? CompletedAt, DateTime? DeletedAt, int CompletedPomodoros,
     int Position, double? LocationLat, double? LocationLng, float? LocationRadiusMeters,
-    string? LocationLabel, string? Subtasks, DateTime UpdatedAt);
+    string? LocationLabel, string? Subtasks, string? Notes, DateTime UpdatedAt);
 
 public record TaskProjectDto(string Id, string Name, string ColorHex, int Position, DateTime UpdatedAt);
 

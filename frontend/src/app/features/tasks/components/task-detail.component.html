@@ -67,6 +67,11 @@
     }
 
     <div class="section">
+      <span class="section-title"><app-icon name="edit" [size]="13" /> Anotações</span>
+      <app-notes-editor [task]="task" />
+    </div>
+
+    <div class="section">
       <span class="section-title"><app-icon name="pomodoro" [size]="13" /> Atividade</span>
       @for (running of runningActivitiesForTask(); track running.id) {
         <div class="activity-running">

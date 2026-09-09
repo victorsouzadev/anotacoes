@@ -4,6 +4,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { IconComponent } from '../../../shared/icon';
 import { PomodoroTimerComponent } from '../pomodoro/pomodoro-timer.component';
+import { NotesEditorComponent } from '../notes/notes-editor.component';
+import { isNotesEmpty } from '../notes/notes-html';
 import { TaskActivitiesService } from '../services/task-activities.service';
 import { PomodoroService } from '../services/pomodoro.service';
 import { TasksStoreService } from '../services/tasks-store.service';
@@ -14,7 +16,7 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
 @Component({
   selector: 'app-tasks-foco-page',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, PomodoroTimerComponent],
+  imports: [FormsModule, RouterLink, IconComponent, PomodoroTimerComponent, NotesEditorComponent],
   template: `
     <div class="page" [style.--tint]="tintColor()">
       @if (activity(); as act) {
@@ -129,13 +131,21 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
                 </section>
 
                 <section class="section">
+                  <h2>Anotações</h2>
+                  <app-notes-editor [task]="t" />
+                </section>
+
+                <section class="section">
                   <h2>Pomodoro</h2>
                   <app-pomodoro-timer />
                 </section>
               </section>
             </div>
           } @else {
-            <p class="empty-standalone">Atividade sem tarefa vinculada — só o timer acima.</p>
+            <p class="empty-standalone">
+              Atividade sem tarefa vinculada — só o timer acima. Anotações ficam guardadas na tarefa,
+              então vincule uma atividade a uma tarefa pra usar o bloco de anotações.
+            </p>
           }
         </main>
       } @else {
@@ -310,6 +320,7 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
       parts.push(t.title);
       if (t.subtasks.length > 0) parts.push(`✓ ${this.completedSubtasks(t)}/${t.subtasks.length}`);
       if (t.dueDate) parts.push(`${this.isOverdue(t) ? '⚠ atrasada' : 'vence'} ${this.formatDueDate(t.dueDate)}`);
+      if (!isNotesEmpty(t.notes)) parts.push('📝');
     }
 
     const others = this.otherRunning().length;

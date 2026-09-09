@@ -66,6 +66,8 @@ export interface TaskItemWire {
   locationRadiusMeters: number | null;
   locationLabel: string | null;
   subtasks: string;
+  // HTML sanitizado das anotações gerais; imagens são <img data-attachment-id="…">.
+  notes: string | null;
   updatedAt: string;
 }
 

@@ -82,6 +82,9 @@ public class TaskItem
     // JSON opaco (array de subtarefas) — o backend não conhece a estrutura interna, só guarda e
     // devolve o blob, igual ao campo Elements das notas.
     public string Subtasks { get; set; } = "[]";
+    // HTML sanitizado das anotações gerais da tarefa — blob opaco pro backend, igual a Subtasks.
+    // As imagens vivem como TaskAttachment e são referenciadas por data-attachment-id.
+    public string? Notes { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 

@@ -7,6 +7,7 @@ import { activityDurationSeconds, decodeRecurrence, formatDuration, totalTimeSpe
 import { TaskActivity, TaskAttachment, TaskComment, TaskItem } from '../models/task.model';
 import { TasksStoreService } from '../services/tasks-store.service';
 import { TaskActivitiesService } from '../services/task-activities.service';
+import { NotesEditorComponent } from '../notes/notes-editor.component';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
@@ -17,7 +18,7 @@ function isImage(attachment: TaskAttachment): boolean {
 @Component({
   selector: 'app-task-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [CommonModule, FormsModule, IconComponent, NotesEditorComponent],
   templateUrl: './task-detail.component.html',
   styleUrl: './task-detail.component.css',
 })

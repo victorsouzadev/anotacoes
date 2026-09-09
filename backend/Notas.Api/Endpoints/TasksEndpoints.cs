@@ -449,6 +449,7 @@ public static class TasksEndpoints
         task.LocationRadiusMeters = req.LocationRadiusMeters;
         task.LocationLabel = req.LocationLabel;
         task.Subtasks = req.Subtasks ?? "[]";
+        task.Notes = req.Notes;
         task.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
     }
 
@@ -464,7 +465,7 @@ public static class TasksEndpoints
     private static TaskItemDto ToDto(TaskItem t) => new(
         t.Id, t.Title, t.Description, t.DueDate, t.Priority, ParseCategoryIds(t.CategoryIds), t.IsRecurring, t.RecurrenceRule,
         t.IsCompleted, t.CreatedAt, t.CompletedAt, t.DeletedAt, t.CompletedPomodoros, t.Position,
-        t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.UpdatedAt);
+        t.LocationLat, t.LocationLng, t.LocationRadiusMeters, t.LocationLabel, t.Subtasks, t.Notes, t.UpdatedAt);
 
     private static List<string> ParseCategoryIds(string json)
     {
