@@ -101,13 +101,8 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
             </div>
           } @else if (task(); as t) {
             <div class="cols" [style.grid-template-columns]="gridTemplate()">
-              @for (column of columns; track column) {
-                <section
-                  class="col"
-                  [class.col-left]="column === 'left'"
-                  [class.col-hidden]="!isColumnVisible(column)"
-                  [attr.aria-label]="'Área ' + columnLabels[column]"
-                >
+              @for (column of visibleColumns(); track column) {
+                <section class="col" [class.col-left]="column === 'left'" [attr.aria-label]="'Área ' + columnLabels[column]">
                   @for (panel of layout.panelsIn(column); track panel.id) {
                     <section class="panel" [class.collapsed]="panel.collapsed">
                       <h2 class="panel-title">
@@ -294,10 +289,8 @@ const PRIORITY_TINT: Record<TaskItem['priority'], string> = { High: '#dc2626', M
 
     /* Três áreas; as colunas visíveis vêm de gridTemplate(), pra área vazia não comer espaço. */
     .cols { display: grid; gap: 36px; align-items: start; }
-    .col-hidden { display: none; }
 
     .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
-    .col-hidden { display: none; }
 
     .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; min-height: 60px; border-radius: var(--radius); }
     .col-empty {
@@ -546,8 +539,12 @@ export class TasksFocoPageComponent implements OnInit, OnDestroy {
     return this.layout.panelsIn(column).length > 0 && !this.layout.isColumnCollapsed(column);
   }
 
+  visibleColumns(): FocoColumn[] {
+    return this.columns.filter((c) => this.isColumnVisible(c));
+  }
+
   gridTemplate(): string {
-    const visible = this.columns.filter((c) => this.isColumnVisible(c));
+    const visible = this.visibleColumns();
     if (visible.length === 0) return 'minmax(0, 1fr)';
     const hasCenter = visible.includes('center');
     return visible.map((c) => (c === 'center' || !hasCenter ? 'minmax(0, 1fr)' : 'minmax(0, 320px)')).join(' ');
