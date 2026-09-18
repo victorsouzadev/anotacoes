@@ -38,6 +38,12 @@ const TOOLS: ToolCard[] = [
     title: 'Simulador de Bolo 3D',
     description: 'Monte um bolo em 3D: camadas, sabores, cobertura, granulado, cerejas e velas para acender.',
   },
+  {
+    path: '/precificacao',
+    icon: 'calculator',
+    title: 'Precificação',
+    description: 'Calculadora de precificação para papelaria personalizada: materiais, HH, HM, custos fixos, margem e preço sugerido.',
+  },
 ];
 
 @Component({

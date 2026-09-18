@@ -1,0 +1,487 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="calculator" [size]="14" /></span> Precificação</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
+        <app-icon [name]="themeIconName()" [size]="16" />
+      </button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <!-- Ações gerais: cadastro de produtos e configurações globais reutilizáveis -->
+    <div class="barra-acoes">
+      <select class="select-produto" (change)="carregarProduto($any($event.target).value)">
+        <option value="">Carregar produto salvo…</option>
+        @for (p of produtos(); track p.id) {
+          <option [value]="p.id" [selected]="p.id === produto().id">{{ p.nome || '(sem nome)' }}</option>
+        }
+      </select>
+      <button type="button" class="btn" (click)="novoProduto()">Novo produto</button>
+      <button type="button" class="btn" (click)="carregarExemplo()">Carregar exemplo</button>
+      <button type="button" class="btn destaque" (click)="salvarProduto()">Salvar ficha</button>
+      <button type="button" class="btn" (click)="abrirConfiguracoes()">
+        <app-icon name="more" [size]="14" /> Configurações
+      </button>
+    </div>
+
+    <div class="grid-principal">
+      <!-- coluna esquerda: dados de entrada -->
+      <div class="coluna-entrada">
+        <!-- 1. Dados do produto -->
+        <section class="card">
+          <h2>Dados do produto</h2>
+          <div class="campos">
+            <label class="campo">
+              <span>Nome do produto</span>
+              <input type="text" [ngModel]="produto().nome" (ngModelChange)="setField('nome', $event)" placeholder="Ex.: Topo de bolo 15cm" />
+            </label>
+            <label class="campo">
+              <span>Categoria</span>
+              <select [ngModel]="produto().categoria" (ngModelChange)="setField('categoria', $event)">
+                @for (c of categorias; track c) { <option [value]="c">{{ c }}</option> }
+              </select>
+            </label>
+            @if (produto().categoria === 'Outro') {
+              <label class="campo">
+                <span>Categoria personalizada</span>
+                <input type="text" [ngModel]="produto().categoriaPersonalizada" (ngModelChange)="setField('categoriaPersonalizada', $event)" />
+              </label>
+            }
+            <label class="campo">
+              <span>Quantidade produzida (lote)</span>
+              <input type="number" min="0" [ngModel]="produto().quantidadeProduzida" (ngModelChange)="setNumField('quantidadeProduzida', $event)" />
+            </label>
+            <label class="campo">
+              <span>Quantidade vendida (pedido)</span>
+              <input type="number" min="0" [ngModel]="produto().quantidadeVendida" (ngModelChange)="setNumField('quantidadeVendida', $event)" />
+            </label>
+            <label class="campo">
+              <span>Perda / desperdício (%)</span>
+              <input type="number" min="0" max="100" step="0.5" [ngModel]="produto().percentualPerda" (ngModelChange)="setNumField('percentualPerda', $event)" />
+            </label>
+          </div>
+        </section>
+
+        <!-- 2. Matéria-prima -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Matéria-prima</h2>
+            <button type="button" class="btn-icone" (click)="adicionarMaterial()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @if (produto().materiais.length === 0) { <p class="vazio">Nenhum material cadastrado ainda.</p> }
+          @for (item of produto().materiais; track item.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Nome (ex.: Papel fotográfico)" [ngModel]="item.nome" (ngModelChange)="atualizarMaterial(item.id, { nome: $event })" />
+              <input type="text" class="unidade" placeholder="un." [ngModel]="item.unidade" (ngModelChange)="atualizarMaterial(item.id, { unidade: $event })" />
+              <div class="mini-campo"><span>Comprado por</span><input type="number" min="0" step="0.01" [ngModel]="item.precoCompra" (ngModelChange)="atualizarMaterialNum(item.id, 'precoCompra', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. comprada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdComprada" (ngModelChange)="atualizarMaterialNum(item.id, 'qtdComprada', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. usada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdUtilizada" (ngModelChange)="atualizarMaterialNum(item.id, 'qtdUtilizada', $event)" /></div>
+              <span class="custo-calculado">{{ custoItem(item) | currency:'BRL' }}</span>
+              <button type="button" class="btn-remover" (click)="remover('materiais', item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="subtotal">Subtotal matéria-prima: <strong>{{ resultado().composicao.materiais | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 3. Insumos -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Insumos</h2>
+            <button type="button" class="btn-icone" (click)="adicionarInsumo()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @if (produto().insumos.length === 0) { <p class="vazio">Nenhum insumo cadastrado ainda.</p> }
+          @for (item of produto().insumos; track item.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Nome (ex.: Cola, fita, glitter)" [ngModel]="item.nome" (ngModelChange)="atualizarInsumo(item.id, { nome: $event })" />
+              <input type="text" class="unidade" placeholder="un." [ngModel]="item.unidade" (ngModelChange)="atualizarInsumo(item.id, { unidade: $event })" />
+              <div class="mini-campo"><span>Comprado por</span><input type="number" min="0" step="0.01" [ngModel]="item.precoCompra" (ngModelChange)="atualizarInsumoNum(item.id, 'precoCompra', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. comprada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdComprada" (ngModelChange)="atualizarInsumoNum(item.id, 'qtdComprada', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. usada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdUtilizada" (ngModelChange)="atualizarInsumoNum(item.id, 'qtdUtilizada', $event)" /></div>
+              <span class="custo-calculado">{{ custoItem(item) | currency:'BRL' }}</span>
+              <button type="button" class="btn-remover" (click)="remover('insumos', item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="subtotal">Subtotal insumos: <strong>{{ resultado().composicao.insumos | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 4. HH — hora-homem -->
+        <section class="card">
+          <h2>Mão de obra (HH)</h2>
+          <p class="ajuda">
+            Valor da hora = remuneração mensal desejada ÷ horas produtivas mensais. Configure a remuneração em
+            <button type="button" class="link" (click)="abrirConfiguracoes()">Configurações</button>.
+          </p>
+          <div class="destaque-valor">Valor da sua hora hoje: <strong>{{ valorHoraAtual() | currency:'BRL' }}</strong></div>
+          <div class="card-header">
+            <h3>Atividades e tempo gasto</h3>
+            <button type="button" class="btn-icone" (click)="adicionarAtividadeHH()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @if (produto().atividadesHH.length === 0) { <p class="vazio">Ex.: criação da arte, impressão, corte, montagem, acabamento…</p> }
+          @for (a of produto().atividadesHH; track a.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Atividade (ex.: Corte)" [ngModel]="a.nome" (ngModelChange)="atualizarAtividadeHH(a.id, { nome: $event })" />
+              <div class="mini-campo"><span>Minutos</span><input type="number" min="0" [ngModel]="a.minutos" (ngModelChange)="atualizarAtividadeHHNum(a.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="remover('atividadesHH', a.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="subtotal">Total: {{ minutosHHTotais() }} min — <strong>{{ resultado().composicao.hh | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 5/6. HM — hora-máquina / depreciação -->
+        <section class="card">
+          <h2>Hora-máquina (HM)</h2>
+          <p class="ajuda">
+            Cadastre plotters, impressoras e outros equipamentos em
+            <button type="button" class="link" (click)="abrirConfiguracoes()">Configurações</button>. A depreciação/hora é calculada
+            automaticamente: (preço − valor residual) ÷ vida útil em horas.
+          </p>
+          <div class="card-header">
+            <h3>Máquinas usadas neste produto</h3>
+            <button type="button" class="btn-icone" (click)="adicionarUsoMaquina()" [disabled]="config().equipamentos.length === 0">
+              <app-icon name="plus" [size]="14" /> Adicionar
+            </button>
+          </div>
+          @if (config().equipamentos.length === 0) { <p class="vazio">Cadastre equipamentos em Configurações para usá-los aqui.</p> }
+          @for (u of produto().usosMaquina; track u.id) {
+            <div class="linha-item">
+              <select class="nome" [ngModel]="u.equipamentoId" (ngModelChange)="atualizarUsoMaquina(u.id, { equipamentoId: $event })">
+                @for (eq of config().equipamentos; track eq.id) { <option [value]="eq.id">{{ eq.nome || '(sem nome)' }}</option> }
+              </select>
+              <div class="mini-campo"><span>Minutos</span><input type="number" min="0" [ngModel]="u.minutos" (ngModelChange)="atualizarUsoMaquinaNum(u.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="remover('usosMaquina', u.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="subtotal">Total: {{ horasMaquinaTotais() | number:'1.1-2' }} h — <strong>{{ resultado().composicao.hm | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 7. Embalagem -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Embalagem</h2>
+            <button type="button" class="btn-icone" (click)="adicionarEmbalagem()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @if (produto().embalagens.length === 0) { <p class="vazio">Ex.: caixa, saquinho, fita, etiqueta, cartão de agradecimento…</p> }
+          @for (item of produto().embalagens; track item.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Nome (ex.: Saquinho personalizado)" [ngModel]="item.nome" (ngModelChange)="atualizarEmbalagem(item.id, { nome: $event })" />
+              <input type="text" class="unidade" placeholder="un." [ngModel]="item.unidade" (ngModelChange)="atualizarEmbalagem(item.id, { unidade: $event })" />
+              <div class="mini-campo"><span>Comprado por</span><input type="number" min="0" step="0.01" [ngModel]="item.precoCompra" (ngModelChange)="atualizarEmbalagemNum(item.id, 'precoCompra', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. comprada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdComprada" (ngModelChange)="atualizarEmbalagemNum(item.id, 'qtdComprada', $event)" /></div>
+              <div class="mini-campo"><span>Qtd. usada</span><input type="number" min="0" step="0.01" [ngModel]="item.qtdUtilizada" (ngModelChange)="atualizarEmbalagemNum(item.id, 'qtdUtilizada', $event)" /></div>
+              <span class="custo-calculado">{{ custoItem(item) | currency:'BRL' }}</span>
+              <button type="button" class="btn-remover" (click)="remover('embalagens', item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="subtotal">Subtotal embalagem: <strong>{{ resultado().composicao.embalagem | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 8. Energia elétrica -->
+        <section class="card">
+          <h2>Energia elétrica</h2>
+          <p class="ajuda">Por padrão, calculada a partir da conta de luz e do tempo de máquina usado (configure em Configurações).</p>
+          <label class="checkbox-linha">
+            <input type="checkbox" [ngModel]="produto().usarEnergiaDireta" (ngModelChange)="setField('usarEnergiaDireta', $event)" />
+            <span>Informar o custo de energia diretamente para este produto</span>
+          </label>
+          @if (produto().usarEnergiaDireta) {
+            <label class="campo">
+              <span>Custo de energia por produto (R$)</span>
+              <input type="number" min="0" step="0.01" [ngModel]="produto().energiaDireta" (ngModelChange)="setNumField('energiaDireta', $event)" />
+            </label>
+          }
+          <div class="subtotal">Custo de energia: <strong>{{ resultado().composicao.energia | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 9/10. Custos fixos e outros custos -->
+        <section class="card">
+          <h2>Custos fixos e outros custos</h2>
+          <p class="ajuda">
+            Custos fixos mensais (aluguel, internet, softwares…) são rateados pela produção mensal estimada. Edite a lista em
+            <button type="button" class="link" (click)="abrirConfiguracoes()">Configurações</button>.
+          </p>
+          <div class="subtotal">Rateio deste produto: <strong>{{ resultado().composicao.custosFixos | currency:'BRL' }}</strong></div>
+
+          <div class="card-header">
+            <h3>Outros custos deste produto</h3>
+            <button type="button" class="btn-icone" (click)="adicionarOutroCusto()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @for (item of produto().outrosCustos; track item.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Descrição" [ngModel]="item.nome" (ngModelChange)="atualizarOutroCusto(item.id, { nome: $event })" />
+              <div class="mini-campo"><span>Valor</span><input type="number" min="0" step="0.01" [ngModel]="item.valor" (ngModelChange)="atualizarOutroCustoNum(item.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="remover('outrosCustos', item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+        </section>
+
+        <!-- 11/12/13. Taxas, impostos, margem e desconto -->
+        <section class="card">
+          <h2>Taxas, impostos, margem e desconto</h2>
+          <div class="card-header">
+            <h3>Taxas de venda</h3>
+            <button type="button" class="btn-icone" (click)="adicionarTaxa()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          @for (t of produto().taxas; track t.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Ex.: Taxa da maquininha" [ngModel]="t.nome" (ngModelChange)="atualizarTaxaProduto(t.id, { nome: $event })" />
+              <div class="mini-campo"><span>%</span><input type="number" min="0" max="100" step="0.1" [ngModel]="t.percentual" (ngModelChange)="atualizarTaxaProdutoNum(t.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="remover('taxas', t.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <div class="campos">
+            <label class="campo">
+              <span>Impostos (%)</span>
+              <input type="number" min="0" max="100" step="0.1" [ngModel]="produto().impostosPercentual" (ngModelChange)="setNumField('impostosPercentual', $event)" />
+            </label>
+            <label class="campo">
+              <span>Margem de lucro desejada (%)</span>
+              <input type="number" min="0" max="99" step="0.5" [ngModel]="produto().margemDesejada" (ngModelChange)="setNumField('margemDesejada', $event)" />
+            </label>
+            <label class="campo">
+              <span>Desconto máximo planejado (%)</span>
+              <input type="number" min="0" max="99" step="0.5" [ngModel]="produto().descontoMaximo" (ngModelChange)="setNumField('descontoMaximo', $event)" />
+            </label>
+          </div>
+          @if (!composicaoValida()) {
+            <p class="erro">Taxas + impostos + margem somam {{ (resultado().taxasPercentualTotal + produto().impostosPercentual + produto().margemDesejada) | number:'1.0-1' }}%.
+            Esse total precisa ficar abaixo de 100%, senão não existe preço de venda válido.</p>
+          }
+        </section>
+
+        <!-- 18. Personalização -->
+        <section class="card">
+          <h2>Personalização</h2>
+          <p class="ajuda">Marque os serviços extras cobrados neste produto (nome, foto, arte exclusiva, acabamento premium…).</p>
+          @for (item of produto().personalizacoes; track item.id) {
+            <div class="linha-item">
+              <label class="checkbox-linha nome">
+                <input type="checkbox" [ngModel]="item.ativo" (ngModelChange)="atualizarPersonalizacao(item.id, { ativo: $event })" />
+                <input type="text" [ngModel]="item.nome" (ngModelChange)="atualizarPersonalizacao(item.id, { nome: $event })" />
+              </label>
+              <div class="mini-campo"><span>Valor</span><input type="number" min="0" step="0.01" [ngModel]="item.valor" (ngModelChange)="atualizarPersonalizacaoNum(item.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="remover('personalizacoes', item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <button type="button" class="btn-icone" (click)="adicionarPersonalizacao()">
+            <app-icon name="plus" [size]="14" /> Adicionar serviço
+          </button>
+          <div class="subtotal">Total de personalização: <strong>{{ extraPersonalizacoes() | currency:'BRL' }}</strong></div>
+        </section>
+
+        <!-- 19. Pedido urgente -->
+        <section class="card">
+          <h2>Pedido urgente</h2>
+          <label class="checkbox-linha">
+            <input type="checkbox" [ngModel]="produto().urgente" (ngModelChange)="setField('urgente', $event)" />
+            <span>Este é um pedido urgente (acrescenta {{ config().taxaUrgenciaPercentual | number:'1.0-1' }}% ao preço final)</span>
+          </label>
+        </section>
+      </div>
+
+      <!-- coluna direita: resultado -->
+      <div class="coluna-resultado">
+        <section class="card resultado-card">
+          <h2>Resultado da precificação</h2>
+
+          <div class="destaques">
+            <div class="destaque preco-sugerido">
+              <span class="rotulo">Preço sugerido de venda</span>
+              <span class="valor">{{ resultado().precoSugerido !== null ? (resultado().precoSugerido | currency:'BRL') : '—' }}</span>
+            </div>
+            <div class="destaque lucro">
+              <span class="rotulo">Lucro estimado (unitário)</span>
+              <span class="valor">{{ resultado().lucroUnitario !== null ? (resultado().lucroUnitario | currency:'BRL') : '—' }}</span>
+              <span class="sub">margem líquida real: {{ resultado().margemLiquidaReal !== null ? (resultado().margemLiquidaReal | number:'1.1-1') + '%' : '—' }}</span>
+            </div>
+          </div>
+
+          <div class="linha-resultado"><span>Preço mínimo (cobre custos + taxas, sem lucro)</span><strong>{{ resultado().precoMinimo !== null ? (resultado().precoMinimo | currency:'BRL') : '—' }}</strong></div>
+          <div class="linha-resultado"><span>Preço de equilíbrio (abaixo disso, prejuízo)</span><strong>{{ resultado().precoEquilibrio !== null ? (resultado().precoEquilibrio | currency:'BRL') : '—' }}</strong></div>
+          <div class="linha-resultado"><span>Preço anunciado (já cobre o desconto máximo)</span><strong>{{ resultado().precoAnunciadoComDesconto !== null ? (resultado().precoAnunciadoComDesconto | currency:'BRL') : '—' }}</strong></div>
+          <div class="linha-resultado"><span>+ Personalizações</span><strong>{{ extraPersonalizacoes() | currency:'BRL' }}</strong></div>
+          @if (produto().urgente) {
+            <div class="linha-resultado"><span>+ Taxa de urgência ({{ config().taxaUrgenciaPercentual }}%)</span><strong>—</strong></div>
+          }
+          <div class="linha-resultado final"><span>Preço unitário final</span><strong>{{ resultado().precoUnitarioFinal !== null ? (resultado().precoUnitarioFinal | currency:'BRL') : '—' }}</strong></div>
+          <div class="linha-resultado"><span>Preço total do pedido ({{ produto().quantidadeVendida }} un.)</span><strong>{{ resultado().precoTotalPedido !== null ? (resultado().precoTotalPedido | currency:'BRL') : '—' }}</strong></div>
+          <div class="linha-resultado"><span>Lucro total do pedido</span><strong>{{ resultado().lucroTotalPedido !== null ? (resultado().lucroTotalPedido | currency:'BRL') : '—' }}</strong></div>
+
+          <button type="button" class="btn" (click)="mostrarComposicao.set(!mostrarComposicao())">
+            {{ mostrarComposicao() ? 'Esconder composição do preço' : 'Ver composição do preço' }}
+          </button>
+
+          @if (mostrarComposicao()) {
+            <div class="composicao-detalhe">
+              <div class="linha-resultado"><span>Matéria-prima</span><strong>{{ resultado().composicao.materiais | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Insumos</span><strong>{{ resultado().composicao.insumos | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>HH (mão de obra)</span><strong>{{ resultado().composicao.hh | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>HM (hora-máquina)</span><strong>{{ resultado().composicao.hm | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Embalagem</span><strong>{{ resultado().composicao.embalagem | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Energia</span><strong>{{ resultado().composicao.energia | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Custos fixos (rateio)</span><strong>{{ resultado().composicao.custosFixos | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Outros custos</span><strong>{{ resultado().composicao.outros | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Custo antes da perda</span><strong>{{ resultado().composicao.custoAntesPerda | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Perda ({{ produto().percentualPerda }}%)</span><strong>{{ resultado().composicao.perda | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado final"><span>Custo total</span><strong>{{ resultado().composicao.custoTotal | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Taxas ({{ resultado().taxasPercentualTotal | number:'1.0-1' }}%)</span><strong>{{ valorTaxasNoPreco() | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Impostos ({{ produto().impostosPercentual }}%)</span><strong>{{ valorImpostosNoPreco() | currency:'BRL' }}</strong></div>
+              <div class="linha-resultado"><span>Lucro ({{ produto().margemDesejada }}%)</span><strong>{{ resultado().lucroUnitario !== null ? (resultado().lucroUnitario | currency:'BRL') : '—' }}</strong></div>
+              <div class="linha-resultado final"><span>Preço final</span><strong>{{ resultado().precoSugerido !== null ? (resultado().precoSugerido | currency:'BRL') : '—' }}</strong></div>
+            </div>
+          }
+        </section>
+
+        <!-- 16. Simulação de margens -->
+        <section class="card">
+          <h2>Simulação de margens</h2>
+          <table class="tabela-simulacao">
+            <thead><tr><th>Margem</th><th>Preço</th></tr></thead>
+            <tbody>
+              @for (linha of simulacaoMargens(); track $index) {
+                <tr>
+                  <td><input type="number" min="0" max="99" class="input-tabela" [ngModel]="linha.margemPercentual" (ngModelChange)="setMargemSimulacao($index, $event)" />%</td>
+                  <td>{{ linha.preco !== null ? (linha.preco | currency:'BRL') : 'inválido' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 17. Venda por quantidade -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Venda por quantidade</h2>
+            <button type="button" class="btn-icone" (click)="adicionarFaixaQuantidade()"><app-icon name="plus" [size]="14" /> Adicionar</button>
+          </div>
+          <table class="tabela-simulacao">
+            <thead><tr><th>Qtd.</th><th>Desconto</th><th>Preço un.</th><th>Total</th><th>Lucro</th><th></th></tr></thead>
+            <tbody>
+              @for (linha of simulacaoQuantidades(); track linha.faixa.id) {
+                <tr>
+                  <td><input type="number" min="1" class="input-tabela" [ngModel]="linha.faixa.quantidade" (ngModelChange)="atualizarFaixaQuantidadeNum(linha.faixa.id, 'quantidade', $event)" /></td>
+                  <td><input type="number" min="0" max="99" class="input-tabela" [ngModel]="linha.faixa.descontoPercentual" (ngModelChange)="atualizarFaixaQuantidadeNum(linha.faixa.id, 'descontoPercentual', $event)" />%</td>
+                  <td>{{ linha.precoUnitario !== null ? (linha.precoUnitario | currency:'BRL') : '—' }}</td>
+                  <td>{{ linha.precoTotal !== null ? (linha.precoTotal | currency:'BRL') : '—' }}</td>
+                  <td>{{ linha.lucroTotal !== null ? (linha.lucroTotal | currency:'BRL') : '—' }}</td>
+                  <td><button type="button" class="btn-remover" (click)="remover('faixasQuantidade', linha.faixa.id)"><app-icon name="delete" [size]="13" /></button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 20. Dashboard / composição do custo -->
+        <section class="card">
+          <h2>Composição do custo</h2>
+          <div class="barras">
+            @for (fatia of resultado().composicaoPercentual; track fatia.rotulo) {
+              <div class="linha-barra">
+                <span class="rotulo-barra">{{ fatia.rotulo }}</span>
+                <div class="trilha"><div class="preenchimento" [style.width.%]="fatia.percentual"></div></div>
+                <span class="percentual-barra">{{ fatia.percentual | number:'1.0-1' }}%</span>
+              </div>
+            }
+          </div>
+          <div class="dashboard-resumo">
+            <div><span>Custo total</span><strong>{{ resultado().composicao.custoTotal | currency:'BRL' }}</strong></div>
+            <div><span>Preço sugerido</span><strong>{{ resultado().precoSugerido !== null ? (resultado().precoSugerido | currency:'BRL') : '—' }}</strong></div>
+            <div><span>Lucro</span><strong>{{ resultado().lucroUnitario !== null ? (resultado().lucroUnitario | currency:'BRL') : '—' }}</strong></div>
+            <div><span>Margem real</span><strong>{{ resultado().margemLiquidaReal !== null ? (resultado().margemLiquidaReal | number:'1.1-1') + '%' : '—' }}</strong></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- 22. Configurações gerais reutilizáveis -->
+  @if (mostrarConfiguracoes()) {
+    <div class="modal-fundo" (click)="fecharConfiguracoes(false)">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Configurações gerais</h2>
+          <button type="button" class="btn-remover" (click)="fecharConfiguracoes(false)"><app-icon name="x" [size]="16" /></button>
+        </div>
+        <div class="modal-corpo">
+          <h3>Hora de trabalho</h3>
+          <div class="campos">
+            <label class="campo">
+              <span>Remuneração mensal desejada (R$)</span>
+              <input type="number" min="0" [ngModel]="configRascunho().hh.valorHoraDesejado" (ngModelChange)="setConfigHH('valorHoraDesejado', $event)" />
+            </label>
+            <label class="campo">
+              <span>Dias trabalhados por mês</span>
+              <input type="number" min="1" max="31" [ngModel]="configRascunho().hh.diasPorMes" (ngModelChange)="setConfigHH('diasPorMes', $event)" />
+            </label>
+            <label class="campo">
+              <span>Horas trabalhadas por dia</span>
+              <input type="number" min="1" max="24" [ngModel]="configRascunho().hh.horasPorDia" (ngModelChange)="setConfigHH('horasPorDia', $event)" />
+            </label>
+          </div>
+
+          <h3>Padrões de precificação</h3>
+          <div class="campos">
+            <label class="campo"><span>Margem padrão (%)</span><input type="number" min="0" max="99" [ngModel]="configRascunho().margemPadrao" (ngModelChange)="setConfigNum('margemPadrao', $event)" /></label>
+            <label class="campo"><span>Perda padrão (%)</span><input type="number" min="0" max="100" [ngModel]="configRascunho().perdaPadrao" (ngModelChange)="setConfigNum('perdaPadrao', $event)" /></label>
+            <label class="campo"><span>Desconto máximo padrão (%)</span><input type="number" min="0" max="99" [ngModel]="configRascunho().descontoMaximoPadrao" (ngModelChange)="setConfigNum('descontoMaximoPadrao', $event)" /></label>
+            <label class="campo"><span>Impostos padrão (%)</span><input type="number" min="0" max="100" [ngModel]="configRascunho().impostosPercentual" (ngModelChange)="setConfigNum('impostosPercentual', $event)" /></label>
+            <label class="campo"><span>Taxa de urgência (%)</span><input type="number" min="0" max="200" [ngModel]="configRascunho().taxaUrgenciaPercentual" (ngModelChange)="setConfigNum('taxaUrgenciaPercentual', $event)" /></label>
+          </div>
+
+          <h3>Taxas de venda padrão</h3>
+          @for (t of configRascunho().taxas; track t.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Nome" [ngModel]="t.nome" (ngModelChange)="atualizarTaxaPadrao(t.id, { nome: $event })" />
+              <div class="mini-campo"><span>%</span><input type="number" min="0" max="100" [ngModel]="t.percentual" (ngModelChange)="atualizarTaxaPadraoPercentual(t.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="removerTaxaPadrao(t.id)"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <button type="button" class="btn-icone" (click)="adicionarTaxaPadrao()"><app-icon name="plus" [size]="14" /> Adicionar taxa</button>
+
+          <h3>Equipamentos (hora-máquina)</h3>
+          @for (eq of configRascunho().equipamentos; track eq.id) {
+            <div class="linha-equipamento">
+              <input type="text" placeholder="Nome (ex.: Plotter de corte)" [ngModel]="eq.nome" (ngModelChange)="atualizarEquipamento(eq.id, { nome: $event })" />
+              <div class="mini-campo"><span>Preço aquisição</span><input type="number" min="0" [ngModel]="eq.precoAquisicao" (ngModelChange)="atualizarEquipamentoNum(eq.id, 'precoAquisicao', $event)" /></div>
+              <div class="mini-campo"><span>Valor residual</span><input type="number" min="0" [ngModel]="eq.valorResidual" (ngModelChange)="atualizarEquipamentoNum(eq.id, 'valorResidual', $event)" /></div>
+              <div class="mini-campo"><span>Vida útil (h)</span><input type="number" min="1" [ngModel]="eq.vidaUtilHoras" (ngModelChange)="atualizarEquipamentoNum(eq.id, 'vidaUtilHoras', $event)" /></div>
+              <div class="mini-campo"><span>Manutenção/h</span><input type="number" min="0" [ngModel]="eq.manutencaoHora" (ngModelChange)="atualizarEquipamentoNum(eq.id, 'manutencaoHora', $event)" /></div>
+              <button type="button" class="btn-remover" (click)="removerEquipamento(eq.id)"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <button type="button" class="btn-icone" (click)="adicionarEquipamento()"><app-icon name="plus" [size]="14" /> Adicionar equipamento</button>
+
+          <h3>Custos fixos mensais</h3>
+          <label class="campo">
+            <span>Produção mensal estimada (unidades)</span>
+            <input type="number" min="1" [ngModel]="configRascunho().producaoMensalEstimada" (ngModelChange)="setConfigNum('producaoMensalEstimada', $event)" />
+          </label>
+          @for (cf of configRascunho().custosFixos; track cf.id) {
+            <div class="linha-item">
+              <input type="text" class="nome" placeholder="Ex.: Aluguel, internet, Canva…" [ngModel]="cf.nome" (ngModelChange)="atualizarCustoFixo(cf.id, { nome: $event })" />
+              <div class="mini-campo"><span>Valor mensal</span><input type="number" min="0" [ngModel]="cf.valorMensal" (ngModelChange)="atualizarCustoFixoValor(cf.id, $event)" /></div>
+              <button type="button" class="btn-remover" (click)="removerCustoFixo(cf.id)"><app-icon name="delete" [size]="14" /></button>
+            </div>
+          }
+          <button type="button" class="btn-icone" (click)="adicionarCustoFixo()"><app-icon name="plus" [size]="14" /> Adicionar custo fixo</button>
+
+          <h3>Energia elétrica</h3>
+          <div class="campos">
+            <label class="campo"><span>Valor da conta (R$)</span><input type="number" min="0" [ngModel]="configRascunho().energia.valorConta" (ngModelChange)="setConfigEnergia('valorConta', $event)" /></label>
+            <label class="campo"><span>% destinado à produção</span><input type="number" min="0" max="100" [ngModel]="configRascunho().energia.percentualProducao" (ngModelChange)="setConfigEnergia('percentualProducao', $event)" /></label>
+            <label class="campo"><span>Horas produtivas/mês</span><input type="number" min="1" [ngModel]="configRascunho().energia.horasProdutivasMes" (ngModelChange)="setConfigEnergia('horasProdutivasMes', $event)" /></label>
+          </div>
+        </div>
+        <div class="modal-rodape">
+          <button type="button" class="btn" (click)="fecharConfiguracoes(false)">Cancelar</button>
+          <button type="button" class="btn destaque" (click)="fecharConfiguracoes(true)">Salvar configurações</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

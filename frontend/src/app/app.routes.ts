@@ -97,5 +97,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/cake/cake-simulator.page').then((m) => m.CakeSimulatorPageComponent),
   },
+  {
+    path: 'precificacao',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/precificacao/precificacao.page').then((m) => m.PrecificacaoPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
