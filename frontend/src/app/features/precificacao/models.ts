@@ -141,3 +141,40 @@ export interface ProdutoFicha {
 
   atualizadoEm: string;
 }
+
+/**
+ * Registro imutável de um cálculo feito em um momento — mantém os números que
+ * o produto tinha naquele instante mesmo que as configurações globais (hora,
+ * equipamentos, custos fixos) mudem depois. É o histórico de precificações.
+ */
+export interface HistoricoEntrada {
+  id: string;
+  dataISO: string;
+  produto: ProdutoFicha;
+  custoTotal: number;
+  precoMinimo: number | null;
+  precoSugerido: number | null;
+  precoUnitarioFinal: number | null;
+  lucroUnitario: number | null;
+  margemLiquidaReal: number | null;
+}
+
+export interface OrcamentoItem {
+  id: string;
+  descricao: string;
+  quantidade: number;
+  precoUnitario: number;
+}
+
+/** Orçamento com a identidade visual Viih Mimos, pronto para imprimir/enviar ao cliente. */
+export interface Orcamento {
+  id: string;
+  numero: number;
+  dataISO: string;
+  validadeDias: number;
+  clienteNome: string;
+  clienteContato: string;
+  condicoes: string;
+  observacoes: string;
+  itens: OrcamentoItem[];
+}

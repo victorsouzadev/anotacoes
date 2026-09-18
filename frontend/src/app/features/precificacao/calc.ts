@@ -8,6 +8,7 @@ import {
   Equipamento,
   FaixaQuantidade,
   ItemCusto,
+  OrcamentoItem,
   PersonalizacaoItem,
   TaxaItem,
   UsoMaquina,
@@ -247,6 +248,20 @@ export function simularMargens(custoTotal: number, taxasPercentual: number, impo
     margemPercentual,
     preco: precoVenda(custoTotal, taxasPercentual, impostosPercentual, margemPercentual),
   }));
+}
+
+export function totalItemOrcamento(item: OrcamentoItem): number {
+  return item.quantidade * item.precoUnitario;
+}
+
+export function totalOrcamento(itens: OrcamentoItem[]): number {
+  return itens.reduce((soma, item) => soma + totalItemOrcamento(item), 0);
+}
+
+export function dataValidadeOrcamento(dataISO: string, validadeDias: number): Date {
+  const data = new Date(dataISO);
+  data.setDate(data.getDate() + validadeDias);
+  return data;
 }
 
 export interface SimulacaoQuantidade {

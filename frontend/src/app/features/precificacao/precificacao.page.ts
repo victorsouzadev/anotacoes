@@ -1,4 +1,4 @@
-import { CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -9,14 +9,16 @@ import { IconComponent } from '../../shared/icon';
 import {
   calcularPrecificacao,
   custoItem,
+  dataValidadeOrcamento,
   simularMargens,
   simularQuantidades,
   somaMinutos,
   somaValorAtivo,
+  totalOrcamento,
   valorHora,
   validaComposicaoPercentual,
 } from './calc';
-import { itemCustoVazio, produtoExemplo, produtoVazio, valorNomeadoVazio } from './factory';
+import { itemCustoVazio, orcamentoItemVazio, orcamentoVazio, produtoExemplo, produtoVazio, valorNomeadoVazio } from './factory';
 import {
   AtividadeHH,
   CATEGORIAS_PADRAO,
@@ -24,6 +26,8 @@ import {
   Equipamento,
   FaixaQuantidade,
   ItemCusto,
+  Orcamento,
+  OrcamentoItem,
   PersonalizacaoItem,
   ProdutoFicha,
   TaxaItem,
@@ -37,7 +41,7 @@ type ListaId = 'materiais' | 'insumos' | 'embalagens' | 'outrosCustos' | 'ativid
 @Component({
   selector: 'app-precificacao-page',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, CurrencyPipe, DecimalPipe],
+  imports: [FormsModule, RouterLink, IconComponent, CurrencyPipe, DecimalPipe, DatePipe],
   templateUrl: './precificacao.page.html',
   styleUrl: './precificacao.page.css',
 })
@@ -54,9 +58,15 @@ export class PrecificacaoPageComponent {
 
   config = this.storage.config;
   produtos = this.storage.produtos;
+  historico = this.storage.historico;
+  orcamentos = this.storage.orcamentos;
   produto = signal<ProdutoFicha>(produtoVazio(this.storage.config()));
 
   configRascunho = signal(structuredClone(this.storage.config()));
+
+  mostrarOrcamentos = signal(false);
+  orcamentoView = signal<'lista' | 'editor' | 'preview'>('lista');
+  orcamentoRascunho = signal<Orcamento | null>(null);
 
   // ---------------------------------------------------------------- cálculo
 
@@ -121,6 +131,16 @@ export class PrecificacaoPageComponent {
     const r = this.resultado();
     const p = this.produto();
     return simularQuantidades(r.precoSugerido, r.composicao.custoTotal, p.faixasQuantidade);
+  });
+
+  totalOrcamentoRascunho = computed(() => {
+    const o = this.orcamentoRascunho();
+    return o ? totalOrcamento(o.itens) : 0;
+  });
+
+  validadeOrcamentoRascunho = computed(() => {
+    const o = this.orcamentoRascunho();
+    return o ? dataValidadeOrcamento(o.dataISO, o.validadeDias) : null;
   });
 
   // ------------------------------------------------------------ mutação — produto
@@ -257,6 +277,7 @@ export class PrecificacaoPageComponent {
     const p = this.produto();
     if (!p.nome.trim()) return;
     this.storage.salvarProduto(p);
+    this.registrarHistorico();
   }
 
   carregarProduto(id: string): void {
@@ -267,6 +288,127 @@ export class PrecificacaoPageComponent {
   excluirProduto(id: string): void {
     this.storage.removerProduto(id);
     if (this.produto().id === id) this.novoProduto();
+  }
+
+  // ------------------------------------------------------------ histórico de cálculos
+
+  private registrarHistorico(): void {
+    const p = this.produto();
+    const r = this.resultado();
+    this.storage.registrarHistorico({
+      produto: p,
+      custoTotal: r.composicao.custoTotal,
+      precoMinimo: r.precoMinimo,
+      precoSugerido: r.precoSugerido,
+      precoUnitarioFinal: r.precoUnitarioFinal,
+      lucroUnitario: r.lucroUnitario,
+      margemLiquidaReal: r.margemLiquidaReal,
+    });
+  }
+
+  usarHistoricoComoBase(id: string): void {
+    const h = this.historico().find((x) => x.id === id);
+    if (h) this.produto.set(structuredClone(h.produto));
+  }
+
+  removerHistorico(id: string): void {
+    this.storage.removerHistorico(id);
+  }
+
+  limparHistorico(): void {
+    this.storage.limparHistorico();
+  }
+
+  // ------------------------------------------------------------ orçamentos Viih Mimos
+
+  abrirOrcamentos(): void {
+    this.orcamentoView.set('lista');
+    this.mostrarOrcamentos.set(true);
+  }
+
+  fecharOrcamentos(): void {
+    this.mostrarOrcamentos.set(false);
+  }
+
+  novoOrcamentoDoProdutoAtual(): void {
+    const p = this.produto();
+    const r = this.resultado();
+    const preco = r.precoUnitarioFinal ?? r.precoSugerido ?? 0;
+    const draft = orcamentoVazio(this.storage.proximoNumeroOrcamento());
+    draft.itens = [orcamentoItemVazio(p.nome || 'Produto personalizado', p.quantidadeVendida || 1, preco)];
+    this.orcamentoRascunho.set(draft);
+    this.orcamentoView.set('editor');
+    this.mostrarOrcamentos.set(true);
+  }
+
+  novoOrcamentoEmBranco(): void {
+    this.orcamentoRascunho.set(orcamentoVazio(this.storage.proximoNumeroOrcamento()));
+    this.orcamentoView.set('editor');
+    this.mostrarOrcamentos.set(true);
+  }
+
+  editarOrcamento(id: string): void {
+    const o = this.orcamentos().find((x) => x.id === id);
+    if (o) {
+      this.orcamentoRascunho.set(structuredClone(o));
+      this.orcamentoView.set('editor');
+    }
+  }
+
+  visualizarOrcamento(id: string): void {
+    const o = this.orcamentos().find((x) => x.id === id);
+    if (o) {
+      this.orcamentoRascunho.set(structuredClone(o));
+      this.orcamentoView.set('preview');
+    }
+  }
+
+  excluirOrcamento(id: string): void {
+    this.storage.removerOrcamento(id);
+    if (this.orcamentoRascunho()?.id === id) this.orcamentoView.set('lista');
+  }
+
+  setOrcamentoField<K extends keyof Orcamento>(campo: K, valor: Orcamento[K]): void {
+    this.orcamentoRascunho.update((o) => (o ? { ...o, [campo]: valor } : o));
+  }
+
+  setOrcamentoValidadeDias(valor: string | number): void {
+    this.setOrcamentoField('validadeDias', Number(valor) || 0);
+  }
+
+  adicionarItemOrcamento(): void {
+    this.orcamentoRascunho.update((o) => (o ? { ...o, itens: [...o.itens, orcamentoItemVazio()] } : o));
+  }
+
+  removerItemOrcamento(id: string): void {
+    this.orcamentoRascunho.update((o) => (o ? { ...o, itens: o.itens.filter((i) => i.id !== id) } : o));
+  }
+
+  atualizarItemOrcamento(id: string, patch: Partial<OrcamentoItem>): void {
+    this.orcamentoRascunho.update((o) => (o ? { ...o, itens: o.itens.map((i) => (i.id === id ? { ...i, ...patch } : i)) } : o));
+  }
+
+  atualizarItemOrcamentoNum(id: string, chave: 'quantidade' | 'precoUnitario', valor: string | number): void {
+    this.atualizarItemOrcamento(id, { [chave]: Number(valor) || 0 } as Partial<OrcamentoItem>);
+  }
+
+  adicionarItemDoHistorico(historicoId: string): void {
+    const h = this.historico().find((x) => x.id === historicoId);
+    if (!h) return;
+    const preco = h.precoUnitarioFinal ?? h.precoSugerido ?? 0;
+    const item = orcamentoItemVazio(h.produto.nome || 'Produto', h.produto.quantidadeVendida || 1, preco);
+    this.orcamentoRascunho.update((o) => (o ? { ...o, itens: [...o.itens, item] } : o));
+  }
+
+  salvarOrcamentoRascunho(): void {
+    const o = this.orcamentoRascunho();
+    if (!o) return;
+    this.storage.salvarOrcamento(o);
+    this.orcamentoView.set('preview');
+  }
+
+  imprimirOrcamento(): void {
+    window.print();
   }
 
   // ------------------------------------------------------------ configurações globais

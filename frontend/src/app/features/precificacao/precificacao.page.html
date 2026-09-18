@@ -24,7 +24,10 @@
       </select>
       <button type="button" class="btn" (click)="novoProduto()">Novo produto</button>
       <button type="button" class="btn" (click)="carregarExemplo()">Carregar exemplo</button>
-      <button type="button" class="btn destaque" (click)="salvarProduto()">Salvar ficha</button>
+      <button type="button" class="btn destaque" (click)="salvarProduto()" title="Salva a ficha e registra este cálculo no histórico">Salvar ficha</button>
+      <button type="button" class="btn" (click)="abrirOrcamentos()">
+        <app-icon name="paperclip" [size]="14" /> Orçamentos Viih Mimos
+      </button>
       <button type="button" class="btn" (click)="abrirConfiguracoes()">
         <app-icon name="more" [size]="14" /> Configurações
       </button>
@@ -395,6 +398,37 @@
             <div><span>Margem real</span><strong>{{ resultado().margemLiquidaReal !== null ? (resultado().margemLiquidaReal | number:'1.1-1') + '%' : '—' }}</strong></div>
           </div>
         </section>
+
+        <!-- Histórico de cálculos -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Histórico de cálculos</h2>
+            @if (historico().length > 0) {
+              <button type="button" class="btn-icone" (click)="limparHistorico()">Limpar tudo</button>
+            }
+          </div>
+          <p class="ajuda">Cada vez que você salva a ficha, o preço calculado naquele momento fica registrado aqui — mesmo que as configurações mudem depois.</p>
+          @if (historico().length === 0) { <p class="vazio">Nenhum cálculo registrado ainda. Clique em "Salvar ficha" para começar o histórico.</p> }
+          <ul class="lista-historico">
+            @for (h of historico(); track h.id) {
+              <li class="item-historico">
+                <div class="item-historico-info">
+                  <strong>{{ h.produto.nome || '(sem nome)' }}</strong>
+                  <span class="item-historico-data">{{ h.dataISO | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+                <div class="item-historico-numeros">
+                  <span>Custo: {{ h.custoTotal | currency:'BRL' }}</span>
+                  <span>Sugerido: {{ h.precoSugerido !== null ? (h.precoSugerido | currency:'BRL') : '—' }}</span>
+                  <span>Lucro: {{ h.lucroUnitario !== null ? (h.lucroUnitario | currency:'BRL') : '—' }}</span>
+                </div>
+                <div class="item-historico-acoes">
+                  <button type="button" class="btn-icone" (click)="usarHistoricoComoBase(h.id)">Usar como base</button>
+                  <button type="button" class="btn-remover" (click)="removerHistorico(h.id)" title="Remover"><app-icon name="delete" [size]="13" /></button>
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
       </div>
     </div>
   </main>
@@ -481,6 +515,165 @@
           <button type="button" class="btn" (click)="fecharConfiguracoes(false)">Cancelar</button>
           <button type="button" class="btn destaque" (click)="fecharConfiguracoes(true)">Salvar configurações</button>
         </div>
+      </div>
+    </div>
+  }
+
+  <!-- Orçamentos com a identidade visual Viih Mimos -->
+  @if (mostrarOrcamentos()) {
+    <div class="modal-fundo" (click)="fecharOrcamentos()">
+      <div class="modal modal-orcamento" (click)="$event.stopPropagation()">
+        @if (orcamentoView() === 'lista') {
+          <div class="modal-header">
+            <h2>Orçamentos Viih Mimos</h2>
+            <button type="button" class="btn-remover" (click)="fecharOrcamentos()"><app-icon name="x" [size]="16" /></button>
+          </div>
+          <div class="modal-corpo">
+            <div class="acoes-orcamento-lista">
+              <button type="button" class="btn destaque" (click)="novoOrcamentoDoProdutoAtual()">Novo orçamento com o produto atual</button>
+              <button type="button" class="btn" (click)="novoOrcamentoEmBranco()">Novo orçamento em branco</button>
+            </div>
+            @if (orcamentos().length === 0) { <p class="vazio">Nenhum orçamento salvo ainda.</p> }
+            <ul class="lista-orcamentos">
+              @for (o of orcamentos(); track o.id) {
+                <li class="item-orcamento">
+                  <div class="item-historico-info">
+                    <strong>Orçamento #{{ o.numero }} — {{ o.clienteNome || '(sem cliente)' }}</strong>
+                    <span class="item-historico-data">{{ o.dataISO | date:'dd/MM/yyyy' }} · válido {{ o.validadeDias }} dias</span>
+                  </div>
+                  <div class="item-historico-acoes">
+                    <button type="button" class="btn-icone" (click)="visualizarOrcamento(o.id)">Ver / imprimir</button>
+                    <button type="button" class="btn-icone" (click)="editarOrcamento(o.id)">Editar</button>
+                    <button type="button" class="btn-remover" (click)="excluirOrcamento(o.id)" title="Excluir"><app-icon name="delete" [size]="13" /></button>
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        @if (orcamentoView() === 'editor' && orcamentoRascunho(); as rascunho) {
+          <div class="modal-header">
+            <h2>Orçamento #{{ rascunho.numero }}</h2>
+            <button type="button" class="btn-remover" (click)="fecharOrcamentos()"><app-icon name="x" [size]="16" /></button>
+          </div>
+          <div class="modal-corpo">
+            <div class="campos">
+              <label class="campo">
+                <span>Cliente</span>
+                <input type="text" [ngModel]="rascunho.clienteNome" (ngModelChange)="setOrcamentoField('clienteNome', $event)" placeholder="Nome do cliente" />
+              </label>
+              <label class="campo">
+                <span>Contato do cliente</span>
+                <input type="text" [ngModel]="rascunho.clienteContato" (ngModelChange)="setOrcamentoField('clienteContato', $event)" placeholder="WhatsApp, Instagram…" />
+              </label>
+              <label class="campo">
+                <span>Validade (dias)</span>
+                <input type="number" min="1" [ngModel]="rascunho.validadeDias" (ngModelChange)="setOrcamentoValidadeDias($event)" />
+              </label>
+            </div>
+
+            <h3>Itens do orçamento</h3>
+            @for (item of rascunho.itens; track item.id) {
+              <div class="linha-item">
+                <input type="text" class="nome" placeholder="Descrição do produto" [ngModel]="item.descricao" (ngModelChange)="atualizarItemOrcamento(item.id, { descricao: $event })" />
+                <div class="mini-campo"><span>Qtd.</span><input type="number" min="1" [ngModel]="item.quantidade" (ngModelChange)="atualizarItemOrcamentoNum(item.id, 'quantidade', $event)" /></div>
+                <div class="mini-campo"><span>Preço un.</span><input type="number" min="0" step="0.01" [ngModel]="item.precoUnitario" (ngModelChange)="atualizarItemOrcamentoNum(item.id, 'precoUnitario', $event)" /></div>
+                <span class="custo-calculado">{{ (item.quantidade * item.precoUnitario) | currency:'BRL' }}</span>
+                <button type="button" class="btn-remover" (click)="removerItemOrcamento(item.id)" title="Remover"><app-icon name="delete" [size]="14" /></button>
+              </div>
+            }
+            <div class="acoes-item-orcamento">
+              <button type="button" class="btn-icone" (click)="adicionarItemOrcamento()"><app-icon name="plus" [size]="14" /> Adicionar item</button>
+              @if (historico().length > 0) {
+                <select class="select-produto" (change)="adicionarItemDoHistorico($any($event.target).value); $any($event.target).value = ''">
+                  <option value="">Adicionar item do histórico…</option>
+                  @for (h of historico(); track h.id) {
+                    <option [value]="h.id">{{ h.produto.nome || '(sem nome)' }} — {{ h.dataISO | date:'dd/MM/yyyy' }}</option>
+                  }
+                </select>
+              }
+            </div>
+            <div class="subtotal">Total do orçamento: <strong>{{ totalOrcamentoRascunho() | currency:'BRL' }}</strong></div>
+
+            <label class="campo">
+              <span>Condições de pagamento</span>
+              <textarea rows="2" [ngModel]="rascunho.condicoes" (ngModelChange)="setOrcamentoField('condicoes', $event)"></textarea>
+            </label>
+            <label class="campo">
+              <span>Observações</span>
+              <textarea rows="2" [ngModel]="rascunho.observacoes" (ngModelChange)="setOrcamentoField('observacoes', $event)" placeholder="Prazo de entrega, cores, detalhes combinados…"></textarea>
+            </label>
+          </div>
+          <div class="modal-rodape">
+            <button type="button" class="btn" (click)="orcamentoView.set('lista')">Voltar</button>
+            <button type="button" class="btn destaque" (click)="salvarOrcamentoRascunho()">Salvar e visualizar</button>
+          </div>
+        }
+
+        @if (orcamentoView() === 'preview' && orcamentoRascunho(); as vm) {
+          <div class="modal-header no-print">
+            <h2>Pré-visualização</h2>
+            <button type="button" class="btn-remover" (click)="fecharOrcamentos()"><app-icon name="x" [size]="16" /></button>
+          </div>
+          <div class="modal-corpo orcamento-imprimir">
+            <header class="vm-cabecalho">
+              <svg viewBox="0 0 300 300" class="vm-logo" role="img" aria-label="Viih Mimos">
+                <circle cx="150" cy="150" r="136" fill="none" stroke="#E7548C" stroke-width="4"/>
+                <path d="M111.29 226.66Q108.25 226.66 103.98 225.43Q99.70 224.19 96.38 220.49Q93.05 216.78 93.05 209.75Q93.05 203.86 95.33 195.50Q97.61 187.14 101.03 176.88Q104.45 166.62 107.87 154.75Q111.29 142.88 113.57 130.05Q115.85 117.22 115.85 103.92Q115.85 97.27 114.90 92.14Q113.95 87.01 111.48 84.16Q109.01 81.31 104.26 81.31Q99.32 81.31 95.90 84.16Q92.48 87.01 90.30 91.57Q88.11 96.13 87.07 101.07Q86.02 106.01 86.02 110.38Q86.02 113.61 86.69 116.66Q87.35 119.69 88.87 122.73Q79.56 122.73 75.38 118.36Q71.20 113.99 71.20 107.53Q71.20 101.83 74.05 95.75Q76.90 89.67 81.94 84.64Q86.97 79.60 93.72 76.47Q100.46 73.33 108.06 73.33Q120.98 73.33 127.63 82.74Q134.28 92.14 134.28 108.48Q134.28 118.93 131.91 130.33Q129.53 141.73 126.11 153.23Q122.69 164.72 119.18 175.56Q115.66 186.38 113.29 195.60Q110.91 204.81 110.91 211.66Q110.91 214.69 111.77 216.40Q112.62 218.11 115.47 218.11Q120.98 218.11 127.92 212.98Q134.85 207.85 142.26 199.02Q149.68 190.19 156.70 178.97Q163.73 167.76 169.44 155.60Q175.13 143.44 178.46 131.47Q181.78 119.50 181.78 109.43Q181.78 99.36 178.18 94.04Q174.56 88.72 169.06 86.82Q171.71 81.12 175.61 78.56Q179.50 75.99 182.54 75.99Q187.68 75.99 192.24 82.45Q196.80 88.91 196.80 100.69Q196.80 110.95 192.90 124.16Q189.00 137.37 182.16 151.52Q175.32 165.67 166.68 179.07Q158.03 192.46 148.44 203.20Q138.84 213.94 129.34 220.30Q119.84 226.66 111.29 226.66Z" fill="#E7548C"/>
+                <path d="M216.00 194.40 C203.60 182.00 196.00 174.00 196.00 167.60 C196.00 157.60 209.20 155.60 216.00 166.00 C222.80 155.60 236.00 157.60 236.00 167.60 C236.00 174.00 228.40 182.00 216.00 194.40 Z" fill="#E7548C"/>
+              </svg>
+              <div class="vm-marca">
+                <span class="vm-titulo">Viih Mimos</span>
+                <span class="vm-subtitulo">papelaria personalizada</span>
+                <span class="vm-legenda">Marabá · Pará · (91) 99373-1794 · &#64;viihmimos_</span>
+              </div>
+              <div class="vm-numero">
+                <span>Orçamento</span>
+                <strong>#{{ vm.numero }}</strong>
+                <span>{{ vm.dataISO | date:'dd/MM/yyyy' }}</span>
+              </div>
+            </header>
+
+            <section class="vm-secao">
+              <div class="vm-cliente">
+                <div><span>Cliente</span><strong>{{ vm.clienteNome || '—' }}</strong></div>
+                <div><span>Contato</span><strong>{{ vm.clienteContato || '—' }}</strong></div>
+                <div><span>Válido até</span><strong>{{ validadeOrcamentoRascunho() | date:'dd/MM/yyyy' }}</strong></div>
+              </div>
+            </section>
+
+            <table class="vm-tabela">
+              <thead><tr><th>Item</th><th>Qtd.</th><th>Preço un.</th><th>Subtotal</th></tr></thead>
+              <tbody>
+                @for (item of vm.itens; track item.id) {
+                  <tr>
+                    <td>{{ item.descricao || '—' }}</td>
+                    <td>{{ item.quantidade }}</td>
+                    <td>{{ item.precoUnitario | currency:'BRL' }}</td>
+                    <td>{{ (item.quantidade * item.precoUnitario) | currency:'BRL' }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Total</td><td>{{ totalOrcamentoRascunho() | currency:'BRL' }}</td></tr>
+              </tfoot>
+            </table>
+
+            @if (vm.condicoes) {
+              <div class="vm-bloco"><span>Condições de pagamento</span><p>{{ vm.condicoes }}</p></div>
+            }
+            @if (vm.observacoes) {
+              <div class="vm-bloco"><span>Observações</span><p>{{ vm.observacoes }}</p></div>
+            }
+
+            <footer class="vm-rodape">feito à mão, pensado pra você · cada mimo com o seu nome</footer>
+          </div>
+          <div class="modal-rodape no-print">
+            <button type="button" class="btn" (click)="orcamentoView.set('editor')">Editar</button>
+            <button type="button" class="btn destaque" (click)="imprimirOrcamento()"><app-icon name="download" [size]="14" /> Imprimir / salvar PDF</button>
+          </div>
+        }
       </div>
     </div>
   }

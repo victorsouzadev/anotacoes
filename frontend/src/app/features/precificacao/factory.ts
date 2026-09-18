@@ -1,5 +1,5 @@
 import { uuid } from '../../core/uuid';
-import { ConfiguracaoPrecificacao, ItemCusto, ProdutoFicha, ValorNomeado } from './models';
+import { ConfiguracaoPrecificacao, ItemCusto, Orcamento, OrcamentoItem, ProdutoFicha, ValorNomeado } from './models';
 
 export function itemCustoVazio(nome = ''): ItemCusto {
   return { id: uuid(), nome, unidade: 'un', precoCompra: 0, qtdComprada: 1, qtdUtilizada: 1 };
@@ -68,5 +68,23 @@ export function produtoExemplo(config: ConfiguracaoPrecificacao): ProdutoFicha {
     embalagens: [{ id: uuid(), nome: 'Saquinho', unidade: 'un', precoCompra: 1.5, qtdComprada: 1, qtdUtilizada: 1 }],
     atividadesHH: [{ id: uuid(), nome: 'Produção completa', minutos: 30 }],
     usosMaquina: [],
+  };
+}
+
+export function orcamentoItemVazio(descricao = '', quantidade = 1, precoUnitario = 0): OrcamentoItem {
+  return { id: uuid(), descricao, quantidade, precoUnitario };
+}
+
+export function orcamentoVazio(numero: number): Orcamento {
+  return {
+    id: uuid(),
+    numero,
+    dataISO: new Date().toISOString(),
+    validadeDias: 7,
+    clienteNome: '',
+    clienteContato: '',
+    condicoes: '50% de entrada para confirmar o pedido, restante na entrega.',
+    observacoes: '',
+    itens: [],
   };
 }

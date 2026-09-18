@@ -8,6 +8,7 @@ import {
   custoHH,
   custoHM,
   custoItem,
+  dataValidadeOrcamento,
   depreciacaoHora,
   precoComDesconto,
   precoMinimo,
@@ -16,6 +17,8 @@ import {
   simularQuantidades,
   somaItens,
   somaMinutos,
+  totalItemOrcamento,
+  totalOrcamento,
   valorHora,
   validaComposicaoPercentual,
 } from './calc';
@@ -166,6 +169,22 @@ describe('simularQuantidades', () => {
     expect(linhas[1].precoUnitario).toBeCloseTo(19);
     expect(linhas[1].precoTotal).toBeCloseTo(190);
     expect(linhas[1].lucroTotal).toBeCloseTo(190 - 100);
+  });
+});
+
+describe('orçamento', () => {
+  it('calcula o total de um item e do orçamento inteiro', () => {
+    const itens = [
+      { id: '1', descricao: 'Topo de bolo', quantidade: 2, precoUnitario: 25 },
+      { id: '2', descricao: 'Caixinha', quantidade: 10, precoUnitario: 5 },
+    ];
+    expect(totalItemOrcamento(itens[0])).toBe(50);
+    expect(totalOrcamento(itens)).toBe(100);
+  });
+
+  it('calcula a data de validade a partir da data de emissão', () => {
+    const validade = dataValidadeOrcamento('2026-01-01T12:00:00.000Z', 7);
+    expect(validade.getUTCDate()).toBe(8);
   });
 });
 
