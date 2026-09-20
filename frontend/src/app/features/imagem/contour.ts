@@ -35,6 +35,16 @@ export interface TraceOptions {
  * (bico de estrela, quina de quadrado) em vez de curva. */
 export const CORNER_ANGLE = 60;
 
+/** Janela do detector de cantos, em amostras de 1 px. Fixa de propósito: o
+ * único motivo de ela não ser 1 é a escada do pixel, que vira 90° de um passo
+ * pro outro e passaria por canto — e isso é um problema de tamanho fixo, não
+ * tem relação com o quanto se está suavizando. Fazer a janela crescer junto com
+ * o sigma sai pela culatra: janela larga mede a virada acumulada de uma curva e
+ * a confunde com canto, então quanto mais se pede suavização, mais feições
+ * pequenas são pinadas — e o controle empaca justamente onde precisava
+ * trabalhar. */
+const CORNER_WINDOW = 4;
+
 export function traceCutPaths(canvas: HTMLCanvasElement, options: TraceOptions = {}): Polygon[] {
   const w = canvas.width;
   const h = canvas.height;
@@ -178,13 +188,7 @@ function smoothContour(poly: Polygon, area: number, sigma: number, cornerAngle: 
   let p = resampleClosed(poly, passo);
   if (p.length < 5) return poly;
   const sigmaAmostras = sigma / passo;
-  // A janela acompanha a escala da suavização, mas nunca desce de 4 amostras:
-  // a escada do pixel vira 90° de um passo pro outro, e uma janela curta a
-  // confundiria com canto proposital — aí a suavização fraca não suavizaria
-  // nada. Larga demais também não serve: aí a curvatura de uma peça pequena
-  // passaria por canto, e é por isso que ela cresce só junto com o sigma.
-  const janela = Math.max(4, Math.round(sigmaAmostras));
-  const cantos = findCorners(p, cornerAngle, janela);
+  const cantos = findCorners(p, cornerAngle, CORNER_WINDOW);
   p = smoothClosed(p, sigmaAmostras, cantos);
   return restoreArea(p, area, sigma);
 }

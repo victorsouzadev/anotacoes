@@ -102,7 +102,7 @@ interface Prefs {
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
-const MAX_SMOOTHING = 25;
+const MAX_SMOOTHING = 60;
 /** Cada passo do controle de suavização vale isto em mm de desvio-padrão: o
  * passo 1 (≈0,08 mm, ou 1 px a 300 DPI) já tira a escada do pixel e o teto
  * arredonda de verdade. */
