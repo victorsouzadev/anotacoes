@@ -1,4 +1,4 @@
-import { FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-model';
+import { FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-model';
 import { SocialStore } from './social-store';
 import { isHeicFile } from './social-mode';
 
@@ -34,6 +34,24 @@ describe('modo redes sociais', () => {
     const moved = frameRect(100, 100, 200, 200, 'cover', 1, 0.25, -0.5);
     expect(moved.x - base.x).toBeCloseTo(50, 6);
     expect(moved.y - base.y).toBeCloseTo(-100, 6);
+  });
+
+  it('agrupa os filtros na ordem da lista, sem perder nenhum', () => {
+    expect(FILTER_GROUPS.flatMap((g) => g.presets.map((p) => p.id)))
+      .toEqual(FILTER_PRESETS.map((p) => p.id));
+    expect(FILTER_GROUPS.length).toBeGreaterThan(1);
+    // Um grupo só pode aparecer uma vez, senão o painel repete o título.
+    expect(new Set(FILTER_GROUPS.map((g) => g.name)).size).toBe(FILTER_GROUPS.length);
+  });
+
+  it('todo preset só mexe em ajuste que existe, e dentro da faixa', () => {
+    const keys = new Set(Object.keys(NEUTRAL));
+    for (const preset of FILTER_PRESETS) {
+      for (const [key, value] of Object.entries(preset.values)) {
+        expect(keys.has(key)).toBe(true);
+        expect(Number.isFinite(value)).toBe(true);
+      }
+    }
   });
 
   it('todo preset e formato tem id único', () => {

@@ -4,12 +4,15 @@
  *
  * Todo seletor usa o prefixo `sm-` pra combinar com o resto da página. */
 
-import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import {
+  Component, ElementRef, computed, effect, inject, signal, viewChild, viewChildren,
+} from '@angular/core';
 import { IconComponent } from '../../shared/icon';
 import {
-  Adjustments, BgMode, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL, SOCIAL_FORMATS, SocialFormat,
-  filterString, frameRect,
+  Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
+  SOCIAL_FORMATS, SocialFormat, filterString,
 } from './social-model';
+import { FrameOptions, Source, paintFrame, sourceOf } from './social-render';
 import { SocialStore, normalizeSocialPhoto } from './social-store';
 import { downloadBlob, loadImageElement } from './svg-template';
 
@@ -166,15 +169,27 @@ async function heicToJpeg(file: File): Promise<Blob> {
           <app-icon class="sm-chevron" name="chevron" [size]="14" />
         </button>
         <div class="sm-section-body">
-          <div class="sm-presets">
-            @for (p of presets; track p.id) {
-              <button class="sm-preset" [class.sm-active]="preset() === p.id" (click)="applyPreset(p)">
-                <span class="sm-preset-chip" [style.filter]="chipFilter(p)"></span>
-                <span class="sm-preset-label">{{ p.label }}</span>
-              </button>
-            }
-          </div>
-          <p class="sm-note">Depois de aplicar, dá pra continuar ajustando tudo na seção de cor.</p>
+          @for (g of groups; track g.name) {
+            <div class="sm-group">
+              <span class="sm-group-name">{{ g.name }}</span>
+              <div class="sm-presets">
+                @for (p of g.presets; track p.id) {
+                  <button class="sm-preset" [class.sm-active]="preset() === p.id" (click)="applyPreset(p)" [title]="p.label">
+                    @if (image()) {
+                      <canvas #presetCanvas class="sm-preset-chip" [attr.data-preset]="p.id"></canvas>
+                    } @else {
+                      <span class="sm-preset-chip sm-chip-demo" [style.filter]="chipFilter(p)"></span>
+                    }
+                    <span class="sm-preset-label">{{ p.label }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+          }
+          <p class="sm-note">
+            {{ presets.length }} filtros. A miniatura mostra a sua foto — depois de aplicar, dá pra
+            continuar ajustando tudo na seção de cor.
+          </p>
         </div>
       </section>
 
@@ -236,7 +251,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
     /* O host some da grade: os dois filhos é que são as colunas da página. */
     app-social-mode { display: contents; }
 
-    .sm-preview-wrap { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    /* A prévia acompanha a rolagem: a lista de filtros e os dez controles de cor
+       são mais altos que a tela, e editar sem ver a foto não serve pra nada. */
+    .sm-preview-wrap {
+      display: flex; flex-direction: column; gap: 10px; min-width: 0;
+      position: sticky; top: 16px;
+      max-height: calc(100dvh - 32px);
+    }
     .sm-tabs { display: flex; align-items: center; gap: 8px; }
     .sm-tab-label { font-size: 12px; font-weight: 600; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sm-zoom-bar { margin-left: auto; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
@@ -246,7 +267,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
 
     .sm-stage {
       flex: 1;
-      min-height: 320px;
+      min-height: 220px;
       display: flex; align-items: center; justify-content: center;
       padding: 16px;
       background: var(--surface);
@@ -258,7 +279,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
       overflow: hidden;
     }
     .sm-stage.sm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
-    .sm-canvas { display: block; max-width: 100%; max-height: 62dvh; border-radius: 4px; }
+    .sm-canvas { display: block; max-width: 100%; max-height: 100%; border-radius: 4px; object-fit: contain; }
 
     .sm-hint { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.4; }
     .sm-error { color: var(--danger); font-size: 12px; }
@@ -331,6 +352,8 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-format-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
     .sm-format.sm-active .sm-format-label { color: var(--accent); }
 
+    .sm-group { display: flex; flex-direction: column; gap: 6px; }
+    .sm-group-name { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
     .sm-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .sm-preset {
       display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -339,9 +362,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
     }
     .sm-preset:hover { border-color: var(--accent); }
     .sm-preset.sm-active { border-color: var(--accent); background: var(--accent-soft); }
-    /* Amostra do filtro: um degradê fixo que recebe o mesmo tratamento de cor. */
-    .sm-preset-chip {
-      width: 100%; height: 28px; border-radius: 4px;
+    /* Miniatura do filtro: a própria foto, no enquadramento atual. Sem foto,
+       cai num degradê que recebe o mesmo tratamento de cor. */
+    .sm-preset-chip { display: block; width: 100%; height: auto; max-height: 56px; border-radius: 4px; object-fit: cover; }
+    .sm-chip-demo {
+      height: 28px;
       background: linear-gradient(135deg, #f7b733 0%, #e96443 38%, #7b4397 72%, #1f6f8b 100%);
     }
     .sm-preset-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
@@ -353,16 +378,29 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-reset { border: none; background: none; color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 0 2px; }
     .sm-reset:hover { color: var(--accent); }
 
-    @media (max-width: 860px) {
-      .sm-canvas { max-height: 46dvh; }
+    /* No celular as colunas viram uma só: a prévia gruda no topo e encolhe pra
+       sobrar tela pros controles logo abaixo. */
+    @media (max-width: 900px) {
+      .sm-preview-wrap {
+        position: sticky; top: 0; z-index: 5;
+        max-height: none;
+        padding-bottom: 8px;
+        background: var(--bg);
+      }
+      .sm-stage { min-height: 0; padding: 8px; }
+      .sm-canvas { max-height: clamp(160px, 34dvh, 320px); }
+      .sm-hint { display: none; }
     }
   `],
 })
 export class SocialModeComponent {
   private readonly previewRef = viewChild<ElementRef<HTMLCanvasElement>>('preview');
 
+  private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
+
   readonly formats = SOCIAL_FORMATS;
   readonly presets = FILTER_PRESETS;
+  readonly groups = FILTER_GROUPS;
   readonly sliders: { key: keyof Adjustments; label: string; min: number; max: number }[] = [
     { key: 'brightness', label: 'Brilho', min: 50, max: 150 },
     { key: 'contrast', label: 'Contraste', min: 50, max: 160 },
@@ -412,6 +450,9 @@ export class SocialModeComponent {
   });
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number } | null = null;
+  /** Recorte intermediário reaproveitado pelas miniaturas. */
+  private readonly baseCanvas = document.createElement('canvas');
+  private frame: number | null = null;
 
   constructor() {
     // Redesenha a prévia sempre que qualquer entrada muda — um efeito só, já que
@@ -420,12 +461,76 @@ export class SocialModeComponent {
       const canvas = this.previewRef()?.nativeElement;
       const img = this.image();
       if (!canvas || !img) return;
-      const ratio = this.format().ratio;
       const w = 900;
       canvas.width = w;
-      canvas.height = Math.round(w / ratio);
-      this.paint(canvas, img, this.adjust(), this.fit(), this.scale(), this.offsetX(), this.offsetY(), this.bgMode(), this.bgColor());
+      canvas.height = Math.round(w / this.format().ratio);
+      paintFrame(canvas, sourceOf(img), this.frameOptions(this.adjust()));
     });
+
+    // As miniaturas dos filtros mostram a própria foto, no enquadramento atual.
+    // Elas não dependem dos ajustes de cor: cada uma desenha os *seus* valores,
+    // então mexer num controle não obriga a redesenhar as 34.
+    effect(() => {
+      const refs = this.presetRefs();
+      const img = this.image();
+      const frame = { ...this.frameOptions(NEUTRAL), ratio: this.format().ratio };
+      if (!refs.length || !img) return;
+      this.schedule(() => this.paintThumbs(refs, img, frame));
+    });
+  }
+
+  /** Junta o enquadramento atual com um conjunto de ajustes. */
+  private frameOptions(adjust: Adjustments): FrameOptions {
+    return {
+      adjust,
+      fit: this.fit(),
+      scale: this.scale(),
+      dx: this.offsetX(),
+      dy: this.offsetY(),
+      bgMode: this.bgMode(),
+      bgColor: this.bgColor(),
+    };
+  }
+
+  /** Agrupa redesenhos num quadro só: arrastar a foto dispara o efeito a cada
+   * movimento do ponteiro, e são dezenas de miniaturas. */
+  private schedule(work: () => void): void {
+    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    this.frame = requestAnimationFrame(() => {
+      this.frame = null;
+      work();
+    });
+  }
+
+  private paintThumbs(
+    refs: readonly ElementRef<HTMLCanvasElement>[],
+    img: HTMLImageElement,
+    frame: FrameOptions & { ratio: number },
+  ): void {
+    // O recorte sem cor nenhuma é desenhado uma vez; cada miniatura só repinta
+    // esse recorte com os seus ajustes, que é barato mesmo com a lista cheia.
+    const baseW = 160;
+    const base = this.baseCanvas;
+    base.width = baseW;
+    base.height = Math.max(1, Math.round(baseW / frame.ratio));
+    paintFrame(base, sourceOf(img), frame);
+    const source: Source = { image: base, width: base.width, height: base.height };
+
+    const thumbW = 104;
+    for (const ref of refs) {
+      const canvas = ref.nativeElement;
+      const id = canvas.dataset['preset'];
+      const values = FILTER_PRESETS.find((p) => p.id === id)?.values;
+      if (!values) continue;
+      canvas.width = thumbW;
+      canvas.height = Math.max(1, Math.round(thumbW / frame.ratio));
+      // O recorte já cobre o quadro inteiro, então a miniatura só precisa de cor.
+      paintFrame(canvas, source, {
+        adjust: { ...NEUTRAL, ...values },
+        fit: 'cover', scale: 1, dx: 0, dy: 0,
+        bgMode: 'cor', bgColor: frame.bgColor,
+      });
+    }
   }
 
   isOpen(id: SectionId): boolean { return this.open()[id]; }
@@ -607,7 +712,7 @@ export class SocialModeComponent {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    this.paint(canvas, img, this.adjust(), this.fit(), this.scale(), this.offsetX(), this.offsetY(), this.bgMode(), this.bgColor());
+    paintFrame(canvas, sourceOf(img), this.frameOptions(this.adjust()));
     const png = this.type() === 'png';
     canvas.toBlob(
       (blob) => {
@@ -622,73 +727,5 @@ export class SocialModeComponent {
       png ? 'image/png' : 'image/jpeg',
       png ? undefined : this.quality() / 100,
     );
-  }
-
-  /** Desenha fundo, foto com os ajustes de cor e as camadas de acabamento
-   * (temperatura, desbotado, vinheta). Usado pela prévia e pela exportação. */
-  private paint(
-    canvas: HTMLCanvasElement, img: HTMLImageElement, a: Adjustments,
-    fit: FitMode, scale: number, dx: number, dy: number, bgMode: BgMode, bgColor: string,
-  ): void {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const w = canvas.width;
-    const h = canvas.height;
-    const size = Math.max(w, h);
-    const iw = img.naturalWidth || 1;
-    const ih = img.naturalHeight || 1;
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.filter = 'none';
-    ctx.clearRect(0, 0, w, h);
-
-    if (bgMode === 'desfoque') {
-      // Fundo borrado: a própria foto cobrindo o quadro, bem desfocada.
-      const cover = frameRect(iw, ih, w, h, 'cover', 1.18, 0, 0);
-      ctx.filter = `blur(${size * 0.04}px) brightness(0.92) saturate(120%)`;
-      ctx.drawImage(img, cover.x, cover.y, cover.w, cover.h);
-      ctx.filter = 'none';
-    } else {
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    const r = frameRect(iw, ih, w, h, fit, scale, dx, dy);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, w, h);
-    ctx.clip();
-    ctx.filter = filterString(a, size);
-    ctx.drawImage(img, r.x, r.y, r.w, r.h);
-    ctx.restore();
-    ctx.filter = 'none';
-
-    if (a.temperature) {
-      // Quente puxa pro laranja, frio pro azul. `overlay` mexe na cor sem lavar
-      // as altas luzes, que é o que um ajuste de temperatura deve fazer.
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = Math.min(0.45, Math.abs(a.temperature) / 100 * 0.45);
-      ctx.fillStyle = a.temperature > 0 ? '#ff8a2b' : '#2b7dff';
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
-    }
-
-    if (a.fade) {
-      ctx.globalAlpha = (a.fade / 100) * 0.4;
-      ctx.fillStyle = '#f5f2ee';
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1;
-    }
-
-    if (a.vignette) {
-      const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32, w / 2, h / 2, Math.max(w, h) * 0.72);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, `rgba(0,0,0,${(a.vignette / 100) * 0.75})`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-    }
   }
 }
