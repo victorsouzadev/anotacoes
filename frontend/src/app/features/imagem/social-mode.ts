@@ -420,8 +420,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
     </aside>
   `,
   styles: [`
-    /* O host some da grade: os dois filhos é que são as colunas da página. */
-    app-social-mode { display: contents; }
+    /* O host some da grade: os dois filhos é que são as colunas da página.
+       Precisa ser :host, e não o nome da tag — o estilo deste componente é
+       escopado por atributo, e o seletor de tag viraria algo que não casa com o
+       próprio elemento. Sem isso o host continuava sendo um item de grade só,
+       com prévia e painel empilhados dentro dele, e no celular a coluna inchava
+       até o dobro da largura da tela. */
+    :host { display: contents; }
 
     /* A prévia acompanha a rolagem: a lista de filtros e os dez controles de cor
        são mais altos que a tela, e editar sem ver a foto não serve pra nada. */
