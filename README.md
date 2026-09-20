@@ -154,7 +154,15 @@ com as artes embutidas em data URL).
 - Importa PNG/JPG, remove fundo por clique (flood fill com tolerância), borracha e
   remoção de linhas de corte individuais.
 - Contorno com margem em mm, na silhueta da arte ou numa forma analítica
-  (retângulo, arredondado, elipse), com suavização e preenchimento de vãos.
+  (retângulo, arredondado, elipse), com preenchimento de vãos.
+- A linha de corte é vetorizada por marching squares com **interpolação subpixel**
+  (o traçado segue a borda anti-serrilhada em vez da escada do pixel), suavizada por
+  um **passa-baixa gaussiano** ao longo do contorno com desvio-padrão em mm, e sai em
+  **curvas de Bézier** — polilinha faz a lâmina desacelerar em cada vértice. A área é
+  devolvida depois de suavizar, senão a linha migraria pra dentro da margem impressa,
+  e cantos propositais (bico de estrela, quina de quadrado) são detectados e
+  preservados, com chave pra desligar. Lógica em `contour.ts`, testada em
+  `contour.spec.ts`.
 - Folha de montagem A4/A3 (shelf packing) com cópias por peça.
 - Exporta PNG 300 DPI (com DPI gravado no arquivo), PDF no tamanho físico e SVG só
   com as linhas de corte — as posições batem entre impressão e corte.

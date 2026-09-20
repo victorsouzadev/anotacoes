@@ -4,7 +4,10 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
-import { Polygon, pngBlobWithDpi, polygonsToPathData, smallestPathContaining, traceCutPaths } from './contour';
+import {
+  CORNER_ANGLE, Polygon, pngBlobWithDpi, polygonToCubics, polygonsToPathData, smallestPathContaining,
+  traceCutPaths,
+} from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
 import {
@@ -83,6 +86,7 @@ interface Prefs {
   color: string;
   shape: CutShape;
   smoothing: number;
+  keepCorners: boolean;
   fillHoles: boolean;
   outerOnly: boolean;
   brushMm: number;
@@ -94,6 +98,14 @@ interface Prefs {
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
+const MAX_SMOOTHING = 10;
+/** Cada passo do controle de suavização vale isto em mm de desvio-padrão: o
+ * passo 1 (≈0,08 mm, ou 1 px a 300 DPI) já tira a escada do pixel e o 10
+ * arredonda de verdade. */
+const SMOOTHING_MM_PER_STEP = 0.08;
+/** Decimação depois de suavizar: só enxuga a contagem de pontos pra máquina,
+ * sem mexer na forma (0,03 mm está bem abaixo da precisão de qualquer lâmina). */
+const SIMPLIFY_MM = 0.03;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
@@ -107,7 +119,7 @@ const PREFS_KEY = 'imagem-editor-prefs';
 const DEFAULT_PREFS: Prefs = {
   modo: 'corte',
   widthMm: 100, marginMm: 3, gapMm: 0, color: '#ffffff', shape: 'silhueta',
-  smoothing: 4, fillHoles: true, outerOnly: false, brushMm: 4,
+  smoothing: 4, keepCorners: true, fillHoles: true, outerOnly: false, brushMm: 4,
   openSections: { imagens: true, contorno: true },
   sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
 };
@@ -130,6 +142,10 @@ type PieceQuality = 'preview' | 'full';
 function scaleErasures(erasures: Erasure[], escala: number): Erasure[] {
   if (escala === 1) return erasures;
   return erasures.map((e) => ({ x: e.x * escala, y: e.y * escala, r: e.r * escala }));
+}
+
+function smoothingSigmaMm(step: number): number {
+  return Math.max(0, step) * SMOOTHING_MM_PER_STEP;
 }
 
 function plural(n: number, singular: string, plural: string): string {
@@ -396,10 +412,14 @@ function loadPrefs(): Prefs {
                 </label>
                 @if (sel.shape === 'silhueta') {
                   <label class="field">
-                    <span class="field-label">Suavizar a linha de corte <strong>{{ smoothing() }}</strong></span>
-                    <input type="range" min="0" max="10" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
+                    <span class="field-label">Suavizar a linha de corte <strong>{{ smoothingLabel() }}</strong></span>
+                    <input type="range" min="0" [max]="maxSmoothing" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
                   </label>
-                  <p class="field-note">Linha muito serrilhada faz a lâmina vibrar e rasgar o papel. Suba isto se o corte estiver saindo picotado.</p>
+                  <p class="field-note">Linha serrilhada faz a lâmina vibrar e rasgar o papel. O número é o quanto a linha pode se afastar do desenho pra ficar lisa — suba se o corte estiver saindo picotado.</p>
+                  <label class="check-field">
+                    <input type="checkbox" [checked]="keepCorners()" (change)="onKeepCornersChange($event)" />
+                    <span>Manter cantos vivos — não arredonda bico de estrela nem quina de quadrado</span>
+                  </label>
                   <label class="check-field">
                     <input type="checkbox" [checked]="fillHoles()" (change)="onFillHolesChange($event)" />
                     <span>Não cortar buracos internos — corta só o contorno de fora</span>
@@ -799,6 +819,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   readonly maxMarginMm = MAX_MARGIN_MM;
   readonly maxGapMm = MAX_GAP_MM;
+  readonly maxSmoothing = MAX_SMOOTHING;
   readonly dpi = EXPORT_DPI;
   readonly swatches = SWATCHES;
   readonly shapes = SHAPES;
@@ -810,6 +831,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   selectedId = signal<string | null>(null);
   view = signal<'peca' | 'folha'>('peca');
   smoothing = signal(this.prefs.smoothing);
+  keepCorners = signal(this.prefs.keepCorners);
   fillHoles = signal(this.prefs.fillHoles);
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
@@ -824,6 +846,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   dragOver = signal(false);
   packInfo = signal<{ placed: number; overflow: number }>({ placed: 0, overflow: 0 });
 
+  /** O controle guarda um passo inteiro, mas quem lê a tela quer saber o
+   * tamanho real do afastamento — em mm, como o resto do painel. */
+  smoothingLabel = computed(() => {
+    const s = this.smoothing();
+    return s > 0 ? `${smoothingSigmaMm(s).toFixed(2).replace('.', ',')} mm` : 'desligada';
+  });
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
@@ -1059,6 +1087,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  onKeepCornersChange(event: Event): void {
+    this.keepCorners.set((event.target as HTMLInputElement).checked);
+    this.prefs.keepCorners = this.keepCorners();
+    this.savePrefs();
+    this.scheduleRender();
+  }
+
   onFillHolesChange(event: Event): void {
     this.fillHoles.set((event.target as HTMLInputElement).checked);
     this.prefs.fillHoles = this.fillHoles();
@@ -1278,7 +1313,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
       item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
-      this.smoothing(), this.fillHoles(), largura,
+      this.smoothing(), this.keepCorners(), this.fillHoles(), largura,
     ]);
     if (quality === 'full') return this.buildPiece(item, largura);
     const cached = this.pieceCache.get(item.id);
@@ -1325,11 +1360,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       ctx.drawImage(contour, 0, 0);
       ctx.drawImage(source, total, total);
 
-      const s = this.smoothing();
+      // tudo em mm vezes o ppm DESTA peça, pra a prévia (que trabalha numa
+      // escala menor) suavizar na mesma medida que a exportação
       const paths = traceCutPaths(canvas, {
         fillHoles: this.fillHoles(),
-        simplifyEpsilon: s > 0 ? ppm * s * 0.05 : ppm * 0.02,
-        chaikinIterations: s >= 5 ? 2 : s >= 1 ? 1 : 0,
+        smoothSigma: smoothingSigmaMm(this.smoothing()) * ppm,
+        cornerAngle: this.keepCorners() ? CORNER_ANGLE : 0,
+        simplifyEpsilon: Math.max(0.2, ppm * SIMPLIFY_MM),
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
       return {
@@ -1407,10 +1444,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     ctx.strokeStyle = '#e5383b';
     ctx.lineWidth = lineWidth;
     ctx.setLineDash([lineWidth * 4, lineWidth * 3]);
+    // as mesmas curvas que vão pro SVG: o tracejado na tela é literalmente o
+    // caminho exportado, então não tem "na prévia parecia liso e saiu diferente"
     for (const poly of paths) {
+      const { start, segments } = polygonToCubics(poly);
+      if (!segments.length) continue;
       ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.moveTo(start[0], start[1]);
+      for (const s of segments) {
+        if (s.c1 && s.c2) ctx.bezierCurveTo(s.c1[0], s.c1[1], s.c2[0], s.c2[1], s.to[0], s.to[1]);
+        else ctx.lineTo(s.to[0], s.to[1]);
+      }
       ctx.closePath();
       ctx.stroke();
     }
@@ -1603,6 +1647,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     return JSON.stringify({
       version: 2,
       smoothing: this.smoothing(),
+      keepCorners: this.keepCorners(),
       fillHoles: this.fillHoles(),
       sheetSize: this.sheetSize(),
       orientation: this.orientation(),
@@ -1659,7 +1704,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     try {
       const dto = await this.projectsApi.get(id);
       const data = JSON.parse(dto.data) as {
-        smoothing?: number; fillHoles?: boolean; sheetSize?: SheetSize;
+        smoothing?: number; keepCorners?: boolean; fillHoles?: boolean; sheetSize?: SheetSize;
         orientation?: SheetOrientation; spacingMm?: number;
         images?: (Partial<ImportedImage> & { original: string })[];
         molde?: TemplateProjectData | null;
@@ -1669,6 +1714,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.pieceCache.clear();
       this.selectedId.set(null);
       if (data.smoothing !== undefined) this.smoothing.set(data.smoothing);
+      // projeto salvo antes dos cantos vivos não traz o campo: liga por padrão
+      this.keepCorners.set(data.keepCorners ?? true);
       if (data.fillHoles !== undefined) this.fillHoles.set(data.fillHoles);
       if (data.sheetSize) this.sheetSize.set(data.sheetSize);
       if (data.orientation) this.orientation.set(data.orientation);
