@@ -1,5 +1,6 @@
 import { FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-model';
 import { SocialStore } from './social-store';
+import { isHeicFile } from './social-mode';
 
 describe('modo redes sociais', () => {
   it('não emite ajustes neutros no filtro', () => {
@@ -97,5 +98,23 @@ describe('projeto do modo redes sociais', () => {
     expect(store.hasImage()).toBe(false);
     expect(store.serialize()).toBeNull();
     expect(store.adjust().sepia).toBe(0);
+  });
+});
+
+describe('detecção de HEIC', () => {
+  it('reconhece pelo tipo declarado', () => {
+    expect(isHeicFile({ name: 'IMG_0001', type: 'image/heic' })).toBe(true);
+    expect(isHeicFile({ name: 'IMG_0001', type: 'image/heif' })).toBe(true);
+  });
+
+  it('reconhece pela extensão quando o tipo vem vazio', () => {
+    expect(isHeicFile({ name: 'IMG_0002.HEIC', type: '' })).toBe(true);
+    expect(isHeicFile({ name: 'IMG_0003.heif', type: '' })).toBe(true);
+  });
+
+  it('não confunde com os formatos que o navegador já abre', () => {
+    expect(isHeicFile({ name: 'foto.jpg', type: 'image/jpeg' })).toBe(false);
+    expect(isHeicFile({ name: 'arte.png', type: 'image/png' })).toBe(false);
+    expect(isHeicFile({ name: 'heic-de-mentira.png', type: 'image/png' })).toBe(false);
   });
 });

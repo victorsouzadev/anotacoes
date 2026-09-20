@@ -24,6 +24,31 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+function readAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Foto de iPhone. O `type` vem vazio em vários sistemas (o navegador não
+ * conhece o formato), então a extensão também conta. */
+export function isHeicFile(file: { name: string; type: string }): boolean {
+  const type = file.type.toLowerCase();
+  if (type === 'image/heic' || type === 'image/heif' || type === 'image/heic-sequence') return true;
+  return /\.hei[cf]$/i.test(file.name);
+}
+
+/** Converte HEIC em JPEG. O decodificador (libheif em WebAssembly) é pesado e
+ * nenhum navegador fora do Safari abre HEIC sozinho, então ele entra por import
+ * dinâmico: só baixa quando alguém realmente solta uma foto de iPhone. */
+async function heicToJpeg(file: File): Promise<Blob> {
+  const { heicTo } = await import('heic-to');
+  return heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 });
+}
+
 @Component({
   selector: 'app-social-mode',
   standalone: true,
@@ -71,13 +96,15 @@ function clamp(n: number, min: number, max: number): number {
           <app-icon name="image" [size]="34" />
           <p><strong>Solte uma foto aqui</strong></p>
           <p class="sm-sub">Escolha o formato do post, aplique um filtro pronto e ajuste as cores na mão.</p>
+          <p class="sm-sub">JPEG, PNG, WebP e HEIC do iPhone.</p>
+          @if (converting()) { <p class="sm-sub">Convertendo HEIC…</p> }
           @if (error()) { <p class="sm-error">{{ error() }}</p> }
         </div>
       }
     </div>
 
     <aside class="sm-panel">
-      <input #fileInput type="file" accept="image/*" hidden (change)="onFileInput($event)" />
+      <input #fileInput type="file" accept="image/*,.heic,.heif" hidden (change)="onFileInput($event)" />
 
       <section class="sm-section" [class.sm-open]="isOpen('foto')">
         <button class="sm-section-head" (click)="toggle('foto')">
@@ -372,6 +399,7 @@ export class SocialModeComponent {
   readonly error = signal('');
   readonly status = signal('');
   readonly dragOver = signal(false);
+  readonly converting = signal(false);
 
   readonly dirty = computed(() => {
     const a = this.adjust();
@@ -431,25 +459,37 @@ export class SocialModeComponent {
   }
 
   private async loadFile(file: File): Promise<void> {
-    if (!file.type.startsWith('image/')) {
+    const heic = isHeicFile(file);
+    if (!heic && !file.type.startsWith('image/')) {
       this.error.set('Esse arquivo não é uma imagem.');
       return;
     }
     try {
-      const original = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
-        reader.readAsDataURL(file);
-      });
+      this.error.set('');
+      let source: Blob = file;
+      if (heic) {
+        // O decodificador leva alguns segundos na primeira foto: avisa antes.
+        this.converting.set(true);
+        this.status.set('Convertendo HEIC…');
+        try {
+          source = await heicToJpeg(file);
+        } finally {
+          this.converting.set(false);
+          this.status.set('');
+        }
+      }
+      const original = await readAsDataUrl(source);
       // Reduz antes de guardar: a foto vai embutida no projeto salvo.
       const raw = await loadImageElement(original);
-      const src = normalizeSocialPhoto(raw, original, file.type);
+      const src = normalizeSocialPhoto(raw, original, heic ? 'image/jpeg' : file.type);
       const img = src === original ? raw : await loadImageElement(src);
-      this.error.set('');
-      this.store.setImage(img, src, file.name);
+      this.store.setImage(img, src, heic ? file.name.replace(/\.hei[cf]$/i, '.jpg') : file.name);
     } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Falha ao abrir a imagem.');
+      this.converting.set(false);
+      this.status.set('');
+      this.error.set(heic
+        ? 'Não consegui converter esse HEIC. Exporte a foto como JPEG e tente de novo.'
+        : (e instanceof Error ? e.message : 'Falha ao abrir a imagem.'));
     }
   }
 
