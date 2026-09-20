@@ -2,7 +2,8 @@
  * mesmo resultado: a prévia grande, a exportação e as miniaturas dos filtros.
  * Enquanto for um caminho só, o que aparece na tela é o que sai no arquivo. */
 
-import { Adjustments, BgMode, FitMode, filterString, frameRect } from './social-model';
+import { Adjustments, BgMode, FitMode, frameRect } from './social-model';
+import { applyLook, isNeutralLook } from './color';
 
 export interface FrameOptions {
   adjust: Adjustments;
@@ -67,7 +68,9 @@ function drawInto(image: CanvasImageSource, w: number, h: number): HTMLCanvasEle
 /** Desenha fundo, foto com os ajustes de cor e as camadas de acabamento
  * (temperatura, desbotado, vinheta) no canvas, no tamanho que ele já tiver. */
 export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptions): void {
-  const ctx = canvas.getContext('2d');
+  // A leitura de volta dos pixels é parte do caminho agora (a cor é feita em
+  // ponto flutuante), então o contexto já nasce avisado disso.
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return;
   const w = canvas.width;
   const h = canvas.height;
@@ -96,34 +99,19 @@ export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptio
   ctx.beginPath();
   ctx.rect(0, 0, w, h);
   ctx.clip();
-  ctx.filter = filterString(a, size);
+  // Só o desfoque continua sendo filtro do canvas: ele é espacial, olha os
+  // vizinhos, e não cabe na conta por pixel que vem depois.
+  ctx.filter = a.blur ? `blur(${(a.blur / 100) * size * 0.03}px)` : 'none';
   ctx.drawImage(src.image, r.x, r.y, r.w, r.h);
   ctx.restore();
   ctx.filter = 'none';
 
-  if (a.temperature) {
-    // Quente puxa pro laranja, frio pro azul. `overlay` mexe na cor sem lavar
-    // as altas luzes, que é o que um ajuste de temperatura deve fazer.
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.globalAlpha = Math.min(0.45, Math.abs(a.temperature) / 100 * 0.45);
-    ctx.fillStyle = a.temperature > 0 ? '#ff8a2b' : '#2b7dff';
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-  }
-
-  if (a.fade) {
-    ctx.globalAlpha = (a.fade / 100) * 0.4;
-    ctx.fillStyle = '#f5f2ee';
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalAlpha = 1;
-  }
-
-  if (a.vignette) {
-    const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32, w / 2, h / 2, Math.max(w, h) * 0.72);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${(a.vignette / 100) * 0.75})`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, w, h);
+  // Cor, acabamento e quantização com dithering, tudo numa passada em ponto
+  // flutuante. Sem ajuste nenhum não há o que fazer — e aí nem o ruído do
+  // dithering entra, pra "Original" ser mesmo o arquivo original.
+  if (!isNeutralLook(a)) {
+    const data = ctx.getImageData(0, 0, w, h);
+    applyLook(data.data, w, h, a);
+    ctx.putImageData(data, 0, 0);
   }
 }

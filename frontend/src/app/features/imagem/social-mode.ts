@@ -59,6 +59,18 @@ interface SliderSpec {
 /** Teto da foto de trabalho. Acima disso a memória e o custo de cada etapa
  * crescem sem nada em troca: nenhum formato de post pede mais que isto. */
 const MAX_WORK_DIMENSION = 4500;
+/** O filtro do seletor de arquivo. `image/*` sozinho esconde HEIC em boa parte
+ * dos sistemas, porque o navegador monta a lista a partir dos tipos que o
+ * sistema tem registrados — e HEIC costuma não estar lá. Daí os tipos e as
+ * extensões virem escritos à mão, em maiúscula também: a câmera do iPhone
+ * nomeia os arquivos como IMG_0001.HEIC e há diálogo que compara sem ignorar
+ * caixa. */
+const FILE_ACCEPT = [
+  'image/*',
+  'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence',
+  '.heic', '.heif', '.HEIC', '.HEIF',
+  '.jpg', '.jpeg', '.png', '.webp',
+].join(',');
 /** A prévia desenha na densidade da tela (até 2×), senão ela parece menos
  * nítida que o arquivo exportado — e a comparação fica injusta. */
 const MAX_PREVIEW_DPR = 2;
@@ -158,7 +170,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
         <div
           class="sm-drop-zone"
           [class.sm-drag-over]="dragOver()"
-          (click)="fileInput.click()"
+          (click)="pick(fileInput)"
           (dragover)="onDragOver($event)"
           (dragleave)="onDragLeave()"
           (drop)="onDrop($event)"
@@ -167,6 +179,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
           <p><strong>Solte uma foto aqui</strong></p>
           <p class="sm-sub">Escolha o formato do post, aplique um filtro pronto e ajuste as cores na mão.</p>
           <p class="sm-sub">JPEG, PNG, WebP e HEIC do iPhone.</p>
+          <button class="sm-link" (click)="pick(fileInput, true); $event.stopPropagation()">
+            Não achou o .heic na janela? Abra sem filtro
+          </button>
           @if (converting()) { <p class="sm-sub">Convertendo HEIC…</p> }
           @if (error()) { <p class="sm-error">{{ error() }}</p> }
         </div>
@@ -174,7 +189,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
     </div>
 
     <aside class="sm-panel">
-      <input #fileInput type="file" accept="image/*,.heic,.heif" hidden (change)="onFileInput($event)" />
+      <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
 
       <section class="sm-section" [class.sm-open]="isOpen('foto')">
         <button class="sm-section-head" (click)="toggle('foto')">
@@ -184,11 +199,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
         </button>
         <div class="sm-section-body">
           <div class="sm-row">
-            <button class="sm-btn" (click)="fileInput.click()"><app-icon name="folder" [size]="13" /> Trocar foto</button>
+            <button class="sm-btn" (click)="pick(fileInput)"><app-icon name="folder" [size]="13" /> Trocar foto</button>
             @if (image()) {
               <button class="sm-btn sm-danger" (click)="removeImage()"><app-icon name="delete" [size]="13" /> Remover</button>
             }
           </div>
+          <button class="sm-link" (click)="pick(fileInput, true)">Abrir sem filtro de tipo (.heic teimoso)</button>
           @if (image()) {
             <div class="sm-row">
               <button class="sm-btn" [class.sm-active]="fit() === 'cover'" (click)="setFit('cover')">Preencher</button>
@@ -495,6 +511,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-field.sm-inline { flex-direction: row; align-items: center; justify-content: space-between; }
     .sm-field input { padding: 7px 9px; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
     .sm-field input[type="color"] { padding: 2px; width: 46px; height: 30px; }
+    .sm-link {
+      align-self: flex-start;
+      padding: 0; border: none; background: none;
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-decoration: underline; text-underline-offset: 2px;
+    }
+    .sm-link:hover { color: var(--accent); }
     .sm-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
     .sm-warn { color: var(--danger); }
 
@@ -631,6 +654,8 @@ export class SocialModeComponent {
   readonly denoising = signal(false);
 
   readonly comparing = signal(false);
+  /** Alguém está arrastando alguma coisa agora. */
+  private readonly interacting = signal(false);
   readonly canUndo = this.store.canUndo;
   readonly canRedo = this.store.canRedo;
 
@@ -708,6 +733,7 @@ export class SocialModeComponent {
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
   private wheelTimer: ReturnType<typeof setTimeout> | null = null;
   private sharpenTimer: ReturnType<typeof setTimeout> | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Recorte intermediário reaproveitado pelas miniaturas. */
   private readonly baseCanvas = document.createElement('canvas');
   private frame: number | null = null;
@@ -729,7 +755,10 @@ export class SocialModeComponent {
       const amount = this.sharpen();
       if (!canvas || !source) return;
       const dpr = Math.min(MAX_PREVIEW_DPR, globalThis.devicePixelRatio || 1);
-      const w = Math.round(PREVIEW_CSS_WIDTH * dpr);
+      // Enquanto a mão está num controle a prévia desenha menor: a conta de cor
+      // agora é por pixel, e resposta imediata vale mais que nitidez num quadro
+      // que vai ser substituído em seguida. Ao parar, volta ao tamanho cheio.
+      const w = Math.round(PREVIEW_CSS_WIDTH * dpr * (this.interacting() ? 0.55 : 1));
       canvas.width = w;
       canvas.height = Math.round(w / this.format().ratio);
       paintFrame(canvas, source, this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()));
@@ -944,6 +973,13 @@ export class SocialModeComponent {
 
   // --- desfazer e comparar ----------------------------------------------------
 
+  /** Avisa que há interação em curso; ao parar, a prévia volta ao tamanho cheio. */
+  private touch(): void {
+    this.interacting.set(true);
+    if (this.idleTimer !== null) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => this.interacting.set(false), 180);
+  }
+
   /** Fecha um passo do histórico. O template chama isto ao soltar um controle. */
   commit(): void { this.store.commit(); }
 
@@ -1015,6 +1051,17 @@ export class SocialModeComponent {
   }
 
   // --- foto -----------------------------------------------------------------
+
+  readonly accept = FILE_ACCEPT;
+
+  /** Abre o seletor. Com `all`, sem filtro nenhum: diálogo que insiste em
+   * esconder HEIC deixa de ter o que esconder, e a validação de tipo continua
+   * acontecendo depois, na leitura do arquivo. */
+  pick(input: HTMLInputElement, all = false): void {
+    if (all) input.removeAttribute('accept');
+    else input.setAttribute('accept', FILE_ACCEPT);
+    input.click();
+  }
 
   onFileInput(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -1106,6 +1153,7 @@ export class SocialModeComponent {
   onWheel(event: WheelEvent): void {
     if (!this.image()) return;
     event.preventDefault();
+    this.touch();
     // Uma rolagem contínua é um passo só: o histórico fecha quando ela para.
     this.scale.update((s) => clamp(s * (event.deltaY < 0 ? 1.1 : 1 / 1.1), MIN_SCALE, MAX_SCALE));
     if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
@@ -1128,6 +1176,7 @@ export class SocialModeComponent {
     if (!canvas) return;
     const box = canvas.getBoundingClientRect();
     d.moved = true;
+    this.touch();
     // O deslocamento é guardado em fração do quadro pra sobreviver ao zoom da tela.
     this.offsetX.set(clamp(d.dx + (event.clientX - d.x) / box.width, -1, 1));
     this.offsetY.set(clamp(d.dy + (event.clientY - d.y) / box.height, -1, 1));
@@ -1172,6 +1221,7 @@ export class SocialModeComponent {
   }
 
   onSlider(key: keyof Adjustments, event: Event): void {
+    this.touch();
     const value = Number((event.target as HTMLInputElement).value);
     this.adjust.update((a) => ({ ...a, [key]: value }));
   }
@@ -1183,6 +1233,7 @@ export class SocialModeComponent {
   }
 
   onSharpen(event: Event): void {
+    this.touch();
     this.sharpen.set(Number((event.target as HTMLInputElement).value));
   }
 
@@ -1193,6 +1244,7 @@ export class SocialModeComponent {
   }
 
   onDenoise(event: Event): void {
+    this.touch();
     this.denoise.set(Number((event.target as HTMLInputElement).value));
   }
 
