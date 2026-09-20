@@ -16,6 +16,7 @@ import {
 } from './raster';
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
 import { SocialModeComponent } from './social-mode';
+import { SocialProjectData, SocialStore } from './social-store';
 import { TemplateModeComponent } from './template-mode';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
@@ -192,7 +193,7 @@ function loadPrefs(): Prefs {
   selector: 'app-image-editor-page',
   standalone: true,
   imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent],
-  providers: [TemplateStore],
+  providers: [TemplateStore, SocialStore],
   template: `
     <div class="page">
       <header class="top-bar">
@@ -892,6 +893,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public theme: ThemeService,
     private projectsApi: ImageProjectsService,
     public templates: TemplateStore,
+    public social: SocialStore,
   ) {}
 
   ngAfterViewInit(): void {
@@ -1696,15 +1698,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         copies: i.copies,
         outerOnly: i.outerOnly,
       })),
-      // O molde entra no mesmo projeto: um documento do Editor de Imagens tem os dois modos.
+      // O molde entra no mesmo projeto: um documento do Editor de Imagens tem todos os modos.
       molde: this.templates.serialize(),
+      social: this.social.serialize(),
     });
   }
 
   async saveProject(): Promise<void> {
     if (this.savingProject()) return;
     const name = this.projectName().trim() || 'Projeto sem nome';
-    if (!this.images().length && !this.templates.hasTemplate()) {
+    if (!this.images().length && !this.templates.hasTemplate() && !this.social.hasImage()) {
       this.projectStatus.set('Importe ao menos uma imagem (ou um molde) antes de salvar.');
       return;
     }
@@ -1737,6 +1740,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         orientation?: SheetOrientation; spacingMm?: number;
         images?: (Partial<ImportedImage> & { original: string })[];
         molde?: TemplateProjectData | null;
+        social?: SocialProjectData | null;
       };
 
       this.images.set([]);
@@ -1762,6 +1766,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         if (!data.images?.length) this.setModo('molde');
       } else {
         this.templates.clear();
+      }
+
+      // Projetos salvos antes do modo redes sociais simplesmente não têm a seção.
+      if (data.social?.src) {
+        await this.social.hydrate(data.social, loadImage);
+        if (!data.images?.length && !data.molde?.svg) this.setModo('social');
+      } else {
+        this.social.clear();
       }
 
       this.projectId.set(dto.id);

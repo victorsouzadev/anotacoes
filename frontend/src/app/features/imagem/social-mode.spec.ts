@@ -1,4 +1,5 @@
-import { FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-mode';
+import { FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-model';
+import { SocialStore } from './social-store';
 
 describe('modo redes sociais', () => {
   it('não emite ajustes neutros no filtro', () => {
@@ -38,5 +39,63 @@ describe('modo redes sociais', () => {
     expect(new Set(FILTER_PRESETS.map((p) => p.id)).size).toBe(FILTER_PRESETS.length);
     expect(new Set(SOCIAL_FORMATS.map((f) => f.id)).size).toBe(SOCIAL_FORMATS.length);
     expect(SOCIAL_FORMATS.every((f) => f.ratio > 0 && f.width >= 200)).toBe(true);
+  });
+});
+
+describe('projeto do modo redes sociais', () => {
+  function fakeImage(): HTMLImageElement {
+    return { naturalWidth: 800, naturalHeight: 600 } as HTMLImageElement;
+  }
+
+  it('não serializa nada sem foto', () => {
+    expect(new SocialStore().serialize()).toBeNull();
+  });
+
+  it('guarda e reabre o enquadramento e os ajustes', async () => {
+    const store = new SocialStore();
+    store.setImage(fakeImage(), 'data:image/jpeg;base64,abc', 'foto.jpg');
+    store.format.set(SOCIAL_FORMATS.find((f) => f.id === 'story')!);
+    store.fit.set('contain');
+    store.scale.set(1.4);
+    store.offsetX.set(-0.2);
+    store.bgMode.set('cor');
+    store.bgColor.set('#101010');
+    store.adjust.set({ ...NEUTRAL, contrast: 118, vignette: 34 });
+    store.type.set('png');
+
+    const data = store.serialize()!;
+    expect(data.formatId).toBe('story');
+
+    const fresh = new SocialStore();
+    await fresh.hydrate(data, async () => fakeImage());
+    expect(fresh.format().id).toBe('story');
+    expect(fresh.fit()).toBe('contain');
+    expect(fresh.scale()).toBeCloseTo(1.4, 6);
+    expect(fresh.offsetX()).toBeCloseTo(-0.2, 6);
+    expect(fresh.bgColor()).toBe('#101010');
+    expect(fresh.adjust().contrast).toBe(118);
+    expect(fresh.adjust().vignette).toBe(34);
+    expect(fresh.type()).toBe('png');
+    expect(fresh.hasImage()).toBe(true);
+  });
+
+  it('cai no padrão com dados de uma versão anterior', async () => {
+    const store = new SocialStore();
+    await store.hydrate({ version: 1, src: 'data:,x', fileName: 'x.png', formatId: 'inexistente' } as never, async () => fakeImage());
+    expect(store.format().id).toBe(SOCIAL_FORMATS[0].id);
+    expect(store.fit()).toBe('cover');
+    expect(store.scale()).toBe(1);
+    expect(store.adjust()).toEqual(NEUTRAL);
+    expect(store.exportW()).toBe(SOCIAL_FORMATS[0].width);
+  });
+
+  it('esquece tudo ao limpar', () => {
+    const store = new SocialStore();
+    store.setImage(fakeImage(), 'data:,x', 'x.jpg');
+    store.adjust.set({ ...NEUTRAL, sepia: 40 });
+    store.clear();
+    expect(store.hasImage()).toBe(false);
+    expect(store.serialize()).toBeNull();
+    expect(store.adjust().sepia).toBe(0);
   });
 });
