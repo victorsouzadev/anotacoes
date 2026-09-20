@@ -97,7 +97,7 @@ export const FILTER_PRESETS: FilterPreset[] = [
   { id: 'pb', label: 'Preto e branco', group: 'Preto e branco', values: { grayscale: 100, contrast: 115 } },
   { id: 'pbsuave', label: 'P&B suave', group: 'Preto e branco', values: { grayscale: 100, contrast: 96, brightness: 106, fade: 18 } },
   { id: 'pbforte', label: 'P&B contrastado', group: 'Preto e branco', values: { grayscale: 100, contrast: 145, brightness: 96, vignette: 30 } },
-  { id: 'pbsepia', label: 'Sépia', group: 'Preto e branco', values: { grayscale: 100, sepia: 70, contrast: 106, fade: 10 } },
+  { id: 'pbsepia', label: 'Sépia clássica', group: 'Preto e branco', values: { grayscale: 100, sepia: 70, contrast: 106, fade: 10 } },
 
   // --- editorial ---
   { id: 'matte', label: 'Matte', group: 'Editorial', values: { fade: 30, contrast: 102, saturation: 88, brightness: 102 } },
@@ -137,6 +137,20 @@ export function filterString(a: Adjustments, sizePx: number): string {
 
 /** Retângulo da foto dentro do quadro, para "preencher" ou "caber", já com o
  * zoom e o deslocamento do usuário aplicados. */
+/** A foto cobre o quadro inteiro no enquadramento dado? Decide se os controles
+ * de fundo têm o que fazer: em "Preencher" com escala cheia a resposta é sim,
+ * mas diminuir a escala ou arrastar a foto pra fora expõe as bordas. */
+export function coversFrame(
+  imgW: number, imgH: number, boxW: number, boxH: number,
+  fit: FitMode, scale: number, dx: number, dy: number,
+): boolean {
+  const r = frameRect(imgW, imgH, boxW, boxH, fit, scale, dx, dy);
+  // Meio pixel de folga: a conta é em ponto flutuante e um encaixe exato não
+  // pode virar "tem fundo" por arredondamento.
+  const slack = 0.5;
+  return r.x <= slack && r.y <= slack && r.x + r.w >= boxW - slack && r.y + r.h >= boxH - slack;
+}
+
 export function frameRect(
   imgW: number, imgH: number, boxW: number, boxH: number,
   fit: FitMode, scale: number, dx: number, dy: number,

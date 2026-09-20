@@ -1,4 +1,6 @@
-import { FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, filterString, frameRect } from './social-model';
+import {
+  FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, coversFrame, filterString, frameRect,
+} from './social-model';
 import { SocialStore } from './social-store';
 import { isHeicFile } from './social-mode';
 
@@ -139,5 +141,23 @@ describe('detecção de HEIC', () => {
     expect(isHeicFile({ name: 'foto.jpg', type: 'image/jpeg' })).toBe(false);
     expect(isHeicFile({ name: 'arte.png', type: 'image/png' })).toBe(false);
     expect(isHeicFile({ name: 'heic-de-mentira.png', type: 'image/png' })).toBe(false);
+  });
+});
+
+describe('fundo à mostra', () => {
+  it('preencher na escala cheia não deixa fundo aparecer', () => {
+    expect(coversFrame(1600, 1200, 1000, 1000, 'cover', 1, 0, 0)).toBe(true);
+    expect(coversFrame(1200, 1600, 1000, 1250, 'cover', 1, 0, 0)).toBe(true);
+  });
+
+  it('caber sempre deixa fundo, menos quando a proporção bate exata', () => {
+    expect(coversFrame(1600, 1200, 1000, 1000, 'contain', 1, 0, 0)).toBe(false);
+    // foto quadrada em quadro quadrado: "caber" e "preencher" dão o mesmo
+    expect(coversFrame(1000, 1000, 1000, 1000, 'contain', 1, 0, 0)).toBe(true);
+  });
+
+  it('diminuir a escala ou arrastar a foto expõe a borda mesmo em preencher', () => {
+    expect(coversFrame(1600, 1200, 1000, 1000, 'cover', 0.8, 0, 0)).toBe(false);
+    expect(coversFrame(1600, 1200, 1000, 1000, 'cover', 1, 0.3, 0)).toBe(false);
   });
 });

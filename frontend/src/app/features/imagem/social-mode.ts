@@ -10,7 +10,7 @@ import {
 import { IconComponent } from '../../shared/icon';
 import {
   Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
-  SOCIAL_FORMATS, SocialFormat, filterString,
+  SOCIAL_FORMATS, SocialFormat, coversFrame, filterString,
 } from './social-model';
 import { FrameOptions, Source, paintFrame, sourceOf } from './social-render';
 import { SocialStore, normalizeSocialPhoto } from './social-store';
@@ -63,10 +63,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
           @if (image()) { {{ fileName() }} · {{ exportW() }} × {{ exportH() }} px } @else { Redes sociais }
         </span>
         @if (image()) {
-          <div class="sm-zoom-bar" title="Use a roda do mouse pra aproximar">
-            <button (click)="zoomBy(1 / 1.15)" aria-label="Menos zoom">−</button>
-            <button class="sm-zoom-level" (click)="resetFraming()" title="Reenquadrar">{{ (scale() * 100).toFixed(0) }}%</button>
-            <button (click)="zoomBy(1.15)" aria-label="Mais zoom">+</button>
+          <div class="sm-zoom-bar" title="Tamanho da foto dentro do quadro — a roda do mouse também muda">
+            <span class="sm-zoom-name">Escala da foto</span>
+            <button (click)="zoomBy(1 / 1.15)" aria-label="Diminuir a foto no quadro">−</button>
+            <button class="sm-zoom-level" (click)="resetFraming()" title="Voltar ao enquadramento original">{{ (scale() * 100).toFixed(0) }}%</button>
+            <button (click)="zoomBy(1.15)" aria-label="Aumentar a foto no quadro">+</button>
           </div>
         }
       </div>
@@ -148,24 +149,28 @@ async function heicToJpeg(file: File): Promise<Blob> {
               </button>
             }
           </div>
-          <div class="sm-row">
-            <button class="sm-btn" [class.sm-active]="bgMode() === 'cor'" (click)="setBgMode('cor')">Fundo cor</button>
-            <button class="sm-btn" [class.sm-active]="bgMode() === 'desfoque'" (click)="setBgMode('desfoque')">Fundo borrado</button>
-          </div>
-          @if (bgMode() === 'cor') {
-            <label class="sm-field sm-inline">
-              <span>Cor do fundo</span>
-              <input type="color" [value]="bgColor()" (input)="onBgColor($event)" />
-            </label>
+          @if (showsBackground()) {
+            <div class="sm-row">
+              <button class="sm-btn" [class.sm-active]="bgMode() === 'cor'" (click)="setBgMode('cor')">Fundo cor</button>
+              <button class="sm-btn" [class.sm-active]="bgMode() === 'desfoque'" (click)="setBgMode('desfoque')">Fundo borrado</button>
+            </div>
+            @if (bgMode() === 'cor') {
+              <label class="sm-field sm-inline">
+                <span>Cor do fundo</span>
+                <input type="color" [value]="bgColor()" (input)="onBgColor($event)" />
+              </label>
+            }
+          } @else {
+            <p class="sm-note">A foto cobre o quadro inteiro — não há fundo à mostra. Use "Caber"
+              ou diminua a escala da foto pra escolher um.</p>
           }
-          <p class="sm-note">O fundo só aparece quando a foto não cobre o quadro inteiro.</p>
         </div>
       </section>
 
       <section class="sm-section" [class.sm-open]="isOpen('filtros')">
         <button class="sm-section-head" (click)="toggle('filtros')">
           <span class="sm-section-title"><app-icon name="sticky" [size]="13" /> Filtros prontos</span>
-          <span class="sm-section-summary">{{ presetLabel() }}</span>
+          <span class="sm-section-summary">{{ presetSummary() }}</span>
           <app-icon class="sm-chevron" name="chevron" [size]="14" />
         </button>
         <div class="sm-section-body">
@@ -174,7 +179,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
               <span class="sm-group-name">{{ g.name }}</span>
               <div class="sm-presets">
                 @for (p of g.presets; track p.id) {
-                  <button class="sm-preset" [class.sm-active]="preset() === p.id" (click)="applyPreset(p)" [title]="p.label">
+                  <button
+                    class="sm-preset"
+                    [class.sm-active]="preset() === p.id"
+                    [class.sm-edited]="preset() === p.id && presetEdited()"
+                    (click)="applyPreset(p)"
+                    [title]="preset() === p.id && presetEdited() ? p.label + ' (com ajustes seus — clique pra voltar ao original)' : p.label"
+                  >
                     @if (image()) {
                       <canvas #presetCanvas class="sm-preset-chip" [attr.data-preset]="p.id"></canvas>
                     } @else {
@@ -280,6 +291,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-zoom-bar button { border: none; background: none; color: var(--text-muted); font-size: 13px; font-weight: 700; padding: 4px 9px; }
     .sm-zoom-bar button:hover { color: var(--accent); }
     .sm-zoom-level { font-size: 11px; min-width: 46px; }
+    .sm-zoom-name { font-size: 10px; font-weight: 700; color: var(--text-muted); padding-left: 8px; }
 
     .sm-stage {
       flex: 1;
@@ -387,6 +399,10 @@ async function heicToJpeg(file: File): Promise<Blob> {
     }
     .sm-preset-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
     .sm-preset.sm-active .sm-preset-label { color: var(--accent); }
+    /* Filtro aplicado e depois mexido à mão: continua sendo o ponto de partida,
+       mas o tracejado avisa que o que está na tela já não é ele. */
+    .sm-preset.sm-edited { border-style: dashed; }
+    .sm-preset.sm-edited .sm-preset-label::after { content: " ·"; }
 
     .sm-divider { height: 1px; background: var(--border); margin: 2px 0; }
     .sm-slider { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
@@ -426,8 +442,8 @@ export class SocialModeComponent {
     { key: 'hue', label: 'Matiz', min: -30, max: 30 },
     { key: 'fade', label: 'Desbotado', min: 0, max: 100 },
     { key: 'vignette', label: 'Vinheta', min: 0, max: 100 },
-    { key: 'sepia', label: 'Sépia', min: 0, max: 100 },
-    { key: 'grayscale', label: 'Preto e branco', min: 0, max: 100 },
+    { key: 'sepia', label: 'Tom sépia', min: 0, max: 100 },
+    { key: 'grayscale', label: 'Dessaturar', min: 0, max: 100 },
     { key: 'blur', label: 'Desfoque', min: 0, max: 100 },
   ];
 
@@ -466,7 +482,33 @@ export class SocialModeComponent {
     const a = this.adjust();
     return (Object.keys(NEUTRAL) as (keyof Adjustments)[]).some((k) => a[k] !== NEUTRAL[k]);
   });
-  readonly presetLabel = computed(() => FILTER_PRESETS.find((p) => p.id === this.preset())?.label ?? 'Original');
+  private readonly activePreset = computed(() => FILTER_PRESETS.find((p) => p.id === this.preset()) ?? FILTER_PRESETS[0]);
+
+  /** O filtro escolhido descreve o que está na tela? Mexer num controle de cor
+   * depois de aplicar um preset deixava o botão marcado como se nada tivesse
+   * mudado — a interface dizia "Cinema" pra uma imagem que já não era. */
+  readonly presetEdited = computed(() => {
+    const target = { ...NEUTRAL, ...this.activePreset().values };
+    const current = this.adjust();
+    return (Object.keys(NEUTRAL) as (keyof Adjustments)[]).some((k) => current[k] !== target[k]);
+  });
+
+  readonly presetSummary = computed(() =>
+    this.presetEdited() ? `${this.activePreset().label} · editado` : this.activePreset().label);
+
+  /** Sobra fundo à mostra no enquadramento atual? Em "Preencher" com a escala
+   * cheia a foto cobre tudo e os controles de fundo não mudariam nada — mas
+   * diminuir a escala ou arrastar a foto pra fora expõe as bordas, então a
+   * conta é a mesma do desenho, não um "é modo Caber?". */
+  readonly showsBackground = computed(() => {
+    const img = this.image();
+    if (!img) return false;
+    const box = 1000;
+    return !coversFrame(
+      img.naturalWidth || 1, img.naturalHeight || 1, box, Math.round(box / this.format().ratio),
+      this.fit(), this.scale(), this.offsetX(), this.offsetY(),
+    );
+  });
 
   private readonly open = signal<Record<SectionId, boolean>>({
     foto: true, formato: true, filtros: true, cor: false, exportar: false,
