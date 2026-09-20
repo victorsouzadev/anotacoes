@@ -11,18 +11,24 @@ export interface Erasure {
 }
 
 /** Máscara binária da arte (alpha >= 128) posicionada na moldura do contorno. */
-function artMask(source: HTMLCanvasElement, W: number, H: number, offset: number): Uint8Array {
+function artCoverage(source: HTMLCanvasElement, W: number, H: number, offset: number): Float32Array {
   const w = source.width;
   const h = source.height;
-  const mask = new Uint8Array(W * H);
+  const cov = new Float32Array(W * H);
   const px = source.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, w, h).data;
   for (let y = 0; y < h; y++) {
     const destino = (y + offset) * W + offset;
     const origem = y * w;
-    for (let x = 0; x < w; x++) {
-      if (px[(origem + x) * 4 + 3] >= 128) mask[destino + x] = 1;
-    }
+    for (let x = 0; x < w; x++) cov[destino + x] = px[(origem + x) * 4 + 3] / 255;
   }
+  return cov;
+}
+
+/** Máscara sólida da arte, pra quem precisa de um sim/não (a busca pela região
+ * externa). A meia cobertura é a fronteira, então o corte fica em 0,5. */
+function solidMask(cov: Float32Array): Uint8Array {
+  const mask = new Uint8Array(cov.length);
+  for (let i = 0; i < cov.length; i++) mask[i] = cov[i] >= 0.5 ? 1 : 0;
   return mask;
 }
 
@@ -52,14 +58,25 @@ function edt1d(f: Float64Array, d: Float64Array, v: Int32Array, z: Float64Array,
   }
 }
 
-/** Distância euclidiana (ao quadrado) de cada pixel até a arte mais próxima.
+/** Distância euclidiana (ao quadrado) de cada pixel até a borda da arte.
  * Substitui a dilatação por carimbos: é exata e custa O(pixels), enquanto
  * carimbar a silhueta centenas de vezes custava O(pixels × carimbos) — a conta
- * que travava a aba em imagens grandes. */
-function squaredDistanceToMask(mask: Uint8Array, W: number, H: number): Float64Array {
+ * que travava a aba em imagens grandes.
+ *
+ * A semente sai da cobertura, não de um sim/não: num pixel de borda com
+ * cobertura `a` a aresta passa a ≈(0,5 − a) do centro, e é essa fração que o
+ * limiar em alpha≥128 jogava fora. Sem ela a margem herda a escada do pixel
+ * mesmo quando a arte que entrou era anti-serrilhada — e nenhuma suavização
+ * depois recupera o que foi arredondado aqui. */
+function squaredDistanceToArt(cov: Float32Array, W: number, H: number): Float64Array {
   const INF = 1e20;
   const dist = new Float64Array(W * H);
-  for (let i = 0; i < W * H; i++) dist[i] = mask[i] ? 0 : INF;
+  for (let i = 0; i < W * H; i++) {
+    const a = cov[i];
+    if (a <= 0) { dist[i] = INF; continue; }
+    const borda = Math.max(0, 0.5 - a);
+    dist[i] = borda * borda;
+  }
 
   const n = Math.max(W, H);
   const f = new Float64Array(n);
@@ -136,9 +153,9 @@ export function buildContourLayer(
   out.height = H;
   if (total === 0) return out;
 
-  const mask = artMask(source, W, H, total);
-  const dist2 = squaredDistanceToMask(mask, W, H);
-  const fora = outerOnly ? outsideMask(mask, W, H) : null;
+  const cov = artCoverage(source, W, H, total);
+  const dist2 = squaredDistanceToArt(cov, W, H);
+  const fora = outerOnly ? outsideMask(solidMask(cov), W, H) : null;
   const [r, gCor, b] = parseHex(color);
 
   const img = new ImageData(W, H);

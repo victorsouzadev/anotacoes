@@ -124,31 +124,53 @@ describe('traceMask — suavização', () => {
 });
 
 describe('polygonToCubics', () => {
-  const circulo: Polygon = Array.from({ length: 32 }, (_, i) => {
-    const t = (i / 32) * Math.PI * 2;
+  /** Dendo como o contorno chega de verdade ao ajuste: reamostrado a ~1 px, e
+   * não um polígono grosseiro. A flecha da corda aqui é ~0,001 px, então o que
+   * o teste mede é o erro do ajuste, não o do polígono de entrada. */
+  const circulo: Polygon = Array.from({ length: 360 }, (_, i) => {
+    const t = (i / 360) * Math.PI * 2;
     return [CENTER + Math.cos(t) * RAIO, CENTER + Math.sin(t) * RAIO] as Point;
   });
 
-  it('passa exatamente pelos pontos do polígono', () => {
-    const { start, segments } = polygonToCubics(circulo);
-
-    expect(start).toEqual(circulo[0]);
-    expect(segments).toHaveLength(circulo.length);
-    segments.forEach((s, i) => expect(s.to).toEqual(circulo[(i + 1) % circulo.length]));
-  });
-
-  it('curva entre os pontos em vez de cortar reto', () => {
-    const { start, segments } = polygonToCubics(circulo);
-
-    // no meio de cada trecho a curva tem de estar sobre o círculo, não na corda
+  /** Maior distância entre a curva ajustada e o círculo real. */
+  function desvioDaCurva(path: ReturnType<typeof polygonToCubics>): number {
     let pior = 0;
-    let de = start;
-    for (const s of segments) {
-      const [x, y] = cubicAt(de, s, 0.5);
-      pior = Math.max(pior, Math.abs(Math.hypot(x - CENTER, y - CENTER) - RAIO));
+    let de = path.start;
+    for (const s of path.segments) {
+      for (let t = 0; t <= 1; t += 0.05) {
+        const [x, y] = cubicAt(de, s, t);
+        pior = Math.max(pior, Math.abs(Math.hypot(x - CENTER, y - CENTER) - RAIO));
+      }
       de = s.to;
     }
-    expect(pior).toBeLessThan(0.02);
+    return pior;
+  }
+
+  it('honra a tolerância pedida', () => {
+    for (const tolerance of [0.2, 0.05, 0.01]) {
+      expect(desvioDaCurva(polygonToCubics(circulo, { tolerance }))).toBeLessThan(tolerance);
+    }
+  });
+
+  it('gasta muito menos curvas do que pontos', () => {
+    const { segments } = polygonToCubics(circulo, { tolerance: 0.05 });
+
+    expect(segments.length).toBeLessThan(circulo.length / 10);
+    expect(segments.length).toBeGreaterThan(0);
+  });
+
+  it('aperta a tolerância, gasta mais curvas', () => {
+    const solto = polygonToCubics(circulo, { tolerance: 0.2 }).segments.length;
+    const apertado = polygonToCubics(circulo, { tolerance: 0.001 }).segments.length;
+
+    expect(apertado).toBeGreaterThan(solto);
+  });
+
+  it('fecha a volta: o último trecho volta ao ponto inicial', () => {
+    const { start, segments } = polygonToCubics(circulo);
+
+    expect(segments[segments.length - 1].to[0]).toBeCloseTo(start[0], 6);
+    expect(segments[segments.length - 1].to[1]).toBeCloseTo(start[1], 6);
   });
 
   it('deixa o retângulo reto — os quatro cantos são quebras, não curvas', () => {
@@ -178,6 +200,29 @@ describe('polygonToCubics', () => {
       de = s.to;
     }
     expect(piorNoReto).toBeLessThan(0.5);
+  });
+
+  it('não estufa em trecho de escada — o ajuste degenerado fica no teto', () => {
+    // Com a suavização desligada o contorno é a escada crua, e as tangentes das
+    // pontas de cada trecho saem quase perpendiculares à corda. O mínimos
+    // quadrados responde com tangentes de dezenas de vezes a corda e a curva
+    // dispara pra longe; o erro medido nos pontos não pega, porque a barriga
+    // fica entre eles. Aqui isso chegou a 82 px num círculo de raio 60.
+    const m = mask(180, 180, (x, y) => (Math.hypot(x - 90, y - 90) <= 60 ? 255 : 0));
+    const poly = traceMask(m, { smoothSigma: 0, simplifyEpsilon: 0.05 })[0];
+    const { start, segments } = polygonToCubics(poly, { tolerance: 0.18 });
+
+    let pior = 0;
+    let de = start;
+    for (const s of segments) {
+      for (let t = 0; t <= 1; t += 0.05) {
+        const [x, y] = cubicAt(de, s, t);
+        pior = Math.max(pior, Math.abs(Math.hypot(x - 90, y - 90) - 60));
+      }
+      de = s.to;
+    }
+    // a própria escada já varia meio pixel de raio; o ajuste não pode somar muito
+    expect(pior).toBeLessThan(1.5);
   });
 
   it('aguenta um polígono degenerado de três pontos', () => {

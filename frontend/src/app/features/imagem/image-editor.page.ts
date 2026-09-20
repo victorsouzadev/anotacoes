@@ -5,8 +5,8 @@ import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import {
-  CORNER_ANGLE, Polygon, pngBlobWithDpi, polygonToCubics, polygonsToPathData, smallestPathContaining,
-  traceCutPaths,
+  CORNER_ANGLE, CubicPath, Point, Polygon, cubicPathsToData, mapCubicPath, pngBlobWithDpi,
+  polygonToCubics, smallestPathContaining, traceCutPaths,
 } from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
 import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
@@ -68,6 +68,10 @@ interface ImportedImage {
 interface Piece {
   canvas: HTMLCanvasElement;
   paths: Polygon[];
+  /** Curvas já ajustadas, em px da peça. Ficam guardadas com a peça pra o
+   * ajuste não rodar de novo a cada quadro — e pra prévia e exportação saírem
+   * provadamente do mesmo caminho. */
+  cuts: CubicPath[];
   /** Pixels por mm DESTA peça (muda com a escala de trabalho). */
   ppm: number;
   artX: number;
@@ -98,14 +102,24 @@ interface Prefs {
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
-const MAX_SMOOTHING = 10;
+const MAX_SMOOTHING = 25;
 /** Cada passo do controle de suavização vale isto em mm de desvio-padrão: o
- * passo 1 (≈0,08 mm, ou 1 px a 300 DPI) já tira a escada do pixel e o 10
+ * passo 1 (≈0,08 mm, ou 1 px a 300 DPI) já tira a escada do pixel e o teto
  * arredonda de verdade. */
 const SMOOTHING_MM_PER_STEP = 0.08;
-/** Decimação depois de suavizar: só enxuga a contagem de pontos pra máquina,
- * sem mexer na forma (0,03 mm está bem abaixo da precisão de qualquer lâmina). */
-const SIMPLIFY_MM = 0.03;
+/** Piso da suavização, em pixels do traçado. A escada não mora em milímetros,
+ * mora em pixel: numa arte de 68 DPI um pixel vale 0,37 mm, e aí os 0,32 mm do
+ * ajuste padrão viram 0,86 px — menos de um pixel, incapaz de tirar um degrau
+ * de um pixel. Com o piso a escada some em qualquer resolução, e em arte densa
+ * o valor em mm passa na frente e volta a mandar. */
+const MIN_SMOOTH_PX = 1.5;
+/** Erro máximo que o ajuste de curvas aceita entre a Bézier e o contorno.
+ * 0,015 mm é uma ordem de grandeza abaixo da precisão de qualquer lâmina, e
+ * como o ajuste é por mínimos quadrados isso sai com *menos* curvas, não mais. */
+const FIT_TOLERANCE_MM = 0.015;
+/** Decimação antes do ajuste: só tira ponto colinear pra baratear a conta, com
+ * folga bem abaixo da tolerância do ajuste pra não entrar no erro final. */
+const SIMPLIFY_MM = FIT_TOLERANCE_MM / 4;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
@@ -1339,6 +1353,15 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     return kept;
   }
 
+  /** O ajuste de curvas sempre protege canto vivo, independente da chave do
+   * painel: ela manda na *suavização*, e com ela desligada a suavização já
+   * entrega o canto arredondado. Com a suavização em zero é o que garante que
+   * a escada do pixel saia reta, fiel, em vez de virar curva. */
+  private fitCuts(paths: Polygon[], ppm: number): CubicPath[] {
+    const tolerance = Math.max(0.05, ppm * FIT_TOLERANCE_MM);
+    return paths.map((poly) => polygonToCubics(poly, { tolerance, cornerAngle: CORNER_ANGLE }));
+  }
+
   private buildPiece(item: ImportedImage, workWidth: number): Piece {
     const escala = Math.min(1, workWidth / item.source.width);
     const base = item.mirrored ? flipHorizontal(item.source) : item.source;
@@ -1364,13 +1387,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       // escala menor) suavizar na mesma medida que a exportação
       const paths = traceCutPaths(canvas, {
         fillHoles: this.fillHoles(),
-        smoothSigma: smoothingSigmaMm(this.smoothing()) * ppm,
+        smoothSigma: this.smoothing() > 0
+          ? Math.max(MIN_SMOOTH_PX, smoothingSigmaMm(this.smoothing()) * ppm)
+          : 0,
         cornerAngle: this.keepCorners() ? CORNER_ANGLE : 0,
-        simplifyEpsilon: Math.max(0.2, ppm * SIMPLIFY_MM),
+        simplifyEpsilon: Math.max(0.05, ppm * SIMPLIFY_MM),
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
+      const mantidos = this.dropRemovedCuts(paths, item, total, total, escala, source.width);
       return {
-        canvas, paths: this.dropRemovedCuts(paths, item, total, total, escala, source.width),
+        canvas, paths: mantidos, cuts: this.fitCuts(mantidos, ppm),
         ppm, artX: total, artY: total, scale: escala,
       };
     }
@@ -1397,8 +1423,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(contour, 0, 0);
     ctx.drawImage(source, artX, artY);
+    const mantidos = this.dropRemovedCuts([outer], item, artX, artY, escala, source.width);
     return {
-      canvas, paths: this.dropRemovedCuts([outer], item, artX, artY, escala, source.width),
+      canvas, paths: mantidos, cuts: this.fitCuts(mantidos, ppm),
       ppm, artX, artY, scale: escala,
     };
   }
@@ -1436,18 +1463,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     canvas.height = piece.canvas.height;
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(piece.canvas, 0, 0);
-    this.strokeCutPaths(ctx, piece.paths, Math.max(1.5, canvas.width / 500));
+    this.strokeCutPaths(ctx, piece.cuts, Math.max(1.5, canvas.width / 500));
     this.applyZoom(canvas, this.pieceStage?.nativeElement);
   }
 
-  private strokeCutPaths(ctx: CanvasRenderingContext2D, paths: Polygon[], lineWidth: number): void {
+  private strokeCutPaths(ctx: CanvasRenderingContext2D, paths: CubicPath[], lineWidth: number): void {
     ctx.strokeStyle = '#e5383b';
     ctx.lineWidth = lineWidth;
     ctx.setLineDash([lineWidth * 4, lineWidth * 3]);
     // as mesmas curvas que vão pro SVG: o tracejado na tela é literalmente o
     // caminho exportado, então não tem "na prévia parecia liso e saiu diferente"
-    for (const poly of paths) {
-      const { start, segments } = polygonToCubics(poly);
+    for (const { start, segments } of paths) {
       if (!segments.length) continue;
       ctx.beginPath();
       ctx.moveTo(start[0], start[1]);
@@ -1510,7 +1536,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(f, f);
-      this.strokeCutPaths(ctx, piece.paths, Math.max(1.2, 1.2 / f));
+      this.strokeCutPaths(ctx, piece.cuts, Math.max(1.2, 1.2 / f));
       ctx.restore();
     }
     this.applyZoom(canvas, this.sheetStage?.nativeElement);
@@ -1557,7 +1583,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private pieceSvg(piece: Piece, imageHref: string | null): string {
     const wMm = piece.canvas.width / piece.ppm;
     const hMm = piece.canvas.height / piece.ppm;
-    const d = polygonsToPathData(piece.paths);
+    const d = cubicPathsToData(piece.cuts);
     const strokePx = piece.ppm * 0.2; // 0,2 mm
     const image = imageHref
       ? `\n  <image x="0" y="0" width="${piece.canvas.width}" height="${piece.canvas.height}" href="${imageHref}" />`
@@ -1621,10 +1647,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const item = this.itemOf(p.id);
       if (!item) continue;
       const piece = this.pieceFor(item, 'full');
-      const mmPolys = piece.paths.map((poly) =>
-        poly.map(([x, y]) => [p.xMm + x / piece.ppm, p.yMm + y / piece.ppm] as [number, number]),
-      );
-      paths += `  <path d="${polygonsToPathData(mmPolys)}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
+      const paraMm = ([x, y]: Point): Point => [p.xMm + x / piece.ppm, p.yMm + y / piece.ppm];
+      const mm = piece.cuts.map((c) => mapCubicPath(c, paraMm));
+      paths += `  <path d="${cubicPathsToData(mm)}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
     }
     const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<svg xmlns="http://www.w3.org/2000/svg" width="${wMm}mm" height="${hMm}mm" viewBox="0 0 ${wMm} ${hMm}">\n` +

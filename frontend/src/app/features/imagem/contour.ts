@@ -490,71 +490,276 @@ export interface CubicPath {
   segments: CubicSegment[];
 }
 
+export interface FitOptions {
+  /** Erro máximo tolerado entre a curva e o contorno, em px. */
+  tolerance?: number;
+  /** Virada acima deste ângulo (graus) vira quebra: a curva chega e sai dela
+   * em linha reta, então ponta de estrela continua ponta. */
+  cornerAngle?: number;
+}
+
+const MAX_REPARAM = 4;
+/** Teto do tamanho da tangente, em múltiplos da corda. Uma cúbica que aproxima
+ * até uma semicircunferência precisa de ~0,7 da corda, então 3 é folga larga e
+ * ainda assim barra o estufamento do ajuste degenerado. */
+const MAX_ALPHA = 3;
+const MAX_DEPTH = 24;
+
 /** A máquina desacelera em cada vértice de uma polilinha, então a saída é
- * curva. Catmull-Rom centrípeto passa *exatamente* pelos pontos do polígono —
- * por isso o `Polygon` continua servindo de fonte da verdade pro hit-testing e
- * pra prévia sem divergir do caminho exportado. Cantos viram quebra: a curva
- * chega e sai deles em linha reta, então ponta de estrela continua ponta. */
-export function polygonToCubics(poly: Polygon, cornerAngleDeg = CORNER_ANGLE): CubicPath {
+ * curva. O ajuste é de mínimos quadrados (Schneider, Graphics Gems 1990): cada
+ * trecho ganha a cúbica que melhor aproxima *todos* os pontos e só é partido em
+ * dois quando o erro passa da tolerância.
+ *
+ * Passar uma curva pelos pontos de um polígono decimado — que era o que se
+ * fazia antes — custa caro em fidelidade: o RDP escolhe quem fica medindo
+ * distância até uma *reta*, sem saber que a saída ia ser curva, e o erro dele
+ * entra inteiro no resultado. Aqui o contorno denso é a referência e a
+ * tolerância é garantida, então sai ao mesmo tempo mais fiel e com menos
+ * curvas. */
+export function polygonToCubics(poly: Polygon, options: FitOptions = {}): CubicPath {
+  const { tolerance = 0.25, cornerAngle = CORNER_ANGLE } = options;
   const n = poly.length;
   if (n < 3) return { start: poly[0] ?? [0, 0], segments: [] };
 
-  const cantos = findCorners(poly, cornerAngleDeg, 1);
+  const cantos = findCorners(poly, cornerAngle, 1);
+  const quebras: number[] = [];
+  for (let i = 0; i < n; i++) if (cantos[i]) quebras.push(i);
   const segments: CubicSegment[] = [];
-  for (let i = 0; i < n; i++) {
-    const p1 = poly[i];
-    const p2 = poly[(i + 1) % n];
-    const cantoIni = cantos[i];
-    const cantoFim = cantos[(i + 1) % n];
-    if (cantoIni && cantoFim) {
-      segments.push({ c1: null, c2: null, to: p2 });
-      continue;
+  const tol2 = tolerance * tolerance;
+
+  if (!quebras.length) {
+    // Laço sem canto: abre na costura e casa as tangentes das duas pontas com
+    // os vizinhos que dão a volta — senão a emenda sairia com um bico.
+    const t = unit(sub(poly[1], poly[n - 1]));
+    fitCubic([...poly, poly[0]], 0, n, t, neg(t), tol2, 0, segments);
+    return { start: poly[0], segments };
+  }
+
+  for (let k = 0; k < quebras.length; k++) {
+    const ini = quebras[k];
+    const passos = (quebras[(k + 1) % quebras.length] - ini + n) % n || n;
+    const trecho: Polygon = [];
+    for (let j = 0; j <= passos; j++) trecho.push(poly[(ini + j) % n]);
+    fitCubic(trecho, 0, passos, tangentAt(trecho, 0, 1), tangentAt(trecho, passos, -1), tol2, 0, segments);
+  }
+  // o caminho tem de começar num canto, pra os trechos fecharem a volta
+  return { start: poly[quebras[0]], segments };
+}
+
+/** Direção do contorno na ponta de um trecho, olhando pra dentro dele. */
+function tangentAt(d: Polygon, i: number, passo: number): Point {
+  return unit(sub(d[i + passo], d[i]));
+}
+
+function fitCubic(
+  d: Polygon, first: number, last: number, tHat1: Point, tHat2: Point,
+  tol2: number, depth: number, out: CubicSegment[],
+): void {
+  if (last - first === 1) {
+    const dist = Math.hypot(d[last][0] - d[first][0], d[last][1] - d[first][1]) / 3;
+    push(out, [d[first], add(d[first], scale(tHat1, dist)), add(d[last], scale(tHat2, dist)), d[last]]);
+    return;
+  }
+
+  let u = chordLengthParameterize(d, first, last);
+  let bez = generateBezier(d, first, last, u, tHat1, tHat2);
+  let { erro, corte } = maxError(d, first, last, bez, u);
+  if (erro < tol2) { push(out, bez); return; }
+
+  // Perto o bastante: vale reposicionar os parâmetros antes de partir em dois,
+  // porque o comprimento de corda é só um chute de onde cada ponto cai na curva.
+  if (erro < tol2 * 4) {
+    for (let i = 0; i < MAX_REPARAM; i++) {
+      u = reparameterize(d, first, last, u, bez);
+      bez = generateBezier(d, first, last, u, tHat1, tHat2);
+      ({ erro, corte } = maxError(d, first, last, bez, u));
+      if (erro < tol2) { push(out, bez); return; }
     }
-    // Refletir o vizinho num canto alinha a tangente com a corda, que é o que
-    // faz a curva sair reta do canto em vez de arredondá-lo.
-    const p0 = cantoIni ? reflect(p1, p2) : poly[(i - 1 + n) % n];
-    const p3 = cantoFim ? reflect(p2, p1) : poly[(i + 2) % n];
-    const [c1, c2] = catmullRomToBezier(p0, p1, p2, p3);
-    segments.push({ c1, c2, to: p2 });
   }
-  return { start: poly[0], segments };
+  if (depth >= MAX_DEPTH) { push(out, bez); return; }
+
+  const centro = centerTangent(d, corte);
+  fitCubic(d, first, corte, tHat1, centro, tol2, depth + 1, out);
+  fitCubic(d, corte, last, neg(centro), tHat2, tol2, depth + 1, out);
 }
 
-function reflect(a: Point, b: Point): Point {
-  return [2 * a[0] - b[0], 2 * a[1] - b[1]];
+function push(out: CubicSegment[], bez: Point[]): void {
+  out.push(isStraight(bez) ? { c1: null, c2: null, to: bez[3] } : { c1: bez[1], c2: bez[2], to: bez[3] });
 }
 
-/** Catmull-Rom centrípeto (alpha = 0,5) convertido pros pontos de controle da
- * cúbica equivalente. Centrípeto porque o espaçamento depois da decimação é
- * bem desigual, e a parametrização uniforme criaria laço e bico nas curvas
- * fechadas. */
-function catmullRomToBezier(p0: Point, p1: Point, p2: Point, p3: Point): [Point, Point] {
-  const EPS = 1e-6;
-  const no = (a: Point, b: Point): number => Math.max(Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])), EPS);
-  const t0 = 0;
-  const t1 = t0 + no(p0, p1);
-  const t2 = t1 + no(p1, p2);
-  const t3 = t2 + no(p2, p3);
+/** Cúbica com os dois controles em cima da corda *é* a reta. Vale gravar como
+ * reta: sai menor no SVG e a lâmina não tem por que tratar como curva. É o que
+ * mantém o retângulo analítico com quatro lados retos. */
+function isStraight(bez: Point[]): boolean {
+  const [p0, c1, c2, p3] = bez;
+  const dx = p3[0] - p0[0];
+  const dy = p3[1] - p0[1];
+  const len = Math.hypot(dx, dy);
+  if (!len) return true;
+  const desvio = (c: Point): number => Math.abs(dy * (c[0] - p0[0]) - dx * (c[1] - p0[1])) / len;
+  return desvio(c1) < 1e-6 && desvio(c2) < 1e-6;
+}
 
-  const c1: Point = [0, 0];
-  const c2: Point = [0, 0];
-  for (let k = 0; k < 2; k++) {
-    const m1 =
-      (t2 - t1) * ((p1[k] - p0[k]) / (t1 - t0) - (p2[k] - p0[k]) / (t2 - t0) + (p2[k] - p1[k]) / (t2 - t1));
-    const m2 =
-      (t2 - t1) * ((p2[k] - p1[k]) / (t2 - t1) - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2));
-    c1[k] = p1[k] + m1 / 3;
-    c2[k] = p2[k] - m2 / 3;
+/** Resolve por mínimos quadrados o tamanho das duas tangentes que melhor
+ * encaixam a cúbica nos pontos, com as direções já fixadas. */
+function generateBezier(d: Polygon, first: number, last: number, u: number[], tHat1: Point, tHat2: Point): Point[] {
+  const p0 = d[first];
+  const p3 = d[last];
+  let c00 = 0, c01 = 0, c11 = 0, x0 = 0, x1 = 0;
+
+  for (let i = first; i <= last; i++) {
+    const t = u[i - first];
+    const a0 = scale(tHat1, bern(1, t));
+    const a1 = scale(tHat2, bern(2, t));
+    c00 += dot(a0, a0);
+    c01 += dot(a0, a1);
+    c11 += dot(a1, a1);
+    const base0 = bern(0, t) + bern(1, t);
+    const base3 = bern(2, t) + bern(3, t);
+    const resto: Point = [
+      d[i][0] - (p0[0] * base0 + p3[0] * base3),
+      d[i][1] - (p0[1] * base0 + p3[1] * base3),
+    ];
+    x0 += dot(a0, resto);
+    x1 += dot(a1, resto);
   }
-  return [c1, c2];
+
+  const det = c00 * c11 - c01 * c01;
+  const corda = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]);
+  let alfa1 = 0, alfa2 = 0;
+  if (Math.abs(det) > 1e-12) {
+    alfa1 = (x0 * c11 - x1 * c01) / det;
+    alfa2 = (c00 * x1 - c01 * x0) / det;
+  }
+  // Sistema degenerado: cai no palpite de Wu/Barsky, um terço da corda pra cada
+  // lado. Além da tangente pra trás (alfa negativo), o teto importa: num trecho
+  // de escada as tangentes das pontas ficam quase perpendiculares à corda, o
+  // mínimos quadrados responde com alfa de dezenas de vezes a corda e a curva
+  // estufa pra longe. O erro medido nos pontos não pega isso, porque a barriga
+  // fica *entre* eles — então o limite tem de estar aqui.
+  const teto = corda * MAX_ALPHA;
+  if (!(alfa1 > 1e-6 * corda) || !(alfa2 > 1e-6 * corda) || alfa1 > teto || alfa2 > teto) {
+    const terco = corda / 3;
+    return [p0, add(p0, scale(tHat1, terco)), add(p3, scale(tHat2, terco)), p3];
+  }
+  return [p0, add(p0, scale(tHat1, alfa1)), add(p3, scale(tHat2, alfa2)), p3];
+}
+
+/** Maior distância (ao quadrado) entre a curva e os pontos, e onde ela está —
+ * é por ali que o trecho é partido quando não cabe na tolerância. */
+function maxError(d: Polygon, first: number, last: number, bez: Point[], u: number[]): { erro: number; corte: number } {
+  let erro = 0;
+  let corte = first + Math.floor((last - first) / 2);
+  for (let i = first + 1; i < last; i++) {
+    const p = bezierAt(bez, u[i - first]);
+    const dx = p[0] - d[i][0];
+    const dy = p[1] - d[i][1];
+    const dist = dx * dx + dy * dy;
+    if (dist >= erro) { erro = dist; corte = i; }
+  }
+  return { erro, corte };
+}
+
+/** Newton-Raphson em cada ponto: acha o parâmetro em que a curva passa mais
+ * perto dele, no lugar do chute pelo comprimento de corda. */
+function reparameterize(d: Polygon, first: number, last: number, u: number[], bez: Point[]): number[] {
+  const d1 = derivative(bez);
+  const d2 = derivative(d1);
+  const out: number[] = [];
+  for (let i = first; i <= last; i++) {
+    const t = u[i - first];
+    const q = bezierAt(bez, t);
+    const q1 = bezierAt(d1, t);
+    const q2 = bezierAt(d2, t);
+    const dx = q[0] - d[i][0];
+    const dy = q[1] - d[i][1];
+    const num = dx * q1[0] + dy * q1[1];
+    const den = q1[0] * q1[0] + q1[1] * q1[1] + dx * q2[0] + dy * q2[1];
+    out.push(den === 0 ? t : t - num / den);
+  }
+  return out;
+}
+
+function centerTangent(d: Polygon, i: number): Point {
+  const a = sub(d[i - 1], d[i]);
+  const b = sub(d[i], d[i + 1]);
+  const m = unit([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+  // trecho reto: a média se anula e não sobra direção nenhuma
+  return m[0] === 0 && m[1] === 0 ? unit(sub(d[i - 1], d[i + 1])) : m;
+}
+
+function chordLengthParameterize(d: Polygon, first: number, last: number): number[] {
+  const u = [0];
+  for (let i = first + 1; i <= last; i++) {
+    u.push(u[i - first - 1] + Math.hypot(d[i][0] - d[i - 1][0], d[i][1] - d[i - 1][1]));
+  }
+  const total = u[u.length - 1];
+  if (!total) return u.map(() => 0);
+  return u.map((v) => v / total);
+}
+
+/** Base de Bernstein de grau 3. */
+function bern(i: number, t: number): number {
+  const u = 1 - t;
+  if (i === 0) return u * u * u;
+  if (i === 1) return 3 * t * u * u;
+  if (i === 2) return 3 * t * t * u;
+  return t * t * t;
+}
+
+/** de Casteljau — serve pra curva de qualquer grau, inclusive as derivadas. */
+function bezierAt(ctrl: Point[], t: number): Point {
+  const p = ctrl.map((c) => [c[0], c[1]] as Point);
+  for (let k = p.length - 1; k > 0; k--) {
+    for (let i = 0; i < k; i++) {
+      p[i][0] += (p[i + 1][0] - p[i][0]) * t;
+      p[i][1] += (p[i + 1][1] - p[i][1]) * t;
+    }
+  }
+  return p[0];
+}
+
+function derivative(ctrl: Point[]): Point[] {
+  const grau = ctrl.length - 1;
+  const out: Point[] = [];
+  for (let i = 0; i < grau; i++) {
+    out.push([(ctrl[i + 1][0] - ctrl[i][0]) * grau, (ctrl[i + 1][1] - ctrl[i][1]) * grau]);
+  }
+  return out;
+}
+
+function sub(a: Point, b: Point): Point { return [a[0] - b[0], a[1] - b[1]]; }
+function add(a: Point, b: Point): Point { return [a[0] + b[0], a[1] + b[1]]; }
+function neg(a: Point): Point { return [-a[0], -a[1]]; }
+function scale(a: Point, k: number): Point { return [a[0] * k, a[1] * k]; }
+function dot(a: Point, b: Point): number { return a[0] * b[0] + a[1] * b[1]; }
+function unit(a: Point): Point {
+  const len = Math.hypot(a[0], a[1]);
+  return len ? [a[0] / len, a[1] / len] : [0, 0];
 }
 
 /** Monta o atributo `d` de um <path> SVG a partir dos polígonos, em curvas. */
-export function polygonsToPathData(polys: Polygon[], decimals = 2): string {
-  return polys
-    .map((poly) => cubicPathToData(polygonToCubics(poly), decimals))
-    .filter(Boolean)
-    .join(' ');
+export function polygonsToPathData(polys: Polygon[], decimals = 2, options: FitOptions = {}): string {
+  return cubicPathsToData(polys.map((poly) => polygonToCubics(poly, options)), decimals);
+}
+
+/** Mesmo `d`, a partir de curvas já ajustadas — quem guarda o ajuste usa esta,
+ * pra o SVG e o tracejado da prévia saírem do mesmo caminho. */
+export function cubicPathsToData(paths: CubicPath[], decimals = 2): string {
+  return paths.map((p) => cubicPathToData(p, decimals)).filter(Boolean).join(' ');
+}
+
+/** Leva a curva pra outro sistema de coordenadas (px da peça → mm da folha),
+ * levando junto os pontos de controle. */
+export function mapCubicPath(path: CubicPath, f: (p: Point) => Point): CubicPath {
+  return {
+    start: f(path.start),
+    segments: path.segments.map((s) => ({
+      c1: s.c1 ? f(s.c1) : null,
+      c2: s.c2 ? f(s.c2) : null,
+      to: f(s.to),
+    })),
+  };
 }
 
 function cubicPathToData(path: CubicPath, decimals: number): string {
