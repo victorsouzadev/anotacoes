@@ -184,6 +184,18 @@ export class SocialStore {
     this.resetHistory();
   }
 
+  /** Troca a foto de trabalho por uma versão melhor da MESMA foto (ampliada por
+   * IA, por exemplo). Diferente de `setImage`: enquadramento, ajustes e
+   * histórico continuam valendo, porque o que mudou foi a resolução, não a
+   * imagem — e o deslocamento é guardado em fração do quadro justamente pra
+   * sobreviver a isso. */
+  replacePhoto(img: PhotoSource, src: string, mime = 'image/png'): void {
+    this.image.set(img);
+    this.src.set(src);
+    this.mime.set(mime);
+    this.storedCache = null;
+  }
+
   resetFraming(): void {
     this.scale.set(1);
     this.offsetX.set(0);

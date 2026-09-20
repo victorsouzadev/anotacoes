@@ -10,6 +10,10 @@ services:
       - ConnectionStrings__Db=Data Source=/data/db/notas.db
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
+      # Ampliação de foto por IA no Editor de Imagens. Sem esta chave o recurso
+      # fica desligado e o botão nem aparece.
+      - Upscale__ApiKey=${REPLICATE_API_TOKEN:-}
+      - Upscale__Model=${UPSCALE_MODEL:-nightmareai/real-esrgan}
       - Llm__Provider=${LLM_PROVIDER:-}
       # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde

@@ -9,6 +9,7 @@ using Notas.Api.Data;
 using Notas.Api.Endpoints;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
+using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Seguranca;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +50,14 @@ builder.Services.AddHttpClient(nameof(OpenRouterLlmExtractor), c =>
 builder.Services.AddHttpClient(nameof(AnthropicLlmExtractor), c =>
     c.Timeout = TimeSpan.FromSeconds(
         Math.Clamp(builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20), 5, 120)));
+
+// Ferramenta "Editor de Imagens": ampliação de foto pequena por super-resolução
+// num serviço externo. Sem chave (Upscale__ApiKey) o recurso fica desligado e o
+// editor nem oferece o botão.
+builder.Services.Configure<UpscaleOptions>(builder.Configuration.GetSection(UpscaleOptions.SectionName));
+builder.Services.AddHttpClient<IImageUpscaler, ReplicateUpscaler>(c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        Math.Clamp(builder.Configuration.GetValue("Upscale:TimeoutSegundos", 90), 15, 300) + 15));
 
 builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
 builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();

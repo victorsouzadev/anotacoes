@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
 using Notas.Api.Dtos;
+using Notas.Api.Services.Imagens;
 
 namespace Notas.Api.Endpoints;
 
@@ -18,6 +19,7 @@ public static class ImagemEndpoints
 
     public static void MapImagemEndpoints(this IEndpointRouteBuilder app)
     {
+        MapUpscale(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -52,6 +54,81 @@ public static class ImagemEndpoints
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+    }
+
+    /// <summary>
+    /// Ampliação por IA. A foto vem em data URL, é ampliada num serviço externo e
+    /// volta em data URL — o editor troca a foto de trabalho pela ampliada.
+    /// A chave do serviço mora só aqui: o navegador nunca a vê.
+    /// </summary>
+    private static void MapUpscale(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/imagens").RequireAuthorization();
+
+        // O editor pergunta antes de oferecer o botão: recurso sem chave não deve
+        // aparecer só pra falhar quando clicado.
+        group.MapGet("/upscale", (IImageUpscaler upscaler) =>
+            Results.Ok(new UpscaleStatusDto(upscaler.Disponivel)));
+
+        group.MapPost("/upscale", async (
+            UpscaleRequest req, IImageUpscaler upscaler, CancellationToken ct) =>
+        {
+            if (!upscaler.Disponivel)
+                return Results.Json(new { error = "Ampliação por IA não configurada neste servidor." }, statusCode: 503);
+
+            if (!TentarLerDataUrl(req.Imagem, out var bytes, out var contentType))
+                return Results.BadRequest(new { error = "Imagem inválida." });
+
+            try
+            {
+                var ampliada = await upscaler.AmpliarAsync(bytes, contentType, req.Escala <= 0 ? 2 : req.Escala, ct);
+                var dataUrl = $"data:{ampliada.ContentType};base64,{Convert.ToBase64String(ampliada.Conteudo)}";
+                return Results.Ok(new UpscaleResponse(dataUrl));
+            }
+            catch (UpscaleIndisponivelException ex)
+            {
+                // Falha esperada e com texto pronto pro usuário: 502, não 500.
+                return Results.Json(new { error = ex.Message }, statusCode: 502);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return Results.StatusCode(499);
+            }
+            catch (TaskCanceledException)
+            {
+                return Results.Json(new { error = "A ampliação demorou demais e foi cancelada." }, statusCode: 504);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Lê uma data URL de imagem. Só os tipos que o editor sabe desenhar passam —
+    /// o que chega aqui vai direto pra um serviço externo.
+    /// </summary>
+    internal static bool TentarLerDataUrl(string? valor, out byte[] bytes, out string contentType)
+    {
+        bytes = [];
+        contentType = "";
+        if (string.IsNullOrWhiteSpace(valor)) return false;
+        if (valor.Length > MaxDataBytes) return false;
+
+        var separador = valor.IndexOf(";base64,", StringComparison.Ordinal);
+        if (separador < 0 || !valor.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var tipo = valor[5..separador].ToLowerInvariant();
+        if (tipo is not ("image/png" or "image/jpeg" or "image/webp")) return false;
+
+        try
+        {
+            bytes = Convert.FromBase64String(valor[(separador + 8)..]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        contentType = tipo;
+        return bytes.Length > 0;
     }
 
     private static async Task<IResult> Upsert(ImageProjectUpsertRequest req, ClaimsPrincipal user, AppDbContext db)

@@ -31,6 +31,16 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    echo "LLM_PROVIDER=openrouter" >> /opt/notas-vps/.env         # força um provedor: openrouter | anthropic | heuristico
    ```
 
+   Para o Editor de Imagens ampliar foto pequena por IA (super-resolução), a
+   chave da Replicate (replicate.com). **É cobrado por imagem ampliada**, então o
+   recurso nasce desligado: sem a chave o botão nem aparece no editor.
+   ```bash
+   echo "REPLICATE_API_TOKEN=r8_..." >> /opt/notas-vps/.env
+   echo "UPSCALE_MODEL=nightmareai/real-esrgan" >> /opt/notas-vps/.env  # opcional: troca o modelo
+   ```
+   A chave fica só no servidor — a foto sobe pelo backend, que fala com o
+   serviço; o navegador nunca vê o token.
+
 2. Enviar os arquivos do projeto (do Windows):
    ```powershell
    cd notas-vps

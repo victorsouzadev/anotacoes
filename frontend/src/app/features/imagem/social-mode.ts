@@ -16,6 +16,7 @@ import {
 import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale } from './social-render';
 import { sharpenRgba } from './sharpen';
 import { SocialStore } from './social-store';
+import { ImageUpscaleService } from './image-upscale.service';
 import { downloadBlob, loadImageElement } from './svg-template';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
@@ -222,6 +223,27 @@ async function heicToJpeg(file: File): Promise<Blob> {
             }
           </div>
           <button class="sm-link" (click)="pick(fileInput, true)">Abrir sem filtro de tipo</button>
+
+          @if (image() && upscale.disponivel()) {
+            <div class="sm-divider"></div>
+            <button class="sm-btn sm-wide" [disabled]="ampliando()" (click)="ampliarComIa()">
+              <app-icon name="image" [size]="13" />
+              {{ ampliando() ? 'Ampliando…' : 'Ampliar 2× com IA' }}
+            </button>
+            <p class="sm-note">
+              @if (ampliando()) {
+                A foto foi pro serviço de ampliação; costuma levar alguns segundos.
+              } @else if (upscaleErro()) {
+                <span class="sm-warn">{{ upscaleErro() }}</span>
+              } @else if (upscaling()) {
+                A foto é pequena pro tamanho que você pediu na exportação — aqui a ampliação
+                ajuda de verdade.
+              } @else {
+                Só vale a pena quando falta pixel: a foto vai pra um serviço externo e volta
+                com o dobro do tamanho. Cada ampliação tem custo pra quem mantém o servidor.
+              }
+            </p>
+          }
           @if (image()) {
             <div class="sm-row">
               <button class="sm-btn" [class.sm-active]="fit() === 'cover'" (click)="setFit('cover')">Preencher</button>
@@ -719,6 +741,10 @@ export class SocialModeComponent {
   readonly canUndo = this.store.canUndo;
   readonly canRedo = this.store.canRedo;
 
+  readonly upscale = inject(ImageUpscaleService);
+  readonly ampliando = signal(false);
+  readonly upscaleErro = signal('');
+
   readonly error = signal('');
   readonly status = signal('');
   readonly dragOver = signal(false);
@@ -831,6 +857,12 @@ export class SocialModeComponent {
       if (amount > 0 && !compare) {
         this.sharpenTimer = setTimeout(() => this.applySharpen(canvas), 160);
       }
+    });
+
+    // Recurso que depende de chave no servidor não deve virar botão sem antes
+    // saber se está ligado.
+    effect(() => {
+      if (this.image() && this.upscale.disponivel() === null) void this.upscale.verificar();
     });
 
     // A foto é reduzida UMA vez, no tamanho que a exportação precisa, e é
@@ -1031,6 +1063,28 @@ export class SocialModeComponent {
         fit: 'cover', scale: 1, dx: 0, dy: 0,
         bgMode: 'cor', bgColor: frame.bgColor,
       });
+    }
+  }
+
+  /** Manda a foto de trabalho pro serviço de ampliação e troca pela que voltar.
+   * O enquadramento e os ajustes ficam: mudou a resolução, não a foto. */
+  async ampliarComIa(): Promise<void> {
+    const photo = this.image();
+    if (!photo || this.ampliando()) return;
+    this.ampliando.set(true);
+    this.upscaleErro.set('');
+    try {
+      // Vai o que está em memória, reencodado — o arquivo original pode ser
+      // grande demais pro limite do servidor.
+      const origem = stepDownscale(sourceOf(photo), this.photoSize().width, this.photoSize().height)
+        .toDataURL('image/jpeg', 0.95);
+      const ampliada = await this.upscale.ampliar(origem, 2);
+      const img = await loadImageElement(ampliada);
+      this.store.replacePhoto(img, ampliada, 'image/png');
+    } catch (e) {
+      this.upscaleErro.set(e instanceof Error ? e.message : 'Não consegui ampliar a foto agora.');
+    } finally {
+      this.ampliando.set(false);
     }
   }
 
