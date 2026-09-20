@@ -84,6 +84,7 @@ describe('projeto do modo redes sociais', () => {
     store.adjust.set({ ...NEUTRAL, contrast: 118, vignette: 34 });
     store.type.set('png');
     store.denoise.set(45);
+    store.sharpen.set(35);
 
     const data = store.serialize()!;
     expect(data.formatId).toBe('story');
@@ -99,6 +100,7 @@ describe('projeto do modo redes sociais', () => {
     expect(fresh.adjust().vignette).toBe(34);
     expect(fresh.type()).toBe('png');
     expect(fresh.denoise()).toBe(45);
+    expect(fresh.sharpen()).toBe(35);
     expect(fresh.hasImage()).toBe(true);
   });
 
@@ -110,6 +112,7 @@ describe('projeto do modo redes sociais', () => {
     expect(store.scale()).toBe(1);
     expect(store.adjust()).toEqual(NEUTRAL);
     expect(store.denoise()).toBe(0);
+    expect(store.sharpen()).toBe(0);
     expect(store.exportW()).toBe(SOCIAL_FORMATS[0].width);
   });
 
@@ -242,6 +245,16 @@ describe('desfazer', () => {
     expect(store.canRedo()).toBe(false);
     store.undo();
     expect(store.denoise()).toBe(30);
+  });
+
+  it('desfaz nitidez e redução de ruído junto com o resto', () => {
+    const store = withPhoto();
+    store.sharpen.set(40);
+    store.denoise.set(25);
+    store.commit();
+    store.undo();
+    expect(store.sharpen()).toBe(0);
+    expect(store.denoise()).toBe(0);
   });
 
   it('devolve enquadramento e formato, não só cor', () => {

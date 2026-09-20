@@ -5,15 +5,17 @@
  * Todo seletor usa o prefixo `sm-` pra combinar com o resto da página. */
 
 import {
-  Component, ElementRef, HostListener, computed, effect, inject, signal, viewChild, viewChildren,
+  Component, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild,
+  viewChildren,
 } from '@angular/core';
 import { IconComponent } from '../../shared/icon';
 import {
   Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
-  SOCIAL_FORMATS, SocialFormat, coversFrame, filterString,
+  SOCIAL_FORMATS, SocialFormat, coversFrame, filterString, frameRect,
 } from './social-model';
-import { FrameOptions, Source, paintFrame, sourceOf } from './social-render';
-import { SocialStore, normalizeSocialPhoto } from './social-store';
+import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale } from './social-render';
+import { sharpenRgba } from './sharpen';
+import { SocialStore } from './social-store';
 import { downloadBlob, loadImageElement } from './svg-template';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
@@ -53,6 +55,14 @@ interface SliderSpec {
   min: number;
   max: number;
 }
+
+/** Teto da foto de trabalho. Acima disso a memória e o custo de cada etapa
+ * crescem sem nada em troca: nenhum formato de post pede mais que isto. */
+const MAX_WORK_DIMENSION = 4500;
+/** A prévia desenha na densidade da tela (até 2×), senão ela parece menos
+ * nítida que o arquivo exportado — e a comparação fica injusta. */
+const MAX_PREVIEW_DPR = 2;
+const PREVIEW_CSS_WIDTH = 900;
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 6;
@@ -185,7 +195,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
               <button class="sm-btn" [class.sm-active]="fit() === 'contain'" (click)="setFit('contain')">Caber</button>
               <button class="sm-btn" (click)="resetFraming()">Reenquadrar</button>
             </div>
-            <p class="sm-note">Origem: {{ image()!.naturalWidth }} × {{ image()!.naturalHeight }} px.</p>
+            <p class="sm-note">Origem: {{ photoSize().width }} × {{ photoSize().height }} px.</p>
           }
         </div>
       </section>
@@ -282,6 +292,21 @@ async function heicToJpeg(file: File): Promise<Blob> {
               filtro: fica de fora dos presets e do "zerar ajustes".
             }
           </p>
+          <label class="sm-slider">
+            <span class="sm-slider-head">
+              <span>Nitidez</span>
+              <button class="sm-reset" (click)="resetSharpen($event)" title="Desligar">{{ sharpen() }}</button>
+            </span>
+            <input
+              type="range" min="0" max="100" step="1"
+              [value]="sharpen()" (input)="onSharpen($event)" (change)="commit()"
+            />
+          </label>
+          <p class="sm-note">
+            Devolve o micro-contraste que a redução de tamanho come. Vai por último, sobre a
+            imagem no tamanho final — 30 a 40 costuma bastar.
+          </p>
+
           <div class="sm-divider"></div>
           @for (s of basicSliders; track s.key) {
             <label class="sm-slider">
@@ -347,6 +372,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
             <span>Largura de saída (px)</span>
             <input type="number" min="200" max="4000" step="10" [value]="exportW()" (input)="onExportW($event)" />
           </label>
+          @if (upscaling(); as falta) {
+            <p class="sm-note sm-warn">
+              A foto tem pixel pra {{ falta }} px de largura neste corte — acima disso o arquivo
+              sai interpolado, maior mas não mais definido.
+            </p>
+          }
           <button class="sm-btn sm-wide sm-primary" [disabled]="!image()" (click)="exportImage()">
             <app-icon name="download" [size]="13" /> Baixar {{ exportW() }} × {{ exportH() }}
           </button>
@@ -465,6 +496,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-field input { padding: 7px 9px; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
     .sm-field input[type="color"] { padding: 2px; width: 46px; height: 30px; }
     .sm-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+    .sm-warn { color: var(--danger); }
 
     .sm-formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
     .sm-format {
@@ -593,6 +625,9 @@ export class SocialModeComponent {
   /** Foto já limpa, do jeito que o resto do desenho consome. `null` enquanto a
    * força for zero (ou enquanto a primeira limpeza não terminou). */
   private readonly cleaned = signal<HTMLCanvasElement | null>(null);
+  /** Foto já no tamanho que a saída pede, antes de cor e de limpeza. */
+  private readonly prescaled = signal<Source | null>(null);
+  readonly sharpen = this.store.sharpen;
   readonly denoising = signal(false);
 
   readonly comparing = signal(false);
@@ -619,6 +654,28 @@ export class SocialModeComponent {
     return (Object.keys(NEUTRAL) as (keyof Adjustments)[]).some((k) => current[k] !== target[k]);
   });
 
+  /** Tamanho da foto de trabalho, em pixels. */
+  readonly photoSize = computed(() => {
+    const photo = this.image();
+    return photo ? sourceOf(photo) : { image: null as unknown as CanvasImageSource, width: 1, height: 1 };
+  });
+
+  /** Largura máxima que a foto sustenta neste corte, ou 0 quando a exportação
+   * cabe dentro dela. Pedir mais não é erro — mas é bom o usuário saber que
+   * está ampliando, não ganhando definição. */
+  readonly upscaling = computed(() => {
+    const photo = this.image();
+    if (!photo) return 0;
+    const source = this.photoSize();
+    const out = this.exportW();
+    const r = frameRect(
+      source.width, source.height, out, this.exportH(),
+      this.fit(), this.scale(), this.offsetX(), this.offsetY(),
+    );
+    if (r.w <= source.width * 1.02) return 0;
+    return Math.round((out * source.width) / r.w);
+  });
+
   /** Há algum controle avançado fora do padrão? Sem isso, esconder os seis
    * atrás do botão esconderia junto o motivo de a foto estar daquele jeito. */
   readonly advancedTouched = computed(() => {
@@ -638,7 +695,7 @@ export class SocialModeComponent {
     if (!img) return false;
     const box = 1000;
     return !coversFrame(
-      img.naturalWidth || 1, img.naturalHeight || 1, box, Math.round(box / this.format().ratio),
+      this.photoSize().width, this.photoSize().height, box, Math.round(box / this.format().ratio),
       this.fit(), this.scale(), this.offsetX(), this.offsetY(),
     );
   });
@@ -650,6 +707,7 @@ export class SocialModeComponent {
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
   private wheelTimer: ReturnType<typeof setTimeout> | null = null;
+  private sharpenTimer: ReturnType<typeof setTimeout> | null = null;
   /** Recorte intermediário reaproveitado pelas miniaturas. */
   private readonly baseCanvas = document.createElement('canvas');
   private frame: number | null = null;
@@ -668,27 +726,60 @@ export class SocialModeComponent {
       // Comparando, o que aparece é a foto como ela entrou: mesmo enquadramento
       // e mesmo formato, sem ajuste de cor e sem a redução de ruído.
       const source = compare ? (img ? sourceOf(img) : null) : this.currentSource();
+      const amount = this.sharpen();
       if (!canvas || !source) return;
-      const w = 900;
+      const dpr = Math.min(MAX_PREVIEW_DPR, globalThis.devicePixelRatio || 1);
+      const w = Math.round(PREVIEW_CSS_WIDTH * dpr);
       canvas.width = w;
       canvas.height = Math.round(w / this.format().ratio);
       paintFrame(canvas, source, this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()));
+      // A nitidez custa uns 50 ms e não pode engasgar quem arrasta um controle:
+      // a imagem aparece na hora e ganha o acabamento quando a mão para.
+      if (this.sharpenTimer !== null) clearTimeout(this.sharpenTimer);
+      if (amount > 0 && !compare) {
+        this.sharpenTimer = setTimeout(() => this.applySharpen(canvas), 160);
+      }
     });
 
-    // A limpeza é cara e roda sobre a foto inteira, então espera a mão sair do
-    // controle antes de começar — e refaz do zero quando a foto muda.
+    // A foto é reduzida UMA vez, no tamanho que a exportação precisa, e é
+    // dessa redução que saem prévia, miniaturas e arquivo final. Antes cada
+    // desenho reduzia a foto inteira de novo, num passo só — o jeito mais
+    // rápido de serrilhar textura fina.
     effect(() => {
-      const img = this.image();
+      const photo = this.image();
+      const needed = this.neededWidth();
+      if (!photo) {
+        this.prescaled.set(null);
+        return;
+      }
+      const source = sourceOf(photo);
+      // Perto o bastante do tamanho da foto: reduzir seria perder à toa.
+      if (needed >= source.width * 0.9) {
+        this.prescaled.set(source);
+        return;
+      }
+      // Diferença pequena não paga uma redução nova: aproximar aos poucos com a
+      // roda do mouse geraria uma cadeia delas.
+      const current = untracked(this.prescaled);
+      if (current && current.width >= needed && current.width <= needed * 1.3) return;
+      const canvas = stepDownscale(source, needed, (needed * source.height) / source.width);
+      this.prescaled.set({ image: canvas, width: canvas.width, height: canvas.height });
+    });
+
+    // A limpeza é cara, então espera a mão sair do controle antes de começar —
+    // e roda sobre a foto já reduzida, que é onde o ruído ainda importa.
+    effect(() => {
+      const source = this.prescaled();
       const strength = this.denoise();
       if (this.denoiseTimer !== null) clearTimeout(this.denoiseTimer);
-      if (!img || strength <= 0) {
+      if (!source || strength <= 0) {
         this.denoiseJob++;
         this.denoising.set(false);
         this.cleaned.set(null);
         return;
       }
       this.denoising.set(true);
-      this.denoiseTimer = setTimeout(() => void this.runDenoise(img, strength), 250);
+      this.denoiseTimer = setTimeout(() => void this.runDenoise(source, strength), 250);
     });
 
     // As miniaturas dos filtros mostram a própria foto, no enquadramento atual.
@@ -705,10 +796,10 @@ export class SocialModeComponent {
 
   /** Roda a limpeza no worker e guarda o resultado. Um pedido novo invalida o
    * anterior: quem arrasta o controle gera vários, e só o último interessa. */
-  private async runDenoise(img: HTMLImageElement, strength: number): Promise<void> {
+  private async runDenoise(photo: Source, strength: number): Promise<void> {
     const job = ++this.denoiseJob;
-    const w = img.naturalWidth || 1;
-    const h = img.naturalHeight || 1;
+    const w = photo.width;
+    const h = photo.height;
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -717,7 +808,7 @@ export class SocialModeComponent {
       this.denoising.set(false);
       return;
     }
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(photo.image, 0, 0);
     const imageData = ctx.getImageData(0, 0, w, h);
     try {
       const pixels = await this.denoiseInWorker(imageData, strength);
@@ -761,8 +852,40 @@ export class SocialModeComponent {
   private currentSource(): Source | null {
     const clean = this.cleaned();
     if (clean) return { image: clean, width: clean.width, height: clean.height };
-    const img = this.image();
-    return img ? sourceOf(img) : null;
+    const pre = this.prescaled();
+    if (pre) return pre;
+    const photo = this.image();
+    return photo ? sourceOf(photo) : null;
+  }
+
+  /** Quantos pixels de foto a exportação vai realmente usar. Sai da mesma conta
+   * do desenho: o retângulo em que a foto cai, medido no canvas de saída. Uma
+   * folga de 15% evita refazer a redução a cada arrastão. */
+  private neededWidth(): number {
+    const photo = this.image();
+    if (!photo) return 0;
+    const source = sourceOf(photo);
+    // Deslocamento de propósito zerado: arrastar a foto não muda quantos pixels
+    // dela são usados, e ler esses sinais aqui refaria a redução a cada
+    // movimento do ponteiro.
+    const r = frameRect(
+      source.width, source.height, this.exportW(), this.exportH(),
+      this.fit(), this.scale(), 0, 0,
+    );
+    const needed = Math.ceil((r.w * 1.15) / 200) * 200;
+    return Math.max(200, Math.min(source.width, needed));
+  }
+
+  /** Aplica a nitidez no canvas já montado — é a última etapa, depois de a
+   * imagem estar no tamanho final, porque nitidez é um efeito de pixel. */
+  private applySharpen(canvas: HTMLCanvasElement): void {
+    const amount = this.sharpen();
+    if (amount <= 0) return;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    sharpenRgba(data.data, canvas.width, canvas.height, amount);
+    ctx.putImageData(data, 0, 0);
   }
 
   /** Junta o enquadramento atual com um conjunto de ajustes. */
@@ -936,11 +1059,20 @@ export class SocialModeComponent {
         }
       }
       const original = await readAsDataUrl(source);
-      // Reduz antes de guardar: a foto vai embutida no projeto salvo.
       const raw = await loadImageElement(original);
-      const src = normalizeSocialPhoto(raw, original, heic ? 'image/jpeg' : file.type);
-      const img = src === original ? raw : await loadImageElement(src);
-      this.store.setImage(img, src, heic ? file.name.replace(/\.hei[cf]$/i, '.jpg') : file.name);
+      // A foto entra inteira: a redução pro projeto salvo acontece ao salvar, e
+      // a redução pro tamanho do post acontece uma vez, mais adiante. Só o
+      // absurdo é cortado aqui.
+      const natural = sourceOf(raw);
+      const photo: PhotoSource = Math.max(natural.width, natural.height) > MAX_WORK_DIMENSION
+        ? stepDownscale(
+            natural,
+            natural.width * (MAX_WORK_DIMENSION / Math.max(natural.width, natural.height)),
+            natural.height * (MAX_WORK_DIMENSION / Math.max(natural.width, natural.height)),
+          )
+        : raw;
+      const mime = heic ? 'image/jpeg' : (file.type || 'image/jpeg');
+      this.store.setImage(photo, original, heic ? file.name.replace(/\.hei[cf]$/i, '.jpg') : file.name, mime);
     } catch (e) {
       this.converting.set(false);
       this.status.set('');
@@ -1050,6 +1182,16 @@ export class SocialModeComponent {
     this.commit();
   }
 
+  onSharpen(event: Event): void {
+    this.sharpen.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  resetSharpen(event: Event): void {
+    event.preventDefault();
+    this.sharpen.set(0);
+    this.commit();
+  }
+
   onDenoise(event: Event): void {
     this.denoise.set(Number((event.target as HTMLInputElement).value));
   }
@@ -1098,6 +1240,7 @@ export class SocialModeComponent {
     canvas.width = w;
     canvas.height = h;
     paintFrame(canvas, source, this.frameOptions(this.adjust()));
+    this.applySharpen(canvas);
     const png = this.type() === 'png';
     canvas.toBlob(
       (blob) => {

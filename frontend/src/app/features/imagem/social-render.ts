@@ -22,8 +22,46 @@ export interface Source {
   height: number;
 }
 
-export function sourceOf(img: HTMLImageElement): Source {
-  return { image: img, width: img.naturalWidth || 1, height: img.naturalHeight || 1 };
+/** A foto de trabalho: o arquivo como veio, ou o canvas de uma redução. */
+export type PhotoSource = HTMLImageElement | HTMLCanvasElement;
+
+export function sourceOf(photo: PhotoSource): Source {
+  return 'naturalWidth' in photo
+    ? { image: photo, width: photo.naturalWidth || 1, height: photo.naturalHeight || 1 }
+    : { image: photo, width: photo.width, height: photo.height };
+}
+
+/** Reduz pela metade, repetidamente, até o alvo.
+ *
+ * Um `drawImage` único de 4000 px para 1080 amostra a origem grosso: a
+ * filtragem bilinear olha quatro pixels vizinhos e ignora os outros doze de
+ * cada bloco, então trama fina e texto serrilham. Reduzir em etapas faz cada
+ * passo ser uma média honesta do anterior, que é o mesmo raciocínio de um
+ * mipmap. A última etapa vai direto ao alvo, com a filtragem boa do navegador. */
+export function stepDownscale(src: Source, targetW: number, targetH: number): HTMLCanvasElement {
+  let current = src.image;
+  let w = src.width;
+  let h = src.height;
+
+  while (w / 2 > targetW && h / 2 > targetH) {
+    w = Math.max(1, Math.round(w / 2));
+    h = Math.max(1, Math.round(h / 2));
+    current = drawInto(current, w, h);
+  }
+  return drawInto(current, Math.max(1, Math.round(targetW)), Math.max(1, Math.round(targetH)));
+}
+
+function drawInto(image: CanvasImageSource, w: number, h: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, w, h);
+  }
+  return canvas;
 }
 
 /** Desenha fundo, foto com os ajustes de cor e as camadas de acabamento
