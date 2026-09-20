@@ -5,7 +5,7 @@
  * Todo seletor usa o prefixo `sm-` pra combinar com o resto da página. */
 
 import {
-  Component, ElementRef, computed, effect, inject, signal, viewChild, viewChildren,
+  Component, ElementRef, HostListener, computed, effect, inject, signal, viewChild, viewChildren,
 } from '@angular/core';
 import { IconComponent } from '../../shared/icon';
 import {
@@ -99,6 +99,25 @@ async function heicToJpeg(file: File): Promise<Blob> {
           @if (image()) { {{ fileName() }} · {{ exportW() }} × {{ exportH() }} px } @else { Redes sociais }
         </span>
         @if (image()) {
+          <div class="sm-bar">
+            <button (click)="undo()" [disabled]="!canUndo()" title="Desfazer (Ctrl+Z)" aria-label="Desfazer">
+              <app-icon name="undo" [size]="14" />
+            </button>
+            <button (click)="redo()" [disabled]="!canRedo()" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer">
+              <app-icon name="redo" [size]="14" />
+            </button>
+            <button
+              class="sm-compare"
+              [class.sm-active]="comparing()"
+              title="Segure pra ver a foto original (ou segure a tecla C)"
+              (pointerdown)="startCompare($event)"
+              (pointerup)="stopCompare()"
+              (pointerleave)="stopCompare()"
+              (pointercancel)="stopCompare()"
+            >
+              <app-icon name="eye" [size]="14" /> Antes
+            </button>
+          </div>
           <div class="sm-zoom-bar" title="Tamanho da foto dentro do quadro — a roda do mouse também muda">
             <span class="sm-zoom-name">Escala da foto</span>
             <button (click)="zoomBy(1 / 1.15)" aria-label="Diminuir a foto no quadro">−</button>
@@ -122,6 +141,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
           (pointercancel)="onPointerUp($event)"
         >
           <canvas #preview class="sm-canvas" [style.aspect-ratio]="format().ratio"></canvas>
+          @if (comparing()) { <span class="sm-badge">Foto original</span> }
         </div>
         <p class="sm-hint">Arraste a foto pra reenquadrar. A prévia já mostra o resultado final.</p>
       } @else {
@@ -252,7 +272,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
               <span>Redução de ruído</span>
               <button class="sm-reset" (click)="resetDenoise($event)" title="Desligar">{{ denoise() }}</button>
             </span>
-            <input type="range" min="0" max="100" step="1" [value]="denoise()" (input)="onDenoise($event)" />
+            <input type="range" min="0" max="100" step="1" [value]="denoise()" (input)="onDenoise($event)" (change)="commit()" />
           </label>
           <p class="sm-note">
             @if (denoising()) {
@@ -274,6 +294,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 [min]="s.min" [max]="s.max" step="1"
                 [value]="adjust()[s.key]"
                 (input)="onSlider(s.key, $event)"
+                (change)="commit()"
               />
             </label>
           }
@@ -295,6 +316,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
                   [min]="s.min" [max]="s.max" step="1"
                   [value]="adjust()[s.key]"
                   (input)="onSlider(s.key, $event)"
+                  (change)="commit()"
                 />
               </label>
             }
@@ -346,7 +368,24 @@ async function heicToJpeg(file: File): Promise<Blob> {
     }
     .sm-tabs { display: flex; align-items: center; gap: 8px; }
     .sm-tab-label { font-size: 12px; font-weight: 600; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sm-zoom-bar { margin-left: auto; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+    .sm-bar { margin-left: auto; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+    .sm-bar button {
+      display: inline-flex; align-items: center; gap: 4px;
+      border: none; background: none; color: var(--text-muted);
+      font-size: 11px; font-weight: 700; padding: 5px 8px;
+    }
+    .sm-bar button:hover:not(:disabled) { color: var(--accent); }
+    .sm-bar button:disabled { opacity: 0.35; }
+    .sm-compare { touch-action: none; user-select: none; }
+    .sm-compare.sm-active { color: var(--accent); }
+    .sm-badge {
+      position: absolute; top: 12px; left: 12px;
+      padding: 3px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 700;
+      color: #fff; background: rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
+    .sm-zoom-bar { margin-left: 6px; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
     .sm-zoom-bar button { border: none; background: none; color: var(--text-muted); font-size: 13px; font-weight: 700; padding: 4px 9px; }
     .sm-zoom-bar button:hover { color: var(--accent); }
     .sm-zoom-level { font-size: 11px; min-width: 46px; }
@@ -365,6 +404,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
       cursor: grab;
       overflow: hidden;
     }
+    .sm-stage { position: relative; }
     .sm-stage.sm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
     .sm-canvas { display: block; max-width: 100%; max-height: 100%; border-radius: 4px; object-fit: contain; }
 
@@ -555,6 +595,10 @@ export class SocialModeComponent {
   private readonly cleaned = signal<HTMLCanvasElement | null>(null);
   readonly denoising = signal(false);
 
+  readonly comparing = signal(false);
+  readonly canUndo = this.store.canUndo;
+  readonly canRedo = this.store.canRedo;
+
   readonly error = signal('');
   readonly status = signal('');
   readonly dragOver = signal(false);
@@ -604,7 +648,8 @@ export class SocialModeComponent {
   /** Os seis controles finos ficam atrás de um botão: quatro resolvem quase tudo. */
   readonly advanced = signal(this.prefs.advanced);
 
-  private drag: { id: number; x: number; y: number; dx: number; dy: number } | null = null;
+  private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
+  private wheelTimer: ReturnType<typeof setTimeout> | null = null;
   /** Recorte intermediário reaproveitado pelas miniaturas. */
   private readonly baseCanvas = document.createElement('canvas');
   private frame: number | null = null;
@@ -618,12 +663,16 @@ export class SocialModeComponent {
     // todo o estado do render mora em signals.
     effect(() => {
       const canvas = this.previewRef()?.nativeElement;
-      const source = this.currentSource();
+      const compare = this.comparing();
+      const img = this.image();
+      // Comparando, o que aparece é a foto como ela entrou: mesmo enquadramento
+      // e mesmo formato, sem ajuste de cor e sem a redução de ruído.
+      const source = compare ? (img ? sourceOf(img) : null) : this.currentSource();
       if (!canvas || !source) return;
       const w = 900;
       canvas.width = w;
       canvas.height = Math.round(w / this.format().ratio);
-      paintFrame(canvas, source, this.frameOptions(this.adjust()));
+      paintFrame(canvas, source, this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()));
     });
 
     // A limpeza é cara e roda sobre a foto inteira, então espera a mão sair do
@@ -770,6 +819,58 @@ export class SocialModeComponent {
     }
   }
 
+  // --- desfazer e comparar ----------------------------------------------------
+
+  /** Fecha um passo do histórico. O template chama isto ao soltar um controle. */
+  commit(): void { this.store.commit(); }
+
+  undo(): void { this.store.undo(); }
+
+  redo(): void { this.store.redo(); }
+
+  startCompare(event?: Event): void {
+    event?.preventDefault();
+    if (this.image()) this.comparing.set(true);
+  }
+
+  stopCompare(): void { this.comparing.set(false); }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeyDown(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    // Não sequestra atalho de quem está digitando num campo de texto.
+    if (target?.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') return;
+    if (target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) this.redo();
+      else this.undo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === 'y') {
+      event.preventDefault();
+      this.redo();
+      return;
+    }
+    // A tecla solta só vale fora de campo: digitar a largura de exportação não
+    // pode piscar a comparação.
+    const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+    if (key === 'c' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat) {
+      this.startCompare();
+    }
+  }
+
+  @HostListener('window:keyup', ['$event'])
+  onKeyUp(event: KeyboardEvent): void {
+    if (event.key.toLowerCase() === 'c') this.stopCompare();
+  }
+
+  /** A janela perder o foco com a tecla apertada deixaria a comparação ligada. */
+  @HostListener('window:blur')
+  onBlur(): void { this.stopCompare(); }
+
   isOpen(id: SectionId): boolean { return this.open()[id]; }
 
   toggle(id: SectionId): void {
@@ -856,27 +957,36 @@ export class SocialModeComponent {
 
   setFit(fit: FitMode): void {
     this.fit.set(fit);
-    this.resetFraming();
+    this.store.resetFraming();
+    this.commit();
   }
 
   resetFraming(): void {
     this.store.resetFraming();
+    this.commit();
   }
 
   zoomBy(factor: number): void {
     this.scale.update((s) => clamp(s * factor, MIN_SCALE, MAX_SCALE));
+    this.commit();
   }
 
   onWheel(event: WheelEvent): void {
     if (!this.image()) return;
     event.preventDefault();
-    this.zoomBy(event.deltaY < 0 ? 1.1 : 1 / 1.1);
+    // Uma rolagem contínua é um passo só: o histórico fecha quando ela para.
+    this.scale.update((s) => clamp(s * (event.deltaY < 0 ? 1.1 : 1 / 1.1), MIN_SCALE, MAX_SCALE));
+    if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
+    this.wheelTimer = setTimeout(() => this.commit(), 300);
   }
 
   onPointerDown(event: PointerEvent): void {
     if (!this.image()) return;
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
-    this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: this.offsetX(), dy: this.offsetY() };
+    this.drag = {
+      id: event.pointerId, x: event.clientX, y: event.clientY,
+      dx: this.offsetX(), dy: this.offsetY(), moved: false,
+    };
   }
 
   onPointerMove(event: PointerEvent): void {
@@ -885,13 +995,17 @@ export class SocialModeComponent {
     const canvas = this.previewRef()?.nativeElement;
     if (!canvas) return;
     const box = canvas.getBoundingClientRect();
+    d.moved = true;
     // O deslocamento é guardado em fração do quadro pra sobreviver ao zoom da tela.
     this.offsetX.set(clamp(d.dx + (event.clientX - d.x) / box.width, -1, 1));
     this.offsetY.set(clamp(d.dy + (event.clientY - d.y) / box.height, -1, 1));
   }
 
   onPointerUp(event: PointerEvent): void {
-    if (this.drag?.id === event.pointerId) this.drag = null;
+    if (this.drag?.id !== event.pointerId) return;
+    const moved = this.drag.moved;
+    this.drag = null;
+    if (moved) this.commit();
   }
 
   // --- formato --------------------------------------------------------------
@@ -899,18 +1013,26 @@ export class SocialModeComponent {
   setFormat(f: SocialFormat): void {
     this.format.set(f);
     this.exportW.set(f.width);
-    this.resetFraming();
+    this.store.resetFraming();
+    this.commit();
   }
 
-  setBgMode(mode: BgMode): void { this.bgMode.set(mode); }
+  setBgMode(mode: BgMode): void {
+    this.bgMode.set(mode);
+    this.commit();
+  }
 
-  onBgColor(event: Event): void { this.bgColor.set((event.target as HTMLInputElement).value); }
+  onBgColor(event: Event): void {
+    this.bgColor.set((event.target as HTMLInputElement).value);
+    this.commit();
+  }
 
   // --- cor ------------------------------------------------------------------
 
   applyPreset(p: FilterPreset): void {
     this.preset.set(p.id);
     this.adjust.set({ ...NEUTRAL, ...p.values });
+    this.commit();
   }
 
   chipFilter(p: FilterPreset): string {
@@ -925,6 +1047,7 @@ export class SocialModeComponent {
   resetOne(key: keyof Adjustments, event: Event): void {
     event.preventDefault();
     this.adjust.update((a) => ({ ...a, [key]: NEUTRAL[key] }));
+    this.commit();
   }
 
   onDenoise(event: Event): void {
@@ -934,11 +1057,13 @@ export class SocialModeComponent {
   resetDenoise(event: Event): void {
     event.preventDefault();
     this.denoise.set(0);
+    this.commit();
   }
 
   resetAdjust(): void {
     this.adjust.set({ ...NEUTRAL });
     this.preset.set('original');
+    this.commit();
   }
 
   display(key: keyof Adjustments): string {

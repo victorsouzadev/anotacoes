@@ -187,3 +187,84 @@ describe('preferências do painel', () => {
     expect(loadPrefs().sections).toEqual(DEFAULT_SECTIONS);
   });
 });
+
+describe('desfazer', () => {
+  function withPhoto(): SocialStore {
+    const store = new SocialStore();
+    store.setImage({ naturalWidth: 800, naturalHeight: 600 } as HTMLImageElement, 'data:,x', 'foto.jpg');
+    return store;
+  }
+
+  it('começa sem nada pra desfazer', () => {
+    const store = withPhoto();
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(false);
+  });
+
+  it('volta e refaz um passo', () => {
+    const store = withPhoto();
+    store.adjust.set({ ...NEUTRAL, contrast: 130 });
+    store.commit();
+    expect(store.canUndo()).toBe(true);
+
+    store.undo();
+    expect(store.adjust().contrast).toBe(100);
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(true);
+
+    store.redo();
+    expect(store.adjust().contrast).toBe(130);
+    expect(store.canRedo()).toBe(false);
+  });
+
+  it('não guarda passo quando nada mudou', () => {
+    const store = withPhoto();
+    store.adjust.set({ ...NEUTRAL, sepia: 20 });
+    store.commit();
+    store.commit();
+    store.commit();
+    store.undo();
+    expect(store.adjust().sepia).toBe(0);
+    expect(store.canUndo()).toBe(false);
+  });
+
+  it('um passo novo descarta o que estava à frente', () => {
+    const store = withPhoto();
+    store.denoise.set(30);
+    store.commit();
+    store.denoise.set(60);
+    store.commit();
+    store.undo();
+    expect(store.denoise()).toBe(30);
+
+    store.denoise.set(80);
+    store.commit();
+    expect(store.canRedo()).toBe(false);
+    store.undo();
+    expect(store.denoise()).toBe(30);
+  });
+
+  it('devolve enquadramento e formato, não só cor', () => {
+    const store = withPhoto();
+    store.format.set(SOCIAL_FORMATS.find((f) => f.id === 'story')!);
+    store.scale.set(1.6);
+    store.offsetX.set(0.2);
+    store.fit.set('contain');
+    store.commit();
+
+    store.undo();
+    expect(store.format().id).toBe(SOCIAL_FORMATS[0].id);
+    expect(store.scale()).toBe(1);
+    expect(store.offsetX()).toBe(0);
+    expect(store.fit()).toBe('cover');
+  });
+
+  it('trocar de foto recomeça o histórico', () => {
+    const store = withPhoto();
+    store.adjust.set({ ...NEUTRAL, brightness: 120 });
+    store.commit();
+    store.setImage({ naturalWidth: 400, naturalHeight: 400 } as HTMLImageElement, 'data:,y', 'outra.jpg');
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(false);
+  });
+});

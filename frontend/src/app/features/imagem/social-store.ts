@@ -31,6 +31,32 @@ export interface SocialProjectData {
  * cobre qualquer formato de post com folga. É o mesmo teto do modo molde. */
 export const MAX_PHOTO_DIMENSION = 2000;
 
+/** Tudo que um "desfazer" precisa devolver. Fica de fora a foto em si: trocar
+ * de foto começa uma edição nova, não é um passo pra voltar. */
+export interface LookSnapshot {
+  formatId: string;
+  fit: FitMode;
+  scale: number;
+  dx: number;
+  dy: number;
+  bgMode: BgMode;
+  bgColor: string;
+  adjust: Adjustments;
+  preset: string;
+  denoise: number;
+}
+
+/** Teto do histórico. Cada passo é um punhado de números, mas guardar sem
+ * limite é vazamento lento. */
+const MAX_HISTORY = 60;
+
+function sameLook(a: LookSnapshot, b: LookSnapshot): boolean {
+  return a.formatId === b.formatId && a.fit === b.fit && a.scale === b.scale
+    && a.dx === b.dx && a.dy === b.dy && a.bgMode === b.bgMode && a.bgColor === b.bgColor
+    && a.preset === b.preset && a.denoise === b.denoise
+    && (Object.keys(NEUTRAL) as (keyof Adjustments)[]).every((k) => a.adjust[k] === b.adjust[k]);
+}
+
 @Injectable()
 export class SocialStore {
   /** Elemento pronto pra desenhar; `null` enquanto não há foto. */
@@ -61,11 +87,85 @@ export class SocialStore {
   readonly hasImage = computed(() => this.image() !== null);
   readonly exportH = computed(() => Math.round(this.exportW() / this.format().ratio));
 
+  // ---------- desfazer ----------
+
+  /** Passos já dados. O primeiro é o estado inicial, então `index` 0 é "nada
+   * pra desfazer" — e não um histórico vazio, que não saberia pra onde voltar. */
+  private history: LookSnapshot[] = [];
+  private index = 0;
+  private readonly revision = signal(0);
+
+  readonly canUndo = computed(() => { this.revision(); return this.index > 0; });
+  readonly canRedo = computed(() => { this.revision(); return this.index < this.history.length - 1; });
+
+  snapshot(): LookSnapshot {
+    return {
+      formatId: this.format().id,
+      fit: this.fit(),
+      scale: this.scale(),
+      dx: this.offsetX(),
+      dy: this.offsetY(),
+      bgMode: this.bgMode(),
+      bgColor: this.bgColor(),
+      adjust: { ...this.adjust() },
+      preset: this.preset(),
+      denoise: this.denoise(),
+    };
+  }
+
+  /** Marca um passo concluído. Chamado ao soltar um controle, não a cada
+   * movimento: arrastar um slider é uma edição só, não trinta. */
+  commit(): void {
+    const current = this.snapshot();
+    const top = this.history[this.index];
+    if (top && sameLook(top, current)) return;
+    // Um passo novo depois de desfazer descarta o que estava à frente.
+    this.history = this.history.slice(0, this.index + 1);
+    this.history.push(current);
+    if (this.history.length > MAX_HISTORY) this.history.shift();
+    this.index = this.history.length - 1;
+    this.revision.update((v) => v + 1);
+  }
+
+  undo(): void {
+    if (this.index <= 0) return;
+    this.index--;
+    this.apply(this.history[this.index]);
+  }
+
+  redo(): void {
+    if (this.index >= this.history.length - 1) return;
+    this.index++;
+    this.apply(this.history[this.index]);
+  }
+
+  /** Recomeça o histórico a partir do estado atual — foto nova, projeto aberto. */
+  private resetHistory(): void {
+    this.history = [this.snapshot()];
+    this.index = 0;
+    this.revision.update((v) => v + 1);
+  }
+
+  private apply(look: LookSnapshot): void {
+    this.format.set(SOCIAL_FORMATS.find((f) => f.id === look.formatId) ?? SOCIAL_FORMATS[0]);
+    this.fit.set(look.fit);
+    this.scale.set(look.scale);
+    this.offsetX.set(look.dx);
+    this.offsetY.set(look.dy);
+    this.bgMode.set(look.bgMode);
+    this.bgColor.set(look.bgColor);
+    this.adjust.set({ ...look.adjust });
+    this.preset.set(look.preset);
+    this.denoise.set(look.denoise);
+    this.revision.update((v) => v + 1);
+  }
+
   setImage(img: HTMLImageElement, src: string, name: string): void {
     this.image.set(img);
     this.src.set(src);
     this.fileName.set(name);
     this.resetFraming();
+    this.resetHistory();
   }
 
   resetFraming(): void {
@@ -89,6 +189,7 @@ export class SocialStore {
     this.quality.set(92);
     this.exportW.set(SOCIAL_FORMATS[0].width);
     this.resetFraming();
+    this.resetHistory();
   }
 
   // ---------- projeto ----------
@@ -139,6 +240,7 @@ export class SocialStore {
     this.image.set(img);
     this.src.set(data.src);
     this.fileName.set(data.fileName ?? '');
+    this.resetHistory();
   }
 }
 
