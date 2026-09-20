@@ -20,6 +20,8 @@ export interface SocialProjectData {
   bgMode: BgMode;
   bgColor: string;
   adjust: Adjustments;
+  /** Força da redução de ruído, 0..100. */
+  denoise: number;
   type: 'jpeg' | 'png';
   quality: number;
   exportW: number;
@@ -47,6 +49,10 @@ export class SocialStore {
 
   readonly adjust = signal<Adjustments>({ ...NEUTRAL });
   readonly preset = signal('original');
+  /** Redução de ruído. Fica fora de `adjust` de propósito: não é um look, é um
+   * conserto da foto — por isso trocar de filtro ou zerar os ajustes não mexe
+   * nela, e ela roda antes de tudo, sobre os pixels originais. */
+  readonly denoise = signal(0);
 
   readonly type = signal<'jpeg' | 'png'>('jpeg');
   readonly quality = signal(92);
@@ -78,6 +84,7 @@ export class SocialStore {
     this.bgColor.set('#ffffff');
     this.adjust.set({ ...NEUTRAL });
     this.preset.set('original');
+    this.denoise.set(0);
     this.type.set('jpeg');
     this.quality.set(92);
     this.exportW.set(SOCIAL_FORMATS[0].width);
@@ -101,6 +108,7 @@ export class SocialStore {
       bgMode: this.bgMode(),
       bgColor: this.bgColor(),
       adjust: { ...NEUTRAL, ...this.adjust() },
+      denoise: this.denoise(),
       type: this.type(),
       quality: this.quality(),
       exportW: this.exportW(),
@@ -122,6 +130,7 @@ export class SocialStore {
     // mexido nos controles depois de aplicar um filtro.
     this.adjust.set({ ...NEUTRAL, ...(data.adjust ?? {}) });
     this.preset.set('original');
+    this.denoise.set(data.denoise ?? 0);
     this.type.set(data.type === 'png' ? 'png' : 'jpeg');
     this.quality.set(data.quality || 92);
     this.exportW.set(data.exportW || format.width);

@@ -200,6 +200,22 @@ async function heicToJpeg(file: File): Promise<Blob> {
           <app-icon class="sm-chevron" name="chevron" [size]="14" />
         </button>
         <div class="sm-section-body">
+          <label class="sm-slider">
+            <span class="sm-slider-head">
+              <span>Redução de ruído</span>
+              <button class="sm-reset" (click)="resetDenoise($event)" title="Desligar">{{ denoise() }}</button>
+            </span>
+            <input type="range" min="0" max="100" step="1" [value]="denoise()" (input)="onDenoise($event)" />
+          </label>
+          <p class="sm-note">
+            @if (denoising()) {
+              Limpando o ruído…
+            } @else {
+              Tira o granulado da foto (sombra, foto noturna) sem borrar as bordas. Não é um
+              filtro: fica de fora dos presets e do "zerar ajustes".
+            }
+          </p>
+          <div class="sm-divider"></div>
           @for (s of sliders; track s.key) {
             <label class="sm-slider">
               <span class="sm-slider-head">
@@ -372,6 +388,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-preset-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
     .sm-preset.sm-active .sm-preset-label { color: var(--accent); }
 
+    .sm-divider { height: 1px; background: var(--border); margin: 2px 0; }
     .sm-slider { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
     .sm-slider-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .sm-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
@@ -434,6 +451,12 @@ export class SocialModeComponent {
   readonly exportW = this.store.exportW;
   readonly exportH = this.store.exportH;
 
+  readonly denoise = this.store.denoise;
+  /** Foto já limpa, do jeito que o resto do desenho consome. `null` enquanto a
+   * força for zero (ou enquanto a primeira limpeza não terminou). */
+  private readonly cleaned = signal<HTMLCanvasElement | null>(null);
+  readonly denoising = signal(false);
+
   readonly error = signal('');
   readonly status = signal('');
   readonly dragOver = signal(false);
@@ -453,18 +476,38 @@ export class SocialModeComponent {
   /** Recorte intermediário reaproveitado pelas miniaturas. */
   private readonly baseCanvas = document.createElement('canvas');
   private frame: number | null = null;
+  private worker: Worker | null = null;
+  private denoiseTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Identifica a última limpeza pedida, pra descartar resposta atrasada. */
+  private denoiseJob = 0;
 
   constructor() {
     // Redesenha a prévia sempre que qualquer entrada muda — um efeito só, já que
     // todo o estado do render mora em signals.
     effect(() => {
       const canvas = this.previewRef()?.nativeElement;
-      const img = this.image();
-      if (!canvas || !img) return;
+      const source = this.currentSource();
+      if (!canvas || !source) return;
       const w = 900;
       canvas.width = w;
       canvas.height = Math.round(w / this.format().ratio);
-      paintFrame(canvas, sourceOf(img), this.frameOptions(this.adjust()));
+      paintFrame(canvas, source, this.frameOptions(this.adjust()));
+    });
+
+    // A limpeza é cara e roda sobre a foto inteira, então espera a mão sair do
+    // controle antes de começar — e refaz do zero quando a foto muda.
+    effect(() => {
+      const img = this.image();
+      const strength = this.denoise();
+      if (this.denoiseTimer !== null) clearTimeout(this.denoiseTimer);
+      if (!img || strength <= 0) {
+        this.denoiseJob++;
+        this.denoising.set(false);
+        this.cleaned.set(null);
+        return;
+      }
+      this.denoising.set(true);
+      this.denoiseTimer = setTimeout(() => void this.runDenoise(img, strength), 250);
     });
 
     // As miniaturas dos filtros mostram a própria foto, no enquadramento atual.
@@ -472,11 +515,73 @@ export class SocialModeComponent {
     // então mexer num controle não obriga a redesenhar as 34.
     effect(() => {
       const refs = this.presetRefs();
-      const img = this.image();
+      const source = this.currentSource();
       const frame = { ...this.frameOptions(NEUTRAL), ratio: this.format().ratio };
-      if (!refs.length || !img) return;
-      this.schedule(() => this.paintThumbs(refs, img, frame));
+      if (!refs.length || !source) return;
+      this.schedule(() => this.paintThumbs(refs, source, frame));
     });
+  }
+
+  /** Roda a limpeza no worker e guarda o resultado. Um pedido novo invalida o
+   * anterior: quem arrasta o controle gera vários, e só o último interessa. */
+  private async runDenoise(img: HTMLImageElement, strength: number): Promise<void> {
+    const job = ++this.denoiseJob;
+    const w = img.naturalWidth || 1;
+    const h = img.naturalHeight || 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      this.denoising.set(false);
+      return;
+    }
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, w, h);
+    try {
+      const pixels = await this.denoiseInWorker(imageData, strength);
+      if (job !== this.denoiseJob) return;
+      ctx.putImageData(new ImageData(pixels, w, h), 0, 0);
+      this.cleaned.set(canvas);
+    } catch {
+      // Sem worker (navegador antigo, bloqueio de módulo) o modo segue vivo com
+      // a foto original: é melhor perder a limpeza do que travar o editor.
+      if (job === this.denoiseJob) this.cleaned.set(null);
+    } finally {
+      if (job === this.denoiseJob) this.denoising.set(false);
+    }
+  }
+
+  private denoiseInWorker(data: ImageData, strength: number): Promise<Uint8ClampedArray<ArrayBuffer>> {
+    this.worker ??= new Worker(new URL('./denoise.worker', import.meta.url), { type: 'module' });
+    const worker = this.worker;
+    return new Promise((resolve, reject) => {
+      const onMessage = ({ data: result }: MessageEvent<{ buffer: ArrayBuffer }>) => {
+        cleanup();
+        resolve(new Uint8ClampedArray(result.buffer) as Uint8ClampedArray<ArrayBuffer>);
+      };
+      const onError = (event: ErrorEvent) => {
+        cleanup();
+        reject(new Error(event.message || 'Falha ao reduzir o ruído.'));
+      };
+      const cleanup = () => {
+        worker.removeEventListener('message', onMessage);
+        worker.removeEventListener('error', onError);
+      };
+      worker.addEventListener('message', onMessage);
+      worker.addEventListener('error', onError);
+      const buffer = data.data.buffer as ArrayBuffer;
+      worker.postMessage({ buffer, width: data.width, height: data.height, strength }, [buffer]);
+    });
+  }
+
+  /** A foto que o desenho usa: a limpa quando há redução de ruído ligada e
+   * pronta, senão a original. */
+  private currentSource(): Source | null {
+    const clean = this.cleaned();
+    if (clean) return { image: clean, width: clean.width, height: clean.height };
+    const img = this.image();
+    return img ? sourceOf(img) : null;
   }
 
   /** Junta o enquadramento atual com um conjunto de ajustes. */
@@ -504,7 +609,7 @@ export class SocialModeComponent {
 
   private paintThumbs(
     refs: readonly ElementRef<HTMLCanvasElement>[],
-    img: HTMLImageElement,
+    photo: Source,
     frame: FrameOptions & { ratio: number },
   ): void {
     // O recorte sem cor nenhuma é desenhado uma vez; cada miniatura só repinta
@@ -513,7 +618,7 @@ export class SocialModeComponent {
     const base = this.baseCanvas;
     base.width = baseW;
     base.height = Math.max(1, Math.round(baseW / frame.ratio));
-    paintFrame(base, sourceOf(img), frame);
+    paintFrame(base, photo, frame);
     const source: Source = { image: base, width: base.width, height: base.height };
 
     const thumbW = 104;
@@ -676,6 +781,15 @@ export class SocialModeComponent {
     this.adjust.update((a) => ({ ...a, [key]: NEUTRAL[key] }));
   }
 
+  onDenoise(event: Event): void {
+    this.denoise.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  resetDenoise(event: Event): void {
+    event.preventDefault();
+    this.denoise.set(0);
+  }
+
   resetAdjust(): void {
     this.adjust.set({ ...NEUTRAL });
     this.preset.set('original');
@@ -700,8 +814,8 @@ export class SocialModeComponent {
   }
 
   exportImage(): void {
-    const img = this.image();
-    if (!img) return;
+    const source = this.currentSource();
+    if (!source) return;
     let w = this.exportW();
     let h = this.exportH();
     if (w * h > MAX_EXPORT_PIXELS) {
@@ -712,7 +826,7 @@ export class SocialModeComponent {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    paintFrame(canvas, sourceOf(img), this.frameOptions(this.adjust()));
+    paintFrame(canvas, source, this.frameOptions(this.adjust()));
     const png = this.type() === 'png';
     canvas.toBlob(
       (blob) => {

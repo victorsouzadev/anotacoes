@@ -81,6 +81,7 @@ describe('projeto do modo redes sociais', () => {
     store.bgColor.set('#101010');
     store.adjust.set({ ...NEUTRAL, contrast: 118, vignette: 34 });
     store.type.set('png');
+    store.denoise.set(45);
 
     const data = store.serialize()!;
     expect(data.formatId).toBe('story');
@@ -95,6 +96,7 @@ describe('projeto do modo redes sociais', () => {
     expect(fresh.adjust().contrast).toBe(118);
     expect(fresh.adjust().vignette).toBe(34);
     expect(fresh.type()).toBe('png');
+    expect(fresh.denoise()).toBe(45);
     expect(fresh.hasImage()).toBe(true);
   });
 
@@ -105,6 +107,7 @@ describe('projeto do modo redes sociais', () => {
     expect(store.fit()).toBe('cover');
     expect(store.scale()).toBe(1);
     expect(store.adjust()).toEqual(NEUTRAL);
+    expect(store.denoise()).toBe(0);
     expect(store.exportW()).toBe(SOCIAL_FORMATS[0].width);
   });
 
@@ -112,10 +115,12 @@ describe('projeto do modo redes sociais', () => {
     const store = new SocialStore();
     store.setImage(fakeImage(), 'data:,x', 'x.jpg');
     store.adjust.set({ ...NEUTRAL, sepia: 40 });
+    store.denoise.set(60);
     store.clear();
     expect(store.hasImage()).toBe(false);
     expect(store.serialize()).toBeNull();
     expect(store.adjust().sepia).toBe(0);
+    expect(store.denoise()).toBe(0);
   });
 });
 
