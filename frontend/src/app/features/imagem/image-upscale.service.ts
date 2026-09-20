@@ -15,8 +15,11 @@ export class ImageUpscaleService {
 
   constructor(private http: HttpClient) {}
 
-  /** Pergunta uma vez por sessão; o resultado fica guardado. */
-  verificar(): Promise<boolean> {
+  /** Pergunta ao servidor e guarda a resposta. Com `forcar`, pergunta de novo —
+   * é o caso de quem acabou de cadastrar a chave em Configurações e voltou ao
+   * editor sem recarregar a página. */
+  verificar(forcar = false): Promise<boolean> {
+    if (forcar) this.consulta = null;
     this.consulta ??= firstValueFrom(this.http.get<{ disponivel: boolean }>('/api/imagens/upscale'))
       .then((r) => {
         this.disponivel.set(r.disponivel);

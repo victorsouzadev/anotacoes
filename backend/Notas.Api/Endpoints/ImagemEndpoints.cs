@@ -67,14 +67,22 @@ public static class ImagemEndpoints
 
         // O editor pergunta antes de oferecer o botão: recurso sem chave não deve
         // aparecer só pra falhar quando clicado.
-        group.MapGet("/upscale", (IImageUpscaler upscaler) =>
-            Results.Ok(new UpscaleStatusDto(upscaler.Disponivel)));
+        group.MapGet("/upscale", async (ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
+        {
+            var efetivo = await factory.ResolverAsync(user.UserId(), ct);
+            return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel));
+        });
 
         group.MapPost("/upscale", async (
-            UpscaleRequest req, IImageUpscaler upscaler, CancellationToken ct) =>
+            UpscaleRequest req, ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
         {
+            var upscaler = await factory.CriarAsync(user.UserId(), ct);
             if (!upscaler.Disponivel)
-                return Results.Json(new { error = "Ampliação por IA não configurada neste servidor." }, statusCode: 503);
+            {
+                return Results.Json(
+                    new { error = "Nenhuma chave de ampliação configurada. Cadastre a sua em Configurações." },
+                    statusCode: 503);
+            }
 
             if (!TentarLerDataUrl(req.Imagem, out var bytes, out var contentType))
                 return Results.BadRequest(new { error = "Imagem inválida." });

@@ -859,11 +859,10 @@ export class SocialModeComponent {
       }
     });
 
-    // Recurso que depende de chave no servidor não deve virar botão sem antes
-    // saber se está ligado.
-    effect(() => {
-      if (this.image() && this.upscale.disponivel() === null) void this.upscale.verificar();
-    });
+    // Recurso que depende de chave não deve virar botão sem antes saber se está
+    // ligado. A pergunta é refeita ao entrar no modo, porque a chave pode ter
+    // sido cadastrada em Configurações há dois cliques.
+    void this.upscale.verificar(true);
 
     // A foto é reduzida UMA vez, no tamanho que a exportação precisa, e é
     // dessa redução que saem prévia, miniaturas e arquivo final. Antes cada

@@ -24,6 +24,13 @@ export interface ConfiguracaoIa {
   usandoChaveDoServidor: boolean;
 
   modelosSugeridos: ModeloSugerido[];
+
+  /** Ampliação de imagem por IA (Editor de Imagens): outro serviço, outro token. */
+  chaveUpscaleConfigurada: boolean;
+  chaveUpscaleMascarada: string | null;
+  upscaleUsandoChaveDoServidor: boolean;
+  upscaleDisponivel: boolean;
+
   atualizadoEm: string | null;
 }
 
@@ -32,6 +39,9 @@ export interface SalvarConfiguracaoIaRequest {
   modelo: string | null;
   /** `null` mantém a chave salva; string vazia remove; texto substitui. */
   chaveApi: string | null;
+
+  /** Mesma regra da `chaveApi`, para a chave de ampliação de imagem. */
+  chaveUpscale?: string | null;
 }
 
 export interface TesteConexao {

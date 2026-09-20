@@ -5,7 +5,8 @@ namespace Notas.Api.Dtos;
 // `ChaveApi` ausente (null) significa "não mexer na chave já salva" — o cliente
 // nunca recebe a chave de volta, então não teria como reenviá-la ao salvar
 // apenas o modelo. String vazia significa "remover a chave".
-public record SalvarConfiguracaoIaRequest(string? Provedor, string? Modelo, string? ChaveApi);
+// `ChaveUpscale` segue a mesma regra da `ChaveApi`: null mantém, vazio remove.
+public record SalvarConfiguracaoIaRequest(string? Provedor, string? Modelo, string? ChaveApi, string? ChaveUpscale);
 
 public record ModeloSugeridoResponse(string Id, string Nome, string Descricao, bool LeImagens);
 
@@ -27,6 +28,15 @@ public record ConfiguracaoIaResponse(
     bool UsandoChaveDoServidor,
 
     List<ModeloSugeridoResponse> ModelosSugeridos,
+
+    // Ampliação de imagem por IA (Editor de Imagens): outro serviço, outro token.
+    bool ChaveUpscaleConfigurada,
+    string? ChaveUpscaleMascarada,
+    /// <summary>Verdadeiro quando quem amplia é a chave do servidor, e não a do usuário.</summary>
+    bool UpscaleUsandoChaveDoServidor,
+    /// <summary>Dá pra ampliar agora? Chave do usuário ou do servidor, qualquer uma.</summary>
+    bool UpscaleDisponivel,
+
     DateTime? AtualizadoEm);
 
 // POST /api/configuracoes/ia/testar

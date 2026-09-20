@@ -25,6 +25,10 @@ export class ConfiguracaoIaService {
     return this.http.delete<ConfiguracaoIa>(`${this.baseUrl}/chave`);
   }
 
+  removerChaveUpscale(): Observable<ConfiguracaoIa> {
+    return this.http.delete<ConfiguracaoIa>(`${this.baseUrl}/chave-upscale`);
+  }
+
   /** Faz uma extração real com a configuração informada, antes de salvar. */
   testar(provedor: ProvedorIa, modelo: string | null, chaveApi: string | null): Observable<TesteConexao> {
     return this.http.post<TesteConexao>(`${this.baseUrl}/testar`, { provedor, modelo, chaveApi });

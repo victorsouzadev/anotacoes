@@ -32,14 +32,18 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    ```
 
    Para o Editor de Imagens ampliar foto pequena por IA (super-resolução), a
-   chave da Replicate (replicate.com). **É cobrado por imagem ampliada**, então o
-   recurso nasce desligado: sem a chave o botão nem aparece no editor.
+   chave da Replicate (replicate.com). **O caminho normal é cadastrá-la em
+   `/configuracoes`**, por usuário, como a de LLM — o `.env` abaixo só vale como
+   padrão do servidor para quem não cadastrou a sua. **É cobrado por imagem
+   ampliada**, então o recurso nasce desligado: sem chave nenhuma, o botão não
+   aparece no editor.
    ```bash
    echo "REPLICATE_API_TOKEN=r8_..." >> /opt/notas-vps/.env
    echo "UPSCALE_MODEL=nightmareai/real-esrgan" >> /opt/notas-vps/.env  # opcional: troca o modelo
    ```
-   A chave fica só no servidor — a foto sobe pelo backend, que fala com o
-   serviço; o navegador nunca vê o token.
+   Em qualquer um dos dois caminhos a chave fica só no servidor (cifrada, quando
+   é a do usuário): a foto sobe pelo backend, que fala com o serviço, e o
+   navegador nunca vê o token.
 
 2. Enviar os arquivos do projeto (do Windows):
    ```powershell

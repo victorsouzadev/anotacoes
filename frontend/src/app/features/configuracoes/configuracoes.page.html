@@ -197,6 +197,50 @@
           </div>
         }
 
+        <!-- Ampliação de imagem: outro serviço, outro token. Fica aqui porque é
+             onde o usuário procura por chave, mas separado pra ninguém achar que
+             a chave de LLM amplia foto. -->
+        <div class="campo">
+          <label for="chave-upscale">Chave de ampliação de imagem</label>
+
+          @if (c.chaveUpscaleConfigurada) {
+            <div class="chave-salva">
+              <app-icon name="check" [size]="13" />
+              <span>Chave salva: <code>{{ c.chaveUpscaleMascarada }}</code></span>
+              @if (!confirmandoRemocaoUpscale()) {
+                <button type="button" class="link-perigo" (click)="pedirRemocaoDaChaveUpscale()">Remover</button>
+              } @else {
+                <span class="confirmar">
+                  Remover a chave?
+                  <button type="button" class="link" (click)="cancelarRemocaoUpscale()">cancelar</button>
+                  <button type="button" class="link-perigo" (click)="removerChaveUpscale()">confirmar</button>
+                </span>
+              }
+            </div>
+          } @else if (c.upscaleUsandoChaveDoServidor) {
+            <p class="dica">Em uso: a chave de ampliação do servidor. Cadastre a sua para não depender dela.</p>
+          }
+
+          <div class="campo-chave">
+            <input id="chave-upscale" [type]="mostrarChaveUpscale() ? 'text' : 'password'"
+                   [(ngModel)]="chaveUpscale" autocomplete="off" spellcheck="false"
+                   [placeholder]="c.chaveUpscaleConfigurada ? 'Deixe em branco para manter a chave atual' : 'r8_...'" />
+            <button type="button" (click)="alternarVisibilidadeDaChaveUpscale()"
+                    [attr.aria-label]="mostrarChaveUpscale() ? 'Ocultar chave' : 'Mostrar chave'"
+                    [title]="mostrarChaveUpscale() ? 'Ocultar' : 'Mostrar'">
+              <app-icon name="eye" [size]="14" />
+            </button>
+          </div>
+
+          <p class="dica">
+            Usada só pelo Editor de Imagens, para ampliar foto pequena por super-resolução
+            (botão “Ampliar 2× com IA”). É um token da Replicate — <code>replicate.com/account/api-tokens</code> —
+            e não serve para o resto da IA, nem a chave acima serve para ampliar.
+            <strong>O serviço cobra por imagem ampliada.</strong>
+            Sem chave aqui, o botão simplesmente não aparece no editor.
+          </p>
+        </div>
+
         <div class="acoes">
           <button type="button" class="secundario" (click)="testar()" [disabled]="testando() || salvando()">
             {{ testando() ? 'Testando...' : 'Testar conexão' }}

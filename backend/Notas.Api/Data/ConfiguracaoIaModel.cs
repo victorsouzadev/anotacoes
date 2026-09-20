@@ -20,5 +20,15 @@ public class ConfiguracaoIa
 
     public string? Modelo { get; set; }
 
+    /// <summary>
+    /// Chave do serviço de ampliação de imagem (Editor de Imagens). É outro
+    /// serviço, com outro token: a chave de LLM não amplia foto, e amplia-se foto
+    /// sem ter LLM nenhum configurado. Por isso mora ao lado, e não no lugar.
+    /// </summary>
+    public string? ChaveUpscaleCifrada { get; set; }
+
+    /// <summary>Últimos caracteres, em claro, só para exibição mascarada.</summary>
+    public string? ChaveUpscaleSufixo { get; set; }
+
     public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
 }

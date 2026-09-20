@@ -40,12 +40,17 @@ export class ConfiguracoesPageComponent {
   readonly teste = signal<TesteConexao | null>(null);
   readonly confirmandoRemocao = signal(false);
   readonly mostrarChave = signal(false);
+  readonly mostrarChaveUpscale = signal(false);
+  readonly confirmandoRemocaoUpscale = signal(false);
 
   // Campos do formulário.
   provedor: ProvedorIa = '';
   modelo = '';
   /** Vazio significa "não mexer na chave salva" — o cliente nunca a recebe. */
   chave = '';
+
+  /** Chave do serviço que amplia foto no Editor de Imagens. Mesma regra. */
+  chaveUpscale = '';
 
   readonly descricaoDoProvedor = computed(() =>
     this.provedores.find((p) => p.valor === this.provedorSelecionado())?.descricao ?? '',
@@ -93,7 +98,9 @@ export class ConfiguracoesPageComponent {
     this.modelo = c.modelo ?? '';
     this.modeloAtual.set(c.modelo ?? '');
     this.chave = '';
+    this.chaveUpscale = '';
     this.mostrarChave.set(false);
+    this.mostrarChaveUpscale.set(false);
   }
 
   aoMudarProvedor(valor: ProvedorIa): void {
@@ -126,6 +133,7 @@ export class ConfiguracoesPageComponent {
         modelo: this.modelo.trim() || null,
         // Campo em branco = manter o que já está salvo.
         chaveApi: this.chave.trim() ? this.chave.trim() : null,
+        chaveUpscale: this.chaveUpscale.trim() ? this.chaveUpscale.trim() : null,
       })
       .subscribe({
         next: (c) => {
@@ -185,6 +193,32 @@ export class ConfiguracoesPageComponent {
 
   alternarVisibilidadeDaChave(): void {
     this.mostrarChave.update((v) => !v);
+  }
+
+  alternarVisibilidadeDaChaveUpscale(): void {
+    this.mostrarChaveUpscale.update((v) => !v);
+  }
+
+  pedirRemocaoDaChaveUpscale(): void {
+    this.confirmandoRemocaoUpscale.set(true);
+  }
+
+  cancelarRemocaoUpscale(): void {
+    this.confirmandoRemocaoUpscale.set(false);
+  }
+
+  removerChaveUpscale(): void {
+    this.service.removerChaveUpscale().subscribe({
+      next: (c) => {
+        this.confirmandoRemocaoUpscale.set(false);
+        this.aplicar(c);
+        this.sucesso.set('Chave de ampliação removida.');
+      },
+      error: (err) => {
+        this.confirmandoRemocaoUpscale.set(false);
+        this.erro.set(mensagemDeErro(err, 'Não foi possível remover a chave de ampliação'));
+      },
+    });
   }
 
   rotuloDoProvedorEfetivo(): string {

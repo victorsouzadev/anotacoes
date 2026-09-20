@@ -23,6 +23,20 @@ describe('ampliação por IA', () => {
     expect(service.disponivel()).toBe(true);
   });
 
+  it('pergunta de novo quando mandado — a chave pode ter acabado de ser cadastrada', async () => {
+    let chamadas = 0;
+    const service = criar({
+      get: () => {
+        chamadas++;
+        return of({ disponivel: chamadas > 1 });
+      },
+    });
+
+    expect(await service.verificar()).toBe(false);
+    expect(await service.verificar(true)).toBe(true);
+    expect(chamadas).toBe(2);
+  });
+
   it('servidor fora do ar não vira botão quebrado', async () => {
     const service = criar({ get: () => throwError(() => new HttpErrorResponse({ status: 0 })) });
     expect(await service.verificar()).toBe(false);

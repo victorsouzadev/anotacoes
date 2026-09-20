@@ -181,6 +181,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Provedor).HasMaxLength(30);
             e.Property(c => c.Modelo).HasMaxLength(120);
             e.Property(c => c.ChaveApiSufixo).HasMaxLength(8);
+            e.Property(c => c.ChaveUpscaleSufixo).HasMaxLength(8);
             // Uma configuração por usuário — o upsert do endpoint depende disso.
             e.HasIndex(c => c.UserId).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);

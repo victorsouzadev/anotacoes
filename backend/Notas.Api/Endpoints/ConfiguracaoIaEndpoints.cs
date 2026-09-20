@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
 using Notas.Api.Dtos;
 using Notas.Api.Services.Financas.Llm;
+using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Seguranca;
 
 namespace Notas.Api.Endpoints;
@@ -16,17 +17,19 @@ public static class ConfiguracaoIaEndpoints
         var grupo = app.MapGroup("/api/configuracoes/ia").RequireAuthorization();
 
         grupo.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, ILlmExtractorFactory factory,
-            CancellationToken ct) =>
+            IUpscalerFactory upscale, CancellationToken ct) =>
         {
             var userId = user.UserId();
             var config = await db.ConfiguracoesIa.AsNoTracking().FirstOrDefaultAsync(c => c.UserId == userId, ct);
             var efetiva = await factory.ResolverAsync(userId, ct);
+            var ampliacao = await upscale.ResolverAsync(userId, ct);
 
-            return Results.Ok(Montar(config, efetiva));
+            return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         grupo.MapPut("/", async (SalvarConfiguracaoIaRequest req, ClaimsPrincipal user, AppDbContext db,
-            IProtetorDeSegredos protetor, ILlmExtractorFactory factory, CancellationToken ct) =>
+            IProtetorDeSegredos protetor, ILlmExtractorFactory factory, IUpscalerFactory upscale,
+            CancellationToken ct) =>
         {
             var provedor = (req.Provedor ?? "").Trim().ToLowerInvariant();
             if (provedor.Length > 0 && !LlmExtractorFactory.ProvedoresValidos.Contains(provedor))
@@ -73,15 +76,54 @@ public static class ConfiguracaoIaEndpoints
                 }
             }
 
+            // Mesma regra da chave de LLM, para a outra chave: null mantém, vazio remove.
+            if (req.ChaveUpscale is not null)
+            {
+                var chave = req.ChaveUpscale.Trim();
+                if (chave.Length == 0)
+                {
+                    config.ChaveUpscaleCifrada = null;
+                    config.ChaveUpscaleSufixo = null;
+                }
+                else
+                {
+                    if (chave.Length is < 8 or > 400)
+                    {
+                        return Results.BadRequest(new { erro = "A chave de ampliação não parece válida." });
+                    }
+
+                    config.ChaveUpscaleCifrada = protetor.Proteger(chave);
+                    config.ChaveUpscaleSufixo = chave[^4..];
+                }
+            }
+
             config.AtualizadoEm = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
             var efetiva = await factory.ResolverAsync(userId, ct);
-            return Results.Ok(Montar(config, efetiva));
+            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            return Results.Ok(Montar(config, efetiva, ampliacao));
+        });
+
+        grupo.MapDelete("/chave-upscale", async (ClaimsPrincipal user, AppDbContext db,
+            ILlmExtractorFactory factory, IUpscalerFactory upscale, CancellationToken ct) =>
+        {
+            var userId = user.UserId();
+            var config = await db.ConfiguracoesIa.FirstOrDefaultAsync(c => c.UserId == userId, ct);
+            if (config is null) return Results.NotFound();
+
+            config.ChaveUpscaleCifrada = null;
+            config.ChaveUpscaleSufixo = null;
+            config.AtualizadoEm = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            var efetiva = await factory.ResolverAsync(userId, ct);
+            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         grupo.MapDelete("/chave", async (ClaimsPrincipal user, AppDbContext db, ILlmExtractorFactory factory,
-            CancellationToken ct) =>
+            IUpscalerFactory upscale, CancellationToken ct) =>
         {
             var userId = user.UserId();
             var config = await db.ConfiguracoesIa.FirstOrDefaultAsync(c => c.UserId == userId, ct);
@@ -93,7 +135,8 @@ public static class ConfiguracaoIaEndpoints
             await db.SaveChangesAsync(ct);
 
             var efetiva = await factory.ResolverAsync(userId, ct);
-            return Results.Ok(Montar(config, efetiva));
+            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         // Faz uma extração de verdade com a configuração informada, antes de salvar:
@@ -160,9 +203,11 @@ public static class ConfiguracaoIaEndpoints
         }).RequireRateLimiting("financas-ia");
     }
 
-    private static ConfiguracaoIaResponse Montar(ConfiguracaoIa? config, ConfiguracaoEfetiva efetiva)
+    private static ConfiguracaoIaResponse Montar(
+        ConfiguracaoIa? config, ConfiguracaoEfetiva efetiva, UpscaleEfetivo ampliacao)
     {
         var sufixo = config?.ChaveApiSufixo;
+        var sufixoUpscale = config?.ChaveUpscaleSufixo;
 
         return new ConfiguracaoIaResponse(
             config?.Provedor ?? "",
@@ -176,6 +221,10 @@ public static class ConfiguracaoIaEndpoints
             ModelosSugeridos.Para(efetiva.Provedor)
                 .Select(m => new ModeloSugeridoResponse(m.Id, m.Nome, m.Descricao, m.LeImagens))
                 .ToList(),
+            ChaveUpscaleConfigurada: !string.IsNullOrEmpty(sufixoUpscale),
+            ChaveUpscaleMascarada: sufixoUpscale is null ? null : $"••••••••{sufixoUpscale}",
+            UpscaleUsandoChaveDoServidor: ampliacao.Disponivel && !ampliacao.ChavePropria,
+            UpscaleDisponivel: ampliacao.Disponivel,
             config?.AtualizadoEm);
     }
 }

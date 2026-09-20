@@ -55,9 +55,12 @@ builder.Services.AddHttpClient(nameof(AnthropicLlmExtractor), c =>
 // num serviço externo. Sem chave (Upscale__ApiKey) o recurso fica desligado e o
 // editor nem oferece o botão.
 builder.Services.Configure<UpscaleOptions>(builder.Configuration.GetSection(UpscaleOptions.SectionName));
-builder.Services.AddHttpClient<IImageUpscaler, ReplicateUpscaler>(c =>
+// Cliente nomeado, e não tipado: a chave é de quem está logado, então o
+// ampliador é construído por requisição (ver UpscalerFactory).
+builder.Services.AddHttpClient(nameof(ReplicateUpscaler), c =>
     c.Timeout = TimeSpan.FromSeconds(
         Math.Clamp(builder.Configuration.GetValue("Upscale:TimeoutSegundos", 90), 15, 300) + 15));
+builder.Services.AddScoped<IUpscalerFactory, UpscalerFactory>();
 
 builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
 builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
