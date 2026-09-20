@@ -15,6 +15,7 @@ import {
   downscale, makeThumb,
 } from './raster';
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
+import { SocialModeComponent } from './social-mode';
 import { TemplateModeComponent } from './template-mode';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
@@ -80,7 +81,7 @@ interface Piece {
   scale: number;
 }
 
-type EditorMode = 'corte' | 'molde';
+type EditorMode = 'corte' | 'molde' | 'social';
 
 interface Prefs {
   modo: EditorMode;
@@ -190,7 +191,7 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent],
+  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent],
   providers: [TemplateStore],
   template: `
     <div class="page">
@@ -202,6 +203,7 @@ function loadPrefs(): Prefs {
         <div class="mode-switch" role="tablist">
           <button [class.active]="modo() === 'corte'" (click)="setModo('corte')">Print &amp; Cut</button>
           <button [class.active]="modo() === 'molde'" (click)="setModo('molde')">Molde SVG</button>
+          <button [class.active]="modo() === 'social'" (click)="setModo('social')">Redes sociais</button>
         </div>
         <div class="top-bar-actions">
           <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
@@ -583,8 +585,10 @@ function loadPrefs(): Prefs {
             }
           </section>
         </aside>
-        } @else {
+        } @else if (modo() === 'molde') {
           <app-template-mode />
+        } @else {
+          <app-social-mode />
         }
       </main>
     </div>
