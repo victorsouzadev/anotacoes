@@ -59,8 +59,8 @@ interface SliderSpec {
 /** Teto da foto de trabalho. Acima disso a memória e o custo de cada etapa
  * crescem sem nada em troca: nenhum formato de post pede mais que isto. */
 const MAX_WORK_DIMENSION = 4500;
-/** O filtro do seletor de arquivo. `image/*` sozinho esconde HEIC em boa parte
- * dos sistemas, porque o navegador monta a lista a partir dos tipos que o
+/** O filtro do seletor no computador. `image/*` sozinho esconde HEIC em boa
+ * parte dos sistemas, porque o navegador monta a lista a partir dos tipos que o
  * sistema tem registrados — e HEIC costuma não estar lá. Daí os tipos e as
  * extensões virem escritos à mão, em maiúscula também: a câmera do iPhone
  * nomeia os arquivos como IMG_0001.HEIC e há diálogo que compara sem ignorar
@@ -71,6 +71,23 @@ const FILE_ACCEPT = [
   '.heic', '.heif', '.HEIC', '.HEIF',
   '.jpg', '.jpeg', '.png', '.webp',
 ].join(',');
+
+/** No celular a história é outra: o seletor do Android é um aplicativo
+ * separado, escolhido por intenção, e **extensão não significa nada pra ele** —
+ * só tipo MIME. Uma lista com extensões que o sistema não sabe traduzir acaba
+ * estreitando o que a galeria mostra, e o HEIC some justamente onde ele é o
+ * formato padrão da câmera.
+ *
+ * Por isso, em tela de toque, o seletor abre sem filtro nenhum: é o que faz a
+ * galeria mostrar tudo. O arquivo continua sendo validado depois, na leitura —
+ * o filtro sempre foi conveniência, nunca a checagem de verdade. */
+function isTouchPicker(): boolean {
+  try {
+    return globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
+  } catch {
+    return false;
+  }
+}
 /** A prévia desenha na densidade da tela (até 2×), senão ela parece menos
  * nítida que o arquivo exportado — e a comparação fica injusta. */
 const MAX_PREVIEW_DPR = 2;
@@ -180,7 +197,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
           <p class="sm-sub">Escolha o formato do post, aplique um filtro pronto e ajuste as cores na mão.</p>
           <p class="sm-sub">JPEG, PNG, WebP e HEIC do iPhone.</p>
           <button class="sm-link" (click)="pick(fileInput, true); $event.stopPropagation()">
-            Não achou o .heic na janela? Abra sem filtro
+            Não achou o arquivo na lista? Abra sem filtro
           </button>
           @if (converting()) { <p class="sm-sub">Convertendo HEIC…</p> }
           @if (error()) { <p class="sm-error">{{ error() }}</p> }
@@ -204,7 +221,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
               <button class="sm-btn sm-danger" (click)="removeImage()"><app-icon name="delete" [size]="13" /> Remover</button>
             }
           </div>
-          <button class="sm-link" (click)="pick(fileInput, true)">Abrir sem filtro de tipo (.heic teimoso)</button>
+          <button class="sm-link" (click)="pick(fileInput, true)">Abrir sem filtro de tipo</button>
           @if (image()) {
             <div class="sm-row">
               <button class="sm-btn" [class.sm-active]="fit() === 'cover'" (click)="setFit('cover')">Preencher</button>
@@ -591,10 +608,48 @@ async function heicToJpeg(file: File): Promise<Blob> {
         max-height: none;
         padding-bottom: 8px;
         background: var(--bg);
+        /* A prévia fica por cima do painel que rola por baixo dela; sem uma
+           borda embaixo, as duas coisas se misturam. */
+        box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.45);
       }
       .sm-stage { min-height: 0; padding: 8px; }
-      .sm-canvas { max-height: clamp(160px, 34dvh, 320px); }
+      .sm-canvas { max-height: clamp(160px, 32dvh, 320px); }
       .sm-hint { display: none; }
+      .sm-tabs { flex-wrap: wrap; row-gap: 6px; }
+      /* As duas barrinhas dividem a linha em vez de empurrar o nome do arquivo
+         pra fora da tela. */
+      .sm-tab-label { flex: 1 1 100%; order: -1; }
+      .sm-bar, .sm-zoom-bar { margin-left: 0; }
+      .sm-zoom-bar { margin-left: auto; }
+      .sm-zoom-name { display: none; }
+      .sm-drop-zone { min-height: 200px; padding: 24px 16px; }
+    }
+
+    /* Toque: nenhum alvo abaixo de ~40px, e controle deslizante grosso o
+       bastante pra pegar de primeira com o dedo. */
+    @media (pointer: coarse) {
+      .sm-section-head { padding: 14px 13px; }
+      .sm-btn { padding: 10px 12px; font-size: 13px; }
+      .sm-icon-btn { width: 34px; height: 34px; }
+      .sm-bar button { padding: 9px 11px; font-size: 12px; }
+      .sm-zoom-bar button { padding: 9px 12px; font-size: 15px; }
+      .sm-slider input[type="range"] { height: 34px; }
+      .sm-reset { padding: 6px 8px; font-size: 12px; }
+      .sm-more { padding: 12px 0; font-size: 13px; }
+      .sm-link { padding: 8px 0; font-size: 12px; }
+      .sm-format { padding: 12px 4px; }
+      .sm-preset { padding: 8px 4px; }
+      .sm-field input { padding: 10px 11px; font-size: 16px; }
+    }
+
+    /* Telas estreitas de verdade: menos colunas, e o painel encosta nas bordas
+       pra não sobrar 40px de nada. */
+    @media (max-width: 540px) {
+      .sm-formats { grid-template-columns: repeat(2, 1fr); }
+      .sm-presets > * { flex-basis: 84px; }
+      .sm-preset-chip { max-height: 64px; }
+      .sm-section-summary { max-width: 88px; }
+      .sm-canvas { max-height: clamp(150px, 30dvh, 280px); }
     }
   `],
 })
@@ -731,6 +786,9 @@ export class SocialModeComponent {
   readonly advanced = signal(this.prefs.advanced);
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
+  /** Dedos (ou ponteiros) em cima do palco agora. Dois viram pinça. */
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private pinch: { distance: number; scale: number } | null = null;
   private wheelTimer: ReturnType<typeof setTimeout> | null = null;
   private sharpenTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1058,7 +1116,7 @@ export class SocialModeComponent {
    * esconder HEIC deixa de ter o que esconder, e a validação de tipo continua
    * acontecendo depois, na leitura do arquivo. */
   pick(input: HTMLInputElement, all = false): void {
-    if (all) input.removeAttribute('accept');
+    if (all || isTouchPicker()) input.removeAttribute('accept');
     else input.setAttribute('accept', FILE_ACCEPT);
     input.click();
   }
@@ -1163,6 +1221,14 @@ export class SocialModeComponent {
   onPointerDown(event: PointerEvent): void {
     if (!this.image()) return;
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pointers.size === 2) {
+      this.pinch = { distance: this.pointerDistance(), scale: this.scale() };
+      // Dois dedos na tela é pinça, não arraste: o arraste em curso termina
+      // aqui pra foto não escapar junto com a ampliação.
+      this.drag = null;
+      return;
+    }
     this.drag = {
       id: event.pointerId, x: event.clientX, y: event.clientY,
       dx: this.offsetX(), dy: this.offsetY(), moved: false,
@@ -1170,6 +1236,20 @@ export class SocialModeComponent {
   }
 
   onPointerMove(event: PointerEvent): void {
+    if (this.pointers.has(event.pointerId)) {
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    const pinch = this.pinch;
+    if (pinch && this.pointers.size === 2) {
+      const distance = this.pointerDistance();
+      if (pinch.distance > 0 && distance > 0) {
+        this.touch();
+        this.scale.set(clamp((pinch.scale * distance) / pinch.distance, MIN_SCALE, MAX_SCALE));
+      }
+      return;
+    }
+
     const d = this.drag;
     if (!d || d.id !== event.pointerId) return;
     const canvas = this.previewRef()?.nativeElement;
@@ -1183,10 +1263,26 @@ export class SocialModeComponent {
   }
 
   onPointerUp(event: PointerEvent): void {
+    this.pointers.delete(event.pointerId);
+    if (this.pinch && this.pointers.size < 2) {
+      this.pinch = null;
+      this.commit();
+      // O dedo que sobrou não vira arraste no meio do gesto: ele recomeça só
+      // no próximo toque.
+      this.drag = null;
+      return;
+    }
     if (this.drag?.id !== event.pointerId) return;
     const moved = this.drag.moved;
     this.drag = null;
     if (moved) this.commit();
+  }
+
+  /** Distância entre os dois dedos, base da pinça. */
+  private pointerDistance(): number {
+    const [a, b] = [...this.pointers.values()];
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   // --- formato --------------------------------------------------------------

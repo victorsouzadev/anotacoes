@@ -822,8 +822,9 @@ function loadPrefs(): Prefs {
     @media (max-width: 900px) {
       .top-bar { padding: 12px 16px; flex-wrap: wrap; }
       .user-email { display: none; }
-      .mode-switch button { padding: 5px 9px; font-size: 11px; }
-      .content { grid-template-columns: 1fr; padding: 16px 16px 48px; }
+      .mode-switch { flex: 1 1 100%; order: 3; }
+      .mode-switch button { flex: 1; padding: 8px 9px; font-size: 12px; }
+      .content { grid-template-columns: 1fr; padding: 16px 12px 48px; gap: 14px; }
       .preview-wrap { top: 0; z-index: 5; padding: 12px; }
       .preview-stage, .drop-zone { height: clamp(180px, 34dvh, 320px); }
       .cut-hint { display: none; }
