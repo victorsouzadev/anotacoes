@@ -18,6 +18,42 @@ import { downloadBlob, loadImageElement } from './svg-template';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
 
+export const PREFS_KEY = 'imagem-social-prefs';
+
+/** Só os filtros abertos: é por onde se começa, e as outras seções empurravam
+ * cor e exportação pra fora da tela. O que o usuário abrir fica guardado. */
+export const DEFAULT_SECTIONS: Record<SectionId, boolean> = {
+  foto: false, formato: false, filtros: true, cor: false, exportar: false,
+};
+
+export interface SocialPrefs {
+  sections: Record<SectionId, boolean>;
+  advanced: boolean;
+}
+
+export function loadPrefs(): SocialPrefs {
+  const fallback: SocialPrefs = { sections: { ...DEFAULT_SECTIONS }, advanced: false };
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return fallback;
+    const saved = JSON.parse(raw) as Partial<SocialPrefs>;
+    return {
+      sections: { ...DEFAULT_SECTIONS, ...(saved.sections ?? {}) },
+      advanced: saved.advanced ?? false,
+    };
+  } catch {
+    // Preferência é conveniência: um valor corrompido não pode derrubar o modo.
+    return fallback;
+  }
+}
+
+interface SliderSpec {
+  key: keyof Adjustments;
+  label: string;
+  min: number;
+  max: number;
+}
+
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 6;
 /** Teto de pixels do raster de exportação: acima disso o canvas estoura em navegador modesto. */
@@ -177,7 +213,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
           @for (g of groups; track g.name) {
             <div class="sm-group">
               <span class="sm-group-name">{{ g.name }}</span>
-              <div class="sm-presets">
+              <div class="sm-presets" role="list">
                 @for (p of g.presets; track p.id) {
                   <button
                     class="sm-preset"
@@ -227,7 +263,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
             }
           </p>
           <div class="sm-divider"></div>
-          @for (s of sliders; track s.key) {
+          @for (s of basicSliders; track s.key) {
             <label class="sm-slider">
               <span class="sm-slider-head">
                 <span>{{ s.label }}</span>
@@ -241,6 +277,29 @@ async function heicToJpeg(file: File): Promise<Blob> {
               />
             </label>
           }
+
+          <button class="sm-more" (click)="toggleAdvanced()">
+            <app-icon class="sm-chevron" [class.sm-chevron-up]="advanced()" name="chevron" [size]="13" />
+            Ajustes avançados
+            @if (!advanced() && advancedTouched()) { <span class="sm-dot" title="Há ajustes avançados em uso"></span> }
+          </button>
+          @if (advanced()) {
+            @for (s of advancedSliders; track s.key) {
+              <label class="sm-slider">
+                <span class="sm-slider-head">
+                  <span>{{ s.label }}</span>
+                  <button class="sm-reset" (click)="resetOne(s.key, $event)" title="Voltar ao padrão">{{ display(s.key) }}</button>
+                </span>
+                <input
+                  type="range"
+                  [min]="s.min" [max]="s.max" step="1"
+                  [value]="adjust()[s.key]"
+                  (input)="onSlider(s.key, $event)"
+                />
+              </label>
+            }
+          }
+
           <button class="sm-btn sm-wide" (click)="resetAdjust()"><app-icon name="undo" [size]="13" /> Zerar ajustes</button>
         </div>
       </section>
@@ -382,7 +441,15 @@ async function heicToJpeg(file: File): Promise<Blob> {
 
     .sm-group { display: flex; flex-direction: column; gap: 6px; }
     .sm-group-name { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-    .sm-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    /* Uma fileira por família, rolando na horizontal: a grade empilhada fazia
+       34 filtros virarem uma página inteira de rolagem. */
+    .sm-presets {
+      display: flex; gap: 6px;
+      overflow-x: auto; scroll-snap-type: x proximity;
+      padding-bottom: 4px;
+      scrollbar-width: thin;
+    }
+    .sm-presets > * { flex: 0 0 76px; scroll-snap-align: start; }
     .sm-preset {
       display: flex; flex-direction: column; align-items: center; gap: 5px;
       padding: 6px 3px;
@@ -405,6 +472,16 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-preset.sm-edited .sm-preset-label::after { content: " ·"; }
 
     .sm-divider { height: 1px; background: var(--border); margin: 2px 0; }
+    .sm-more {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 0;
+      border: none; background: none;
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+    }
+    .sm-more:hover { color: var(--accent); }
+    .sm-more .sm-chevron { transition: transform 0.15s; }
+    .sm-more .sm-chevron-up { transform: rotate(180deg); }
+    .sm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
     .sm-slider { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
     .sm-slider-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .sm-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
@@ -434,11 +511,16 @@ export class SocialModeComponent {
   readonly formats = SOCIAL_FORMATS;
   readonly presets = FILTER_PRESETS;
   readonly groups = FILTER_GROUPS;
-  readonly sliders: { key: keyof Adjustments; label: string; min: number; max: number }[] = [
+  /** Os quatro que resolvem a maior parte das fotos. */
+  readonly basicSliders: SliderSpec[] = [
     { key: 'brightness', label: 'Brilho', min: 50, max: 150 },
     { key: 'contrast', label: 'Contraste', min: 50, max: 160 },
     { key: 'saturation', label: 'Saturação', min: 0, max: 200 },
     { key: 'temperature', label: 'Temperatura', min: -100, max: 100 },
+  ];
+
+  /** Os finos, atrás do botão de avançados. */
+  readonly advancedSliders: SliderSpec[] = [
     { key: 'hue', label: 'Matiz', min: -30, max: 30 },
     { key: 'fade', label: 'Desbotado', min: 0, max: 100 },
     { key: 'vignette', label: 'Vinheta', min: 0, max: 100 },
@@ -493,6 +575,13 @@ export class SocialModeComponent {
     return (Object.keys(NEUTRAL) as (keyof Adjustments)[]).some((k) => current[k] !== target[k]);
   });
 
+  /** Há algum controle avançado fora do padrão? Sem isso, esconder os seis
+   * atrás do botão esconderia junto o motivo de a foto estar daquele jeito. */
+  readonly advancedTouched = computed(() => {
+    const a = this.adjust();
+    return this.advancedSliders.some((s) => a[s.key] !== NEUTRAL[s.key]);
+  });
+
   readonly presetSummary = computed(() =>
     this.presetEdited() ? `${this.activePreset().label} · editado` : this.activePreset().label);
 
@@ -510,9 +599,10 @@ export class SocialModeComponent {
     );
   });
 
-  private readonly open = signal<Record<SectionId, boolean>>({
-    foto: true, formato: true, filtros: true, cor: false, exportar: false,
-  });
+  private readonly prefs = loadPrefs();
+  private readonly open = signal<Record<SectionId, boolean>>(this.prefs.sections);
+  /** Os seis controles finos ficam atrás de um botão: quatro resolvem quase tudo. */
+  readonly advanced = signal(this.prefs.advanced);
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number } | null = null;
   /** Recorte intermediário reaproveitado pelas miniaturas. */
@@ -684,6 +774,20 @@ export class SocialModeComponent {
 
   toggle(id: SectionId): void {
     this.open.update((o) => ({ ...o, [id]: !o[id] }));
+    this.prefs.sections = this.open();
+    this.savePrefs();
+  }
+
+  toggleAdvanced(): void {
+    this.advanced.update((v) => !v);
+    this.prefs.advanced = this.advanced();
+    this.savePrefs();
+  }
+
+  private savePrefs(): void {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(this.prefs));
+    } catch { /* prefs são só conveniência */ }
   }
 
   // --- foto -----------------------------------------------------------------

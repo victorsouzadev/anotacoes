@@ -2,7 +2,7 @@ import {
   FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, coversFrame, filterString, frameRect,
 } from './social-model';
 import { SocialStore } from './social-store';
-import { isHeicFile } from './social-mode';
+import { DEFAULT_SECTIONS, PREFS_KEY, isHeicFile, loadPrefs } from './social-mode';
 
 describe('modo redes sociais', () => {
   it('não emite ajustes neutros no filtro', () => {
@@ -159,5 +159,31 @@ describe('fundo à mostra', () => {
   it('diminuir a escala ou arrastar a foto expõe a borda mesmo em preencher', () => {
     expect(coversFrame(1600, 1200, 1000, 1000, 'cover', 0.8, 0, 0)).toBe(false);
     expect(coversFrame(1600, 1200, 1000, 1000, 'cover', 1, 0.3, 0)).toBe(false);
+  });
+});
+
+describe('preferências do painel', () => {
+  beforeEach(() => localStorage.removeItem(PREFS_KEY));
+
+  it('começa só com os filtros abertos', () => {
+    const prefs = loadPrefs();
+    expect(prefs.sections).toEqual(DEFAULT_SECTIONS);
+    expect(prefs.sections.filtros).toBe(true);
+    expect(prefs.sections.cor).toBe(false);
+    expect(prefs.advanced).toBe(false);
+  });
+
+  it('lembra o que foi aberto e completa o que falta', () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ sections: { cor: true }, advanced: true }));
+    const prefs = loadPrefs();
+    expect(prefs.sections.cor).toBe(true);
+    // seção que a versão salva não conhecia volta ao padrão em vez de sumir
+    expect(prefs.sections.filtros).toBe(true);
+    expect(prefs.advanced).toBe(true);
+  });
+
+  it('ignora preferência corrompida em vez de derrubar o modo', () => {
+    localStorage.setItem(PREFS_KEY, '{isso não é json');
+    expect(loadPrefs().sections).toEqual(DEFAULT_SECTIONS);
   });
 });
