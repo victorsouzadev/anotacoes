@@ -60,6 +60,10 @@ builder.Services.Configure<UpscaleOptions>(builder.Configuration.GetSection(Upsc
 builder.Services.AddHttpClient(nameof(ReplicateUpscaler), c =>
     c.Timeout = TimeSpan.FromSeconds(
         Math.Clamp(builder.Configuration.GetValue("Upscale:TimeoutSegundos", 90), 15, 300) + 15));
+builder.Services.Configure<RelightOptions>(builder.Configuration.GetSection(RelightOptions.SectionName));
+builder.Services.AddHttpClient(nameof(ReplicateRelighter), c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        Math.Clamp(builder.Configuration.GetValue("Relight:TimeoutSegundos", 180), 30, 600) + 15));
 builder.Services.AddScoped<IUpscalerFactory, UpscalerFactory>();
 
 builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();

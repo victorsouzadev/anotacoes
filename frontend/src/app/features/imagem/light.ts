@@ -135,3 +135,96 @@ export function aplicarLuz(
     }
   }
 }
+
+
+/** Lado maior do mapa de razão. Pequeno porque só a luz interessa: é neste
+ * tamanho que o detalhe inventado pela IA deixa de existir. */
+const RAZAO_LADO = 96;
+
+/**
+ * Razão de luz entre a foto reiluminada pela IA e a original, as duas já
+ * reduzidas ao mesmo tamanho pequeno.
+ *
+ * É o coração do método: a IA redesenha o produto — copo transparente vira
+ * copo opaco, arte muda de cor —, mas a RAZÃO entre as duas luminâncias,
+ * borrada, guarda só onde a luz bate mais e onde bate menos. Multiplicando a
+ * foto original por essa razão, a iluminação vem da IA e cada pixel de produto,
+ * texto e arte continua sendo o original.
+ *
+ * A normalização pela mediana tira o clareamento geral que a IA aplicou por
+ * conta própria — o que se quer dela é o desenho da luz, não a exposição.
+ */
+export function razaoDeLuz(
+  original: Uint8ClampedArray, iaPixels: Uint8ClampedArray, largura: number, altura: number,
+): Float32Array {
+  const total = largura * altura;
+  const razao = new Float32Array(total);
+
+  for (let i = 0; i < total; i++) {
+    const p = i * 4;
+    const lo = 0.299 * original[p] + 0.587 * original[p + 1] + 0.114 * original[p + 2];
+    const li = 0.299 * iaPixels[p] + 0.587 * iaPixels[p + 1] + 0.114 * iaPixels[p + 2];
+    // O `+ 4` evita que sombra fechada vire divisão por quase zero.
+    razao[i] = (li + 4) / (lo + 4);
+  }
+
+  boxBlur(razao, new Float32Array(total), largura, altura, Math.max(2, Math.round(Math.max(largura, altura) / 14)));
+
+  const ordenado = Float32Array.from(razao).sort();
+  const mediana = ordenado[ordenado.length >> 1] || 1;
+  for (let i = 0; i < total; i++) {
+    // Teto e piso: o que passa disso é a IA tendo inventado outra cena, não luz.
+    razao[i] = Math.min(1.8, Math.max(0.65, razao[i] / mediana));
+  }
+  return razao;
+}
+
+/**
+ * Aplica a razão de luz sobre os pixels, in loco. `forca` vai de 0 a 100 e
+ * entra como expoente: 0 não muda nada, 100 aplica a luz inteira da IA, e o
+ * meio do caminho é de fato o meio — multiplicar a razão por um fator, em vez
+ * de elevá-la, deslocaria o neutro e clarearia a foto toda.
+ */
+export function aplicarRazaoDeLuz(
+  pixels: Uint8ClampedArray, w: number, h: number,
+  razao: Float32Array, mw: number, mh: number, forca: number,
+): void {
+  const expoente = Math.min(100, Math.max(0, forca)) / 100;
+  if (expoente <= 0 || mw < 2 || mh < 2) return;
+
+  const escalaX = mw / w;
+  const escalaY = mh / h;
+
+  for (let y = 0; y < h; y++) {
+    const my = Math.min(mh - 1.001, y * escalaY);
+    const my0 = Math.floor(my);
+    const ty = my - my0;
+    const linha0 = my0 * mw;
+    const linha1 = Math.min(mh - 1, my0 + 1) * mw;
+
+    for (let x = 0; x < w; x++) {
+      const mx = Math.min(mw - 1.001, x * escalaX);
+      const mx0 = Math.floor(mx);
+      const tx = mx - mx0;
+      const mx1 = Math.min(mw - 1, mx0 + 1);
+
+      const cima = razao[linha0 + mx0] * (1 - tx) + razao[linha0 + mx1] * tx;
+      const baixo = razao[linha1 + mx0] * (1 - tx) + razao[linha1 + mx1] * tx;
+      const ganho = (cima * (1 - ty) + baixo * ty) ** expoente;
+
+      const p = (y * w + x) * 4;
+      pixels[p] *= ganho;
+      pixels[p + 1] *= ganho;
+      pixels[p + 2] *= ganho;
+    }
+  }
+}
+
+/** Tamanho do mapa para uma foto: mesma proporção, lado maior fixo. */
+export function tamanhoDaRazao(w: number, h: number): { largura: number; altura: number } {
+  const escala = RAZAO_LADO / Math.max(w, h);
+  return {
+    largura: Math.max(2, Math.round(w * escala)),
+    altura: Math.max(2, Math.round(h * escala)),
+  };
+}

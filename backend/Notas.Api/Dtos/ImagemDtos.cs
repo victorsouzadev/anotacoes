@@ -15,3 +15,6 @@ public record UpscaleStatusDto(bool Disponivel, int MaxPixelsEntrada);
 public record UpscaleRequest(string? Imagem, int Escala);
 
 public record UpscaleResponse(string Imagem);
+
+/// <summary>Foto a reiluminar e de onde a luz deve vir.</summary>
+public record RelightRequest(string? Imagem, string? Direcao);

@@ -74,6 +74,40 @@ public static class ImagemEndpoints
             return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel, options.Value.MaxInputPixels));
         });
 
+        group.MapPost("/reiluminar", async (
+            RelightRequest req, ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
+        {
+            var relighter = await factory.CriarRelighterAsync(user.UserId(), ct);
+            if (!relighter.Disponivel)
+            {
+                return Results.Json(
+                    new { error = "Nenhuma chave de IA de imagem configurada. Cadastre a sua em Configurações." },
+                    statusCode: 503);
+            }
+
+            if (!TentarLerDataUrl(req.Imagem, out var bytes, out var contentType))
+                return Results.BadRequest(new { error = "Imagem inválida." });
+
+            try
+            {
+                var luz = await relighter.ReiluminarAsync(bytes, contentType, req.Direcao ?? "esquerda", ct);
+                var dataUrl = $"data:{luz.ContentType};base64,{Convert.ToBase64String(luz.Conteudo)}";
+                return Results.Ok(new UpscaleResponse(dataUrl));
+            }
+            catch (UpscaleIndisponivelException ex)
+            {
+                return Results.Json(new { error = ex.Message, tentarMenor = ex.TentarMenor }, statusCode: 502);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return Results.StatusCode(499);
+            }
+            catch (TaskCanceledException)
+            {
+                return Results.Json(new { error = "A reiluminação demorou demais e foi cancelada." }, statusCode: 504);
+            }
+        });
+
         group.MapPost("/upscale", async (
             UpscaleRequest req, ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
         {

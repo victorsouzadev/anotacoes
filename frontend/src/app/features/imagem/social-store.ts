@@ -25,6 +25,10 @@ export interface SocialProjectData {
   denoise: number;
   /** Força da máscara de nitidez, 0..100. */
   sharpen: number;
+  /** Mapa de luz da IA, em PNG cinza minúsculo (vazio = não há). */
+  luzIa: string;
+  /** Quanto dessa luz aplicar, 0..100. */
+  luzForca: number;
   type: 'jpeg' | 'png';
   quality: number;
   exportW: number;
@@ -48,6 +52,8 @@ export interface LookSnapshot {
   preset: string;
   denoise: number;
   sharpen: number;
+  luzIa: string;
+  luzForca: number;
 }
 
 /** Teto do histórico. Cada passo é um punhado de números, mas guardar sem
@@ -58,6 +64,7 @@ function sameLook(a: LookSnapshot, b: LookSnapshot): boolean {
   return a.formatId === b.formatId && a.fit === b.fit && a.scale === b.scale
     && a.dx === b.dx && a.dy === b.dy && a.bgMode === b.bgMode && a.bgColor === b.bgColor
     && a.preset === b.preset && a.denoise === b.denoise && a.sharpen === b.sharpen
+    && a.luzIa === b.luzIa && a.luzForca === b.luzForca
     && (Object.keys(NEUTRAL) as (keyof Adjustments)[]).every((k) => a.adjust[k] === b.adjust[k]);
 }
 
@@ -91,6 +98,13 @@ export class SocialStore {
   /** Nitidez. Como a redução de ruído, é conserto e não look — e é a última
    * coisa aplicada, depois de a imagem já estar no tamanho final. */
   readonly sharpen = signal(0);
+  /** Mapa de luz vindo da IA, guardado como PNG cinza de ~96 px — cabe no
+   * projeto salvo e no histórico sem pesar, e é tudo o que sobra da
+   * reiluminação: a foto continua sendo a sua. */
+  readonly luzIa = signal('');
+  /** 60 é o padrão: luz suficiente pra mudar a foto, discreta o bastante pra
+   * ela continuar parecendo uma foto, e não uma montagem. */
+  readonly luzForca = signal(60);
 
   readonly type = signal<'jpeg' | 'png'>('jpeg');
   readonly quality = signal(92);
@@ -123,6 +137,8 @@ export class SocialStore {
       preset: this.preset(),
       denoise: this.denoise(),
       sharpen: this.sharpen(),
+      luzIa: this.luzIa(),
+      luzForca: this.luzForca(),
     };
   }
 
@@ -171,6 +187,8 @@ export class SocialStore {
     this.preset.set(look.preset);
     this.denoise.set(look.denoise);
     this.sharpen.set(look.sharpen);
+    this.luzIa.set(look.luzIa);
+    this.luzForca.set(look.luzForca);
     this.revision.update((v) => v + 1);
   }
 
@@ -215,6 +233,8 @@ export class SocialStore {
     this.preset.set('original');
     this.denoise.set(0);
     this.sharpen.set(0);
+    this.luzIa.set('');
+    this.luzForca.set(60);
     this.type.set('jpeg');
     this.quality.set(92);
     this.exportW.set(SOCIAL_FORMATS[0].width);
@@ -257,6 +277,8 @@ export class SocialStore {
       adjust: { ...NEUTRAL, ...this.adjust() },
       denoise: this.denoise(),
       sharpen: this.sharpen(),
+      luzIa: this.luzIa(),
+      luzForca: this.luzForca(),
       type: this.type(),
       quality: this.quality(),
       exportW: this.exportW(),
@@ -280,6 +302,8 @@ export class SocialStore {
     this.preset.set('original');
     this.denoise.set(data.denoise ?? 0);
     this.sharpen.set(data.sharpen ?? 0);
+    this.luzIa.set(data.luzIa ?? '');
+    this.luzForca.set(data.luzForca ?? 60);
     this.type.set(data.type === 'png' ? 'png' : 'jpeg');
     this.quality.set(data.quality || 92);
     this.exportW.set(data.exportW || format.width);

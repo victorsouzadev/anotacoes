@@ -16,6 +16,7 @@ import {
 import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale } from './social-render';
 import { sharpenRgba } from './sharpen';
 import { melhorarAutomaticamente } from './auto';
+import { aplicarRazaoDeLuz, razaoDeLuz, tamanhoDaRazao } from './light';
 import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { downloadBlob, loadImageElement } from './svg-template';
@@ -118,6 +119,19 @@ function descreverAuto(auto: ReturnType<typeof melhorarAutomaticamente>): string
     ? `${feito.slice(0, -1).join(', ')} e ${feito[feito.length - 1]}`
     : feito[0];
   return `Pronto: ${lista}.`;
+}
+
+/** Desenha a imagem no tamanho pedido e devolve os pixels. */
+function pixelsEm(imagem: CanvasImageSource, w: number, h: number): Uint8ClampedArray | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(imagem, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h).data;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -378,6 +392,53 @@ async function heicToJpeg(file: File): Promise<Blob> {
               filtro: fica de fora dos presets e do "zerar ajustes".
             }
           </p>
+          @if (upscale.disponivel()) {
+            <div class="sm-divider"></div>
+            <div class="sm-row">
+              @for (d of direcoes; track d.id) {
+                <button
+                  class="sm-btn"
+                  [class.sm-active]="direcaoLuz() === d.id"
+                  [disabled]="iluminando()"
+                  (click)="direcaoLuz.set(d.id)"
+                >{{ d.rotulo }}</button>
+              }
+            </div>
+            <button class="sm-btn sm-wide" [disabled]="!image() || iluminando()" (click)="iluminarComIa()">
+              <app-icon name="sun" [size]="13" />
+              {{ iluminando() ? 'Criando a luz…' : (luzIa() ? 'Refazer a luz com IA' : 'Iluminar com IA') }}
+            </button>
+
+            @if (luzIa()) {
+              <label class="sm-slider">
+                <span class="sm-slider-head">
+                  <span>Intensidade da luz</span>
+                  <button class="sm-reset" (click)="removerLuzIa($event)" title="Remover a luz da IA">{{ luzForca() }}</button>
+                </span>
+                <input
+                  type="range" min="0" max="100" step="1"
+                  [value]="luzForca()" (input)="onLuzForca($event)" (change)="commit()"
+                />
+              </label>
+            }
+
+            <p class="sm-note">
+              @if (iluminando()) {
+                A IA está desenhando a luz; leva de trinta segundos a um minuto e meio.
+              } @else if (luzErro()) {
+                <span class="sm-warn">{{ luzErro() }}</span>
+              } @else if (luzIa()) {
+                A luz é da IA; os pixels são os seus. Mexa na intensidade à vontade — isso não
+                chama o serviço de novo.
+              } @else {
+                A IA gera uma versão iluminada da foto e o editor aproveita só a LUZ dela: o
+                produto, o texto e as cores continuam sendo os da sua foto. Cada geração tem custo.
+              }
+            </p>
+          }
+
+          <div class="sm-divider"></div>
+
           <label class="sm-slider">
             <span class="sm-slider-head">
               <span>Nitidez</span>
@@ -765,6 +826,8 @@ export class SocialModeComponent {
   private readonly cleaned = signal<HTMLCanvasElement | null>(null);
   /** Foto já no tamanho que a saída pede, antes de cor e de limpeza. */
   private readonly prescaled = signal<Source | null>(null);
+  /** Foto com a luz da IA já aplicada. */
+  private readonly iluminado = signal<Source | null>(null);
   readonly sharpen = this.store.sharpen;
   readonly denoising = signal(false);
 
@@ -779,6 +842,17 @@ export class SocialModeComponent {
   /** Em qual tentativa está, quando a GPU do serviço obriga a encolher. */
   readonly tentativa = signal(1);
   readonly upscaleErro = signal('');
+  readonly luzIa = this.store.luzIa;
+  readonly luzForca = this.store.luzForca;
+  readonly iluminando = signal(false);
+  readonly luzErro = signal('');
+  readonly direcaoLuz = signal('esquerda');
+  readonly direcoes = [
+    { id: 'esquerda', rotulo: 'Esquerda' },
+    { id: 'direita', rotulo: 'Direita' },
+    { id: 'cima', rotulo: 'Cima' },
+    { id: 'baixo', rotulo: 'Baixo' },
+  ];
   /** O que a melhoria automática fez da última vez, em uma frase. */
   readonly autoResumo = signal('');
 
@@ -931,6 +1005,24 @@ export class SocialModeComponent {
       this.prescaled.set({ image: canvas, width: canvas.width, height: canvas.height });
     });
 
+    // A luz da IA entra sobre a foto já reduzida e limpa, antes de cor e
+    // acabamento: é iluminação, e cor se decide sobre a foto iluminada. O
+    // resultado fica guardado, então mexer na intensidade não refaz a conta
+    // toda nem chama o serviço de novo.
+    effect(() => {
+      const limpa = this.cleaned();
+      const base: Source | null = limpa
+        ? { image: limpa, width: limpa.width, height: limpa.height }
+        : this.prescaled();
+      const mapaUrl = this.luzIa();
+      const forca = this.luzForca();
+      if (!base || !mapaUrl || forca <= 0) {
+        this.iluminado.set(null);
+        return;
+      }
+      this.schedule(() => void this.aplicarLuzDaIa(base, mapaUrl, forca));
+    });
+
     // A limpeza é cara, então espera a mão sair do controle antes de começar —
     // e roda sobre a foto já reduzida, que é onde o ruído ainda importa.
     effect(() => {
@@ -1015,6 +1107,8 @@ export class SocialModeComponent {
   /** A foto que o desenho usa: a limpa quando há redução de ruído ligada e
    * pronta, senão a original. */
   private currentSource(): Source | null {
+    const comLuz = this.iluminado();
+    if (comLuz) return comLuz;
     const clean = this.cleaned();
     if (clean) return { image: clean, width: clean.width, height: clean.height };
     const pre = this.prescaled();
@@ -1154,6 +1248,107 @@ export class SocialModeComponent {
     );
     const data = ctx.getImageData(0, 0, w, h);
     return { pixels: data.data, width: w, height: h };
+  }
+
+  /** Desenha a foto multiplicada pelo mapa de luz. Aqui a luz da IA entra na
+   * imagem — e é só isto que entra dela. */
+  private async aplicarLuzDaIa(base: Source, mapaUrl: string, forca: number): Promise<void> {
+    try {
+      const mapa = await loadImageElement(mapaUrl);
+      const mw = mapa.naturalWidth;
+      const mh = mapa.naturalHeight;
+      const bruto = pixelsEm(mapa, mw, mh);
+      if (!bruto) return;
+
+      const razao = new Float32Array(mw * mh);
+      for (let i = 0; i < razao.length; i++) razao[i] = bruto[i * 4] / 128;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = base.width;
+      canvas.height = base.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(base.image, 0, 0);
+      const dados = ctx.getImageData(0, 0, base.width, base.height);
+      aplicarRazaoDeLuz(dados.data, base.width, base.height, razao, mw, mh, forca);
+      ctx.putImageData(dados, 0, 0);
+
+      this.iluminado.set({ image: canvas, width: canvas.width, height: canvas.height });
+    } catch {
+      // Mapa ilegível não pode derrubar a prévia: segue sem a luz da IA.
+      this.iluminado.set(null);
+    }
+  }
+
+  /** Pede a luz à IA e guarda só o mapa de razão — a foto continua a sua.
+   *
+   * A imagem enviada é pequena de propósito: como só a luz borrada é
+   * aproveitada, mandar grande custaria mais pelo mesmo resultado. */
+  async iluminarComIa(): Promise<void> {
+    const photo = this.image();
+    if (!photo || this.iluminando()) return;
+    this.iluminando.set(true);
+    this.luzErro.set('');
+    try {
+      const source = sourceOf(photo);
+      const enviado = fitWithinPixels(source.width, source.height, 700_000);
+      const pequena = stepDownscale(source, enviado.width, enviado.height);
+      const resposta = await this.upscale.reiluminar(
+        pequena.toDataURL('image/jpeg', 0.92), this.direcaoLuz());
+
+      const iluminada = await loadImageElement(resposta);
+      const mapa = this.extrairLuz(source, iluminada);
+      if (!mapa) throw new Error('Não consegui ler a luz que voltou.');
+
+      this.luzIa.set(mapa);
+      this.commit();
+    } catch (e) {
+      this.luzErro.set(e instanceof Error ? e.message : 'Não consegui criar a luz agora.');
+    } finally {
+      this.iluminando.set(false);
+    }
+  }
+
+  /** Compara as duas imagens no MESMO tamanho pequeno e guarda a razão entre
+   * as luminâncias como um PNG cinza — 128 é "não mexe". É neste tamanho que o
+   * produto redesenhado pela IA deixa de existir e só a luz sobrevive. */
+  private extrairLuz(source: Source, iluminada: HTMLImageElement): string | null {
+    const { largura, altura } = tamanhoDaRazao(source.width, source.height);
+    const original = pixelsEm(source.image, largura, altura);
+    const daIa = pixelsEm(iluminada, largura, altura);
+    if (!original || !daIa) return null;
+
+    const razao = razaoDeLuz(original, daIa, largura, altura);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = largura;
+    canvas.height = altura;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const saida = ctx.createImageData(largura, altura);
+    for (let i = 0; i < razao.length; i++) {
+      // 128 = razão 1. A escala cobre de 0 a 2, que é mais do que os limites
+      // que a própria razão já impõe.
+      const v = Math.max(0, Math.min(255, Math.round(razao[i] * 128)));
+      saida.data[i * 4] = v;
+      saida.data[i * 4 + 1] = v;
+      saida.data[i * 4 + 2] = v;
+      saida.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(saida, 0, 0);
+    return canvas.toDataURL('image/png');
+  }
+
+  onLuzForca(event: Event): void {
+    this.touch();
+    this.luzForca.set(Number((event.target as HTMLInputElement).value));
+  }
+
+  removerLuzIa(event: Event): void {
+    event.preventDefault();
+    this.luzIa.set('');
+    this.luzErro.set('');
+    this.commit();
   }
 
   /** Manda a foto de trabalho pro serviço de ampliação e troca pela que voltar.

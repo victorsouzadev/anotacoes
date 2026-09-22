@@ -16,6 +16,10 @@ public interface IUpscalerFactory
 
     /// <summary>Ampliador já com a chave de quem está logado — ou a do servidor, se ele não tiver a sua.</summary>
     Task<IImageUpscaler> CriarAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>Reiluminador, com a MESMA chave: é a mesma conta no mesmo
+    /// serviço, e pedir dois tokens pela mesma origem seria ruído.</summary>
+    Task<IImageRelighter> CriarRelighterAsync(string userId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -29,6 +33,7 @@ public class UpscalerFactory : IUpscalerFactory
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IProtetorDeSegredos _protetor;
     private readonly UpscaleOptions _padrao;
+    private readonly RelightOptions _relight;
     private readonly ILoggerFactory _loggerFactory;
 
     public UpscalerFactory(
@@ -36,12 +41,14 @@ public class UpscalerFactory : IUpscalerFactory
         IHttpClientFactory httpClientFactory,
         IProtetorDeSegredos protetor,
         IOptions<UpscaleOptions> padrao,
+        IOptions<RelightOptions> relight,
         ILoggerFactory loggerFactory)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
         _protetor = protetor;
         _padrao = padrao.Value;
+        _relight = relight.Value;
         _loggerFactory = loggerFactory;
     }
 
@@ -69,6 +76,16 @@ public class UpscalerFactory : IUpscalerFactory
             _httpClientFactory.CreateClient(nameof(ReplicateUpscaler)),
             Options.Create(options),
             _loggerFactory.CreateLogger<ReplicateUpscaler>());
+    }
+
+    public async Task<IImageRelighter> CriarRelighterAsync(string userId, CancellationToken ct = default)
+    {
+        var chave = await ChaveDoUsuarioAsync(userId, ct);
+        return new ReplicateRelighter(
+            _httpClientFactory.CreateClient(nameof(ReplicateRelighter)),
+            _relight,
+            chave is { Length: > 0 } ? chave : _padrao.ApiKey,
+            _loggerFactory.CreateLogger<ReplicateRelighter>());
     }
 
     private async Task<string?> ChaveDoUsuarioAsync(string userId, CancellationToken ct)

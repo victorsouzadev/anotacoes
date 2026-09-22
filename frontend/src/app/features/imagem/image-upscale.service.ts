@@ -51,6 +51,19 @@ export class ImageUpscaleService {
     }
   }
 
+  /** Pede à IA uma versão reiluminada da foto. O que volta não é a foto final:
+   * é de onde a luz será extraída. */
+  async reiluminar(imagem: string, direcao: string): Promise<string> {
+    try {
+      const resposta = await firstValueFrom(
+        this.http.post<{ imagem: string }>('/api/imagens/reiluminar', { imagem, direcao }),
+      );
+      return resposta.imagem;
+    } catch (err) {
+      throw erroDe(err);
+    }
+  }
+
   /**
    * Amplia tentando de novo, menor, quando a GPU do serviço estiver sem
    * memória. O tamanho que cabe lá não é fixo: depende de quem mais está
