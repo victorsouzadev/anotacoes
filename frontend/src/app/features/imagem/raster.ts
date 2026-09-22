@@ -68,7 +68,7 @@ function edt1d(f: Float64Array, d: Float64Array, v: Int32Array, z: Float64Array,
  * limiar em alpha≥128 jogava fora. Sem ela a margem herda a escada do pixel
  * mesmo quando a arte que entrou era anti-serrilhada — e nenhuma suavização
  * depois recupera o que foi arredondado aqui. */
-function squaredDistanceToArt(cov: Float32Array, W: number, H: number): Float64Array {
+export function squaredDistanceToArt(cov: Float32Array, W: number, H: number): Float64Array {
   const INF = 1e20;
   const dist = new Float64Array(W * H);
   for (let i = 0; i < W * H; i++) {

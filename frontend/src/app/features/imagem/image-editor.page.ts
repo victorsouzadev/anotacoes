@@ -17,8 +17,9 @@ import {
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
 import { SocialModeComponent } from './social-mode';
 import { SocialProjectData, SocialStore } from './social-store';
-import { splitCanvasElements } from './split';
+import { SplitElement, SplitOptions, SplitPlan, planSplit } from './split';
 import { TemplateModeComponent } from './template-mode';
+import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
 
@@ -131,12 +132,16 @@ const SIMPLIFY_MM = FIT_TOLERANCE_MM / 4;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
-/** Vão, em mm, abaixo do qual dois pedaços ainda são o MESMO elemento ao
- * dividir: uma estrela solta na cabeça do desenho, a ponta de um tentáculo
- * separada pelo anti-aliasing. Acima disso já é outro adesivo. */
-const SPLIT_GAP_MM = 2;
+/** Vãos, em mm, testados pela escolha automática de separação: de "nada se
+ * junta" (folha de estrelinhas com as pontas quase se tocando) a "junta o
+ * desenho inteiro" (polvo com faixa de nome e estrela solta na cabeça). */
+const SPLIT_GAP_CANDIDATES_MM = [0, 0.2, 0.35, 0.5, 0.75, 1, 1.5, 2, 3];
+const MAX_SPLIT_GAP_MM = 3;
 /** Área mínima, em mm², pra um pedaço virar elemento ao dividir. */
 const SPLIT_MIN_AREA_MM2 = 4;
+/** Largura em que a prévia da divisão lê a arte: o bastante pra marcar os
+ * elementos com fidelidade e leve o bastante pra acompanhar o controle. */
+const SPLIT_PREVIEW_WIDTH = 900;
 const MIN_WORK_WIDTH = 360;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 8;
@@ -274,6 +279,9 @@ function loadPrefs(): Prefs {
                 }
                 @case ('corte') {
                   <p class="cut-hint pick-hint">Clique dentro de uma linha tracejada pra removê-la do corte. O desenho e o contorno continuam iguais.</p>
+                }
+                @case ('dividir') {
+                  <p class="cut-hint pick-hint">{{ splitSummary() }}</p>
                 }
                 @default {
                   <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
@@ -482,9 +490,25 @@ function loadPrefs(): Prefs {
                   <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
                   <span>Espelhar na horizontal — necessário só pra vinil termocolante</span>
                 </label>
-                <button class="btn full" (click)="splitSelected()">Dividir em elementos</button>
-                <p class="field-note">Uma folha com vários desenhos vira um item por desenho, cada um com tamanho, contorno e cópias próprios — e cada um sai no seu SVG de corte. Remova o fundo antes: é o vazio entre os desenhos que diz onde separar.</p>
-                @if (splitHint()) { <p class="field-note">{{ splitHint() }}</p> }
+                <button class="btn full" [class.primary]="tool() === 'dividir'" (click)="setTool('dividir')">
+                  {{ tool() === 'dividir' ? 'Fechar divisão' : 'Dividir em elementos' }}
+                </button>
+                @if (tool() === 'dividir') {
+                  <label class="field">
+                    <span class="field-label">Juntar pedaços a até <strong>{{ splitGapMm().toFixed(2) }} mm</strong></span>
+                    <input type="range" min="0" [max]="maxSplitGapMm" step="0.05" [value]="splitGapMm()" (input)="onSplitGapInput($event)" />
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Tolerância do fundo <strong>{{ splitTolerance() }}</strong></span>
+                    <input type="range" min="5" max="120" step="1" [value]="splitTolerance()" (input)="onSplitToleranceInput($event)" />
+                  </label>
+                  <button class="btn full" (click)="autoSplit()">Escolher sozinho</button>
+                  <p class="field-note">{{ splitSummary() }}</p>
+                  <button class="btn primary full" [disabled]="splitFound().length < 2" (click)="splitSelected()">
+                    Dividir em {{ splitFound().length }} elementos
+                  </button>
+                }
+                <p class="field-note">Uma folha com vários desenhos vira um item por desenho, cada um com tamanho, contorno, cópias e SVG de corte próprios. Não precisa remover o fundo antes: quando a arte é opaca, o fundo é deduzido pela cor das bordas.</p>
               }
             </section>
 
@@ -596,6 +620,9 @@ function loadPrefs(): Prefs {
               </button>
               <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
                 <app-icon name="download" [size]="14" /> SVG arte + corte
+              </button>
+              <button class="btn full" [disabled]="images().length < 2" (click)="exportCutSvgZip()">
+                <app-icon name="download" [size]="14" /> ZIP com um SVG por imagem
               </button>
               <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
             }
@@ -855,6 +882,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   readonly maxMarginMm = MAX_MARGIN_MM;
   readonly maxGapMm = MAX_GAP_MM;
   readonly maxSmoothing = MAX_SMOOTHING;
+  readonly maxSplitGapMm = MAX_SPLIT_GAP_MM;
   readonly dpi = EXPORT_DPI;
   readonly swatches = SWATCHES;
   readonly shapes = SHAPES;
@@ -868,11 +896,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
-  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte'>('nenhuma');
+  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir'>('nenhuma');
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
   cutHint = signal('');
-  splitHint = signal('');
+  splitTolerance = signal(32);
+  splitGapMm = signal(0.5);
+  splitFound = signal<SplitElement[]>([]);
+  private splitPlan: SplitPlan | null = null;
   /** 1 = imagem ajustada ao palco; acima disso, o palco ganha rolagem. */
   zoom = signal(1);
   openSections = signal<Record<string, boolean>>({ ...this.prefs.openSections });
@@ -1031,7 +1062,6 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   select(id: string): void {
     this.selectedId.set(id);
-    this.splitHint.set('');
     this.tool.set('nenhuma');
     this.scheduleRender();
   }
@@ -1049,21 +1079,88 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
    * solto vira um item da lista, com seus próprios ajustes de corte, tamanho e
    * cópias. É o caminho pra uma folha com seis adesivos sair como seis SVGs de
    * corte em vez de um só. */
-  splitSelected(): void {
+  /** Refaz a leitura dos elementos da imagem selecionada. É ela que alimenta
+   * tanto os retângulos desenhados na prévia quanto a divisão de verdade —
+   * o que se vê marcado na tela é exatamente o que vai virar item. */
+  private refreshSplitPreview(auto = false): void {
     const sel = this.selected();
-    if (!sel) return;
-    const ppm = this.pxPerMm(sel);
-    const pedacos = splitCanvasElements(sel.source, {
-      gapPx: Math.max(2, Math.round(SPLIT_GAP_MM * ppm)),
-      minAreaPx: Math.max(16, Math.round(SPLIT_MIN_AREA_MM2 * ppm * ppm)),
-      padPx: Math.max(1, Math.round(ppm)),
-    });
-    if (pedacos.length < 2) {
-      this.splitHint.set(sel.bgRemoved
-        ? 'Os desenhos estão encostados: não deu pra separar em elementos.'
-        : 'Primeiro remova o fundo — com o fundo inteiro a imagem é um bloco só.');
+    if (!sel || this.tool() !== 'dividir') {
+      this.splitPlan = null;
+      this.splitFound.set([]);
       return;
     }
+    // A prévia lê uma cópia reduzida: o controle é arrastado, e varrer 3000 px
+    // a cada passo travaria o painel. A divisão de verdade refaz a leitura na
+    // arte inteira — os parâmetros são todos em mm, então acompanham a escala.
+    const escala = Math.min(1, SPLIT_PREVIEW_WIDTH / sel.source.width);
+    const arte = escala < 1 ? downscale(sel.source, escala) : sel.source;
+    const plano = planSplit(arte, this.splitOptions(sel, escala, auto));
+    this.splitPlan = plano;
+    if (auto) {
+      const ppm = this.pxPerMm(sel) * escala;
+      this.splitGapMm.set(Math.round((plano.gapPx / ppm) * 100) / 100);
+    }
+    this.splitFound.set(escala < 1
+      ? plano.elements.map((el) => ({
+          ...el,
+          x: Math.round(el.x / escala), y: Math.round(el.y / escala),
+          w: Math.round(el.w / escala), h: Math.round(el.h / escala),
+        }))
+      : plano.elements);
+  }
+
+  /** Os mesmos parâmetros pra prévia e pra divisão, convertidos dos mm da peça
+   * pra px da arte na escala pedida. */
+  private splitOptions(item: ImportedImage, escala: number, auto = false): SplitOptions {
+    const ppm = this.pxPerMm(item) * escala;
+    return {
+      bgTolerance: this.splitTolerance(),
+      gapPx: Math.round(this.splitGapMm() * ppm),
+      minAreaPx: Math.max(16, Math.round(SPLIT_MIN_AREA_MM2 * ppm * ppm)),
+      padPx: Math.max(1, Math.round(ppm)),
+      autoGapCandidatesPx: auto ? SPLIT_GAP_CANDIDATES_MM.map((mm) => Math.round(mm * ppm)) : undefined,
+    };
+  }
+
+  onSplitToleranceInput(event: Event): void {
+    this.splitTolerance.set(Number((event.target as HTMLInputElement).value));
+    this.refreshSplitPreview();
+    this.scheduleRender();
+  }
+
+  onSplitGapInput(event: Event): void {
+    this.splitGapMm.set(Number((event.target as HTMLInputElement).value));
+    this.refreshSplitPreview();
+    this.scheduleRender();
+  }
+
+  autoSplit(): void {
+    this.refreshSplitPreview(true);
+    this.scheduleRender();
+  }
+
+  /** O que está sendo mostrado agora, em uma frase — o retorno que faltava:
+   * antes a divisão era um botão que ou fazia tudo ou dizia "não deu". */
+  splitSummary(): string {
+    const achados = this.splitFound().length;
+    if (!this.splitPlan) return 'Lendo a imagem…';
+    const origem = this.splitPlan.fromAlpha ? 'pela transparência' : 'pela cor do fundo';
+    if (achados < 2) {
+      return achados === 1
+        ? `Um elemento só, lido ${origem}. Se a folha tem vários desenhos, desça o "juntar pedaços" até eles se separarem.`
+        : `Nenhum elemento ${origem}. Desça a tolerância do fundo — nesse valor a arte inteira está passando por fundo.`;
+    }
+    return `${plural(achados, 'elemento marcado', 'elementos marcados')} na prévia, lidos ${origem}. Desenho picado em vários? Suba o "juntar pedaços". Vizinhos grudados num só? Desça.`;
+  }
+
+  splitSelected(): void {
+    const sel = this.selected();
+    if (!sel || this.splitFound().length < 2) return;
+    // relê na arte inteira: a prévia roda numa cópia reduzida, e o recorte que
+    // vira item tem de sair na resolução original
+    const plano = planSplit(sel.source, this.splitOptions(sel, 1));
+    if (plano.elements.length < 2) return;
+    const pedacos = plano.elements.map((el) => plano.crop(el));
 
     const base = this.baseName(sel);
     const herdado: Partial<ImportedImage> = {
@@ -1079,7 +1176,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
     this.remove(sel.id);
     this.selectedId.set(novos[0].id);
-    this.splitHint.set(`${plural(novos.length, 'elemento', 'elementos')} — cada um com seus próprios ajustes.`);
+    this.tool.set('nenhuma');
+    this.splitPlan = null;
+    this.splitFound.set([]);
     this.scheduleRender();
   }
 
@@ -1188,11 +1287,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- ferramentas sobre a peça (fundo e borracha) ----------
 
-  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte'): void {
+  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir'): void {
     const next = this.tool() === tool ? 'nenhuma' : tool;
     if (next !== 'nenhuma') this.view.set('peca');
     this.tool.set(next);
     this.cutHint.set('');
+    this.refreshSplitPreview(next === 'dividir');
     this.scheduleRender();
   }
 
@@ -1535,7 +1635,40 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(piece.canvas, 0, 0);
     this.strokeCutPaths(ctx, piece.cuts, Math.max(1.5, canvas.width / 500));
+    if (this.tool() === 'dividir') this.strokeSplitBoxes(ctx, sel, piece);
     this.applyZoom(canvas, this.pieceStage?.nativeElement);
+  }
+
+  /** Marca na prévia cada elemento que a divisão encontrou, numerado na ordem
+   * em que vai entrar na lista. Nas coordenadas da peça: a arte mora deslocada
+   * pela margem e, quando espelhada, invertida. */
+  private strokeSplitBoxes(ctx: CanvasRenderingContext2D, item: ImportedImage, piece: Piece): void {
+    const elementos = this.splitFound();
+    const escala = piece.scale;
+    const larguraArte = item.source.width * escala;
+    const linha = Math.max(1.5, ctx.canvas.width / 400);
+    ctx.save();
+    ctx.lineWidth = linha;
+    ctx.font = `bold ${Math.max(12, ctx.canvas.width / 40)}px system-ui, sans-serif`;
+    ctx.textBaseline = 'top';
+    elementos.forEach((el, i) => {
+      const w = el.w * escala;
+      const h = el.h * escala;
+      const x = piece.artX + (item.mirrored ? larguraArte - el.x * escala - w : el.x * escala);
+      const y = piece.artY + el.y * escala;
+      ctx.strokeStyle = '#2f6fed';
+      ctx.fillStyle = 'rgba(47, 111, 237, 0.12)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      const rotulo = String(i + 1);
+      const largura = ctx.measureText(rotulo).width + linha * 4;
+      const altura = Math.max(14, ctx.canvas.width / 34);
+      ctx.fillStyle = '#2f6fed';
+      ctx.fillRect(x, y, largura, altura);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(rotulo, x + linha * 2, y + linha);
+    });
+    ctx.restore();
   }
 
   private strokeCutPaths(ctx: CanvasRenderingContext2D, paths: CubicPath[], lineWidth: number): void {
@@ -1649,6 +1782,21 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const piece = this.pieceFor(sel, 'full');
     const svg = this.pieceSvg(piece, piece.canvas.toDataURL('image/png'));
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), this.baseName(sel) + '-arte-corte.svg');
+  }
+
+  /** Um SVG de corte por imagem da lista, num ZIP só: depois de dividir a
+   * folha em seis elementos, baixar seis arquivos um a um (cada um com seu
+   * diálogo do navegador) é o que tornava a divisão inútil na prática. */
+  exportCutSvgZip(): void {
+    const itens = this.images();
+    if (!itens.length) return;
+    const nomes = uniqueNames(itens.map((i) => `${this.baseName(i)}-corte.svg`));
+    const arquivos = itens.map((item, i) => ({
+      name: nomes[i],
+      content: this.pieceSvg(this.pieceFor(item, 'full'), null),
+    }));
+    const projeto = this.projectName().trim() || 'corte';
+    this.downloadBlob(zipStore(arquivos), `${projeto}-svgs.zip`);
   }
 
   private pieceSvg(piece: Piece, imageHref: string | null): string {
