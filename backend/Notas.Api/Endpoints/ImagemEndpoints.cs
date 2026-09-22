@@ -17,9 +17,13 @@ public static class ImagemEndpoints
     // mas ainda abaixo do limite de corpo de requisição do Kestrel (10 MB).
     private const int MaxDataBytes = 9 * 1024 * 1024;
 
+    // Miniaturas, não as artes: uma folha inteira de adesivos cabe com folga.
+    private const int MaxNomesBytes = 6 * 1024 * 1024;
+
     public static void MapImagemEndpoints(this IEndpointRouteBuilder app)
     {
         MapUpscale(app);
+        MapNomes(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -54,6 +58,37 @@ public static class ImagemEndpoints
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+    }
+
+    /// <summary>
+    /// Nomes dos elementos, dados por IA a partir das miniaturas. Existe para a
+    /// exportação em ZIP: depois de dividir uma folha, "proj 1…proj 6" obriga a
+    /// abrir arquivo por arquivo pra achar o polvo. Falhar aqui não é erro de
+    /// exportação — o editor segue com os nomes que já tinha.
+    /// </summary>
+    private static void MapNomes(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/imagens/nomes", async (
+            NomearElementosRequest req, ClaimsPrincipal user, INomeadorDeElementos nomeador, CancellationToken ct) =>
+        {
+            var imagens = req.Imagens ?? new List<string>();
+            if (imagens.Count == 0) return Results.BadRequest(new { erro = "Envie ao menos uma imagem." });
+            if (imagens.Count > NomeadorDeElementos.MaxImagens)
+            {
+                return Results.BadRequest(new { erro = $"No máximo {NomeadorDeElementos.MaxImagens} imagens por vez." });
+            }
+            if (imagens.Any(i => string.IsNullOrWhiteSpace(i) || !i.StartsWith("data:image/", StringComparison.Ordinal)))
+            {
+                return Results.BadRequest(new { erro = "Cada imagem precisa ser uma data URL de imagem." });
+            }
+            if (imagens.Sum(i => i.Length) > MaxNomesBytes)
+            {
+                return Results.BadRequest(new { erro = "As miniaturas somadas passaram do limite; reduza a quantidade." });
+            }
+
+            var resultado = await nomeador.NomearAsync(user.UserId(), imagens, ct);
+            return Results.Ok(new NomearElementosResponse(resultado.Nomes, resultado.UsouIa, resultado.Motivo));
+        }).RequireAuthorization();
     }
 
     /// <summary>

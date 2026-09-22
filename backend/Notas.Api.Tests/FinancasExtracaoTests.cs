@@ -149,6 +149,9 @@ public class TransacaoExtractionServiceTests
             Task.FromResult(new ConfiguracaoEfetiva(_extrator.Provedor, "modelo-de-teste", true, true,
                 _extrator.SuportaAnexos));
 
+        public Task<CredenciaisLlm> ResolverCredenciaisAsync(string userId, CancellationToken ct = default) =>
+            Task.FromResult(new CredenciaisLlm(_extrator.Provedor, "chave-de-teste", "modelo-de-teste"));
+
         public Task<ILlmExtractor> CriarAsync(string userId, CancellationToken ct = default) =>
             Task.FromResult(_extrator);
 

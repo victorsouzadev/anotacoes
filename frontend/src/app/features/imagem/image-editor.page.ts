@@ -19,6 +19,7 @@ import { SocialModeComponent } from './social-mode';
 import { SocialProjectData, SocialStore } from './social-store';
 import { SplitElement, SplitOptions, SplitPlan, planSplit } from './split';
 import { TemplateModeComponent } from './template-mode';
+import { ElementNamingService } from './element-naming.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
@@ -621,9 +622,12 @@ function loadPrefs(): Prefs {
               <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
                 <app-icon name="download" [size]="14" /> SVG arte + corte
               </button>
-              <button class="btn full" [disabled]="images().length < 2" (click)="exportCutSvgZip()">
-                <app-icon name="download" [size]="14" /> ZIP com um SVG por imagem
+              <button class="btn full" [disabled]="images().length < 2 || zipping()" (click)="exportCutSvgZip()">
+                <app-icon name="download" [size]="14" />
+                {{ zipping() ? 'Nomeando com IA…' : 'ZIP com um SVG por imagem' }}
               </button>
+              @if (zipStatus()) { <p class="field-note">{{ zipStatus() }}</p> }
+              <p class="field-note">No ZIP cada arquivo é nomeado por IA pelo que o desenho é ("polvo-maria-clara"), não por número. Sem chave de IA configurada, valem os nomes atuais.</p>
               <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
             }
           </section>
@@ -902,6 +906,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   cutHint = signal('');
   splitTolerance = signal(32);
   splitGapMm = signal(0.5);
+  zipStatus = signal('');
+  zipping = signal(false);
   splitFound = signal<SplitElement[]>([]);
   private splitPlan: SplitPlan | null = null;
   /** 1 = imagem ajustada ao palco; acima disso, o palco ganha rolagem. */
@@ -937,6 +943,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public auth: AuthService,
     public theme: ThemeService,
     private projectsApi: ImageProjectsService,
+    private naming: ElementNamingService,
     public templates: TemplateStore,
     public social: SocialStore,
   ) {}
@@ -1787,10 +1794,28 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Um SVG de corte por imagem da lista, num ZIP só: depois de dividir a
    * folha em seis elementos, baixar seis arquivos um a um (cada um com seu
    * diálogo do navegador) é o que tornava a divisão inútil na prática. */
-  exportCutSvgZip(): void {
+  async exportCutSvgZip(): Promise<void> {
     const itens = this.images();
-    if (!itens.length) return;
-    const nomes = uniqueNames(itens.map((i) => `${this.baseName(i)}-corte.svg`));
+    if (!itens.length || this.zipping()) return;
+    this.zipping.set(true);
+    this.zipStatus.set('Nomeando os elementos com IA…');
+
+    // Os nomes vêm da IA olhando cada elemento: depois de dividir uma folha os
+    // itens se chamam "proj 1…proj 6", e um ZIP assim obriga a abrir arquivo por
+    // arquivo pra achar o polvo. Se a IA não estiver configurada ou falhar, o
+    // ZIP sai do mesmo jeito com o nome que o item já tinha.
+    let nomesIa: string[] = [];
+    try {
+      const sugestao = await this.naming.nomear(itens.map((i) => this.naming.miniatura(i.source)));
+      nomesIa = sugestao.usouIa ? sugestao.nomes : [];
+      this.zipStatus.set(sugestao.usouIa
+        ? `Nomes dados pela IA a ${plural(sugestao.nomes.length, 'elemento', 'elementos')}.`
+        : `Nomes mantidos como estão — ${sugestao.motivo ?? 'a IA não respondeu'}.`);
+    } finally {
+      this.zipping.set(false);
+    }
+
+    const nomes = uniqueNames(itens.map((item, i) => `${nomesIa[i] || this.baseName(item)}-corte.svg`));
     const arquivos = itens.map((item, i) => ({
       name: nomes[i],
       content: this.pieceSvg(this.pieceFor(item, 'full'), null),

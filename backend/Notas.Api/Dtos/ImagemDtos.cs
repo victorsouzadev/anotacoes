@@ -18,3 +18,10 @@ public record UpscaleResponse(string Imagem);
 
 /// <summary>Foto a reiluminar e de onde a luz deve vir.</summary>
 public record RelightRequest(string? Imagem, string? Direcao);
+
+/// <summary>Miniaturas dos elementos, na ordem em que estão na lista do editor.</summary>
+public record NomearElementosRequest(List<string>? Imagens);
+
+/// <summary>Nomes sugeridos; vazio com <c>UsouIa=false</c> quando não deu, e aí
+/// <c>Motivo</c> diz o porquê pra tela poder contar em vez de falhar calada.</summary>
+public record NomearElementosResponse(IReadOnlyList<string> Nomes, bool UsouIa, string? Motivo);

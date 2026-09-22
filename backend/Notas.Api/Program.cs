@@ -66,8 +66,16 @@ builder.Services.AddHttpClient(nameof(ReplicateRelighter), c =>
         Math.Clamp(builder.Configuration.GetValue("Relight:TimeoutSegundos", 180), 30, 600) + 15));
 builder.Services.AddScoped<IUpscalerFactory, UpscalerFactory>();
 
+// Nomear os elementos do editor é outra conversa com o LLM (imagens entram,
+// nomes de arquivo saem), então tem cliente próprio — com o timeout de anexo,
+// que é o caso dele.
+builder.Services.AddHttpClient(nameof(NomeadorDeElementos), c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+
 builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
 builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
+builder.Services.AddScoped<INomeadorDeElementos, NomeadorDeElementos>();
 
 builder.Services.AddScoped<TransacaoExtractionService>();
 builder.Services.AddScoped<OrcamentoService>();

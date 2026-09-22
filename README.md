@@ -26,7 +26,8 @@ inicial, sem exigir outro login nem outro deploy.
   com margem em mm, remoção de fundo, divisão de uma folha em elementos separados
   — com prévia do que vai ser separado, vão escolhido sozinho e ajustes próprios
   por elemento —, folha de montagem A4/A3 e exports em PNG 300 DPI, PDF, SVG de
-  corte e ZIP com um SVG por elemento) e **moldes SVG** (você sobe o próprio molde e encaixa
+  corte e ZIP com um SVG por elemento, com os arquivos nomeados por IA pelo que o
+  desenho é) e **moldes SVG** (você sobe o próprio molde e encaixa
   fotos nos buracos dele, em camadas com ordem e transparência).
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
