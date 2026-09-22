@@ -137,6 +137,18 @@ export function filterString(a: Adjustments, sizePx: number): string {
 
 /** Retângulo da foto dentro do quadro, para "preencher" ou "caber", já com o
  * zoom e o deslocamento do usuário aplicados. */
+/** Reduz (só se precisar) para caber num teto de pixels, mantendo a proporção.
+ * O ampliador roda numa GPU e recusa foto acima de um tamanho; reduzir antes de
+ * enviar é melhor que descobrir isso depois de o upload inteiro subir. */
+export function fitWithinPixels(
+  w: number, h: number, maxPixels: number,
+): { width: number; height: number } {
+  const total = w * h;
+  if (!(total > maxPixels) || maxPixels <= 0) return { width: w, height: h };
+  const fator = Math.sqrt(maxPixels / total);
+  return { width: Math.max(1, Math.round(w * fator)), height: Math.max(1, Math.round(h * fator)) };
+}
+
 /** A foto cobre o quadro inteiro no enquadramento dado? Decide se os controles
  * de fundo têm o que fazer: em "Preencher" com escala cheia a resposta é sim,
  * mas diminuir a escala ou arrastar a foto pra fora expõe as bordas. */

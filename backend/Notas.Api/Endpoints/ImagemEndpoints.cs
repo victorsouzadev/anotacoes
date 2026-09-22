@@ -67,10 +67,11 @@ public static class ImagemEndpoints
 
         // O editor pergunta antes de oferecer o botão: recurso sem chave não deve
         // aparecer só pra falhar quando clicado.
-        group.MapGet("/upscale", async (ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
+        group.MapGet("/upscale", async (ClaimsPrincipal user, IUpscalerFactory factory,
+            Microsoft.Extensions.Options.IOptions<UpscaleOptions> options, CancellationToken ct) =>
         {
             var efetivo = await factory.ResolverAsync(user.UserId(), ct);
-            return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel));
+            return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel, options.Value.MaxInputPixels));
         });
 
         group.MapPost("/upscale", async (

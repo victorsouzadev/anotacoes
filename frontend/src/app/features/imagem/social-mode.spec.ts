@@ -1,5 +1,6 @@
 import {
-  FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, coversFrame, filterString, frameRect,
+  FILTER_GROUPS, FILTER_PRESETS, NEUTRAL, SOCIAL_FORMATS, coversFrame, filterString, fitWithinPixels,
+  frameRect,
 } from './social-model';
 import { SocialStore } from './social-store';
 import { DEFAULT_SECTIONS, PREFS_KEY, isHeicFile, loadPrefs } from './social-mode';
@@ -279,5 +280,33 @@ describe('desfazer', () => {
     store.setImage({ naturalWidth: 400, naturalHeight: 400 } as HTMLImageElement, 'data:,y', 'outra.jpg');
     expect(store.canUndo()).toBe(false);
     expect(store.canRedo()).toBe(false);
+  });
+});
+
+describe('teto do ampliador', () => {
+  // O modelo roda numa GPU T4 e recusa acima de ~2,1 MP. O caso real que falhou
+  // em produção: foto de 4000×1848 (7,4 MP) recusada pelo serviço.
+  const TETO = 2_000_000;
+
+  it('não mexe em foto que já cabe', () => {
+    expect(fitWithinPixels(1200, 800, TETO)).toEqual({ width: 1200, height: 800 });
+  });
+
+  it('reduz a foto que estourava o limite, mantendo a proporção', () => {
+    const { width, height } = fitWithinPixels(4000, 1848, TETO);
+    expect(width * height).toBeLessThanOrEqual(TETO);
+    expect(width / height).toBeCloseTo(4000 / 1848, 2);
+    // e aproveita quase todo o teto: reduzir mais seria jogar pixel fora
+    expect(width * height).toBeGreaterThan(TETO * 0.98);
+  });
+
+  it('cabe também nas proporções extremas', () => {
+    for (const [w, h] of [[8000, 1000], [1000, 8000], [3000, 3000]]) {
+      const r = fitWithinPixels(w, h, TETO);
+      expect(r.width * r.height).toBeLessThanOrEqual(TETO);
+      expect(r.width / r.height).toBeCloseTo(w / h, 2);
+      expect(r.width).toBeGreaterThanOrEqual(1);
+      expect(r.height).toBeGreaterThanOrEqual(1);
+    }
   });
 });

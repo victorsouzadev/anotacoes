@@ -11,6 +11,11 @@ export class ImageUpscaleService {
   /** `null` enquanto não se sabe; depois, ligado ou não. */
   readonly disponivel = signal<boolean | null>(null);
 
+  /** Teto de pixels da foto de entrada, dito pelo servidor. O modelo roda numa
+   * GPU e recusa acima disso — melhor reduzir antes de subir do que descobrir
+   * depois de esperar o upload. */
+  readonly maxPixelsEntrada = signal(2_000_000);
+
   private consulta: Promise<boolean> | null = null;
 
   constructor(private http: HttpClient) {}
@@ -20,9 +25,12 @@ export class ImageUpscaleService {
    * editor sem recarregar a página. */
   verificar(forcar = false): Promise<boolean> {
     if (forcar) this.consulta = null;
-    this.consulta ??= firstValueFrom(this.http.get<{ disponivel: boolean }>('/api/imagens/upscale'))
+    this.consulta ??= firstValueFrom(
+      this.http.get<{ disponivel: boolean; maxPixelsEntrada: number }>('/api/imagens/upscale'),
+    )
       .then((r) => {
         this.disponivel.set(r.disponivel);
+        if (r.maxPixelsEntrada > 0) this.maxPixelsEntrada.set(r.maxPixelsEntrada);
         return r.disponivel;
       })
       .catch(() => {

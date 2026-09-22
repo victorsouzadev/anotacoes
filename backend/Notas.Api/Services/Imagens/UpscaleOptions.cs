@@ -25,4 +25,11 @@ public class UpscaleOptions
 
     /// <summary>Ampliações permitidas. Acima de 4× o ganho não paga o tempo.</summary>
     public int MaxEscala { get; set; } = 4;
+
+    /// <summary>
+    /// Teto de pixels da imagem de ENTRADA. O modelo roda numa GPU T4 e recusa
+    /// acima de 2.096.704 pixels — e a recusa vem só depois de a foto subir. O
+    /// cliente reduz antes de enviar; este valor existe pra ele saber até quanto.
+    /// </summary>
+    public int MaxInputPixels { get; set; } = 2_000_000;
 }

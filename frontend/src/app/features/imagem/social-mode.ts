@@ -11,7 +11,7 @@ import {
 import { IconComponent } from '../../shared/icon';
 import {
   Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
-  SOCIAL_FORMATS, SocialFormat, coversFrame, filterString, frameRect,
+  SOCIAL_FORMATS, SocialFormat, coversFrame, filterString, fitWithinPixels, frameRect,
 } from './social-model';
 import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale } from './social-render';
 import { sharpenRgba } from './sharpen';
@@ -226,7 +226,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
 
           @if (image() && upscale.disponivel()) {
             <div class="sm-divider"></div>
-            <button class="sm-btn sm-wide" [disabled]="ampliando()" (click)="ampliarComIa()">
+            <button
+              class="sm-btn sm-wide"
+              [disabled]="ampliando() || !ampliacaoUtil()"
+              (click)="ampliarComIa()"
+            >
               <app-icon name="image" [size]="13" />
               {{ ampliando() ? 'Ampliando…' : 'Ampliar 2× com IA' }}
             </button>
@@ -235,12 +239,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 A foto foi pro serviço de ampliação; costuma levar alguns segundos.
               } @else if (upscaleErro()) {
                 <span class="sm-warn">{{ upscaleErro() }}</span>
-              } @else if (upscaling()) {
-                A foto é pequena pro tamanho que você pediu na exportação — aqui a ampliação
-                ajuda de verdade.
+              } @else if (ampliacaoUtil()) {
+                A foto é pequena pro tamanho que você pediu na exportação: ampliar aqui
+                acrescenta detalhe de verdade. A foto vai pra um serviço externo e cada
+                ampliação tem custo.
               } @else {
-                Só vale a pena quando falta pixel: a foto vai pra um serviço externo e volta
-                com o dobro do tamanho. Cada ampliação tem custo pra quem mantém o servidor.
+                A foto já tem pixel de sobra pra este formato — ampliar não acrescentaria nada.
+                O botão liga sozinho quando o tamanho pedido na exportação passar do que ela tem.
               }
             </p>
           }
@@ -765,6 +770,11 @@ export class SocialModeComponent {
     return (Object.keys(NEUTRAL) as (keyof Adjustments)[]).some((k) => current[k] !== target[k]);
   });
 
+  /** Ampliar só acrescenta quando a foto não cobre o que a exportação pede.
+   * Numa foto de 4000 px pra um post de 1080 não há o que ganhar — e o modelo
+   * ainda recusaria o tamanho. */
+  readonly ampliacaoUtil = computed(() => this.upscaling() > 0);
+
   /** Tamanho da foto de trabalho, em pixels. */
   readonly photoSize = computed(() => {
     const photo = this.image();
@@ -1069,14 +1079,16 @@ export class SocialModeComponent {
    * O enquadramento e os ajustes ficam: mudou a resolução, não a foto. */
   async ampliarComIa(): Promise<void> {
     const photo = this.image();
-    if (!photo || this.ampliando()) return;
+    if (!photo || this.ampliando() || !this.ampliacaoUtil()) return;
     this.ampliando.set(true);
     this.upscaleErro.set('');
     try {
-      // Vai o que está em memória, reencodado — o arquivo original pode ser
-      // grande demais pro limite do servidor.
-      const origem = stepDownscale(sourceOf(photo), this.photoSize().width, this.photoSize().height)
-        .toDataURL('image/jpeg', 0.95);
+      // O modelo roda numa GPU e recusa foto acima de ~2 megapixels. Reduzir
+      // aqui é melhor que descobrir isso depois do upload — e não custa
+      // resolução, porque só chega aqui foto que precisa de MAIS pixel.
+      const source = sourceOf(photo);
+      const cabe = fitWithinPixels(source.width, source.height, this.upscale.maxPixelsEntrada());
+      const origem = stepDownscale(source, cabe.width, cabe.height).toDataURL('image/jpeg', 0.95);
       const ampliada = await this.upscale.ampliar(origem, 2);
       const img = await loadImageElement(ampliada);
       this.store.replacePhoto(img, ampliada, 'image/png');

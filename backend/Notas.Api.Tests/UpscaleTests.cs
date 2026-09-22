@@ -144,3 +144,46 @@ public class UpscaleTests
         Assert.Equal(esperado, ImagemEndpoints.TentarLerDataUrl(valor, out _, out _));
     }
 }
+
+public class UpscaleErroDoModeloTests
+{
+    private static ReplicateUpscaler Criar(HandlerDeUpscale handler)
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(
+            new UpscaleOptions { ApiKey = "token-de-teste", TimeoutSegundos = 20 });
+        return new ReplicateUpscaler(new HttpClient(handler), options,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ReplicateUpscaler>.Instance);
+    }
+
+    [Fact]
+    public async Task Foto_maior_que_a_GPU_vira_explicacao_util()
+    {
+        // Texto real devolvido pelo modelo quando a foto passa do que cabe na T4.
+        var handler = new HandlerDeUpscale().Responde(HttpStatusCode.OK, new
+        {
+            status = "failed",
+            error = "Input image of dimensions (4000, 1848, 3) has a total number of pixels 7392000 "
+                + "greater than the max size that fits in GPU memory on this hardware, 2096704. "
+                + "Resize input image and try again.",
+        });
+
+        var erro = await Assert.ThrowsAsync<UpscaleIndisponivelException>(
+            () => Criar(handler).AmpliarAsync([9], "image/png", 2));
+
+        // O usuário precisa saber o que fazer, não ler o traço do modelo.
+        Assert.Contains("2 megapixels", erro.Message);
+        Assert.DoesNotContain("GPU memory", erro.Message);
+    }
+
+    [Fact]
+    public async Task Outra_falha_do_modelo_continua_aparecendo_como_veio()
+    {
+        var handler = new HandlerDeUpscale().Responde(HttpStatusCode.OK,
+            new { status = "failed", error = "arquivo corrompido" });
+
+        var erro = await Assert.ThrowsAsync<UpscaleIndisponivelException>(
+            () => Criar(handler).AmpliarAsync([9], "image/png", 2));
+
+        Assert.Contains("arquivo corrompido", erro.Message);
+    }
+}

@@ -83,9 +83,7 @@ public class ReplicateUpscaler : IImageUpscaler
             ?? throw new UpscaleIndisponivelException("Resposta vazia do serviço de ampliação.");
         predicao = await AguardarAsync(predicao, ct);
 
-        var url = UrlDaSaida(predicao)
-            ?? throw new UpscaleIndisponivelException(
-                predicao.Error is { Length: > 0 } erro ? $"A ampliação falhou: {erro}" : "A ampliação não devolveu imagem.");
+        var url = UrlDaSaida(predicao) ?? throw new UpscaleIndisponivelException(Explicar(predicao.Error));
 
         return await BaixarAsync(url, ct);
     }
@@ -148,6 +146,23 @@ public class ReplicateUpscaler : IImageUpscaler
                 => predicao.Output[0].GetString(),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Traduz a falha do modelo. A de longe mais comum é a foto passar do que
+    /// cabe na GPU — e o texto cru ("total number of pixels … greater than the
+    /// max size that fits in GPU memory") não diz ao usuário o que fazer.
+    /// </summary>
+    private static string Explicar(string? erro)
+    {
+        if (string.IsNullOrWhiteSpace(erro)) return "A ampliação não devolveu imagem.";
+        if (erro.Contains("fits in GPU memory", StringComparison.OrdinalIgnoreCase)
+            || erro.Contains("greater than the max size", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Essa foto é grande demais para o ampliador (o limite é cerca de 2 megapixels). "
+                + "Numa foto desse tamanho, porém, ampliar não acrescenta nada: ela já tem pixel de sobra.";
+        }
+        return $"A ampliação falhou: {erro}";
     }
 
     private static string Resumo(string texto) => texto.Length <= 300 ? texto : texto[..300];
