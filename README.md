@@ -23,8 +23,9 @@ inicial, sem exigir outro login nem outro deploy.
   ver as mesmas tarefas no navegador. Ver [mobile/README.md](mobile/README.md).
 
 - **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
-  com margem em mm, remoção de fundo, folha de montagem A4/A3 e exports em PNG 300
-  DPI, PDF e SVG de corte) e **moldes SVG** (você sobe o próprio molde e encaixa
+  com margem em mm, remoção de fundo, divisão de uma folha em elementos separados
+  — cada um com seus próprios ajustes e seu próprio SVG —, folha de montagem A4/A3
+  e exports em PNG 300 DPI, PDF e SVG de corte) e **moldes SVG** (você sobe o próprio molde e encaixa
   fotos nos buracos dele, em camadas com ordem e transparência).
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.

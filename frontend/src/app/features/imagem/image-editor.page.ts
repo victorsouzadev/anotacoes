@@ -17,6 +17,7 @@ import {
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
 import { SocialModeComponent } from './social-mode';
 import { SocialProjectData, SocialStore } from './social-store';
+import { splitCanvasElements } from './split';
 import { TemplateModeComponent } from './template-mode';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
@@ -61,6 +62,11 @@ interface ImportedImage {
   copies: number;
   /** Só desenha contorno na região ligada à borda (ignora vãos internos). */
   outerOnly: boolean;
+  /** Ajustes da linha de corte, por imagem: cada arte tem a sua exigência, e
+   * mexer numa não pode mudar as outras. */
+  smoothing: number;
+  keepCorners: boolean;
+  fillHoles: boolean;
   erasures: Erasure[];
   cutRemovals: CutRemoval[];
   /** Sobe a cada borrachada/ajuste destrutivo, pra invalidar o cache da peça. */
@@ -125,6 +131,12 @@ const SIMPLIFY_MM = FIT_TOLERANCE_MM / 4;
 /** Teto de resolução na importação: 3000 px ≈ 25 cm a 300 DPI, com folga pra
  * qualquer adesivo/topo, e mantém o projeto salvo dentro do limite do backend. */
 const MAX_IMPORT_DIMENSION = 3000;
+/** Vão, em mm, abaixo do qual dois pedaços ainda são o MESMO elemento ao
+ * dividir: uma estrela solta na cabeça do desenho, a ponta de um tentáculo
+ * separada pelo anti-aliasing. Acima disso já é outro adesivo. */
+const SPLIT_GAP_MM = 2;
+/** Área mínima, em mm², pra um pedaço virar elemento ao dividir. */
+const SPLIT_MIN_AREA_MM2 = 4;
 const MIN_WORK_WIDTH = 360;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 8;
@@ -430,15 +442,15 @@ function loadPrefs(): Prefs {
                 @if (sel.shape === 'silhueta') {
                   <label class="field">
                     <span class="field-label">Suavizar a linha de corte <strong>{{ smoothingLabel() }}</strong></span>
-                    <input type="range" min="0" [max]="maxSmoothing" step="1" [value]="smoothing()" (input)="onSmoothingInput($event)" />
+                    <input type="range" min="0" [max]="maxSmoothing" step="1" [value]="sel.smoothing" (input)="onSmoothingInput($event)" />
                   </label>
                   <p class="field-note">Linha serrilhada faz a lâmina vibrar e rasgar o papel. O número é o quanto a linha pode se afastar do desenho pra ficar lisa — suba se o corte estiver saindo picotado.</p>
                   <label class="check-field">
-                    <input type="checkbox" [checked]="keepCorners()" (change)="onKeepCornersChange($event)" />
+                    <input type="checkbox" [checked]="sel.keepCorners" (change)="onKeepCornersChange($event)" />
                     <span>Manter cantos vivos — não arredonda bico de estrela nem quina de quadrado</span>
                   </label>
                   <label class="check-field">
-                    <input type="checkbox" [checked]="fillHoles()" (change)="onFillHolesChange($event)" />
+                    <input type="checkbox" [checked]="sel.fillHoles" (change)="onFillHolesChange($event)" />
                     <span>Não cortar buracos internos — corta só o contorno de fora</span>
                   </label>
                 }
@@ -470,6 +482,9 @@ function loadPrefs(): Prefs {
                   <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
                   <span>Espelhar na horizontal — necessário só pra vinil termocolante</span>
                 </label>
+                <button class="btn full" (click)="splitSelected()">Dividir em elementos</button>
+                <p class="field-note">Uma folha com vários desenhos vira um item por desenho, cada um com tamanho, contorno e cópias próprios — e cada um sai no seu SVG de corte. Remova o fundo antes: é o vazio entre os desenhos que diz onde separar.</p>
+                @if (splitHint()) { <p class="field-note">{{ splitHint() }}</p> }
               }
             </section>
 
@@ -850,9 +865,6 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   images = signal<ImportedImage[]>([]);
   selectedId = signal<string | null>(null);
   view = signal<'peca' | 'folha'>('peca');
-  smoothing = signal(this.prefs.smoothing);
-  keepCorners = signal(this.prefs.keepCorners);
-  fillHoles = signal(this.prefs.fillHoles);
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
@@ -860,6 +872,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
   cutHint = signal('');
+  splitHint = signal('');
   /** 1 = imagem ajustada ao palco; acima disso, o palco ganha rolagem. */
   zoom = signal(1);
   openSections = signal<Record<string, boolean>>({ ...this.prefs.openSections });
@@ -869,7 +882,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** O controle guarda um passo inteiro, mas quem lê a tela quer saber o
    * tamanho real do afastamento — em mm, como o resto do painel. */
   smoothingLabel = computed(() => {
-    const s = this.smoothing();
+    const s = this.selected()?.smoothing ?? 0;
     return s > 0 ? `${smoothingSigmaMm(s).toFixed(2).replace('.', ',')} mm` : 'desligada';
   });
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
@@ -971,7 +984,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const octx = original.getContext('2d')!;
     octx.imageSmoothingQuality = 'high';
     octx.drawImage(img, 0, 0, w, h);
+    return this.addArt(name, original, overrides);
+  }
 
+  /** Entra na lista uma arte que já é um canvas no tamanho final — a
+   * importação depois de reduzir, ou um elemento recortado da divisão. */
+  private addArt(name: string, original: HTMLCanvasElement, overrides: Partial<ImportedImage> = {}): ImportedImage {
+    const w = original.width;
+    const h = original.height;
     const source = document.createElement('canvas');
     source.width = w;
     source.height = h;
@@ -984,6 +1004,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       widthMm: this.prefs.widthMm, marginMm: this.prefs.marginMm, gapMm: this.prefs.gapMm,
       color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
       outerOnly: this.prefs.outerOnly, erasures: [], cutRemovals: [], editVersion: 0,
+      smoothing: this.prefs.smoothing, keepCorners: this.prefs.keepCorners, fillHoles: this.prefs.fillHoles,
       ...overrides,
     };
     // projeto salvo por uma versão anterior pode não trazer todas as listas —
@@ -991,6 +1012,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     item.bgRemovals ??= [];
     item.erasures ??= [];
     item.cutRemovals ??= [];
+    // projeto salvo quando o corte era global não traz os campos por imagem
+    item.smoothing ??= this.prefs.smoothing;
+    item.keepCorners ??= this.prefs.keepCorners;
+    item.fillHoles ??= this.prefs.fillHoles;
     // remoções de fundo salvas são reaplicadas sobre a arte original
     for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
     if (item.bgRemovals.length) {
@@ -1006,6 +1031,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   select(id: string): void {
     this.selectedId.set(id);
+    this.splitHint.set('');
     this.tool.set('nenhuma');
     this.scheduleRender();
   }
@@ -1016,6 +1042,44 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (this.selectedId() === id) {
       this.selectedId.set(this.images()[0]?.id ?? null);
     }
+    this.scheduleRender();
+  }
+
+  /** Quebra a imagem selecionada em elementos independentes: cada desenho
+   * solto vira um item da lista, com seus próprios ajustes de corte, tamanho e
+   * cópias. É o caminho pra uma folha com seis adesivos sair como seis SVGs de
+   * corte em vez de um só. */
+  splitSelected(): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const ppm = this.pxPerMm(sel);
+    const pedacos = splitCanvasElements(sel.source, {
+      gapPx: Math.max(2, Math.round(SPLIT_GAP_MM * ppm)),
+      minAreaPx: Math.max(16, Math.round(SPLIT_MIN_AREA_MM2 * ppm * ppm)),
+      padPx: Math.max(1, Math.round(ppm)),
+    });
+    if (pedacos.length < 2) {
+      this.splitHint.set(sel.bgRemoved
+        ? 'Os desenhos estão encostados: não deu pra separar em elementos.'
+        : 'Primeiro remova o fundo — com o fundo inteiro a imagem é um bloco só.');
+      return;
+    }
+
+    const base = this.baseName(sel);
+    const herdado: Partial<ImportedImage> = {
+      marginMm: sel.marginMm, gapMm: sel.gapMm, color: sel.color, shape: sel.shape,
+      mirrored: sel.mirrored, copies: sel.copies, outerOnly: sel.outerOnly,
+      smoothing: sel.smoothing, keepCorners: sel.keepCorners, fillHoles: sel.fillHoles,
+    };
+    const novos = pedacos.map((canvas, i) => this.addArt(`${base} ${i + 1}`, canvas, {
+      ...herdado,
+      // cada elemento nasce no tamanho real que já tinha dentro da folha
+      widthMm: Math.max(1, (sel.widthMm * canvas.width) / sel.source.width),
+    }));
+
+    this.remove(sel.id);
+    this.selectedId.set(novos[0].id);
+    this.splitHint.set(`${plural(novos.length, 'elemento', 'elementos')} — cada um com seus próprios ajustes.`);
     this.scheduleRender();
   }
 
@@ -1102,24 +1166,24 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   onSmoothingInput(event: Event): void {
     this.markInteracting();
-    this.smoothing.set(Number((event.target as HTMLInputElement).value));
-    this.prefs.smoothing = this.smoothing();
+    const smoothing = Number((event.target as HTMLInputElement).value);
+    this.prefs.smoothing = smoothing;
     this.savePrefs();
-    this.scheduleRender();
+    this.updateSelected({ smoothing });
   }
 
   onKeepCornersChange(event: Event): void {
-    this.keepCorners.set((event.target as HTMLInputElement).checked);
-    this.prefs.keepCorners = this.keepCorners();
+    const keepCorners = (event.target as HTMLInputElement).checked;
+    this.prefs.keepCorners = keepCorners;
     this.savePrefs();
-    this.scheduleRender();
+    this.updateSelected({ keepCorners });
   }
 
   onFillHolesChange(event: Event): void {
-    this.fillHoles.set((event.target as HTMLInputElement).checked);
-    this.prefs.fillHoles = this.fillHoles();
+    const fillHoles = (event.target as HTMLInputElement).checked;
+    this.prefs.fillHoles = fillHoles;
     this.savePrefs();
-    this.scheduleRender();
+    this.updateSelected({ fillHoles });
   }
 
   // ---------- ferramentas sobre a peça (fundo e borracha) ----------
@@ -1334,7 +1398,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
       item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
-      this.smoothing(), this.keepCorners(), this.fillHoles(), largura,
+      item.smoothing, item.keepCorners, item.fillHoles, largura,
     ]);
     if (quality === 'full') return this.buildPiece(item, largura);
     const cached = this.pieceCache.get(item.id);
@@ -1393,11 +1457,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       // tudo em mm vezes o ppm DESTA peça, pra a prévia (que trabalha numa
       // escala menor) suavizar na mesma medida que a exportação
       const paths = traceCutPaths(canvas, {
-        fillHoles: this.fillHoles(),
-        smoothSigma: this.smoothing() > 0
-          ? Math.max(MIN_SMOOTH_PX, smoothingSigmaMm(this.smoothing()) * ppm)
+        fillHoles: item.fillHoles,
+        smoothSigma: item.smoothing > 0
+          ? Math.max(MIN_SMOOTH_PX, smoothingSigmaMm(item.smoothing) * ppm)
           : 0,
-        cornerAngle: this.keepCorners() ? CORNER_ANGLE : 0,
+        cornerAngle: item.keepCorners ? CORNER_ANGLE : 0,
         simplifyEpsilon: Math.max(0.05, ppm * SIMPLIFY_MM),
         minArea: Math.max(16, ppm * ppm), // descarta pedaços menores que ~1 mm²
       });
@@ -1677,10 +1741,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private serialize(): string {
     return JSON.stringify({
-      version: 2,
-      smoothing: this.smoothing(),
-      keepCorners: this.keepCorners(),
-      fillHoles: this.fillHoles(),
+      version: 3,
       sheetSize: this.sheetSize(),
       orientation: this.orientation(),
       spacingMm: this.spacingMm(),
@@ -1698,6 +1759,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         mirrored: i.mirrored,
         copies: i.copies,
         outerOnly: i.outerOnly,
+        smoothing: i.smoothing,
+        keepCorners: i.keepCorners,
+        fillHoles: i.fillHoles,
       })),
       // O molde entra no mesmo projeto: um documento do Editor de Imagens tem todos os modos.
       molde: this.templates.serialize(),
@@ -1747,10 +1811,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.images.set([]);
       this.pieceCache.clear();
       this.selectedId.set(null);
-      if (data.smoothing !== undefined) this.smoothing.set(data.smoothing);
-      // projeto salvo antes dos cantos vivos não traz o campo: liga por padrão
-      this.keepCorners.set(data.keepCorners ?? true);
-      if (data.fillHoles !== undefined) this.fillHoles.set(data.fillHoles);
+      // Até a versão 2 o corte era um ajuste só, valendo pra folha inteira;
+      // agora ele mora em cada imagem, e o valor antigo vira o padrão delas.
+      const cutLegado: Partial<ImportedImage> = {
+        smoothing: data.smoothing ?? this.prefs.smoothing,
+        keepCorners: data.keepCorners ?? true,
+        fillHoles: data.fillHoles ?? this.prefs.fillHoles,
+      };
       if (data.sheetSize) this.sheetSize.set(data.sheetSize);
       if (data.orientation) this.orientation.set(data.orientation);
       if (data.spacingMm !== undefined) this.spacingMm.set(data.spacingMm);
@@ -1758,7 +1825,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       for (const stored of data.images ?? []) {
         const { name, original, ...rest } = stored;
         const img = await loadImage(original);
-        this.addImage(name ?? 'imagem', img, { ...rest, originalDataUrl: original });
+        this.addImage(name ?? 'imagem', img, { ...cutLegado, ...rest, originalDataUrl: original });
       }
 
       // Projetos salvos antes do modo molde (version 1) simplesmente não têm a seção.
