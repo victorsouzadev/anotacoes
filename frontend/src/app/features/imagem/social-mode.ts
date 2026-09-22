@@ -15,6 +15,7 @@ import {
 } from './social-model';
 import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale } from './social-render';
 import { sharpenRgba } from './sharpen';
+import { melhorarAutomaticamente } from './auto';
 import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { downloadBlob, loadImageElement } from './svg-template';
@@ -98,6 +99,24 @@ const MIN_SCALE = 0.2;
 const MAX_SCALE = 6;
 /** Teto de pixels do raster de exportação: acima disso o canvas estoura em navegador modesto. */
 const MAX_EXPORT_PIXELS = 40_000_000;
+
+/** Conta em uma frase o que a melhoria automática mexeu — e diz quando não
+ * mexeu em quase nada, que também é informação. */
+function descreverAuto(auto: ReturnType<typeof melhorarAutomaticamente>): string {
+  const feito: string[] = [];
+  if (auto.adjust.contrast >= 108) feito.push('abriu a faixa tonal');
+  if (auto.adjust.brightness >= 106) feito.push('clareou');
+  else if (auto.adjust.brightness <= 94) feito.push('escureceu');
+  if (auto.diagnostico.dominante === 'quente') feito.push('tirou a dominante amarelada');
+  if (auto.diagnostico.dominante === 'fria') feito.push('tirou a dominante azulada');
+  if (auto.denoise > 0) feito.push('limpou o grão');
+  feito.push('devolveu a nitidez que a redução come');
+
+  const lista = feito.length > 1
+    ? `${feito.slice(0, -1).join(', ')} e ${feito[feito.length - 1]}`
+    : feito[0];
+  return `Pronto: ${lista}.`;
+}
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -756,6 +775,8 @@ export class SocialModeComponent {
   /** Em qual tentativa está, quando a GPU do serviço obriga a encolher. */
   readonly tentativa = signal(1);
   readonly upscaleErro = signal('');
+  /** O que a melhoria automática fez da última vez, em uma frase. */
+  readonly autoResumo = signal('');
 
   readonly error = signal('');
   readonly status = signal('');
@@ -1080,6 +1101,55 @@ export class SocialModeComponent {
         bgMode: 'cor', bgColor: frame.bgColor,
       });
     }
+  }
+
+  /** Mede a foto e escreve os ajustes. É um passo de histórico como qualquer
+   * outro: Ctrl+Z desfaz, e "Antes" compara com o original. */
+  melhorarAuto(): void {
+    const photo = this.image();
+    if (!photo) return;
+
+    const dados = this.amostraParaAnalise(photo);
+    if (!dados) return;
+
+    // Quanto a foto encolhe até o tamanho do post: é o que define a nitidez a
+    // devolver, porque é a redução que come o micro-contraste.
+    const source = sourceOf(photo);
+    const r = frameRect(
+      source.width, source.height, this.exportW(), this.exportH(),
+      this.fit(), this.scale(), 0, 0,
+    );
+    const reducao = r.w > 0 ? source.width / r.w : 1;
+
+    const auto = melhorarAutomaticamente(dados.pixels, dados.width, dados.height, reducao);
+    this.adjust.set(auto.adjust);
+    this.preset.set('original');
+    this.denoise.set(auto.denoise);
+    this.sharpen.set(auto.sharpen);
+    this.autoResumo.set(descreverAuto(auto));
+    this.commit();
+  }
+
+  /** Pixels para medir. Foto grande é analisada por um recorte do meio em
+   * resolução nativa, e não reduzida: reduzir faria a média do grão e o ruído
+   * medido sairia menor do que é. */
+  private amostraParaAnalise(photo: PhotoSource): { pixels: Uint8ClampedArray; width: number; height: number } | null {
+    const source = sourceOf(photo);
+    const maxLado = 2000;
+    const w = Math.min(source.width, maxLado);
+    const h = Math.min(source.height, maxLado);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(
+      source.image,
+      Math.round((source.width - w) / 2), Math.round((source.height - h) / 2), w, h,
+      0, 0, w, h,
+    );
+    const data = ctx.getImageData(0, 0, w, h);
+    return { pixels: data.data, width: w, height: h };
   }
 
   /** Manda a foto de trabalho pro serviço de ampliação e troca pela que voltar.
@@ -1437,6 +1507,7 @@ export class SocialModeComponent {
   resetAdjust(): void {
     this.adjust.set({ ...NEUTRAL });
     this.preset.set('original');
+    this.autoResumo.set('');
     this.commit();
   }
 
