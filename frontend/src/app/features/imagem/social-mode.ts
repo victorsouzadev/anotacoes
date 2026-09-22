@@ -236,7 +236,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
             </button>
             <p class="sm-note">
               @if (ampliando()) {
-                A foto foi pro serviço de ampliação; costuma levar alguns segundos.
+                @if (tentativa() > 1) {
+                  A GPU do serviço estava cheia — tentando de novo com a foto menor
+                  ({{ tentativa() }}ª tentativa).
+                } @else {
+                  A foto foi pro serviço de ampliação; costuma levar alguns segundos.
+                }
               } @else if (upscaleErro()) {
                 <span class="sm-warn">{{ upscaleErro() }}</span>
               } @else if (ampliacaoUtil()) {
@@ -748,6 +753,8 @@ export class SocialModeComponent {
 
   readonly upscale = inject(ImageUpscaleService);
   readonly ampliando = signal(false);
+  /** Em qual tentativa está, quando a GPU do serviço obriga a encolher. */
+  readonly tentativa = signal(1);
   readonly upscaleErro = signal('');
 
   readonly error = signal('');
@@ -1081,15 +1088,22 @@ export class SocialModeComponent {
     const photo = this.image();
     if (!photo || this.ampliando() || !this.ampliacaoUtil()) return;
     this.ampliando.set(true);
+    this.tentativa.set(1);
     this.upscaleErro.set('');
     try {
       // O modelo roda numa GPU e recusa foto acima de ~2 megapixels. Reduzir
       // aqui é melhor que descobrir isso depois do upload — e não custa
       // resolução, porque só chega aqui foto que precisa de MAIS pixel.
       const source = sourceOf(photo);
-      const cabe = fitWithinPixels(source.width, source.height, this.upscale.maxPixelsEntrada());
-      const origem = stepDownscale(source, cabe.width, cabe.height).toDataURL('image/jpeg', 0.95);
-      const ampliada = await this.upscale.ampliar(origem, 2);
+      const ampliada = await this.upscale.ampliarEncolhendo(
+        (maxPixels) => {
+          const cabe = fitWithinPixels(source.width, source.height, maxPixels);
+          return stepDownscale(source, cabe.width, cabe.height).toDataURL('image/jpeg', 0.95);
+        },
+        this.upscale.maxPixelsEntrada(),
+        2,
+        (tentativa) => this.tentativa.set(tentativa),
+      );
       const img = await loadImageElement(ampliada);
       this.store.replacePhoto(img, ampliada, 'image/png');
     } catch (e) {

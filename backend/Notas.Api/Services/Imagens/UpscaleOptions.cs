@@ -27,9 +27,13 @@ public class UpscaleOptions
     public int MaxEscala { get; set; } = 4;
 
     /// <summary>
-    /// Teto de pixels da imagem de ENTRADA. O modelo roda numa GPU T4 e recusa
-    /// acima de 2.096.704 pixels — e a recusa vem só depois de a foto subir. O
-    /// cliente reduz antes de enviar; este valor existe pra ele saber até quanto.
+    /// Teto de pixels da imagem de ENTRADA.
+    ///
+    /// O modelo declara aceitar 2.096.704 pixels, mas esse número é teórico: a
+    /// GPU é compartilhada, e uma execução que caiba sozinha estoura quando há
+    /// outra em cima ("CUDA out of memory… 3.81 GiB is free" com 14,56 GiB de
+    /// placa). Daí o teto conservador — e daí o cliente reduzir e tentar de novo
+    /// quando mesmo assim faltar memória.
     /// </summary>
-    public int MaxInputPixels { get; set; } = 2_000_000;
+    public int MaxInputPixels { get; set; } = 1_200_000;
 }

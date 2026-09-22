@@ -83,7 +83,7 @@ public class ReplicateUpscaler : IImageUpscaler
             ?? throw new UpscaleIndisponivelException("Resposta vazia do serviço de ampliação.");
         predicao = await AguardarAsync(predicao, ct);
 
-        var url = UrlDaSaida(predicao) ?? throw new UpscaleIndisponivelException(Explicar(predicao.Error));
+        var url = UrlDaSaida(predicao) ?? throw Falha(predicao.Error);
 
         return await BaixarAsync(url, ct);
     }
@@ -149,20 +149,38 @@ public class ReplicateUpscaler : IImageUpscaler
     }
 
     /// <summary>
-    /// Traduz a falha do modelo. A de longe mais comum é a foto passar do que
-    /// cabe na GPU — e o texto cru ("total number of pixels … greater than the
-    /// max size that fits in GPU memory") não diz ao usuário o que fazer.
+    /// Traduz a falha do modelo e diz se vale tentar de novo com a foto menor.
+    /// São duas falhas de tamanho, e elas são diferentes:
+    ///
+    /// - o limite declarado do modelo ("greater than the max size that fits in
+    ///   GPU memory") é fixo e a recusa é imediata;
+    /// - a falta de memória de verdade ("CUDA out of memory") depende de quem
+    ///   mais está na mesma GPU naquele instante, então a mesma foto pode passar
+    ///   daqui a pouco — e passa quase sempre se for menor.
     /// </summary>
-    private static string Explicar(string? erro)
+    private static UpscaleIndisponivelException Falha(string? erro)
     {
-        if (string.IsNullOrWhiteSpace(erro)) return "A ampliação não devolveu imagem.";
+        if (string.IsNullOrWhiteSpace(erro))
+            return new UpscaleIndisponivelException("A ampliação não devolveu imagem.");
+
+        if (erro.Contains("out of memory", StringComparison.OrdinalIgnoreCase))
+        {
+            return new UpscaleIndisponivelException(
+                "A GPU do serviço ficou sem memória para esta foto. O tamanho que cabe varia conforme "
+                + "quem mais está usando o serviço no momento — tentando de novo com a foto menor.",
+                tentarMenor: true);
+        }
+
         if (erro.Contains("fits in GPU memory", StringComparison.OrdinalIgnoreCase)
             || erro.Contains("greater than the max size", StringComparison.OrdinalIgnoreCase))
         {
-            return "Essa foto é grande demais para o ampliador (o limite é cerca de 2 megapixels). "
-                + "Numa foto desse tamanho, porém, ampliar não acrescenta nada: ela já tem pixel de sobra.";
+            return new UpscaleIndisponivelException(
+                "Essa foto passa do tamanho que o ampliador aceita. Numa foto desse tamanho, porém, "
+                + "ampliar não acrescenta nada: ela já tem pixel de sobra.",
+                tentarMenor: true);
         }
-        return $"A ampliação falhou: {erro}";
+
+        return new UpscaleIndisponivelException($"A ampliação falhou: {erro}");
     }
 
     private static string Resumo(string texto) => texto.Length <= 300 ? texto : texto[..300];

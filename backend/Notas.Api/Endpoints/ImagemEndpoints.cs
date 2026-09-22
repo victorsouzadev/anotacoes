@@ -97,7 +97,8 @@ public static class ImagemEndpoints
             catch (UpscaleIndisponivelException ex)
             {
                 // Falha esperada e com texto pronto pro usuário: 502, não 500.
-                return Results.Json(new { error = ex.Message }, statusCode: 502);
+                // `tentarMenor` diz ao cliente que reenviar reduzido tem chance.
+                return Results.Json(new { error = ex.Message, tentarMenor = ex.TentarMenor }, statusCode: 502);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

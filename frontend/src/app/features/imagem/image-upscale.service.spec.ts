@@ -65,3 +65,66 @@ describe('ampliação por IA', () => {
       .rejects.toThrow('Não consegui ampliar a foto agora.');
   });
 });
+
+describe('encolher e tentar de novo', () => {
+  /** Serviço com um http que falha as `falhas` primeiras vezes com OOM. */
+  function comFalhasDeMemoria(falhas: number) {
+    const enviados: number[] = [];
+    const service = criar({
+      post: (_url: string, corpo: { imagem: string }) => {
+        enviados.push(Number(corpo.imagem));
+        if (enviados.length <= falhas) {
+          return throwError(() => new HttpErrorResponse({
+            status: 502,
+            error: { error: 'A GPU do serviço ficou sem memória para esta foto.', tentarMenor: true },
+          }));
+        }
+        return of({ imagem: 'data:image/png;base64,PRONTA' });
+      },
+    });
+    // a "imagem" é o próprio orçamento, pra o teste ver quanto foi pedido
+    const gerar = (maxPixels: number) => String(maxPixels);
+    return { service, gerar, enviados };
+  }
+
+  it('insiste menor quando a GPU do serviço está cheia', async () => {
+    const { service, gerar, enviados } = comFalhasDeMemoria(1);
+    const r = await service.ampliarEncolhendo(gerar, 1_200_000, 2);
+
+    expect(r).toBe('data:image/png;base64,PRONTA');
+    expect(enviados.length).toBe(2);
+    // a segunda tentativa manda menos pixel que a primeira
+    expect(enviados[1]).toBeLessThan(enviados[0]);
+    expect(enviados[1]).toBeGreaterThan(enviados[0] * 0.5);
+  });
+
+  it('avisa a cada nova tentativa', async () => {
+    const { service, gerar } = comFalhasDeMemoria(2);
+    const tentativas: number[] = [];
+    await service.ampliarEncolhendo(gerar, 1_200_000, 2, (t) => tentativas.push(t));
+    expect(tentativas).toEqual([2, 3]);
+  });
+
+  it('desiste depois de três tentativas, com o motivo', async () => {
+    const { service, gerar, enviados } = comFalhasDeMemoria(99);
+    await expect(service.ampliarEncolhendo(gerar, 1_200_000, 2)).rejects.toThrow('sem memória');
+    // três no total: insistir mais deixaria a foto pequena demais pra valer a pena
+    expect(enviados.length).toBe(3);
+  });
+
+  it('erro que não é de tamanho não vira retentativa', async () => {
+    let chamadas = 0;
+    const service = criar({
+      post: () => {
+        chamadas++;
+        return throwError(() => new HttpErrorResponse({
+          status: 502,
+          error: { error: 'A chave de ampliação foi recusada pelo serviço.', tentarMenor: false },
+        }));
+      },
+    });
+
+    await expect(service.ampliarEncolhendo(() => 'x', 1_200_000, 2)).rejects.toThrow('recusada');
+    expect(chamadas).toBe(1);
+  });
+});

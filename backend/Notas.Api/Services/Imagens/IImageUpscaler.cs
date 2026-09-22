@@ -15,4 +15,12 @@ public record ImagemAmpliada(byte[] Conteudo, string ContentType);
 /// Falha que o usuário precisa ler: sem chave, arquivo grande demais, serviço
 /// fora do ar ou demorando além do teto.
 /// </summary>
-public class UpscaleIndisponivelException(string mensagem) : Exception(mensagem);
+/// <param name="tentarMenor">
+/// Verdadeiro quando a mesma foto, menor, tem chance de passar — é o caso da
+/// GPU sem memória, que depende de quem mais está usando o serviço na hora.
+/// Insistir igual só repetiria a falha; insistir menor costuma resolver.
+/// </param>
+public class UpscaleIndisponivelException(string mensagem, bool tentarMenor = false) : Exception(mensagem)
+{
+    public bool TentarMenor { get; } = tentarMenor;
+}

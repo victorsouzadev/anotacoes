@@ -171,8 +171,40 @@ public class UpscaleErroDoModeloTests
             () => Criar(handler).AmpliarAsync([9], "image/png", 2));
 
         // O usuário precisa saber o que fazer, não ler o traço do modelo.
-        Assert.Contains("2 megapixels", erro.Message);
+        Assert.Contains("passa do tamanho", erro.Message);
         Assert.DoesNotContain("GPU memory", erro.Message);
+    }
+
+    [Fact]
+    public async Task GPU_sem_memoria_pede_pra_tentar_menor()
+    {
+        // Texto real: a GPU é compartilhada, e o que cabe muda conforme a fila.
+        var handler = new HandlerDeUpscale().Responde(HttpStatusCode.OK, new
+        {
+            status = "failed",
+            error = "CUDA out of memory. Tried to allocate 3.96 GiB. GPU 0 has a total capacity of "
+                + "14.56 GiB of which 3.81 GiB is free.",
+        });
+
+        var erro = await Assert.ThrowsAsync<UpscaleIndisponivelException>(
+            () => Criar(handler).AmpliarAsync([9], "image/png", 2));
+
+        // Sinaliza retentativa: a mesma foto menor costuma passar.
+        Assert.True(erro.TentarMenor);
+        Assert.Contains("sem memória", erro.Message);
+        Assert.DoesNotContain("CUDA", erro.Message);
+    }
+
+    [Fact]
+    public async Task Falha_que_nao_e_de_tamanho_nao_pede_retentativa()
+    {
+        var handler = new HandlerDeUpscale().Responde(HttpStatusCode.OK,
+            new { status = "failed", error = "modelo indisponível" });
+
+        var erro = await Assert.ThrowsAsync<UpscaleIndisponivelException>(
+            () => Criar(handler).AmpliarAsync([9], "image/png", 2));
+
+        Assert.False(erro.TentarMenor);
     }
 
     [Fact]
