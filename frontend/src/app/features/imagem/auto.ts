@@ -11,6 +11,7 @@
  * ponto de partida, não uma caixa-preta. */
 
 import { Adjustments, NEUTRAL } from './social-model';
+import { mapaDeLuz } from './light';
 
 export interface AutoResultado {
   adjust: Adjustments;
@@ -21,6 +22,9 @@ export interface AutoResultado {
     faixaUsada: number;
     dominante: 'quente' | 'fria' | 'neutra';
     ruido: number;
+    /** Fração da cena que está na sombra e fração que está no alto. */
+    naSombra: number;
+    noAlto: number;
   };
 }
 
@@ -116,7 +120,7 @@ export function melhorarAutomaticamente(
   if (!n) {
     return {
       adjust: { ...NEUTRAL }, denoise: 0, sharpen: 0,
-      diagnostico: { faixaUsada: 1, dominante: 'neutra', ruido: 0 },
+      diagnostico: { faixaUsada: 1, dominante: 'neutra', ruido: 0, naSombra: 0, noAlto: 0 },
     };
   }
 
@@ -210,6 +214,28 @@ export function melhorarAutomaticamente(
   const temperatura = clamp(Math.round(-desvio * 50), -16, 16) || 0;
   const dominante = desvio > 0.08 ? 'quente' : desvio < -0.08 ? 'fria' : 'neutra';
 
+  // --- iluminação: quanto da CENA está na sombra, e quanto está estourando ---
+  //
+  // Medido no mapa de luz, e não no histograma, de propósito: o histograma diz
+  // quantos pixels são escuros, e uma foto de fundo preto tem muitos sem ter
+  // problema de luz nenhum. O mapa diz quantas REGIÕES ficaram na sombra, que é
+  // a pergunta certa — é a luz da cena que se quer consertar.
+  const mapa = mapaDeLuz(pixels, w, h);
+  let naSombra = 0;
+  let noAlto = 0;
+  for (const luz of mapa.dados) {
+    if (luz < 0.26) naSombra++;
+    else if (luz > 0.86) noAlto++;
+  }
+  naSombra /= mapa.dados.length;
+  noAlto /= mapa.dados.length;
+
+  // Abre a sombra em proporção ao tamanho dela, com teto: passar disso vira
+  // aquele aspecto chapado de foto "tratada".
+  const sombras = naSombra < 0.04 ? 0 : clamp(Math.round(naSombra * 110), 12, 55);
+  // Segurar as luzes só vale quando há área clara de verdade se perdendo.
+  const luzes = noAlto < 0.03 ? 0 : clamp(Math.round(noAlto * 90), 10, 45);
+
   // --- ruído e nitidez ---
   const ruido = estimarRuido(pixels, w, h);
   // Abaixo de 2 níveis não há grão que justifique limpar.
@@ -231,9 +257,11 @@ export function melhorarAutomaticamente(
       // Saturação sobe pouco, e só quando a foto está lavada.
       saturation: clamp(Math.round(100 + (1 - faixaUsada) * 25), 100, 118),
       temperature: temperatura,
+      shadows: sombras,
+      highlights: luzes,
     },
     denoise,
     sharpen,
-    diagnostico: { faixaUsada, dominante, ruido },
+    diagnostico: { faixaUsada, dominante, ruido, naSombra, noAlto },
   };
 }

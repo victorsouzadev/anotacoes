@@ -4,6 +4,7 @@
 
 import { Adjustments, BgMode, FitMode, frameRect } from './social-model';
 import { applyLook, isNeutralLook } from './color';
+import { aplicarLuz } from './light';
 
 export interface FrameOptions {
   adjust: Adjustments;
@@ -111,6 +112,11 @@ export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptio
   // dithering entra, pra "Original" ser mesmo o arquivo original.
   if (!isNeutralLook(a)) {
     const data = ctx.getImageData(0, 0, w, h);
+    // Sombras e luzes primeiro: elas consertam a iluminação da cena, e cor e
+    // acabamento devem ser decididos sobre a foto já iluminada — é a ordem de
+    // quem edita à mão, e a que evita esticar contraste em cima de uma sombra
+    // que ia ser aberta em seguida.
+    aplicarLuz(data.data, w, h, a.shadows, a.highlights);
     applyLook(data.data, w, h, a);
     ctx.putImageData(data, 0, 0);
   }

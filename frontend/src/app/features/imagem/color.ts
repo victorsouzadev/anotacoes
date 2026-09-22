@@ -94,7 +94,9 @@ const NOISE = (() => {
   return table;
 })();
 
-/** Nada a fazer? O desfoque não conta: ele já foi aplicado no desenho. */
+/** Nada a fazer? O desfoque não conta: ele já foi aplicado no desenho.
+ * Sombras e luzes contam — não são feitas aqui, mas é esta resposta que decide
+ * se a imagem chega a ser lida de volta do canvas. */
 export function isNeutralLook(a: Adjustments): boolean {
   return (Object.keys(NEUTRAL) as (keyof Adjustments)[])
     .every((k) => k === 'blur' || a[k] === NEUTRAL[k]);

@@ -104,6 +104,8 @@ const MAX_EXPORT_PIXELS = 40_000_000;
  * mexeu em quase nada, que também é informação. */
 function descreverAuto(auto: ReturnType<typeof melhorarAutomaticamente>): string {
   const feito: string[] = [];
+  if (auto.adjust.shadows > 0) feito.push('abriu as sombras');
+  if (auto.adjust.highlights > 0) feito.push('segurou as luzes altas');
   if (auto.adjust.contrast >= 108) feito.push('abriu a faixa tonal');
   if (auto.adjust.brightness >= 106) feito.push('clareou');
   else if (auto.adjust.brightness <= 94) feito.push('escureceu');
@@ -723,6 +725,8 @@ export class SocialModeComponent {
     { key: 'contrast', label: 'Contraste', min: 50, max: 160 },
     { key: 'saturation', label: 'Saturação', min: 0, max: 200 },
     { key: 'temperature', label: 'Temperatura', min: -100, max: 100 },
+    { key: 'shadows', label: 'Sombras', min: 0, max: 100 },
+    { key: 'highlights', label: 'Luzes', min: 0, max: 100 },
   ];
 
   /** Os finos, atrás do botão de avançados. */

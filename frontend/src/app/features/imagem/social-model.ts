@@ -32,6 +32,10 @@ export interface Adjustments {
   hue: number;
   /** -100 (frio/azulado) a 100 (quente/alaranjado). */
   temperature: number;
+  /** 0..100 — clareia o que está na sombra, sem tocar no que já está claro. */
+  shadows: number;
+  /** 0..100 — segura o que está indo pro branco. */
+  highlights: number;
   /** 0..100 — quanto a imagem desbota pro branco (efeito "fade"). */
   fade: number;
   /** 0..100 — escurecimento das bordas. */
@@ -46,7 +50,8 @@ export interface Adjustments {
 
 export const NEUTRAL: Adjustments = {
   brightness: 100, contrast: 100, saturation: 100, hue: 0,
-  temperature: 0, fade: 0, vignette: 0, sepia: 0, grayscale: 0, blur: 0,
+  temperature: 0, shadows: 0, highlights: 0,
+  fade: 0, vignette: 0, sepia: 0, grayscale: 0, blur: 0,
 };
 
 export interface FilterPreset {
