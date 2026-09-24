@@ -46,6 +46,38 @@ interface LayerBase {
   groupId: string | null;
   /** Entra no "SVG de corte" (só as linhas que a máquina recorta). */
   cut: boolean;
+  /** Degradê ou padrão no lugar da cor sólida do preenchimento. */
+  paint?: FillPaint | null;
+  /** Contornos em volta e sombra, desenhados atrás da camada. */
+  effects?: LayerEffects | null;
+  /** Recortada pela forma desta camada (máscara de recorte). */
+  clipBy?: string | null;
+  /** É a forma de uma máscara de recorte: não pinta, só recorta. */
+  mask?: boolean;
+}
+
+export interface GradientStop {
+  offset: number;
+  color: string;
+}
+
+export type PatternKind = 'bolinhas' | 'listras' | 'xadrez' | 'grade' | 'coracoes';
+
+export type FillPaint =
+  | { type: 'linear' | 'radial'; stops: GradientStop[]; angle: number }
+  | { type: 'pattern'; pattern: PatternKind; color: string; bg: string | null; sizeMm: number; angle: number };
+
+export interface EffectStroke {
+  color: string;
+  widthMm: number;
+}
+
+export interface LayerEffects {
+  /** Contorno colado na camada. */
+  outline?: EffectStroke | null;
+  /** Segundo contorno, em volta do primeiro (o "contorno duplo" de topo de bolo). */
+  outline2?: EffectStroke | null;
+  shadow?: { color: string; dx: number; dy: number; opacity: number } | null;
 }
 
 export interface PathLayer extends LayerBase {

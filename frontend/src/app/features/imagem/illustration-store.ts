@@ -6,7 +6,7 @@ import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { DEFAULT_FONT_ID, FontLibrary, UploadedFont } from './fonts';
 import {
-  Bounds, ImageLayer, Layer, PathLayer, Point, ShapeLayer, ShapeType, TextLayer, VPath,
+  Bounds, FillPaint, ImageLayer, Layer, LayerEffects, PathLayer, Point, ShapeLayer, ShapeType, TextLayer, VPath,
   applyMatrix, boundsCenter, boundsCorners, centerPaths, growBounds, layerBase, layerMatrix, normalizeHex,
   pathsBounds, pathsToD, reversePath, round, shapePaths, topFraction, transformPaths, unionBounds,
 } from './illustration-model';
@@ -71,6 +71,12 @@ function compactLayer(l: Layer): Layer {
   return l;
 }
 export const CUT_COLOR = '#e53935';
+
+/** Cópias de camadas mascaradas apontam pra cópia da máscara, não pra original. */
+function remapClips(originals: Layer[], copies: Layer[]): Layer[] {
+  const ids = new Map(originals.map((l, i) => [l.id, copies[i].id]));
+  return copies.map((c) => (c.clipBy ? ({ ...c, clipBy: ids.get(c.clipBy) ?? null } as Layer) : c));
+}
 
 function clone<T>(v: T): T {
   return structuredClone(v);
@@ -370,7 +376,10 @@ export class IllustrationStore {
     if (!ids.length) return;
     const set = new Set(ids);
     this.record();
-    this.layers.update((list) => list.filter((l) => !set.has(l.id)));
+    // Máscara apagada solta o que ela recortava.
+    this.layers.update((list) => list
+      .filter((l) => !set.has(l.id))
+      .map((l) => (l.clipBy && set.has(l.clipBy) ? ({ ...l, clipBy: null } as Layer) : l)));
     this.selectedIds.update((sel) => sel.filter((id) => !set.has(id)));
     this.nodeSel.set(null);
     if (this.vecRefId() && set.has(this.vecRefId()!)) this.vecRefId.set(null);
@@ -385,7 +394,7 @@ export class IllustrationStore {
         const groupId = l.groupId ? (groups.get(l.groupId) ?? groups.set(l.groupId, uuid()).get(l.groupId)!) : null;
         return { ...clone(l), id: uuid(), name: `${l.name} (cópia)`, x: l.x + 5, y: l.y + 5, groupId } as Layer;
       });
-    this.addLayers(copies);
+    this.addLayers(remapClips(this.layers().filter((l) => set.has(l.id)), copies));
   }
 
   /** Clique numa camada seleciona o grupo inteiro dela. */
@@ -634,7 +643,7 @@ export class IllustrationStore {
       const groupId = l.groupId ? (groups.get(l.groupId) ?? groups.set(l.groupId, uuid()).get(l.groupId)!) : null;
       return { ...clone(l), id: uuid(), x: l.x + off, y: l.y + off, groupId } as Layer;
     });
-    this.addLayers(copies);
+    this.addLayers(remapClips(this.clipboard, copies));
   }
 
   // ---------- organizar ----------
@@ -755,6 +764,71 @@ export class IllustrationStore {
     return true;
   }
 
+  // ---------- pintura especial, efeitos e máscara ----------
+
+  /** Degradê/padrão (ou `null`, de volta à cor sólida) na seleção. */
+  setFillPaint(paint: FillPaint | null, live = false): void {
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (!ids.length) return;
+    const apply = (): void => this.patchMany(ids, () => ({ paint }), false);
+    if (live) this.live(apply);
+    else {
+      this.record();
+      apply();
+    }
+  }
+
+  setEffects(patch: Partial<LayerEffects>, live = false): void {
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (!ids.length) return;
+    const apply = (): void => this.patchMany(ids, (l) => {
+      const next = { ...(l.effects ?? {}), ...patch };
+      const empty = !next.outline && !next.outline2 && !next.shadow;
+      return { effects: empty ? null : next };
+    }, false);
+    if (live) this.live(apply);
+    else {
+      this.record();
+      apply();
+    }
+  }
+
+  /** A máscara de recorte possível agora: a camada de cima da seleção recorta
+   * as de baixo (como no Illustrator). */
+  clipCandidate = computed(() => {
+    const sel = this.selection();
+    if (sel.length < 2) return null;
+    const order = new Map(this.layers().map((l, i) => [l.id, i]));
+    const top = [...sel].sort((a, b) => order.get(b.id)! - order.get(a.id)!)[0];
+    return top.kind === 'imagem' || top.mask ? null : top;
+  });
+
+  canReleaseClip = computed(() => this.selection().some((l) => l.mask || l.clipBy));
+
+  makeClip(): boolean {
+    const mask = this.clipCandidate();
+    if (!mask) return false;
+    const others = this.selection().filter((l) => l.id !== mask.id).map((l) => l.id);
+    const g = uuid();
+    this.record();
+    this.patchMany([mask.id, ...others], (l) => (l.id === mask.id ? { mask: true, clipBy: null, groupId: g } : { clipBy: mask.id, groupId: g }), false);
+    return true;
+  }
+
+  /** Solta a máscara: a forma volta a pintar e o conteúdo aparece inteiro. */
+  releaseClip(): void {
+    const sel = this.selection();
+    const masks = new Set(sel.filter((l) => l.mask).map((l) => l.id));
+    for (const l of sel) if (l.clipBy) masks.add(l.clipBy);
+    if (!masks.size) return;
+    this.record();
+    this.layers.update((list) => list.map((l) => {
+      if (masks.has(l.id)) return { ...l, mask: false, groupId: null } as Layer;
+      if (l.clipBy && masks.has(l.clipBy)) return { ...l, clipBy: null, groupId: null } as Layer;
+      return l;
+    }));
+  }
+
   /** Texto e forma viram caminho (é o que permite editar nós). */
   convertToPath(ids: string[]): void {
     const set = new Set(ids);
@@ -764,9 +838,9 @@ export class IllustrationStore {
     this.layers.update((list) => list.map((l) => {
       if (!set.has(l.id) || (l.kind !== 'texto' && l.kind !== 'forma')) return l;
       const paths = this.localPaths(l);
-      const { id, name, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut } = l;
+      const { id, name, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask } = l;
       const label = l.kind === 'texto' ? `“${l.text.split('\n')[0].slice(0, 24)}”` : name;
-      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, kind: 'caminho', paths } as PathLayer;
+      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, kind: 'caminho', paths } as PathLayer;
     }));
   }
 
@@ -777,9 +851,9 @@ export class IllustrationStore {
     return pieces.map((paths, i) => {
       const c = centerPaths(paths);
       const [x, y] = applyMatrix(m, [c.cx, c.cy]);
-      const { rotation, scaleX, scaleY, opacity, fill, stroke, strokeWidth, cut } = l;
+      const { rotation, scaleX, scaleY, opacity, fill, stroke, strokeWidth, cut, paint, effects } = l;
       return {
-        ...layerBase(uuid(), names[i]), rotation, scaleX, scaleY, opacity, fill, stroke, strokeWidth, cut,
+        ...layerBase(uuid(), names[i]), rotation, scaleX, scaleY, opacity, fill, stroke, strokeWidth, cut, paint, effects,
         kind: 'caminho', paths: c.paths, x, y,
       } as PathLayer;
     });

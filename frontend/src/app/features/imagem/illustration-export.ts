@@ -5,6 +5,8 @@
 import { FontLibrary, nearestWeight } from './fonts';
 import { IllustrationStore } from './illustration-store';
 import { Bounds, Layer, TextLayer, growBounds, layerMatrix, matrixAttr, pathsToD, round } from './illustration-model';
+import { clipDef, clipId, effectsPad, fillRef, paintDef, underlays } from './illustration-paint';
+import { booleanPaths } from './vector-ops';
 
 export interface SvgOptions {
   /** Só as linhas de corte (camadas marcadas, ou todo vetor se nenhuma for). */
@@ -25,9 +27,11 @@ function n(v: number): string {
   return String(round(v, 3));
 }
 
+const IDS = 'ile-';
+
 function paintAttrs(l: Layer): string {
-  const fill = l.fill ? `fill="${l.fill}"` : 'fill="none"';
-  const stroke = l.stroke && l.strokeWidth > 0
+  const fill = `fill="${fillRef(IDS, l)}"`;
+  const stroke = l.stroke && l.strokeWidth > 0 && !l.mask
     ? ` stroke="${l.stroke}" stroke-width="${n(l.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"`
     : '';
   const opacity = l.opacity < 1 ? ` opacity="${n(l.opacity)}"` : '';
@@ -118,48 +122,85 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
   let body = '';
   let fontCss = '';
 
+  const masks = new Map(layers.filter((l) => l.mask).map((l) => [l.id, l]));
+  let defs = '';
+
   if (options.cutOnly) {
-    const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem');
-    const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem');
+    const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem' && !l.mask);
+    const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem' && !l.mask);
     for (const l of cut) {
-      const d = pathsToD(store.worldPaths(l));
+      // Recortada por máscara: a lâmina corta só a parte que aparece.
+      const mask = l.clipBy ? masks.get(l.clipBy) : undefined;
+      const paths = mask
+        ? booleanPaths('intersecao', [
+          { paths: store.worldPaths(l), pad: l.stroke && l.strokeWidth > 0 ? l.strokeWidth / 2 : 0, strokeOnly: !l.fill && !l.paint },
+          { paths: store.worldPaths(mask), pad: 0, strokeOnly: false },
+        ])
+        : store.worldPaths(l);
+      const d = pathsToD(paths);
       if (d) body += `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
     }
   } else {
     const texts: TextLayer[] = [];
+    for (const m of masks.values()) defs += clipDef(IDS, m.id, pathsToD(store.worldPaths(m)));
     for (const l of layers) {
       if (options.skipCut && l.cut) continue;
+      if (l.mask) continue;
+      const clip = l.clipBy && masks.has(l.clipBy) ? ` clip-path="url(#${clipId(IDS, l.clipBy)})"` : '';
+      if (clip) body += `  <g${clip}>\n`;
       if (l.kind === 'imagem') {
         body += `  <image href="${l.src}" x="${n(-l.w / 2)}" y="${n(-l.h / 2)}" width="${n(l.w)}" height="${n(l.h)}" ` +
           `preserveAspectRatio="none" transform="${matrixAttr(layerMatrix(l))}"${l.opacity < 1 ? ` opacity="${n(l.opacity)}"` : ''} />\n`;
+        if (clip) body += `  </g>\n`;
         continue;
       }
-      if (l.kind === 'texto' && options.textAsText) {
+      defs += paintDef(IDS, l, layerMatrix(l));
+      const d = pathsToD(store.worldPaths(l));
+      for (const u of underlays(l)) {
+        if (!d) break;
+        const shift = u.dx || u.dy ? ` transform="translate(${n(u.dx)} ${n(u.dy)})"` : '';
+        const op = u.opacity * l.opacity;
+        body += `  <path d="${d}" fill-rule="evenodd" fill="${u.color}"` +
+          (u.widthMm > 0 ? ` stroke="${u.color}" stroke-width="${n(u.widthMm)}" stroke-linejoin="round" stroke-linecap="round"` : '') +
+          `${op < 1 ? ` opacity="${n(op)}"` : ''}${shift} />\n`;
+      }
+      if (l.kind === 'texto' && options.textAsText && !l.paint) {
         const el = textElement(store, l);
         if (el) {
           body += el;
           texts.push(l);
+          if (clip) body += `  </g>\n`;
           continue;
         }
       }
-      const d = pathsToD(store.worldPaths(l));
       if (d) body += `  <path id="${esc(l.name.replace(/[^\w-]+/g, '-'))}-${l.id.slice(0, 4)}" d="${d}" fill-rule="evenodd" ${paintAttrs(l)} />\n`;
+      if (clip) body += `  </g>\n`;
     }
     if (texts.length) fontCss = await fontFaceCss(store.fonts, texts);
   }
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(W)}mm" height="${n(H)}mm" viewBox="${n(b.minX)} ${n(b.minY)} ${n(W)} ${n(H)}">\n` +
-    fontCss + body + `</svg>\n`;
+    fontCss + (defs ? `<defs>${defs}</defs>\n` : '') + body + `</svg>\n`;
 }
 
 /** Caixa do que vai ser impresso (sem as linhas de corte). */
 export function contentBounds(store: IllustrationStore, skipCut: boolean): Bounds | null {
   let b: Bounds | null = null;
-  for (const l of store.layers()) {
-    if (!l.visible || (skipCut && l.cut)) continue;
-    const lb = store.worldBounds(l);
-    const pad = l.stroke && l.kind !== 'imagem' ? l.strokeWidth / 2 : 0;
+  const layers = store.layers();
+  for (const l of layers) {
+    if (!l.visible || (skipCut && l.cut) || l.mask) continue;
+    let lb = store.worldBounds(l);
+    const pad = Math.max(l.stroke && l.kind !== 'imagem' ? l.strokeWidth / 2 : 0, effectsPad(l));
+    const mask = l.clipBy ? layers.find((m) => m.id === l.clipBy && m.mask) : undefined;
+    if (mask) {
+      // o que passa da máscara não aparece, então não conta na caixa
+      const mb = store.worldBounds(mask);
+      lb = { minX: Math.max(lb.minX - pad, mb.minX), minY: Math.max(lb.minY - pad, mb.minY), maxX: Math.min(lb.maxX + pad, mb.maxX), maxY: Math.min(lb.maxY + pad, mb.maxY) };
+      if (lb.minX >= lb.maxX || lb.minY >= lb.maxY) continue;
+      b = growBounds(growBounds(b, [lb.minX, lb.minY]), [lb.maxX, lb.maxY]);
+      continue;
+    }
     b = growBounds(growBounds(b, [lb.minX - pad, lb.minY - pad]), [lb.maxX + pad, lb.maxY + pad]);
   }
   return b;

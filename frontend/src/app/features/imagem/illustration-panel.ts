@@ -8,6 +8,7 @@ import { pngBlobWithDpi } from './contour';
 import { nearestWeight } from './fonts';
 import { ALIGN_BUTTONS, PATHFINDER } from './illustration-controlbar';
 import { ModeBridge } from './mode-bridge';
+import { IlEffectsComponent } from './illustration-effects';
 import { buildSvg, canvasToBlob, contentBounds, rasterizeSvg } from './illustration-export';
 import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
@@ -56,7 +57,7 @@ function loadOpen(): Record<string, boolean> {
 @Component({
   selector: 'app-illustration-panel',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent, IlLayersComponent],
+  imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent, IlLayersComponent, IlEffectsComponent],
   encapsulation: ViewEncapsulation.None,
   host: { class: 'il-dock' },
   template: `
@@ -162,6 +163,8 @@ function loadOpen(): Record<string, boolean> {
             </section>
           }
 
+          <il-effects />
+
           @if (text(); as t) {
             <section class="il-sec" [class.il-closed]="closed('char')">
               <button type="button" class="il-sec-head" (click)="flip('char')"><il-icon name="chevron" [size]="12" /> Caractere</button>
@@ -191,6 +194,10 @@ function loadOpen(): Record<string, boolean> {
                 </div>
                 @if (t.curve === 'arco') {
                   <label class="il-range"><span>Curvatura</span><input type="range" min="-100" max="100" step="1" [value]="t.bend" (input)="liveText(t, { bend: +$any($event.target).value })" (change)="store.commitLive()" /><b>{{ t.bend }}%</b></label>
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [class.il-on]="t.bend === 100" data-tip="O texto dá a volta inteira, por cima" (click)="store.patch(t.id, { bend: 100 })">Círculo completo</button>
+                    <button type="button" class="il-btn il-grow" [class.il-on]="t.bend === -100" data-tip="Volta inteira, lido por baixo" (click)="store.patch(t.id, { bend: -100 })">Por baixo</button>
+                  </div>
                 }
                 @if (t.curve === 'caminho') {
                   <label class="il-range"><span>Início</span><input type="range" min="0" max="100" step="1" [value]="t.guideOffset * 100" (input)="liveText(t, { guideOffset: $any($event.target).value / 100 })" (change)="store.commitLive()" /><b>{{ (t.guideOffset * 100).toFixed(0) }}%</b></label>

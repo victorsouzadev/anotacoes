@@ -17,7 +17,8 @@ export type IlIconName =
   | 'node-smooth' | 'node-corner' | 'node-add' | 'node-delete'
   | 'chevron' | 'fit' | 'keyboard' | 'image' | 'x' | 'search' | 'upload' | 'magnet' | 'panels' | 'cut'
   | 'wand' | 'eraser' | 'split' | 'sheet' | 'slot' | 'photo-add' | 'compare' | 'filter' | 'sparkle' | 'sun'
-  | 'folder' | 'save' | 'rotate-left' | 'rotate-right' | 'cover' | 'contain' | 'reframe' | 'download' | 'file-new' | 'piece';
+  | 'folder' | 'save' | 'rotate-left' | 'rotate-right' | 'cover' | 'contain' | 'reframe' | 'download' | 'file-new' | 'piece'
+  | 'clip' | 'pencil' | 'vector-eraser' | 'grid' | 'guides' | 'templates';
 
 @Component({
   selector: 'il-icon',
@@ -100,6 +101,12 @@ export type IlIconName =
         @case ('magnet') { <path d="M4 3.5v6a6 6 0 0 0 12 0v-6h-3.5v6a2.5 2.5 0 0 1-5 0v-6z" /><path d="M4 7h3.5M12.5 7H16" /> }
         @case ('panels') { <rect x="2.5" y="3.5" width="15" height="13" rx="1" /><path d="M12.5 3.5v13" /><path d="M14.5 7h1.5M14.5 10h1.5" /> }
         @case ('wand') { <path d="M3 17L13 7" /><path d="M11.5 5.5l3 3" /><path d="M15 2.5v2M17.5 5H15.5M16.8 3.2l-1.3 1.3M6 3.5v2M5 4.5h2M16 12.5v2M15 13.5h2" /> }
+        @case ('clip') { <circle cx="10" cy="10" r="6.5" stroke-dasharray="2 1.6" /><rect x="6" y="6" width="8" height="8" rx="1" fill="currentColor" fill-opacity=".25" /> }
+        @case ('pencil') { <path d="M3.5 16.5l1-4L13 4l3 3-8.5 8.5z" /><path d="M11.5 5.5l3 3" /><path d="M3.5 16.5l3-1" /> }
+        @case ('vector-eraser') { <path d="M4 13.5l6.5-6.5 6 6-4.5 4.5H8z" fill="currentColor" fill-opacity=".2" /><path d="M7.2 10.3l6 6" /><circle cx="15.5" cy="4.5" r="2" /> }
+        @case ('grid') { <rect x="3" y="3" width="14" height="14" rx="1" /><path d="M7.7 3v14M12.3 3v14M3 7.7h14M3 12.3h14" /> }
+        @case ('guides') { <path d="M2.5 6.5h15M13.5 2.5v15" stroke-dasharray="2 1.5" /><rect x="5" y="9" width="6" height="6" rx=".8" /> }
+        @case ('templates') { <rect x="2.5" y="3" width="6.5" height="6" rx="1" /><rect x="11" y="3" width="6.5" height="6" rx="1" /><rect x="2.5" y="11" width="6.5" height="6" rx="1" /><path d="M14.25 11.5v5M11.75 14h5" /> }
         @case ('eraser') { <path d="M4 13.5l6.5-6.5 6 6-4.5 4.5H8z" /><path d="M7.2 10.3l6 6" /><path d="M8 17.5h9" /> }
         @case ('split') { <rect x="2.5" y="3.5" width="6" height="6" rx="1" /><rect x="11.5" y="3.5" width="6" height="6" rx="1" /><rect x="7" y="12" width="6" height="5" rx="1" /><path d="M10 2v16" stroke-dasharray="1.5 1.8" /> }
         @case ('sheet') { <rect x="4" y="2.5" width="12" height="15" rx="1" /><rect x="6" y="5" width="3.5" height="3.5" /><rect x="10.5" y="5" width="3.5" height="3.5" /><rect x="6" y="10" width="3.5" height="3.5" /><rect x="10.5" y="10" width="3.5" height="3.5" /> }

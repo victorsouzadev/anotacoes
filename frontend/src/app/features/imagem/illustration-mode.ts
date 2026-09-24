@@ -24,6 +24,7 @@ import {
   localStrokeWidth, matrixAttr, pathsToD, rgbToHex, unionBounds,
 } from './illustration-model';
 import { moveHandle, moveNode, nodeCount, nodeInfo } from './vector-ops';
+import { clipDef, clipId, fillRef, paintDef, underlays } from './illustration-paint';
 
 /** Pixels de tela por mm no zoom 100% (tamanho real, 96 DPI do CSS). */
 const PX_PER_MM = 96 / 25.4;
@@ -50,7 +51,14 @@ interface RenderItem {
   d: string;
   transform: string;
   strokeWidth: number;
+  fill: string;
+  /** Contornos de efeito e sombra, atrás da camada. */
+  under: { color: string; width: number; transform: string; opacity: number }[];
+  /** `url(#…)` da máscara que recorta a camada. */
+  clip: string | null;
 }
+
+const STAGE_IDS = 'ils-';
 
 type Drag =
   | { kind: 'move'; start: Point; base: Map<string, Layer>; bounds: Bounds | null; moved: boolean }
@@ -159,8 +167,18 @@ function fmt(v: number, d = 1): string {
         (contextmenu)="onContextMenu($event)"
       >
         <text class="il-board-label" x="0" [attr.y]="-7 / ppm()" [attr.font-size]="11 / ppm()">Prancheta · {{ store.widthMm() }} × {{ store.heightMm() }} mm</text>
+        <defs #defs></defs>
         <rect class="il-board" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" />
         @for (item of rendered(); track item.id) {
+          <g [attr.clip-path]="item.clip">
+          @for (u of item.under; track $index) {
+            <path
+              [attr.d]="item.d" [attr.transform]="u.transform" fill-rule="evenodd"
+              [attr.fill]="u.color" [attr.stroke]="u.width > 0 ? u.color : null" [attr.stroke-width]="u.width"
+              stroke-linejoin="round" stroke-linecap="round" [attr.opacity]="u.opacity"
+              [attr.data-id]="item.id" [attr.pointer-events]="item.layer.locked ? 'none' : 'visible'"
+            />
+          }
           @if (item.layer.kind === 'imagem') {
             <image
               [attr.href]="item.layer.src"
@@ -177,16 +195,17 @@ function fmt(v: number, d = 1): string {
               [attr.d]="item.d"
               [attr.transform]="item.transform"
               fill-rule="evenodd"
-              [attr.fill]="item.layer.fill ?? 'none'"
-              [attr.stroke]="item.layer.stroke && item.layer.strokeWidth > 0 ? item.layer.stroke : null"
+              [attr.fill]="item.fill"
+              [attr.stroke]="item.layer.stroke && item.layer.strokeWidth > 0 && !item.layer.mask ? item.layer.stroke : null"
               [attr.stroke-width]="item.strokeWidth"
               stroke-linejoin="round"
               stroke-linecap="round"
               [attr.opacity]="item.layer.opacity"
               [attr.data-id]="item.id"
-              [attr.pointer-events]="item.layer.locked ? 'none' : 'visible'"
+              [attr.pointer-events]="item.layer.locked || item.layer.mask ? 'none' : 'visible'"
             />
           }
+          </g>
         }
         <rect class="il-board-line" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" />
 
@@ -445,6 +464,11 @@ export class IllustrationModeComponent {
       }
       this.scheduleRulers();
     });
+    effect(() => {
+      const el = this.defsEl()?.nativeElement;
+      const markup = this.stageDefs();
+      if (el && el.innerHTML !== markup) el.innerHTML = markup;
+    });
     // Imagem mandada pelo Print & Cut: abre direto na vetorização.
     effect(() => {
       const pending = this.store.pendingImport();
@@ -602,14 +626,43 @@ export class IllustrationModeComponent {
 
   rendered = computed<RenderItem[]>(() => {
     this.store.fonts.version();
-    return this.store.layers().filter((l) => l.visible).map((l) => ({
-      id: l.id,
-      layer: l,
-      d: this.store.pathD(l),
-      transform: matrixAttr(layerMatrix(l)),
-      strokeWidth: localStrokeWidth(l),
-    }));
+    const layers = this.store.layers();
+    const masks = new Set(layers.filter((l) => l.mask && l.visible).map((l) => l.id));
+    return layers.filter((l) => l.visible).map((l) => {
+      const m = layerMatrix(l);
+      const scale = Math.sqrt(Math.abs(l.scaleX * l.scaleY)) || 1;
+      return {
+        id: l.id,
+        layer: l,
+        d: this.store.pathD(l),
+        transform: matrixAttr(m),
+        strokeWidth: localStrokeWidth(l),
+        fill: fillRef(STAGE_IDS, l),
+        under: underlays(l).map((u) => ({
+          color: u.color,
+          width: u.widthMm / scale,
+          transform: matrixAttr([m[0], m[1], m[2], m[3], m[4] + u.dx, m[5] + u.dy]),
+          opacity: u.opacity * l.opacity,
+        })),
+        clip: l.clipBy && masks.has(l.clipBy) ? `url(#${clipId(STAGE_IDS, l.clipBy)})` : null,
+      };
+    });
   });
+
+  /** Degradês, padrões e máscaras do palco, como marcação SVG crua: o
+   * sanitizador do Angular não passa gradiente por template, então a <defs>
+   * é escrita direto no DOM. */
+  private stageDefs = computed(() => {
+    this.store.fonts.version();
+    let out = '';
+    for (const l of this.store.layers()) {
+      if (!l.visible) continue;
+      out += paintDef(STAGE_IDS, l, null);
+      if (l.mask) out += clipDef(STAGE_IDS, l.id, pathsToD(this.store.worldPaths(l)));
+    }
+    return out;
+  });
+  private defsEl = viewChild<ElementRef<SVGDefsElement>>('defs');
 
   hover = computed(() => {
     const id = this.hoverId();
