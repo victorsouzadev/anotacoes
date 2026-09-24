@@ -15,7 +15,9 @@ export type IlIconName =
   | 'unite' | 'minus-front' | 'intersect' | 'exclude' | 'offset' | 'break-apart' | 'to-path' | 'letters'
   | 'text-left' | 'text-center' | 'text-right' | 'text-straight' | 'text-arc' | 'text-path'
   | 'node-smooth' | 'node-corner' | 'node-add' | 'node-delete'
-  | 'chevron' | 'fit' | 'keyboard' | 'image' | 'x' | 'search' | 'upload' | 'magnet' | 'panels' | 'cut';
+  | 'chevron' | 'fit' | 'keyboard' | 'image' | 'x' | 'search' | 'upload' | 'magnet' | 'panels' | 'cut'
+  | 'wand' | 'eraser' | 'split' | 'sheet' | 'slot' | 'photo-add' | 'compare' | 'filter' | 'sparkle' | 'sun'
+  | 'folder' | 'save' | 'rotate-left' | 'rotate-right' | 'cover' | 'contain' | 'reframe' | 'download' | 'file-new' | 'piece';
 
 @Component({
   selector: 'il-icon',
@@ -97,6 +99,26 @@ export type IlIconName =
         @case ('upload') { <path d="M10 13V3.5M6.5 7L10 3.5 13.5 7" /><path d="M3.5 13.5v3h13v-3" /> }
         @case ('magnet') { <path d="M4 3.5v6a6 6 0 0 0 12 0v-6h-3.5v6a2.5 2.5 0 0 1-5 0v-6z" /><path d="M4 7h3.5M12.5 7H16" /> }
         @case ('panels') { <rect x="2.5" y="3.5" width="15" height="13" rx="1" /><path d="M12.5 3.5v13" /><path d="M14.5 7h1.5M14.5 10h1.5" /> }
+        @case ('wand') { <path d="M3 17L13 7" /><path d="M11.5 5.5l3 3" /><path d="M15 2.5v2M17.5 5H15.5M16.8 3.2l-1.3 1.3M6 3.5v2M5 4.5h2M16 12.5v2M15 13.5h2" /> }
+        @case ('eraser') { <path d="M4 13.5l6.5-6.5 6 6-4.5 4.5H8z" /><path d="M7.2 10.3l6 6" /><path d="M8 17.5h9" /> }
+        @case ('split') { <rect x="2.5" y="3.5" width="6" height="6" rx="1" /><rect x="11.5" y="3.5" width="6" height="6" rx="1" /><rect x="7" y="12" width="6" height="5" rx="1" /><path d="M10 2v16" stroke-dasharray="1.5 1.8" /> }
+        @case ('sheet') { <rect x="4" y="2.5" width="12" height="15" rx="1" /><rect x="6" y="5" width="3.5" height="3.5" /><rect x="10.5" y="5" width="3.5" height="3.5" /><rect x="6" y="10" width="3.5" height="3.5" /><rect x="10.5" y="10" width="3.5" height="3.5" /> }
+        @case ('piece') { <path d="M6 3.5h8a2.5 2.5 0 0 1 2.5 2.5v8a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 14V6A2.5 2.5 0 0 1 6 3.5z" stroke-dasharray="2 1.5" /><circle cx="10" cy="10" r="3.5" fill="currentColor" stroke="none" /> }
+        @case ('slot') { <rect x="3" y="3" width="14" height="14" rx="2" stroke-dasharray="2.5 2" /><path d="M10 7v6M7 10h6" /> }
+        @case ('photo-add') { <rect x="2.5" y="4" width="12" height="11" rx="1.2" /><path d="M3 13l3.5-3.5 2.5 2.5 2-2 3.5 3" /><path d="M16 3v5M13.5 5.5h5" /> }
+        @case ('compare') { <rect x="2.5" y="4" width="15" height="12" rx="1.2" /><path d="M10 2.5v15" /><path d="M10 4h6.3a1.2 1.2 0 0 1 1.2 1.2v9.6a1.2 1.2 0 0 1-1.2 1.2H10z" fill="currentColor" opacity="0.35" stroke="none" /> }
+        @case ('filter') { <circle cx="7.5" cy="8" r="4.5" /><circle cx="12.5" cy="8" r="4.5" /><circle cx="10" cy="12.5" r="4.5" /> }
+        @case ('sparkle') { <path d="M9 2.5l1.6 4.4L15 8.5l-4.4 1.6L9 14.5l-1.6-4.4L3 8.5l4.4-1.6z" /><path d="M15.5 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /> }
+        @case ('sun') { <circle cx="10" cy="10" r="3.3" /><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" /> }
+        @case ('folder') { <path d="M2.5 6V4.5a1 1 0 0 1 1-1h4l1.5 2h7.5a1 1 0 0 1 1 1V15a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z" /> }
+        @case ('save') { <path d="M4 3h9.5L17 6.5V16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M6.5 3v4h6V3M6 17v-5.5h8V17" /> }
+        @case ('rotate-left') { <path d="M4 4v4h4" /><path d="M4.5 8A6 6 0 1 1 5 13.5" /> }
+        @case ('rotate-right') { <path d="M16 4v4h-4" /><path d="M15.5 8A6 6 0 1 0 15 13.5" /> }
+        @case ('cover') { <rect x="3" y="4.5" width="14" height="11" /><rect x="1.5" y="6.5" width="17" height="7" fill="currentColor" opacity="0.3" stroke="none" /> }
+        @case ('contain') { <rect x="3" y="3" width="14" height="14" /><rect x="3" y="6.5" width="14" height="7" fill="currentColor" opacity="0.3" stroke="none" /> }
+        @case ('reframe') { <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" /><path d="M10 7v6M7 10h6" /> }
+        @case ('download') { <path d="M10 3v9.5M6.5 9L10 12.5 13.5 9" /><path d="M4 14v3h12v-3" /> }
+        @case ('file-new') { <path d="M5 2.5h6.5L15 6v11.5H5z" /><path d="M11.5 2.5V6H15" /><path d="M10 9v5M7.5 11.5h5" /> }
         @case ('cut') { <circle cx="5.5" cy="14.5" r="2.5" /><circle cx="14.5" cy="14.5" r="2.5" /><path d="M7.3 12.8L15 3M12.7 12.8L5 3" /> }
       }
     </svg>

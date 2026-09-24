@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -24,6 +24,9 @@ import { FontLibrary } from './fonts';
 import { IllustrationModeComponent } from './illustration-mode';
 import { IllustrationProjectData, IllustrationStore } from './illustration-store';
 import { IllustrationTracer } from './illustration-tracer';
+import { IlIconComponent, IlIconName } from './illustration-icons';
+import { IlNumComponent } from './illustration-num';
+import { IlStudioBaseStylesComponent, IlStudioChromeStylesComponent } from './studio-styles';
 import { VectorizeService } from './vectorize.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
@@ -176,6 +179,38 @@ const SHAPES: { id: CutShape; label: string }[] = [
 
 type PieceQuality = 'preview' | 'full';
 
+type PcTool = 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir';
+type PcTab = 'imagens' | 'ajustes' | 'folha' | 'exportar';
+
+const MODES: { id: EditorMode; label: string }[] = [
+  { id: 'corte', label: 'Print & Cut' },
+  { id: 'molde', label: 'Molde SVG' },
+  { id: 'social', label: 'Redes sociais' },
+  { id: 'ilustracao', label: 'Ilustração' },
+];
+
+/** Ferramentas do Print & Cut na coluna da esquerda, com a tecla de cada uma. */
+const PC_TOOLS: { id: PcTool; icon: IlIconName; label: string; key: string; help: string }[] = [
+  { id: 'nenhuma', icon: 'select', label: 'Visualizar', key: 'V', help: 'Só olhar a peça, sem editar' },
+  { id: 'fundo', icon: 'wand', label: 'Remover fundo', key: 'W', help: 'Clique na cor do fundo pra apagar' },
+  { id: 'borracha', icon: 'eraser', label: 'Borracha de contorno', key: 'E', help: 'Arraste pra apagar a borda (a arte fica)' },
+  { id: 'corte', icon: 'cut', label: 'Remover linha de corte', key: 'C', help: 'Clique dentro da linha que sobra' },
+  { id: 'dividir', icon: 'split', label: 'Dividir em elementos', key: 'D', help: 'Uma folha com vários desenhos vira um item por desenho' },
+];
+
+const PC_TABS: { id: PcTab; label: string }[] = [
+  { id: 'imagens', label: 'Imagens' },
+  { id: 'ajustes', label: 'Ajustes' },
+  { id: 'folha', label: 'Folha' },
+  { id: 'exportar', label: 'Exportar' },
+];
+
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  const tag = el?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el?.isContentEditable;
+}
+
 /** As borrachadas ficam em pixels da arte original; a peça pode estar numa
  * escala menor, então os círculos precisam acompanhar. */
 function scaleErasures(erasures: Erasure[], escala: number): Erasure[] {
@@ -215,54 +250,157 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent],
+  imports: [
+    RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent,
+    IlIconComponent, IlNumComponent, IlStudioBaseStylesComponent, IlStudioChromeStylesComponent,
+  ],
   providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService, IllustrationTracer],
   template: `
+    <il-studio-base-styles /><il-studio-chrome-styles />
     <div class="page">
-      <header class="top-bar">
-        <div class="brand">
-          <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
-          <h1><span class="brand-mark"><app-icon name="image" [size]="14" /></span> Editor de Imagens</h1>
+      <header class="il-appbar">
+        <a class="ab-home" routerLink="/" title="Voltar ao início" aria-label="Voltar ao início"><app-icon name="grid" [size]="15" /></a>
+        <span class="ab-title"><span class="ab-mark"><app-icon name="image" [size]="12" /></span> Editor de Imagens</span>
+        <nav class="ab-modes" role="tablist" aria-label="Modo">
+          @for (m of modes; track m.id) {
+            <button type="button" role="tab" [class.il-on]="modo() === m.id" [attr.aria-selected]="modo() === m.id" (click)="setModo(m.id)">{{ m.label }}</button>
+          }
+        </nav>
+        <div class="ab-project">
+          <input class="ab-name" type="text" maxlength="300" placeholder="Projeto sem nome" aria-label="Nome do projeto" [value]="projectName()" (input)="onProjectNameInput($event)" />
+          <button type="button" class="il-btn il-primary" [disabled]="savingProject()" data-tip="Salvar projeto  Ctrl+S" (click)="saveProject()">
+            <il-icon name="save" [size]="13" /> {{ savingProject() ? 'Salvando…' : 'Salvar' }}
+          </button>
+          <div class="ab-menu-wrap">
+            <button type="button" class="il-btn" [class.il-on]="projectsOpen()" (click)="toggleProjects()"><il-icon name="folder" [size]="13" /> Abrir <il-icon name="chevron" [size]="11" /></button>
+            @if (projectsOpen()) {
+              <div class="ab-menu" role="menu">
+                <button type="button" class="ab-menu-item ab-new" (click)="newProject(); projectsOpen.set(false)"><il-icon name="file-new" [size]="14" /> Novo projeto</button>
+                @for (p of projects(); track p.id) {
+                  <div class="ab-menu-row" [class.il-on]="p.id === projectId()">
+                    <button type="button" class="ab-menu-item" (click)="openProject(p.id); projectsOpen.set(false)">
+                      <span class="ab-p-name">{{ p.name }}</span><span class="ab-p-date">{{ p.updatedAt | date: 'dd/MM HH:mm' }}</span>
+                    </button>
+                    <button type="button" class="il-ib il-ib-sm il-danger" title="Excluir projeto" aria-label="Excluir projeto" (click)="deleteProject(p.id, $event)"><il-icon name="trash" [size]="13" /></button>
+                  </div>
+                } @empty {
+                  <p class="ab-menu-empty">Nenhum projeto salvo ainda.</p>
+                }
+              </div>
+            }
+          </div>
+          @if (projectStatus()) { <span class="ab-status" [title]="projectStatus()">{{ projectStatus() }}</span> }
         </div>
-        <div class="mode-switch" role="tablist">
-          <button [class.active]="modo() === 'corte'" (click)="setModo('corte')">Print &amp; Cut</button>
-          <button [class.active]="modo() === 'molde'" (click)="setModo('molde')">Molde SVG</button>
-          <button [class.active]="modo() === 'social'" (click)="setModo('social')">Redes sociais</button>
-          <button [class.active]="modo() === 'ilustracao'" (click)="setModo('ilustracao')">Ilustração</button>
-        </div>
-        <div class="top-bar-actions">
-          <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
-          <span class="user-email">{{ auth.user()?.email }}</span>
-          <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+        <div class="ab-right">
+          <button type="button" class="il-ib" (click)="theme.cycle()" [title]="themeLabel()" [attr.aria-label]="themeLabel()"><app-icon [name]="themeIconName()" [size]="15" /></button>
+          <span class="ab-user">{{ auth.user()?.email }}</span>
+          <button type="button" class="il-ib" (click)="auth.logout()" title="Sair" aria-label="Sair"><app-icon name="logout" [size]="14" /></button>
         </div>
       </header>
 
-      <main class="content" [class.content-studio]="modo() === 'ilustracao'">
+      <main class="content">
         @if (modo() === 'corte') {
-        <div class="preview-wrap">
-          <div class="tabs">
-            <button [class.active]="view() === 'peca'" (click)="setView('peca')">Peça</button>
-            <button [class.active]="view() === 'folha'" (click)="setView('folha')">
-              Folha de montagem @if (totalCopies()) { ({{ totalCopies() }}) }
-            </button>
-            <div class="zoom-bar" title="Ctrl + roda do mouse também dá zoom">
-              <button (click)="zoomBy(1 / 1.25)" aria-label="Menos zoom">−</button>
-              <button class="zoom-level" (click)="resetZoom()" title="Ajustar à tela">{{ (zoom() * 100).toFixed(0) }}%</button>
-              <button (click)="zoomBy(1.25)" aria-label="Mais zoom">+</button>
+        <div class="il-studio il-basic pc">
+          <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesSelected($event)" />
+
+          <div class="il-controlbar">
+            <div class="il-cb-group">
+              <div class="il-seg pc-seg">
+                <button type="button" [class.il-on]="view() === 'peca'" (click)="setView('peca')"><il-icon name="piece" [size]="14" /> Peça</button>
+                <button type="button" [class.il-on]="view() === 'folha'" (click)="setView('folha')"><il-icon name="sheet" [size]="14" /> Folha @if (totalCopies()) { ({{ totalCopies() }}) }</button>
+              </div>
             </div>
+            @if (view() === 'peca') {
+              @if (selected(); as sel) {
+                <span class="il-cb-kind pc-name" [title]="sel.name">{{ sel.name }}</span>
+                <div class="il-cb-group">
+                  <il-num label="L" title="Largura da arte" unit="cm" [value]="sel.widthMm / 10" [step]="0.1" [min]="1" [max]="100" (valueChange)="onWidthCmChange(ev($event.value))" />
+                  <il-num label="Cópias" [value]="sel.copies" [min]="1" [max]="99" [decimals]="0" (valueChange)="onCopiesChange(ev($event.value))" />
+                </div>
+                <div class="il-cb-group">
+                  <select class="il-select" [value]="sel.shape" (change)="setShape($any($event.target).value)" aria-label="Forma do contorno">
+                    @for (s of shapes; track s.id) { <option [value]="s.id">{{ s.label }}</option> }
+                  </select>
+                  <il-num label="Borda" title="Largura da borda" unit="mm" [value]="sel.marginMm" [step]="0.1" [min]="0" [max]="maxMarginMm" (valueChange)="onMarginInput(ev($event.value))" />
+                  <button type="button" class="il-swatch-btn" data-tip="Cor da borda" aria-label="Cor da borda" (click)="borderColor.click()"><span class="il-sw" [style.background]="sel.color"></span></button>
+                  <input #borderColor type="color" class="il-hidden-color" tabindex="-1" aria-hidden="true" [value]="sel.color" (input)="onColorInput($event)" />
+                </div>
+                @switch (tool()) {
+                  @case ('fundo') {
+                    <div class="il-cb-group">
+                      <il-num label="Tolerância" [value]="tolerance()" [step]="5" [min]="5" [max]="120" [decimals]="0" (valueChange)="onToleranceInput(ev($event.value))" />
+                      @if (sel.bgRemoved) { <button type="button" class="il-btn" (click)="restoreOriginal()">Restaurar original</button> }
+                    </div>
+                  }
+                  @case ('borracha') {
+                    <div class="il-cb-group">
+                      <il-num label="Borracha" unit="mm" [value]="brushMm()" [step]="0.5" [min]="0.5" [max]="20" (valueChange)="onBrushInput(ev($event.value))" />
+                      @if (sel.erasures.length) {
+                        <button type="button" class="il-btn" (click)="undoErase()">Desfazer</button>
+                        <button type="button" class="il-btn" (click)="clearErasures()">Limpar</button>
+                      }
+                    </div>
+                  }
+                  @case ('corte') {
+                    @if (sel.cutRemovals.length) {
+                      <div class="il-cb-group">
+                        <button type="button" class="il-btn" (click)="undoCutRemoval()">Desfazer</button>
+                        <button type="button" class="il-btn" (click)="restoreCuts()">Restaurar linhas</button>
+                      </div>
+                    }
+                  }
+                  @case ('dividir') {
+                    <div class="il-cb-group">
+                      <il-num label="Juntar até" title="Pedaços a menos que isso viram um elemento só" unit="mm" [value]="splitGapMm()" [step]="0.05" [min]="0" [max]="maxSplitGapMm" [decimals]="2" (valueChange)="onSplitGapInput(ev($event.value))" />
+                      <il-num label="Fundo" title="Tolerância do fundo" [value]="splitTolerance()" [min]="5" [max]="120" [decimals]="0" (valueChange)="onSplitToleranceInput(ev($event.value))" />
+                      <button type="button" class="il-btn" (click)="autoSplit()"><il-icon name="sparkle" [size]="13" /> Escolher sozinho</button>
+                      <button type="button" class="il-btn il-primary" [disabled]="splitFound().length < 2" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
+                    </div>
+                  }
+                }
+              } @else {
+                <span class="il-cb-hint">Importe imagens pra gerar o contorno e a linha de corte.</span>
+              }
+            } @else {
+              <div class="il-cb-group">
+                <span class="il-cb-label">Folha</span>
+                <select class="il-select" [value]="sheetSize()" (change)="onSheetSizeChange($event)" aria-label="Tamanho da folha">
+                  <option value="A4">A4</option>
+                  <option value="A3">A3</option>
+                </select>
+                <select class="il-select" [value]="orientation()" (change)="onOrientationChange($event)" aria-label="Orientação">
+                  <option value="retrato">Retrato</option>
+                  <option value="paisagem">Paisagem</option>
+                </select>
+                <il-num label="Espaço" title="Espaço entre peças" unit="mm" [value]="spacingMm()" [min]="0" [max]="10" [decimals]="0" (valueChange)="onSpacingInput(ev($event.value))" />
+              </div>
+              <button type="button" class="il-btn il-primary" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="download" [size]="13" /> PDF da folha</button>
+            }
           </div>
 
+          <nav class="il-tools-col" aria-label="Ferramentas">
+            <div class="il-tb-group">
+              @for (t of pcTools; track t.id) {
+                <button type="button" class="il-tool" [class.il-on]="tool() === t.id" [disabled]="t.id !== 'nenhuma' && !selected()"
+                  [attr.aria-label]="t.label" [attr.data-tip]="t.label + '  ' + t.key" [attr.data-help]="t.help" (click)="setTool(t.id)">
+                  <il-icon [name]="t.icon" [size]="18" />
+                </button>
+              }
+            </div>
+            <div class="il-tb-group">
+              <button type="button" class="il-tool" aria-label="Importar imagens" data-tip="Importar imagens" data-help="PNG transparente é o ideal; foto também serve" (click)="fileInput.click()"><il-icon name="photo-add" [size]="18" /></button>
+              <button type="button" class="il-tool" [class.il-on]="selected()?.mirrored" [disabled]="!selected()" aria-label="Espelhar" data-tip="Espelhar" data-help="Só pra vinil termocolante" (click)="toggleMirror()"><il-icon name="flip-h" [size]="18" /></button>
+              <button type="button" class="il-tool" [disabled]="!selected()" aria-label="Vetorizar na Ilustração" data-tip="Vetorizar na Ilustração" data-help="Curvas, cores ou linha central" (click)="vectorizeSelected()"><il-icon name="trace" [size]="18" /></button>
+            </div>
+          </nav>
+
           @if (view() === 'peca') {
-            @if (selected(); as sel) {
-              <div
-                #pieceStage
-                class="preview-stage"
-                [class.picking]="tool() === 'fundo' || tool() === 'corte'"
-                [class.erasing]="tool() === 'borracha'"
-                (wheel)="onWheel($event)"
-              >
+            @if (selected()) {
+              <div #pieceStage class="il-stage pc-stage" [class.il-drag-over]="dragOver()" [attr.data-tool]="tool()"
+                (wheel)="onWheel($event)" (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)">
                 <canvas
                   #previewCanvas
+                  class="il-checker il-paper"
                   (click)="onPreviewClick($event)"
                   (pointerdown)="onPreviewPointerDown($event)"
                   (pointermove)="onPreviewPointerMove($event)"
@@ -270,375 +408,185 @@ function loadPrefs(): Prefs {
                   (pointercancel)="onPreviewPointerUp($event)"
                 ></canvas>
               </div>
-              <div class="preview-meta">
-                <span class="file-name">{{ sel.name }}</span>
-                <span class="file-dims">
-                  arte {{ formatMm(sel.widthMm) }} × {{ formatMm(artHeightMm(sel)) }} ·
-                  peça {{ pieceSizeLabel(sel) }}
-                </span>
-              </div>
-              @switch (tool()) {
-                @case ('fundo') {
-                  <p class="cut-hint pick-hint">Clique na cor de fundo que quer remover. A região contígua àquela cor será apagada.</p>
-                }
-                @case ('borracha') {
-                  <p class="cut-hint pick-hint">Arraste sobre o contorno pra apagá-lo. A arte não é afetada — só o contorno e a faixa branca.</p>
-                }
-                @case ('corte') {
-                  <p class="cut-hint pick-hint">Clique dentro de uma linha tracejada pra removê-la do corte. O desenho e o contorno continuam iguais.</p>
-                }
-                @case ('dividir') {
-                  <p class="cut-hint pick-hint">{{ splitSummary() }}</p>
-                }
-                @default {
-                  <p class="cut-hint">A linha tracejada vermelha é a linha de corte que sai no SVG.</p>
-                }
-              }
             } @else {
-              <div
-                class="drop-zone"
-                [class.drag-over]="dragOver()"
-                (click)="fileInput.click()"
-                (dragover)="onDragOver($event)"
-                (dragleave)="dragOver.set(false)"
-                (drop)="onDrop($event)"
-              >
-                <app-icon name="image" [size]="34" />
-                <p><strong>Importe imagens</strong> pra gerar o contorno e a linha de corte</p>
-                <p class="hint">Clique ou arraste arquivos aqui. PNGs com fundo transparente ficam com contorno na forma do desenho; pra fotos/JPGs use "Remover fundo".</p>
+              <div class="il-stage" [class.il-drag-over]="dragOver()" (dragover)="onDragOver($event)" (dragleave)="dragOver.set(false)" (drop)="onDrop($event)">
+                <button type="button" class="il-empty" (click)="fileInput.click()">
+                  <il-icon name="photo-add" [size]="34" />
+                  <strong>Importe imagens pra gerar o contorno e a linha de corte</strong>
+                  <span>Clique ou arraste arquivos aqui. PNG com fundo transparente fica com contorno na forma do desenho; em foto ou JPG, use "Remover fundo".</span>
+                </button>
               </div>
             }
           } @else {
-            <div #sheetStage class="preview-stage sheet-stage" (wheel)="onWheel($event)">
-              <canvas #sheetCanvas></canvas>
+            <div #sheetStage class="il-stage pc-stage" (wheel)="onWheel($event)">
+              <canvas #sheetCanvas class="il-paper"></canvas>
             </div>
-            <div class="preview-meta">
-              <span>{{ sheetSize() }} {{ orientation() }} · {{ packInfo().placed }} peça(s) na folha</span>
-              @if (packInfo().overflow > 0) {
-                <span class="overflow-warn">{{ packInfo().overflow }} não couberam — reduza cópias/tamanho ou use A3</span>
-              }
-            </div>
-            <p class="cut-hint">Imprima o PNG/PDF da folha e corte com o SVG da folha: as posições batem entre os dois.</p>
           }
-        </div>
 
-        <aside class="panel">
-          <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesSelected($event)" />
-          <section class="panel-section" [class.open]="isOpen('projeto')">
-            <button class="section-head" (click)="toggleSection('projeto')">
-              <span class="section-title"><app-icon name="folder" [size]="13" /> Projeto</span>
-              <span class="section-summary">{{ sectionSummary('projeto') }}</span>
-              <app-icon class="chevron" name="chevron" [size]="14" />
-            </button>
-            @if (isOpen('projeto')) {
-              <p class="section-help">Salva a montagem inteira na sua conta: as artes, as medidas e todos os ajustes. Dá pra continuar depois de outro computador.</p>
-              <input
-                class="num-input"
-                type="text"
-                maxlength="300"
-                placeholder="Nome do projeto"
-                [value]="projectName()"
-                (input)="onProjectNameInput($event)"
-              />
-              <div class="btn-row">
-                <button class="btn primary" [disabled]="savingProject() || (!images().length && !templates.hasTemplate())" (click)="saveProject()">
-                  {{ savingProject() ? 'Salvando…' : projectId() ? 'Salvar' : 'Salvar novo' }}
-                </button>
-                <button class="btn" (click)="newProject()">Novo</button>
-              </div>
-              @if (projectStatus()) {
-                <p class="field-note">{{ projectStatus() }}</p>
+          <aside class="il-dock">
+            <div class="il-tabs" role="tablist">
+              @for (t of pcTabs; track t.id) {
+                <button type="button" role="tab" class="il-tab" [class.il-on]="pcTab() === t.id" [attr.aria-selected]="pcTab() === t.id" (click)="pcTab.set(t.id)">{{ t.label }}</button>
               }
-              @if (projects().length) {
-                <ul class="project-list">
-                  @for (p of projects(); track p.id) {
-                    <li [class.active]="p.id === projectId()">
-                      <button class="project-open" (click)="openProject(p.id)">
-                        <span class="project-name">{{ p.name }}</span>
-                        <span class="project-date">{{ p.updatedAt | date: 'dd/MM HH:mm' }}</span>
-                      </button>
-                      <button class="remove-btn" title="Excluir projeto" (click)="deleteProject(p.id, $event)">
-                        <app-icon name="x" [size]="12" />
-                      </button>
-                    </li>
-                  }
-                </ul>
-              }
-            }
-          </section>
-
-          <section class="panel-section" [class.open]="isOpen('imagens')">
-            <button class="section-head" (click)="toggleSection('imagens')">
-              <span class="section-title"><span class="step">1</span> Importar</span>
-              <span class="section-summary">{{ sectionSummary('imagens') }}</span>
-              <app-icon class="chevron" name="chevron" [size]="14" />
-            </button>
-            @if (isOpen('imagens')) {
-              <p class="section-help">PNG com fundo transparente é o ideal: o contorno segue o formato do desenho. Foto ou JPG dá certo também — depois é só usar "Remover fundo" no passo 4.</p>
-              <button class="btn primary full" (click)="fileInput.click()"><app-icon name="plus" [size]="14" /> Importar imagens</button>
-              @if (images().length) {
-                <ul class="image-list">
+            </div>
+            <div class="il-tab-body">
+              @switch (pcTab()) {
+                @case ('imagens') {
+                  <div class="il-sec"><div class="il-sec-body il-sec-body-top">
+                    <button type="button" class="il-btn il-primary il-wide" (click)="fileInput.click()"><il-icon name="photo-add" [size]="14" /> Importar imagens</button>
+                    <p class="il-note">PNG com fundo transparente é o ideal: o contorno segue o desenho. Foto ou JPG também dá — use "Remover fundo" (W).</p>
+                  </div></div>
                   @for (item of images(); track item.id) {
-                    <li [class.active]="item.id === selectedId()">
-                      <button class="thumb-btn" (click)="select(item.id)">
-                        <img [src]="item.thumbUrl" [alt]="item.name" />
-                        <span class="thumb-name">{{ item.name }}</span>
-                        @if (item.copies > 1) { <span class="copies-badge">×{{ item.copies }}</span> }
+                    <div class="il-item" [class.il-on]="item.id === selectedId()">
+                      <button type="button" class="il-item-main" (click)="select(item.id)">
+                        <img class="il-item-thumb il-checker" [src]="item.thumbUrl" [alt]="item.name" />
+                        <span class="il-item-text">
+                          <span class="il-item-name">{{ item.name }}</span>
+                          <span class="il-item-sub">{{ (item.widthMm / 10).toFixed(1).replace('.', ',') }} cm · {{ shapeLabel(item.shape) }}{{ item.bgRemoved ? ' · sem fundo' : '' }}</span>
+                        </span>
                       </button>
-                      <button class="remove-btn" title="Remover" (click)="remove(item.id)"><app-icon name="x" [size]="12" /></button>
-                    </li>
+                      @if (item.copies > 1) { <span class="il-badge">×{{ item.copies }}</span> }
+                      <button type="button" class="il-ib il-ib-sm il-danger" title="Remover" aria-label="Remover" (click)="remove(item.id)"><il-icon name="x" [size]="12" /></button>
+                    </div>
                   }
-                </ul>
-                <p class="field-note">Clique numa imagem da lista pra editá-la. Os ajustes valem só pra ela.</p>
-              }
-            }
-          </section>
-
-          @if (selected(); as sel) {
-            <section class="panel-section" [class.open]="isOpen('tamanho')">
-              <button class="section-head" (click)="toggleSection('tamanho')">
-                <span class="section-title"><span class="step">2</span> Tamanho</span>
-                <span class="section-summary">{{ sectionSummary('tamanho') }}</span>
-                <app-icon class="chevron" name="chevron" [size]="14" />
-              </button>
-              @if (isOpen('tamanho')) {
-                <p class="section-help">O tamanho real com que a peça vai ser impressa e cortada. A máquina corta em centímetros, não em pixels — por isso é aqui que tudo começa.</p>
-                <div class="field-row">
-                  <label class="field">
-                    <span class="field-label">Largura (cm)</span>
-                    <input class="num-input" type="number" min="1" max="100" step="0.1"
-                      [value]="(sel.widthMm / 10).toFixed(1)" (change)="onWidthCmChange($event)" />
-                  </label>
-                  <label class="field">
-                    <span class="field-label">Cópias na folha</span>
-                    <input class="num-input" type="number" min="1" max="99" step="1"
-                      [value]="sel.copies" (change)="onCopiesChange($event)" />
-                  </label>
-                </div>
-                <p class="field-note">A altura acompanha a proporção: {{ formatMm(artHeightMm(sel)) }}. A impressão sai a {{ dpi }} DPI.</p>
-              }
-            </section>
-
-            <section class="panel-section" [class.open]="isOpen('contorno')">
-              <button class="section-head" (click)="toggleSection('contorno')">
-                <span class="section-title"><span class="step">3</span> Contorno</span>
-                <span class="section-summary">{{ sectionSummary('contorno') }}</span>
-                <app-icon class="chevron" name="chevron" [size]="14" />
-              </button>
-              @if (isOpen('contorno')) {
-                <p class="section-help">A borda colorida em volta do desenho — é por ela que passa a linha de corte. "Silhueta" acompanha o formato do desenho; as outras cortam numa forma simples em volta.</p>
-                <div class="shape-row">
-                  @for (s of shapes; track s.id) {
-                    <button class="shape-btn" [class.active]="sel.shape === s.id" (click)="setShape(s.id)">{{ s.label }}</button>
+                }
+                @case ('ajustes') {
+                  @if (selected(); as sel) {
+                    <section class="il-sec" [class.il-closed]="pcClosed('tamanho')">
+                      <button type="button" class="il-sec-head" (click)="pcFlip('tamanho')"><il-icon name="chevron" [size]="12" /> Tamanho</button>
+                      <div class="il-sec-body">
+                        <div class="il-grid2">
+                          <il-num label="L" title="Largura" unit="cm" [value]="sel.widthMm / 10" [step]="0.1" [min]="1" [max]="100" (valueChange)="onWidthCmChange(ev($event.value))" />
+                          <il-num label="Cópias" [value]="sel.copies" [min]="1" [max]="99" [decimals]="0" (valueChange)="onCopiesChange(ev($event.value))" />
+                        </div>
+                        <p class="il-note">Altura {{ formatMm(artHeightMm(sel)) }} (segue a proporção) · peça {{ pieceLabel() }} · impressão a {{ dpi }} DPI.</p>
+                      </div>
+                    </section>
+                    <section class="il-sec" [class.il-closed]="pcClosed('contorno')">
+                      <button type="button" class="il-sec-head" (click)="pcFlip('contorno')"><il-icon name="chevron" [size]="12" /> Contorno</button>
+                      <div class="il-sec-body">
+                        <div class="il-seg pc-seg pc-seg-full">
+                          @for (s of shapes; track s.id) {
+                            <button type="button" [class.il-on]="sel.shape === s.id" (click)="setShape(s.id)">{{ s.label }}</button>
+                          }
+                        </div>
+                        <label class="il-range"><span>Borda</span><input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" /><b>{{ sel.marginMm.toFixed(1) }}</b></label>
+                        <label class="il-range"><span>Respiro</span><input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" /><b>{{ sel.gapMm.toFixed(1) }}</b></label>
+                        <p class="il-note">Borda e respiro em mm. O respiro é a faixa branca entre o desenho e a borda colorida.</p>
+                        <div class="il-row">
+                          <input type="color" class="il-color-input" [value]="sel.color" (input)="onColorInput($event)" aria-label="Cor da borda" />
+                          @for (sw of swatches; track sw) {
+                            <button type="button" class="pc-swatch" [class.il-on]="sw === sel.color" [style.background]="sw" [title]="sw" (click)="setColor(sw)"></button>
+                          }
+                        </div>
+                        @if (sel.shape === 'silhueta') {
+                          <label class="il-range"><span>Suavizar</span><input type="range" min="0" [max]="maxSmoothing" step="1" [value]="sel.smoothing" (input)="onSmoothingInput($event)" /><b class="pc-wide-b">{{ smoothingLabel() }}</b></label>
+                          <label class="il-check"><input type="checkbox" [checked]="sel.keepCorners" (change)="onKeepCornersChange($event)" /> Manter cantos vivos</label>
+                          <label class="il-check"><input type="checkbox" [checked]="sel.fillHoles" (change)="onFillHolesChange($event)" /> Não cortar buracos internos</label>
+                        }
+                      </div>
+                    </section>
+                    <section class="il-sec" [class.il-closed]="pcClosed('arte')">
+                      <button type="button" class="il-sec-head" (click)="pcFlip('arte')"><il-icon name="chevron" [size]="12" /> Arte</button>
+                      <div class="il-sec-body">
+                        <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'fundo'" (click)="setTool('fundo')"><il-icon name="wand" [size]="14" /> {{ tool() === 'fundo' ? 'Clique no fundo da imagem…' : 'Remover fundo' }}</button>
+                        @if (tool() === 'fundo') {
+                          <label class="il-range"><span>Tolerância</span><input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" /><b>{{ tolerance() }}</b></label>
+                        }
+                        @if (sel.bgRemoved) { <button type="button" class="il-btn il-wide" (click)="restoreOriginal()">Restaurar imagem original</button> }
+                        <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'dividir'" (click)="setTool('dividir')"><il-icon name="split" [size]="14" /> {{ tool() === 'dividir' ? 'Fechar divisão' : 'Dividir em elementos' }}</button>
+                        @if (tool() === 'dividir') {
+                          <label class="il-range"><span>Juntar até</span><input type="range" min="0" [max]="maxSplitGapMm" step="0.05" [value]="splitGapMm()" (input)="onSplitGapInput($event)" /><b>{{ splitGapMm().toFixed(2) }}</b></label>
+                          <label class="il-range"><span>Fundo</span><input type="range" min="5" max="120" step="1" [value]="splitTolerance()" (input)="onSplitToleranceInput($event)" /><b>{{ splitTolerance() }}</b></label>
+                          <p class="il-note">{{ splitSummary() }}</p>
+                          <div class="il-row">
+                            <button type="button" class="il-btn il-grow" (click)="autoSplit()"><il-icon name="sparkle" [size]="13" /> Escolher sozinho</button>
+                            <button type="button" class="il-btn il-primary il-grow" [disabled]="splitFound().length < 2" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
+                          </div>
+                        }
+                        <label class="il-check"><input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" /> Espelhar (só pra vinil termocolante)</label>
+                        <button type="button" class="il-btn il-wide" (click)="vectorizeSelected()"><il-icon name="trace" [size]="14" /> Vetorizar na Ilustração</button>
+                      </div>
+                    </section>
+                    <section class="il-sec" [class.il-closed]="pcClosed('retoques')">
+                      <button type="button" class="il-sec-head" (click)="pcFlip('retoques')"><il-icon name="chevron" [size]="12" /> Retoques do corte</button>
+                      <div class="il-sec-body">
+                        @if (sel.shape === 'silhueta') {
+                          <label class="il-check"><input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" /> Só contorno por fora</label>
+                        }
+                        <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'borracha'" (click)="setTool('borracha')"><il-icon name="eraser" [size]="14" /> {{ tool() === 'borracha' ? 'Arraste sobre o contorno…' : 'Borracha de contorno' }}</button>
+                        @if (tool() === 'borracha') {
+                          <label class="il-range"><span>Tamanho</span><input type="range" min="0.5" max="20" step="0.5" [value]="brushMm()" (input)="onBrushInput($event)" /><b>{{ brushMm().toFixed(1) }}</b></label>
+                        }
+                        @if (sel.erasures.length) {
+                          <div class="il-row"><button type="button" class="il-btn il-grow" (click)="undoErase()">Desfazer</button><button type="button" class="il-btn il-grow" (click)="clearErasures()">Limpar borrachadas</button></div>
+                        }
+                        <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'corte'" (click)="setTool('corte')"><il-icon name="cut" [size]="14" /> {{ tool() === 'corte' ? 'Clique na linha a remover…' : 'Remover linha de corte' }}</button>
+                        @if (sel.cutRemovals.length) {
+                          <div class="il-row"><button type="button" class="il-btn il-grow" (click)="undoCutRemoval()">Desfazer</button><button type="button" class="il-btn il-grow" (click)="restoreCuts()">Restaurar linhas</button></div>
+                        }
+                      </div>
+                    </section>
+                  } @else {
+                    <p class="il-note pc-pad">Selecione ou importe uma imagem na aba Imagens.</p>
                   }
-                </div>
-                <label class="field">
-                  <span class="field-label">Largura da borda <strong>{{ sel.marginMm.toFixed(1) }} mm</strong></span>
-                  <input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" />
-                </label>
-                <div class="btn-row">
-                  <button class="btn" (click)="nudgeMargin(-0.1)" [disabled]="sel.marginMm <= 0">−0,1 mm</button>
-                  <button class="btn" (click)="nudgeMargin(0.1)" [disabled]="sel.marginMm >= maxMarginMm">+0,1 mm</button>
-                </div>
-                <label class="field">
-                  <span class="field-label">Respiro antes da borda <strong>{{ sel.gapMm.toFixed(1) }} mm</strong></span>
-                  <input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" />
-                </label>
-                <p class="field-note">O respiro é uma faixa branca entre o desenho e a borda colorida. Com a borda branca ele não aparece — escolha uma cor pra ver.</p>
-                <label class="field">
-                  <span class="field-label">Cor da borda</span>
-                  <div class="color-row">
-                    <input type="color" [value]="sel.color" (input)="onColorInput($event)" />
-                    @for (sw of swatches; track sw) {
-                      <button class="swatch" [class.active]="sw === sel.color" [style.background]="sw" [title]="sw" (click)="setColor(sw)"></button>
-                    }
-                  </div>
-                </label>
-                @if (sel.shape === 'silhueta') {
-                  <label class="field">
-                    <span class="field-label">Suavizar a linha de corte <strong>{{ smoothingLabel() }}</strong></span>
-                    <input type="range" min="0" [max]="maxSmoothing" step="1" [value]="sel.smoothing" (input)="onSmoothingInput($event)" />
-                  </label>
-                  <p class="field-note">Linha serrilhada faz a lâmina vibrar e rasgar o papel. O número é o quanto a linha pode se afastar do desenho pra ficar lisa — suba se o corte estiver saindo picotado.</p>
-                  <label class="check-field">
-                    <input type="checkbox" [checked]="sel.keepCorners" (change)="onKeepCornersChange($event)" />
-                    <span>Manter cantos vivos — não arredonda bico de estrela nem quina de quadrado</span>
-                  </label>
-                  <label class="check-field">
-                    <input type="checkbox" [checked]="sel.fillHoles" (change)="onFillHolesChange($event)" />
-                    <span>Não cortar buracos internos — corta só o contorno de fora</span>
-                  </label>
                 }
-              }
-            </section>
-
-            <section class="panel-section" [class.open]="isOpen('arte')">
-              <button class="section-head" (click)="toggleSection('arte')">
-                <span class="section-title"><span class="step">4</span> Ajustar a arte</span>
-                <span class="section-summary">{{ sectionSummary('arte') }}</span>
-                <app-icon class="chevron" name="chevron" [size]="14" />
-              </button>
-              @if (isOpen('arte')) {
-                <p class="section-help">Mexe na imagem em si. Use "Remover fundo" quando a arte tem fundo branco ou colorido e o contorno está saindo em volta de um retângulo.</p>
-                <button class="btn full" [class.primary]="tool() === 'fundo'" (click)="setTool('fundo')">
-                  {{ tool() === 'fundo' ? 'Clique no fundo da imagem…' : 'Remover fundo (clicar na cor)' }}
-                </button>
-                @if (tool() === 'fundo') {
-                  <label class="field">
-                    <span class="field-label">Tolerância <strong>{{ tolerance() }}</strong></span>
-                    <input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" />
-                  </label>
-                  <p class="field-note">Sobrou fundo? Aumente a tolerância e clique de novo. Comeu parte do desenho? Diminua e desfaça em "Restaurar".</p>
-                }
-                @if (sel.bgRemoved) {
-                  <button class="btn full" (click)="restoreOriginal()">Restaurar imagem original</button>
-                }
-                <button class="btn full" (click)="vectorizeSelected()">Vetorizar na Ilustração (curvas, cores, linha central)</button>
-                <label class="check-field">
-                  <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
-                  <span>Espelhar na horizontal — necessário só pra vinil termocolante</span>
-                </label>
-                <button class="btn full" [class.primary]="tool() === 'dividir'" (click)="setTool('dividir')">
-                  {{ tool() === 'dividir' ? 'Fechar divisão' : 'Dividir em elementos' }}
-                </button>
-                @if (tool() === 'dividir') {
-                  <label class="field">
-                    <span class="field-label">Juntar pedaços a até <strong>{{ splitGapMm().toFixed(2) }} mm</strong></span>
-                    <input type="range" min="0" [max]="maxSplitGapMm" step="0.05" [value]="splitGapMm()" (input)="onSplitGapInput($event)" />
-                  </label>
-                  <label class="field">
-                    <span class="field-label">Tolerância do fundo <strong>{{ splitTolerance() }}</strong></span>
-                    <input type="range" min="5" max="120" step="1" [value]="splitTolerance()" (input)="onSplitToleranceInput($event)" />
-                  </label>
-                  <button class="btn full" (click)="autoSplit()">Escolher sozinho</button>
-                  <p class="field-note">{{ splitSummary() }}</p>
-                  <button class="btn primary full" [disabled]="splitFound().length < 2" (click)="splitSelected()">
-                    Dividir em {{ splitFound().length }} elementos
-                  </button>
-                }
-                <p class="field-note">Uma folha com vários desenhos vira um item por desenho, cada um com tamanho, contorno, cópias e SVG de corte próprios. Não precisa remover o fundo antes: quando a arte é opaca, o fundo é deduzido pela cor das bordas.</p>
-              }
-            </section>
-
-            <section class="panel-section" [class.open]="isOpen('retoques')">
-              <button class="section-head" (click)="toggleSection('retoques')">
-                <span class="section-title"><span class="step">5</span> Retoques do corte</span>
-                <span class="section-summary">{{ sectionSummary('retoques') }}</span>
-                <app-icon class="chevron" name="chevron" [size]="14" />
-              </button>
-              @if (isOpen('retoques')) {
-                <p class="section-help">Para quando sobra contorno ou linha de corte onde você não quer — típico em desenhos de traço, que ganham borda por dentro também.</p>
-                @if (sel.shape === 'silhueta') {
-                  <label class="check-field">
-                    <input type="checkbox" [checked]="sel.outerOnly" (change)="onOuterOnlyChange($event)" />
-                    <span>Só contorno por fora — tira de uma vez a borda que nasce dentro do desenho</span>
-                  </label>
-                }
-                <button class="btn full" [class.primary]="tool() === 'borracha'" (click)="setTool('borracha')">
-                  <app-icon name="eraser-area" [size]="14" />
-                  {{ tool() === 'borracha' ? 'Arraste sobre o contorno…' : 'Borracha de contorno' }}
-                </button>
-                @if (tool() === 'borracha') {
-                  <label class="field">
-                    <span class="field-label">Tamanho da borracha <strong>{{ brushMm().toFixed(1) }} mm</strong></span>
-                    <input type="range" min="0.5" max="20" step="0.5" [value]="brushMm()" (input)="onBrushInput($event)" />
-                  </label>
-                  <p class="field-note">Apaga só a borda; o desenho nunca é tocado.</p>
-                }
-                @if (sel.erasures.length) {
-                  <div class="btn-row">
-                    <button class="btn" (click)="undoErase()">Desfazer</button>
-                    <button class="btn" (click)="clearErasures()">Limpar borrachadas</button>
+                @case ('folha') {
+                  <section class="il-sec"><div class="il-sec-body il-sec-body-top">
+                    <div class="il-grid2">
+                      <select class="il-select" [value]="sheetSize()" (change)="onSheetSizeChange($event)" aria-label="Tamanho da folha">
+                        <option value="A4">A4</option>
+                        <option value="A3">A3</option>
+                      </select>
+                      <select class="il-select" [value]="orientation()" (change)="onOrientationChange($event)" aria-label="Orientação">
+                        <option value="retrato">Retrato</option>
+                        <option value="paisagem">Paisagem</option>
+                      </select>
+                    </div>
+                    <label class="il-range"><span>Espaço</span><input type="range" min="0" max="10" step="1" [value]="spacingMm()" (input)="onSpacingInput($event)" /><b>{{ spacingMm().toFixed(0) }} mm</b></label>
+                    <p class="il-note">Junta todas as peças (e as cópias) numa folha pra imprimir de uma vez. Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem.</p>
+                  </div></section>
+                  <div class="il-export-list">
+                    <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF da folha</strong><small>No tamanho físico, pronto pra imprimir</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPng()"><il-icon name="image" [size]="20" /><span><strong>PNG da folha ({{ dpi }} DPI)</strong><small>Imagem pra imprimir em outro programa</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetSvg()"><il-icon name="cut" [size]="20" /><span><strong>SVG de corte da folha</strong><small>Só as linhas de corte, em mm, nas mesmas posições</small></span></button>
                   </div>
                 }
-                <button class="btn full" [class.primary]="tool() === 'corte'" (click)="setTool('corte')">
-                  <app-icon name="delete" [size]="14" />
-                  {{ tool() === 'corte' ? 'Clique na linha a remover…' : 'Remover linha de corte' }}
-                </button>
-                @if (tool() === 'corte') {
-                  <p class="field-note">Clique dentro da linha tracejada que sobra. Ela sai do corte, mas o desenho impresso continua igual.</p>
-                }
-                @if (cutHint()) {
-                  <p class="field-note">{{ cutHint() }}</p>
-                }
-                @if (sel.cutRemovals.length) {
-                  <div class="btn-row">
-                    <button class="btn" (click)="undoCutRemoval()">Desfazer</button>
-                    <button class="btn" (click)="restoreCuts()">Restaurar linhas</button>
+                @case ('exportar') {
+                  <div class="il-export-list">
+                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportPrintPng()"><il-icon name="image" [size]="20" /><span><strong>PNG {{ dpi }} DPI</strong><small>A peça selecionada, pra imprimir</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportCutSvg()"><il-icon name="cut" [size]="20" /><span><strong>SVG da linha de corte</strong><small>Pra ScanNCut / CanvasWorkspace, em mm</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportFullSvg()"><il-icon name="export" [size]="20" /><span><strong>SVG arte + corte</strong><small>A arte embutida com a linha de corte por cima</small></span></button>
+                    <button type="button" class="il-export" [disabled]="images().length < 2 || zipping()" (click)="exportCutSvgZip()"><il-icon name="split" [size]="20" /><span><strong>{{ zipping() ? 'Nomeando com IA…' : 'ZIP com um SVG por imagem' }}</strong><small>Cada arquivo nomeado por IA pelo que o desenho é</small></span></button>
                   </div>
+                  @if (zipStatus()) { <p class="il-note pc-pad">{{ zipStatus() }}</p> }
+                  <p class="il-note pc-pad">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
                 }
               }
-            </section>
-          }
+            </div>
+          </aside>
 
-          <section class="panel-section" [class.open]="isOpen('folha')">
-            <button class="section-head" (click)="toggleSection('folha')">
-              <span class="section-title"><span class="step">6</span> Folha</span>
-              <span class="section-summary">{{ sectionSummary('folha') }}</span>
-              <app-icon class="chevron" name="chevron" [size]="14" />
-            </button>
-            @if (isOpen('folha')) {
-              <p class="section-help">Junta todas as peças (e suas cópias) numa folha só pra imprimir de uma vez. Veja o resultado na aba "Folha de montagem" acima.</p>
-              <div class="field-row">
-                <label class="field">
-                  <span class="field-label">Tamanho</span>
-                  <select class="num-input" [value]="sheetSize()" (change)="onSheetSizeChange($event)">
-                    <option value="A4">A4</option>
-                    <option value="A3">A3</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span class="field-label">Orientação</span>
-                  <select class="num-input" [value]="orientation()" (change)="onOrientationChange($event)">
-                    <option value="retrato">Retrato</option>
-                    <option value="paisagem">Paisagem</option>
-                  </select>
-                </label>
-              </div>
-              <label class="field">
-                <span class="field-label">Espaço entre peças <strong>{{ spacingMm().toFixed(0) }} mm</strong></span>
-                <input type="range" min="0" max="10" step="1" [value]="spacingMm()" (input)="onSpacingInput($event)" />
-              </label>
-              <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPng()">
-                <app-icon name="download" [size]="14" /> PNG da folha ({{ dpi }} DPI)
-              </button>
-              <button class="btn primary full" [disabled]="!images().length" (click)="exportSheetPdf()">
-                <app-icon name="download" [size]="14" /> PDF da folha (imprimir)
-              </button>
-              <button class="btn full" [disabled]="!images().length" (click)="exportSheetSvg()">
-                <app-icon name="download" [size]="14" /> SVG de corte da folha
-              </button>
-              <p class="field-note">Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem entre os dois.</p>
+          <footer class="il-status">
+            <div class="il-status-zoom">
+              <button type="button" class="il-ib il-ib-sm" data-tip="Afastar  Ctrl+−" aria-label="Afastar" (click)="zoomBy(1 / 1.25)">−</button>
+              <il-num label="" title="Zoom (100% = cabe na tela)" unit="%" [value]="zoom() * 100" [step]="10" [min]="50" [max]="800" [decimals]="0" (valueChange)="setZoomPct($event.value)" />
+              <button type="button" class="il-ib il-ib-sm" data-tip="Aproximar  Ctrl+=" aria-label="Aproximar" (click)="zoomBy(1.25)">+</button>
+              <button type="button" class="il-ib il-ib-sm" data-tip="Ajustar à janela  Ctrl+0" aria-label="Ajustar à janela" (click)="resetZoom()"><il-icon name="fit" [size]="13" /></button>
+            </div>
+            @if (view() === 'peca') {
+              @if (selected(); as sel) {
+                <span class="il-status-info">{{ sel.name }}</span>
+                <span class="pc-dims">arte {{ formatMm(sel.widthMm) }} × {{ formatMm(artHeightMm(sel)) }} · peça {{ pieceLabel() }}</span>
+              }
+              <span class="il-status-msg" [class.pc-active]="tool() !== 'nenhuma'">{{ pcHint() }}</span>
+            } @else {
+              <span class="il-status-info">{{ sheetSize() }} {{ orientation() }} · {{ packInfo().placed }} peça(s)</span>
+              <span class="il-status-msg" [class.il-warn]="packInfo().overflow > 0">
+                {{ packInfo().overflow > 0 ? packInfo().overflow + ' não couberam — reduza cópias ou tamanho, ou use A3' : 'Imprima a folha e corte com o SVG da folha: as posições batem.' }}
+              </span>
             }
-          </section>
-
-          <section class="panel-section" [class.open]="isOpen('exportar')">
-            <button class="section-head" (click)="toggleSection('exportar')">
-              <span class="section-title"><span class="step">7</span> Exportar a peça</span>
-              <span class="section-summary">{{ sectionSummary('exportar') }}</span>
-              <app-icon class="chevron" name="chevron" [size]="14" />
-            </button>
-            @if (isOpen('exportar')) {
-              <p class="section-help">Só a peça selecionada, sem folha. São dois arquivos: um pra impressora e outro pra máquina de corte.</p>
-              <button class="btn primary full" [disabled]="!selected()" (click)="exportPrintPng()">
-                <app-icon name="download" [size]="14" /> PNG {{ dpi }} DPI (imprimir)
-              </button>
-              <button class="btn primary full" [disabled]="!selected()" (click)="exportCutSvg()">
-                <app-icon name="download" [size]="14" /> SVG linha de corte (ScanNCut)
-              </button>
-              <button class="btn full" [disabled]="!selected()" (click)="exportFullSvg()">
-                <app-icon name="download" [size]="14" /> SVG arte + corte
-              </button>
-              <button class="btn full" [disabled]="images().length < 2 || zipping()" (click)="exportCutSvgZip()">
-                <app-icon name="download" [size]="14" />
-                {{ zipping() ? 'Nomeando com IA…' : 'ZIP com um SVG por imagem' }}
-              </button>
-              @if (zipStatus()) { <p class="field-note">{{ zipStatus() }}</p> }
-              <p class="field-note">No ZIP cada arquivo é nomeado por IA pelo que o desenho é ("polvo-maria-clara"), não por número. Sem chave de IA configurada, valem os nomes atuais.</p>
-              <p class="field-note">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
-            }
-          </section>
-        </aside>
+          </footer>
+        </div>
         } @else if (modo() === 'molde') {
           <app-template-mode />
         } @else if (modo() === 'social') {
@@ -650,244 +598,68 @@ function loadPrefs(): Prefs {
     </div>
   `,
   styles: [`
-    .page { min-height: 100dvh; background: var(--bg); }
-    .top-bar {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--border);
-    }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .hub-link {
-      display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text-muted); text-decoration: none;
-    }
-    .hub-link:hover { border-color: var(--accent); color: var(--accent); }
-    .top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
-    .brand-mark {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--accent-contrast); flex-shrink: 0;
-    }
-    .top-bar-actions { display: flex; align-items: center; gap: 14px; }
-    .theme-toggle {
-      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
-      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-      color: var(--text-muted); flex-shrink: 0;
-    }
-    .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
-    .mode-switch { display: flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-    .mode-switch button {
-      border: none; background: none; color: var(--text-muted);
-      font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px;
-    }
-    .mode-switch button:hover { color: var(--accent); }
-    .mode-switch button.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+    .page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+    .content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .content > * { flex: 1; min-height: 0; }
 
-    .user-email { font-size: 12px; color: var(--text-muted); }
-    .logout { display: flex; align-items: center; gap: 5px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 600; }
-    .logout:hover { color: var(--danger); }
+    /* ---- barra do app, como a barra de aplicativo da Adobe ---- */
+    .il-appbar {
+      display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 10px; flex-shrink: 0;
+      background: var(--il-chrome-2); border-bottom: 1px solid var(--il-line);
+    }
+    .ab-home { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 4px; color: var(--text-muted); }
+    .ab-home:hover { background: var(--il-hover); color: var(--text); }
+    .ab-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; white-space: nowrap; }
+    .ab-mark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px; background: var(--il-blue); color: #fff; }
+    .ab-modes { display: flex; gap: 2px; padding: 2px; background: var(--il-field); border: 1px solid var(--il-line); border-radius: 5px; }
+    .ab-modes button { height: 26px; padding: 0 12px; border: none; border-radius: 4px; background: none; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+    .ab-modes button:hover { color: var(--text); }
+    .ab-modes button.il-on { background: var(--il-active); color: var(--il-blue); }
+    .ab-project { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+    .ab-name { width: 200px; min-width: 90px; height: 26px; padding: 0 8px; font: inherit; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
+    .ab-name:focus { outline: none; border-color: var(--il-blue); }
+    .ab-status { max-width: 220px; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ab-menu-wrap { position: relative; }
+    .ab-menu {
+      position: absolute; z-index: 120; top: calc(100% + 4px); right: 0; width: 300px; max-height: 60vh; overflow-y: auto; padding: 4px;
+      background: var(--il-chrome); border: 1px solid var(--il-line-strong); border-radius: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    }
+    .ab-menu-row { display: flex; align-items: center; gap: 2px; border-radius: 3px; }
+    .ab-menu-row.il-on { background: var(--il-active); }
+    .ab-menu-item { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: none; border-radius: 3px; background: none; color: var(--text); text-align: left; }
+    .ab-menu-item:hover { background: var(--il-hover); }
+    .ab-new { justify-content: flex-start; font-weight: 600; border-bottom: 1px solid var(--il-line); border-radius: 0; margin-bottom: 3px; width: 100%; }
+    .ab-p-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ab-p-date { flex-shrink: 0; font-size: 11px; color: var(--text-muted); }
+    .ab-menu-empty { margin: 8px; font-size: 11px; color: var(--text-muted); }
+    .ab-right { display: flex; align-items: center; gap: 4px; }
+    .ab-user { font-size: 11px; color: var(--text-muted); max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    .content {
-      max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px;
-      display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start;
-    }
-    /* Ilustração: área de trabalho de tela cheia, como um app de desenho. */
-    .page:has(.content-studio) { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
-    .content.content-studio { max-width: none; margin: 0; padding: 0; display: block; flex: 1; min-height: 0; }
-
-    .preview-wrap {
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm); padding: 16px;
-      position: sticky; top: 16px;
-      /* Sem isto, o mínimo automático do item de grade é o tamanho do canvas:
-         ao dar zoom a coluna incharia e empurraria o painel pra fora da tela,
-         em vez de o palco rolar. */
-      min-width: 0;
-    }
-    .tabs { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
-    .zoom-bar {
-      display: flex; align-items: center; gap: 2px; margin-left: auto;
-      border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
-    }
-    .zoom-bar button {
-      border: none; background: var(--bg); color: var(--text-muted);
-      padding: 6px 10px; font-size: 13px; font-weight: 700; cursor: pointer; line-height: 1;
-    }
-    .zoom-bar button:hover { color: var(--accent); }
-    .zoom-level { min-width: 52px; font-size: 12px; font-variant-numeric: tabular-nums; }
-    .tabs button {
-      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
-      padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer;
-    }
-    .tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
-    .preview-stage {
-      display: flex; overflow: auto; overscroll-behavior: contain;
-      height: clamp(280px, 52dvh, 560px); min-width: 0; border-radius: var(--radius); padding: 16px;
-      background:
-        repeating-conic-gradient(rgba(128, 128, 128, 0.16) 0% 25%, transparent 0% 50%)
-        0 0 / 22px 22px;
-    }
-    .preview-stage.picking canvas { cursor: crosshair; }
-    .preview-stage.erasing canvas { cursor: cell; touch-action: none; }
-    /* margin auto centraliza quando cabe e, ao contrário de align-items:center,
-       não corta o topo/esquerda quando a imagem fica maior que o palco. */
-    .preview-stage canvas { margin: auto; }
-    .sheet-stage { background: var(--bg); }
-    .preview-meta {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-      padding: 12px 4px 0; font-size: 12px; color: var(--text-muted);
-    }
-    .file-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-dims { flex-shrink: 0; }
-    .overflow-warn { color: var(--danger); font-weight: 600; }
-    .cut-hint { margin: 6px 4px 0; font-size: 11px; color: var(--text-muted); }
-    .pick-hint { color: var(--accent-dark); font-weight: 600; }
-
-    .drop-zone {
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-      height: clamp(280px, 52dvh, 560px); border: 2px dashed var(--border); border-radius: var(--radius);
-      color: var(--text-muted); text-align: center; padding: 24px; cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); }
-    .drop-zone p { margin: 0; font-size: 14px; }
-    .drop-zone .hint { font-size: 12px; max-width: 380px; line-height: 1.5; }
-
-    .panel { display: flex; flex-direction: column; gap: 16px; }
-    .panel-section {
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm); padding: 16px; display: flex; flex-direction: column; gap: 10px;
-    }
-    /* O cabeçalho sangra até as bordas do cartão com margem negativa; o corpo
-       fica no padding normal, pra que "width: 100%" dos controles case com a
-       largura interna em vez de estourar o cartão. */
-    .panel-section { padding: 0 14px 14px; gap: 10px; overflow: hidden; }
-    .panel-section:not(.open) { padding-bottom: 0; }
-    .section-head {
-      display: flex; align-items: center; gap: 8px;
-      margin: 0 -14px; padding: 12px 14px;
-      border: none; background: none; cursor: pointer; color: inherit; text-align: left;
-    }
-    .section-title {
-      display: flex; align-items: center; gap: 7px;
-      font-size: 13px; font-weight: 700; flex-shrink: 0;
-    }
-    .step {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
-      background: var(--accent-soft); color: var(--accent-dark);
-      font-size: 11px; font-weight: 700;
-    }
-    .panel-section.open .step { background: var(--accent); color: var(--accent-contrast); }
-    .section-summary {
-      flex: 1; min-width: 0; text-align: right;
-      font-size: 11px; color: var(--text-muted);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .panel-section.open .section-summary { display: none; }
-    .chevron { color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0; }
-    .panel-section.open .chevron { transform: rotate(180deg); }
-    .section-help {
-      margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted);
-      padding-bottom: 2px;
-    }
-
-    .btn {
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
-      padding: 8px 12px; font-size: 13px; font-weight: 600; color: inherit; cursor: pointer;
-    }
-    .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-    .btn:disabled { opacity: 0.5; cursor: default; }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
-    .btn.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
-    .btn.full { width: 100%; }
-
-    .image-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
-    .image-list li {
-      display: flex; align-items: center; gap: 6px;
-      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 6px;
-    }
-    .image-list li.active { border-color: var(--accent); background: var(--accent-soft); }
-    .thumb-btn {
-      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-      border: none; background: none; padding: 2px; text-align: left; cursor: pointer; color: inherit;
-    }
-    .thumb-btn img {
-      width: 36px; height: 36px; object-fit: contain; border-radius: 6px; flex-shrink: 0;
-      background:
-        repeating-conic-gradient(rgba(128, 128, 128, 0.16) 0% 25%, transparent 0% 50%)
-        0 0 / 12px 12px;
-    }
-    .thumb-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .project-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
-    .project-list li {
-      display: flex; align-items: center; gap: 4px;
-      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 4px;
-    }
-    .project-list li.active { border-color: var(--accent); background: var(--accent-soft); }
-    .project-open {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; min-width: 0;
-      border: none; background: none; padding: 6px 4px; text-align: left; cursor: pointer; color: inherit;
-    }
-    .project-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .project-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
-    .copies-badge {
-      font-size: 11px; font-weight: 700; color: var(--accent-dark);
-      background: var(--accent-soft); border-radius: 999px; padding: 1px 7px; flex-shrink: 0;
-    }
-    .remove-btn {
-      display: flex; align-items: center; justify-content: center;
-      width: 24px; height: 24px; border: none; background: none; border-radius: 6px;
-      color: var(--text-muted); cursor: pointer; flex-shrink: 0;
-    }
-    .remove-btn:hover { color: var(--danger); background: var(--bg); }
-
-    .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .field-row { display: flex; gap: 10px; }
-    .field-row .field { flex: 1; }
-    .field-label { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; }
-    .field-label strong { color: var(--text); }
-    .field input[type='range'] { width: 100%; accent-color: var(--accent); }
-    .field-note { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.5; }
-    .num-input {
-      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
-      padding: 7px 10px; font-size: 13px; color: inherit; width: 100%;
-    }
-    .num-input:focus { outline: none; border-color: var(--accent); }
-    .btn-row { display: flex; gap: 6px; }
-    .btn-row .btn { flex: 1; padding: 6px 0; }
-    .check-field { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
-    .check-field input { accent-color: var(--accent); margin-top: 1px; }
-
-    .shape-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .shape-btn {
-      border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm);
-      padding: 6px 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); cursor: pointer;
-    }
-    .shape-btn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); }
-
-    .color-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .color-row input[type='color'] {
-      width: 34px; height: 28px; padding: 2px; border: 1px solid var(--border);
-      border-radius: var(--radius-sm); background: var(--bg); cursor: pointer;
-    }
-    .swatch {
-      width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border);
-      cursor: pointer; padding: 0; flex-shrink: 0;
-    }
-    .swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+    /* ---- Print & Cut ---- */
+    .pc-seg button { width: auto; padding: 0 10px; gap: 5px; font-size: 12px; }
+    .pc-seg-full { display: flex; }
+    .pc-seg-full button { flex: 1; padding: 0 4px; font-size: 11px; }
+    .pc-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .pc-stage canvas { margin: auto; flex: none; }
+    .pc-stage[data-tool='fundo'] canvas, .pc-stage[data-tool='corte'] canvas { cursor: crosshair; }
+    .pc-stage[data-tool='borracha'] canvas { cursor: cell; touch-action: none; }
+    .pc-swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--il-line-strong); }
+    .pc-swatch.il-on { outline: 2px solid var(--il-blue); outline-offset: 1px; }
+    .pc-wide-b { font-size: 10px; }
+    .pc-pad { margin: 10px; }
+    .pc-dims { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .il-status-msg.pc-active { color: var(--il-blue); font-weight: 600; }
 
     @media (max-width: 900px) {
-      .top-bar { padding: 12px 16px; flex-wrap: wrap; }
-      .user-email { display: none; }
-      .mode-switch { flex: 1 1 100%; order: 3; }
-      .mode-switch button { flex: 1; padding: 8px 9px; font-size: 12px; }
-      .content { grid-template-columns: 1fr; padding: 16px 12px 48px; gap: 14px; }
-      .page:has(.content-studio) { height: auto; overflow: visible; }
-      .content.content-studio { padding: 0; }
-      .preview-wrap { top: 0; z-index: 5; padding: 12px; }
-      .preview-stage, .drop-zone { height: clamp(180px, 34dvh, 320px); }
-      .cut-hint { display: none; }
+      .page { height: auto; overflow: visible; }
+      .il-appbar { height: auto; flex-wrap: wrap; padding: 6px 8px; row-gap: 6px; }
+      .ab-modes { order: 5; width: 100%; }
+      .ab-modes button { flex: 1; padding: 0 4px; }
+      .ab-project { order: 6; width: 100%; justify-content: flex-start; }
+      .ab-name { flex: 1; }
+      .ab-status, .ab-user { display: none; }
+      .ab-right { margin-left: auto; }
+      .pc-dims { display: none; }
     }
   `],
 })
@@ -904,10 +676,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   readonly dpi = EXPORT_DPI;
   readonly swatches = SWATCHES;
   readonly shapes = SHAPES;
+  readonly modes = MODES;
+  readonly pcTools = PC_TOOLS;
+  readonly pcTabs = PC_TABS;
 
   private prefs = loadPrefs();
 
   modo = signal<EditorMode>(this.prefs.modo ?? 'corte');
+  pcTab = signal<PcTab>('imagens');
+  /** Tamanho físico da peça desenhada por último (arte + borda). */
+  pieceLabel = signal('');
+  projectsOpen = signal(false);
   images = signal<ImportedImage[]>([]);
   selectedId = signal<string | null>(null);
   view = signal<'peca' | 'folha'>('peca');
@@ -1211,6 +990,82 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (!id) return;
     this.images.update((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
     this.scheduleRender();
+  }
+
+  // ---------- área de trabalho ----------
+
+  /** Os campos numéricos novos falam número; os handlers do Print & Cut
+   * leem o valor de um evento de input. Este adaptador liga os dois sem
+   * duplicar a regra de cada campo. */
+  ev(value: number): Event {
+    return { target: { value: String(value) } } as unknown as Event;
+  }
+
+  toggleMirror(): void {
+    const sel = this.selected();
+    if (sel) this.updateSelected({ mirrored: !sel.mirrored });
+  }
+
+  setZoomPct(pct: number): void {
+    this.zoom.set(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pct / 100)));
+    this.scheduleRender();
+  }
+
+  /** Seções do painel Ajustes: abertas por padrão; o que o usuário fecha fica
+   * lembrado nas preferências. */
+  pcClosed(id: StepId): boolean {
+    return this.openSections()[id] === false;
+  }
+
+  pcFlip(id: StepId): void {
+    const next = { ...this.openSections(), [id]: this.openSections()[id] === false };
+    this.openSections.set(next);
+    this.prefs.openSections = next;
+    this.savePrefs();
+  }
+
+  /** O que a barra de status diz sobre a ferramenta em uso. */
+  pcHint(): string {
+    if (this.cutHint()) return this.cutHint();
+    switch (this.tool()) {
+      case 'fundo': return 'Clique na cor de fundo: a região contígua àquela cor é apagada.';
+      case 'borracha': return 'Arraste sobre o contorno pra apagá-lo — a arte não é afetada.';
+      case 'corte': return 'Clique dentro de uma linha tracejada pra tirá-la do corte.';
+      case 'dividir': return this.splitSummary();
+      default: return 'A linha tracejada vermelha é a linha de corte que sai no SVG · Ctrl+roda dá zoom';
+    }
+  }
+
+  toggleProjects(): void {
+    this.projectsOpen.update((v) => !v);
+    if (this.projectsOpen()) void this.refreshProjects();
+  }
+
+  @HostListener('document:pointerdown', ['$event'])
+  onDocPointerDown(event: PointerEvent): void {
+    if (this.projectsOpen() && !(event.target as Element).closest?.('.ab-menu-wrap')) this.projectsOpen.set(false);
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onPageKey(event: KeyboardEvent): void {
+    const ctrl = event.ctrlKey || event.metaKey;
+    if (ctrl && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      void this.saveProject();
+      return;
+    }
+    if (this.modo() !== 'corte' || isTyping(event.target) || event.altKey) return;
+    if (ctrl) {
+      if (event.code === 'Digit0') { event.preventDefault(); this.resetZoom(); }
+      else if (event.key === '=' || event.key === '+') { event.preventDefault(); this.zoomBy(1.25); }
+      else if (event.key === '-') { event.preventDefault(); this.zoomBy(1 / 1.25); }
+      return;
+    }
+    if (event.key === 'Escape') { this.setTool('nenhuma'); return; }
+    const tool = PC_TOOLS.find((t) => t.key.toLowerCase() === event.key.toLowerCase());
+    if (tool && (tool.id === 'nenhuma' || this.selected())) {
+      if (this.tool() !== tool.id) this.setTool(tool.id);
+    }
   }
 
   // ---------- ponte com a Ilustração ----------
@@ -1687,6 +1542,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.strokeCutPaths(ctx, piece.cuts, Math.max(1.5, canvas.width / 500));
     if (this.tool() === 'dividir') this.strokeSplitBoxes(ctx, sel, piece);
     this.applyZoom(canvas, this.pieceStage?.nativeElement);
+    // Gravado aqui, e não calculado no template: a resolução da prévia depende
+    // da largura do palco, e o arredondamento mudava entre duas verificações.
+    this.pieceLabel.set(this.pieceSizeLabel(sel));
   }
 
   /** Marca na prévia cada elemento que a divisão encontrou, numerado na ordem

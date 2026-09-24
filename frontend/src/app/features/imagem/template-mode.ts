@@ -3,7 +3,8 @@
  * camada — o mesmo buraco aceita várias, com ordem e opacidade próprias. */
 
 import { Component, ElementRef, HostListener, ViewEncapsulation, effect, signal, viewChild } from '@angular/core';
-import { IconComponent } from '../../shared/icon';
+import { IlIconComponent } from './illustration-icons';
+import { IlNumComponent } from './illustration-num';
 import { pngBlobWithDpi } from './contour';
 import { jpegToPdf } from './sheet';
 import { NEW_PHOTO_DEFAULTS, TemplateStore } from './template-store';
@@ -29,7 +30,7 @@ const MAX_ZOOM = 8;
 const MIN_PHOTO_SCALE = 0.2;
 const MAX_PHOTO_SCALE = 8;
 
-type SectionId = 'molde' | 'encaixes' | 'fotos' | 'ajuste' | 'exportar';
+type TabId = 'molde' | 'fotos' | 'exportar';
 
 interface DragState {
   pointerId: number;
@@ -99,357 +100,219 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
 @Component({
   selector: 'app-template-mode',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IlIconComponent, IlNumComponent],
   // Sem encapsulamento porque o SVG do molde entra por appendChild e não recebe
   // o atributo de escopo do Angular. Por isso todo seletor daqui usa o prefixo `tm-`.
   encapsulation: ViewEncapsulation.None,
+  host: { class: 'il-studio il-basic tm' },
   template: `
-    <div class="tm-preview-wrap">
-      <div class="tm-tabs">
-        <span class="tm-tab-label">
-          @if (store.hasTemplate()) {
-            {{ store.slots().length }} encaixe(s) · {{ store.photos().length }} foto(s)
-          } @else {
-            Molde SVG
-          }
-        </span>
-        @if (store.hasTemplate()) {
-          <div class="tm-zoom-bar" title="Ctrl + roda do mouse também dá zoom">
-            <button (click)="zoomBy(1 / 1.25)" aria-label="Menos zoom">−</button>
-            <button class="tm-zoom-level" (click)="resetZoom()" title="Ajustar à tela">{{ (zoom() * 100).toFixed(0) }}%</button>
-            <button (click)="zoomBy(1.25)" aria-label="Mais zoom">+</button>
-          </div>
-        }
-      </div>
+    <input #svgInput type="file" accept=".svg,image/svg+xml" hidden (change)="onSvgInput($event)" />
+    <input #photoInput type="file" accept="image/*" multiple hidden (change)="onPhotoInput($event)" />
 
-      @if (store.hasTemplate()) {
-        <div
-          #stage
-          class="tm-stage"
-          [class.tm-drag-over]="dragOver()"
-          [class.tm-marking]="marking()"
-          (wheel)="onWheel($event)"
-          (dragover)="onDragOver($event)"
-          (dragleave)="onDragLeave($event)"
-          (drop)="onDrop($event)"
-          (pointerdown)="onPointerDown($event)"
-          (pointermove)="onPointerMove($event)"
-          (pointerup)="onPointerUp($event)"
-          (pointercancel)="onPointerUp($event)"
-        >
-          <div #svgHost class="tm-svg-host"></div>
+    <div class="il-controlbar">
+      @if (store.selectedPhoto(); as photo) {
+        <span class="il-cb-kind tm-kind" [title]="photo.name">Foto · {{ photo.name }}</span>
+        <div class="il-cb-group">
+          <il-num label="Opac." title="Opacidade" unit="%" [value]="photo.opacity * 100" [min]="0" [max]="100" [decimals]="0" (valueChange)="onOpacity(photo.id, ev($event.value))" />
+          <il-num label="Zoom" title="Tamanho da foto no encaixe" unit="%" [value]="photo.scale * 100" [step]="5" [min]="20" [max]="800" [decimals]="0" (valueChange)="onScale(photo.id, ev($event.value))" />
+          <il-num label="⟳" title="Giro" unit="°" [value]="photo.rotation" [min]="-180" [max]="180" [decimals]="0" (valueChange)="onRotation(photo.id, ev($event.value))" />
         </div>
-        <div class="tm-meta">
-          <span class="tm-file-name">{{ store.fileName() || 'molde.svg' }}</span>
-          <span>impressão {{ store.widthMm().toFixed(1) }} × {{ store.heightMm().toFixed(1) }} mm</span>
+        <div class="il-cb-group">
+          <button type="button" class="il-ib" data-tip="Girar −90°" aria-label="Girar −90°" (click)="rotateBy(photo, -90)"><il-icon name="rotate-left" /></button>
+          <button type="button" class="il-ib" data-tip="Girar +90°" aria-label="Girar +90°" (click)="rotateBy(photo, 90)"><il-icon name="rotate-right" /></button>
+          <button type="button" class="il-ib" [class.il-on]="photo.flipX" data-tip="Espelhar" aria-label="Espelhar" (click)="store.patchPhoto(photo.id, { flipX: !photo.flipX })"><il-icon name="flip-h" /></button>
         </div>
-        <p class="tm-hint">
-          @if (marking()) {
-            Clique numa forma do molde pra transformá-la em encaixe. Segure Alt pra pegar o grupo inteiro.
-          } @else if (hint()) {
-            {{ hint() }}
-          } @else {
-            Arraste uma foto pra cima de um encaixe. Solte outra no mesmo lugar pra empilhar.
-          }
-        </p>
+        <div class="il-cb-group">
+          <div class="il-seg">
+            <button type="button" [class.il-on]="photo.fit === 'cover'" data-tip="Preencher o encaixe" aria-label="Preencher" (click)="store.patchPhoto(photo.id, { fit: 'cover' })"><il-icon name="cover" /></button>
+            <button type="button" [class.il-on]="photo.fit === 'contain'" data-tip="Caber inteira" aria-label="Caber" (click)="store.patchPhoto(photo.id, { fit: 'contain' })"><il-icon name="contain" /></button>
+          </div>
+          <button type="button" class="il-ib" data-tip="Reenquadrar" aria-label="Reenquadrar" (click)="store.reframe(photo.id)"><il-icon name="reframe" /></button>
+          <button type="button" class="il-ib" [class.il-on]="photo.depth === 'atras'" [attr.data-tip]="photo.depth === 'atras' ? 'Atrás do molde (clique pra trazer)' : 'Na frente do molde (clique pra mandar atrás)'" aria-label="Frente ou atrás do molde" (click)="toggleDepth($event, photo)"><il-icon [name]="photo.depth === 'atras' ? 'back' : 'front'" /></button>
+          <button type="button" class="il-ib il-danger" data-tip="Remover foto" aria-label="Remover foto" (click)="removePhoto($event, photo.id)"><il-icon name="trash" /></button>
+        </div>
+      } @else if (store.hasTemplate()) {
+        <span class="il-cb-kind">Molde</span>
+        <div class="il-cb-group">
+          <il-num label="L" title="Largura de impressão" unit="mm" [value]="store.widthMm()" [min]="10" [max]="2000" [decimals]="1" (valueChange)="setWidth($event.value)" />
+          <span class="il-cb-label">A {{ store.heightMm().toFixed(1).replace('.', ',') }} mm</span>
+        </div>
+        <span class="il-cb-hint">{{ marking() ? 'Clique numa forma do molde pra virar encaixe (Alt pega o grupo)' : 'Clique num encaixe pra selecionar a foto; arraste pra enquadrar' }}</span>
       } @else {
-        <div
-          class="tm-drop-zone"
-          [class.tm-drag-over]="dragOver()"
-          (click)="svgInput.click()"
-          (dragover)="onDragOver($event)"
-          (dragleave)="onDragLeave($event)"
-          (drop)="onDrop($event)"
-        >
-          <app-icon name="image" [size]="34" />
-          <p><strong>Solte um molde .svg aqui</strong></p>
-          <p class="tm-sub">
-            Encaixes com <code>id</code> começando em "foto" (ou rótulo do Inkscape) são
-            detectados sozinhos — nos outros é só clicar na forma depois.
-          </p>
-          @if (store.error()) { <p class="tm-error">{{ store.error() }}</p> }
-        </div>
+        <span class="il-cb-kind">Molde SVG</span>
+        <span class="il-cb-hint">Abra um molde .svg (moldura, colagem, gabarito) pra encaixar fotos nos buracos dele.</span>
       }
     </div>
 
-    <aside class="tm-panel">
-      <input #svgInput type="file" accept=".svg,image/svg+xml" hidden (change)="onSvgInput($event)" />
-      <input #photoInput type="file" accept="image/*" multiple hidden (change)="onPhotoInput($event)" />
+    <nav class="il-tools-col" aria-label="Ferramentas">
+      <div class="il-tb-group">
+        <button type="button" class="il-tool" [class.il-on]="!marking()" aria-label="Mover foto" data-tip="Mover foto  V" data-help="Clique no encaixe e arraste pra enquadrar" (click)="marking.set(false)"><il-icon name="select" [size]="18" /></button>
+        <button type="button" class="il-tool" [class.il-on]="marking()" [disabled]="!store.hasTemplate()" aria-label="Marcar encaixe" data-tip="Marcar encaixe  M" data-help="Clique numa forma do molde pra ela receber foto" (click)="toggleMarking()"><il-icon name="slot" [size]="18" /></button>
+      </div>
+      <div class="il-tb-group">
+        <button type="button" class="il-tool" aria-label="Abrir molde" data-tip="Abrir molde (.svg)" (click)="svgInput.click()"><il-icon name="folder" [size]="18" /></button>
+        <button type="button" class="il-tool" [disabled]="!store.slots().length" aria-label="Adicionar foto" data-tip="Adicionar foto" data-help="Vai pro encaixe ativo (ou o primeiro vazio)" (click)="pickPhoto()"><il-icon name="photo-add" [size]="18" /></button>
+      </div>
+    </nav>
 
-      <section class="tm-section" [class.tm-open]="isOpen('molde')">
-        <button class="tm-section-head" (click)="toggle('molde')">
-          <span class="tm-section-title"><app-icon name="image" [size]="13" /> Molde</span>
-          <span class="tm-section-summary">{{ store.fileName() || 'nenhum' }}</span>
-          <app-icon class="tm-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="tm-section-body">
-          <div class="tm-row">
-            <button class="tm-btn" (click)="svgInput.click()"><app-icon name="folder" [size]="13" /> Trocar molde</button>
-            @if (store.hasTemplate()) {
-              <button class="tm-btn tm-danger" (click)="removeTemplate()"><app-icon name="delete" [size]="13" /> Remover</button>
-            }
-          </div>
-          @if (store.hasTemplate()) {
-            <label class="tm-field">
-              <span>Largura de impressão (mm)</span>
-              <input type="number" min="10" max="2000" step="1" [value]="store.widthMm()" (input)="onWidthMm($event)" />
-            </label>
-            <p class="tm-note">Altura: {{ store.heightMm().toFixed(1) }} mm (segue a proporção do molde).</p>
-          }
-        </div>
-      </section>
-
+    <div
+      #stage
+      class="il-stage tm-stage"
+      [class.il-drag-over]="dragOver()"
+      [class.tm-marking]="marking()"
+      (wheel)="onWheel($event)"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerUp($event)"
+    >
       @if (store.hasTemplate()) {
-        <section class="tm-section" [class.tm-open]="isOpen('encaixes')">
-          <button class="tm-section-head" (click)="toggle('encaixes')">
-            <span class="tm-section-title"><app-icon name="rect" [size]="13" /> Encaixes</span>
-            <span class="tm-section-summary">{{ store.slots().length }}</span>
-            <app-icon class="tm-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="tm-section-body">
-            <button class="tm-btn tm-wide" [class.tm-active]="marking()" (click)="toggleMarking()">
-              <app-icon name="plus" [size]="13" /> {{ marking() ? 'Clique numa forma…' : 'Marcar encaixe' }}
-            </button>
-            @if (!store.slots().length) {
-              <p class="tm-note">
-                Nenhum encaixe detectado. Use "Marcar encaixe" e clique na forma que deve receber a
-                foto — ou nomeie a forma como <code>foto1</code> no Inkscape/Illustrator.
-              </p>
-            }
-            @for (slot of store.slots(); track slot.id) {
-              <div class="tm-item" [class.tm-item-active]="activeSlot() === slot.id">
-                <input class="tm-item-name" [value]="slot.label" (input)="onSlotRename(slot.id, $event)" />
-                <span class="tm-count">{{ store.photosOfSlot(slot.id).length }}</span>
-                <button class="tm-icon-btn" title="Adicionar foto" (click)="pickPhotoFor(slot.id)"><app-icon name="plus" [size]="13" /></button>
-                <button class="tm-icon-btn tm-danger" title="Remover encaixe" (click)="store.removeSlot(slot.id)"><app-icon name="delete" [size]="13" /></button>
-              </div>
-            }
-          </div>
-        </section>
+        <div #svgHost class="tm-svg-host il-paper"></div>
+      } @else {
+        <button type="button" class="il-empty" (click)="svgInput.click()">
+          <il-icon name="slot" [size]="34" />
+          <strong>Solte um molde .svg aqui</strong>
+          <span>Encaixes com <code>id</code> começando em "foto" (ou rótulo do Inkscape) são detectados sozinhos — nos outros é só marcar a forma depois.</span>
+          @if (store.error()) { <span class="il-error">{{ store.error() }}</span> }
+        </button>
+      }
+    </div>
 
-        <section class="tm-section" [class.tm-open]="isOpen('fotos')">
-          <button class="tm-section-head" (click)="toggle('fotos')">
-            <span class="tm-section-title"><app-icon name="duplicate" [size]="13" /> Fotos</span>
-            <span class="tm-section-summary">{{ store.photos().length }}</span>
-            <app-icon class="tm-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="tm-section-body">
+    <aside class="il-dock">
+      <div class="il-tabs" role="tablist">
+        @for (t of tabs; track t.id) {
+          <button type="button" role="tab" class="il-tab" [class.il-on]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}</button>
+        }
+      </div>
+      <div class="il-tab-body">
+        @switch (tab()) {
+          @case ('molde') {
+            <section class="il-sec">
+              <div class="il-sec-body il-sec-body-top">
+                <div class="il-row">
+                  <button type="button" class="il-btn il-grow" (click)="svgInput.click()"><il-icon name="folder" [size]="13" /> {{ store.hasTemplate() ? 'Trocar molde' : 'Abrir molde' }}</button>
+                  @if (store.hasTemplate()) {
+                    <button type="button" class="il-btn il-danger" (click)="removeTemplate()" data-tip="Remover o molde"><il-icon name="trash" [size]="13" /></button>
+                  }
+                </div>
+                @if (store.hasTemplate()) {
+                  <span class="il-item-sub">{{ store.fileName() || 'molde.svg' }}</span>
+                  <il-num label="Largura" unit="mm" [value]="store.widthMm()" [min]="10" [max]="2000" (valueChange)="setWidth($event.value)" />
+                  <p class="il-note">Altura {{ store.heightMm().toFixed(1).replace('.', ',') }} mm — segue a proporção do molde.</p>
+                }
+              </div>
+            </section>
+            @if (store.hasTemplate()) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">Encaixes <small>{{ store.slots().length }}</small></div>
+                <div class="il-sec-body">
+                  <button type="button" class="il-btn il-wide" [class.il-on]="marking()" (click)="toggleMarking()"><il-icon name="slot" [size]="13" /> {{ marking() ? 'Clique numa forma…' : 'Marcar encaixe' }}</button>
+                  @if (!store.slots().length) {
+                    <p class="il-note">Nenhum encaixe detectado. Use "Marcar encaixe" e clique na forma que recebe a foto — ou nomeie a forma como <code>foto1</code> no Inkscape.</p>
+                  }
+                </div>
+                @for (slot of store.slots(); track slot.id) {
+                  <div class="il-item" [class.il-on]="activeSlot() === slot.id">
+                    <input class="il-item-input" [value]="slot.label" aria-label="Nome do encaixe" (input)="onSlotRename(slot.id, $event)" (focus)="activeSlot.set(slot.id)" />
+                    <span class="il-badge" title="Fotos neste encaixe">{{ store.photosOfSlot(slot.id).length }}</span>
+                    <button type="button" class="il-ib il-ib-sm" data-tip="Adicionar foto" aria-label="Adicionar foto" (click)="pickPhotoFor(slot.id)"><il-icon name="photo-add" [size]="14" /></button>
+                    <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Remover encaixe" aria-label="Remover encaixe" (click)="store.removeSlot(slot.id)"><il-icon name="trash" [size]="13" /></button>
+                  </div>
+                }
+              </section>
+            }
+          }
+          @case ('fotos') {
             @if (!store.photos().length) {
-              <p class="tm-note">Arraste fotos pra cima dos encaixes. A última solta fica na frente.</p>
+              <p class="il-note tm-pad">Arraste fotos pra cima dos encaixes (ou cole com Ctrl+V). A última solta fica na frente.</p>
             }
             @for (photo of store.stack(); track photo.id) {
-              <div class="tm-layer" [class.tm-item-active]="store.selectedPhotoId() === photo.id" (click)="selectPhoto(photo)">
-                <img class="tm-thumb" [src]="photo.src" alt="" />
-                <div class="tm-layer-info">
-                  <span class="tm-layer-name">{{ photo.name }}</span>
-                  <span class="tm-layer-sub">{{ slotLabel(photo.slotId) }} · {{ (photo.opacity * 100).toFixed(0) }}%</span>
-                </div>
-                <div class="tm-layer-actions">
-                  <button class="tm-icon-btn" title="Trazer pra frente" (click)="reorder($event, photo.id, 'frente')">↑</button>
-                  <button class="tm-icon-btn" title="Enviar pra trás" (click)="reorder($event, photo.id, 'tras')">↓</button>
-                  <button
-                    class="tm-icon-btn tm-depth"
-                    [class.tm-active]="photo.depth === 'atras'"
-                    [title]="photo.depth === 'atras' ? 'Está atrás do molde' : 'Está na frente do molde'"
-                    (click)="toggleDepth($event, photo)"
-                  >{{ photo.depth === 'atras' ? 'atrás' : 'frente' }}</button>
-                  <button class="tm-icon-btn tm-danger" title="Remover foto" (click)="removePhoto($event, photo.id)"><app-icon name="delete" [size]="13" /></button>
-                </div>
+              <div class="il-item" [class.il-on]="store.selectedPhotoId() === photo.id">
+                <button type="button" class="il-item-main" (click)="selectPhoto(photo)">
+                  <img class="il-item-thumb" [src]="photo.src" alt="" />
+                  <span class="il-item-text">
+                    <span class="il-item-name">{{ photo.name }}</span>
+                    <span class="il-item-sub">{{ slotLabel(photo.slotId) }} · {{ (photo.opacity * 100).toFixed(0) }}% · {{ photo.depth === 'atras' ? 'atrás' : 'frente' }}</span>
+                  </span>
+                </button>
+                <button type="button" class="il-ib il-ib-sm" data-tip="Trazer pra frente" aria-label="Trazer pra frente" (click)="reorder($event, photo.id, 'frente')"><il-icon name="forward" [size]="13" /></button>
+                <button type="button" class="il-ib il-ib-sm" data-tip="Enviar pra trás" aria-label="Enviar pra trás" (click)="reorder($event, photo.id, 'tras')"><il-icon name="backward" [size]="13" /></button>
+                <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Remover foto" aria-label="Remover foto" (click)="removePhoto($event, photo.id)"><il-icon name="trash" [size]="13" /></button>
               </div>
             }
-          </div>
-        </section>
-
-        @if (store.selectedPhoto(); as photo) {
-          <section class="tm-section" [class.tm-open]="isOpen('ajuste')">
-            <button class="tm-section-head" (click)="toggle('ajuste')">
-              <span class="tm-section-title"><app-icon name="select" [size]="13" /> Ajuste</span>
-              <span class="tm-section-summary">{{ photo.name }}</span>
-              <app-icon class="tm-chevron" name="chevron" [size]="14" />
-            </button>
-            <div class="tm-section-body">
-              <label class="tm-slider">
-                <span>Opacidade <strong>{{ (photo.opacity * 100).toFixed(0) }}%</strong></span>
-                <input type="range" min="0" max="100" step="1" [value]="photo.opacity * 100" (input)="onOpacity(photo.id, $event)" />
-              </label>
-              <label class="tm-slider">
-                <span>Zoom <strong>{{ (photo.scale * 100).toFixed(0) }}%</strong></span>
-                <input type="range" min="20" max="800" step="1" [value]="photo.scale * 100" (input)="onScale(photo.id, $event)" />
-              </label>
-              <label class="tm-slider">
-                <span>Girar <strong>{{ photo.rotation.toFixed(0) }}°</strong></span>
-                <input type="range" min="-180" max="180" step="1" [value]="photo.rotation" (input)="onRotation(photo.id, $event)" />
-              </label>
-              <div class="tm-row">
-                <button class="tm-btn" (click)="rotateBy(photo, -90)">−90°</button>
-                <button class="tm-btn" (click)="rotateBy(photo, 90)">+90°</button>
-                <button class="tm-btn" [class.tm-active]="photo.flipX" (click)="store.patchPhoto(photo.id, { flipX: !photo.flipX })">Espelhar</button>
-              </div>
-              <div class="tm-row">
-                <button class="tm-btn" [class.tm-active]="photo.fit === 'cover'" (click)="store.patchPhoto(photo.id, { fit: 'cover' })">Preencher</button>
-                <button class="tm-btn" [class.tm-active]="photo.fit === 'contain'" (click)="store.patchPhoto(photo.id, { fit: 'contain' })">Caber</button>
-                <button class="tm-btn" (click)="store.reframe(photo.id)">Reenquadrar</button>
-              </div>
-              <p class="tm-note">Arraste a foto direto no palco pra mover; roda do mouse sobre ela dá zoom.</p>
+            @if (store.selectedPhoto(); as photo) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">Ajuste da foto</div>
+                <div class="il-sec-body">
+                  <label class="il-range"><span>Opacidade</span><input type="range" min="0" max="100" step="1" [value]="photo.opacity * 100" (input)="onOpacity(photo.id, $event)" /><b>{{ (photo.opacity * 100).toFixed(0) }}%</b></label>
+                  <label class="il-range"><span>Zoom</span><input type="range" min="20" max="800" step="1" [value]="photo.scale * 100" (input)="onScale(photo.id, $event)" /><b>{{ (photo.scale * 100).toFixed(0) }}%</b></label>
+                  <label class="il-range"><span>Giro</span><input type="range" min="-180" max="180" step="1" [value]="photo.rotation" (input)="onRotation(photo.id, $event)" /><b>{{ photo.rotation.toFixed(0) }}°</b></label>
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [class.il-on]="photo.fit === 'cover'" (click)="store.patchPhoto(photo.id, { fit: 'cover' })">Preencher</button>
+                    <button type="button" class="il-btn il-grow" [class.il-on]="photo.fit === 'contain'" (click)="store.patchPhoto(photo.id, { fit: 'contain' })">Caber</button>
+                    <button type="button" class="il-btn il-grow" (click)="store.reframe(photo.id)">Reenquadrar</button>
+                  </div>
+                  <p class="il-note">Arraste a foto no palco pra mover; a roda do mouse sobre ela dá zoom. Clicar de novo no encaixe desce pra camada de baixo.</p>
+                </div>
+              </section>
+            }
+          }
+          @case ('exportar') {
+            <div class="il-export-list">
+              <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="exportPng()"><il-icon name="image" [size]="20" /><span><strong>PNG {{ dpi }} DPI</strong><small>No tamanho físico, com as fotos</small></span></button>
+              <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="exportSvg()"><il-icon name="export" [size]="20" /><span><strong>SVG</strong><small>Fotos embutidas, em mm — editável no Inkscape/Illustrator</small></span></button>
+              <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="exportPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF</strong><small>Página no tamanho do molde, pra imprimir</small></span></button>
             </div>
-          </section>
+            <p class="il-note tm-pad">O PNG e o PDF são rasterizados pelo navegador: se o molde usar uma fonte instalada no seu computador, só o SVG preserva o texto como texto.</p>
+            @if (exportStatus()) { <p class="il-note tm-pad">{{ exportStatus() }}</p> }
+          }
         }
-
-        <section class="tm-section" [class.tm-open]="isOpen('exportar')">
-          <button class="tm-section-head" (click)="toggle('exportar')">
-            <span class="tm-section-title"><app-icon name="download" [size]="13" /> Exportar</span>
-            <span class="tm-section-summary">{{ store.widthMm().toFixed(0) }} mm</span>
-            <app-icon class="tm-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="tm-section-body">
-            <button class="tm-btn tm-wide" [disabled]="busy()" (click)="exportPng()"><app-icon name="download" [size]="13" /> PNG {{ dpi }} DPI</button>
-            <button class="tm-btn tm-wide" [disabled]="busy()" (click)="exportSvg()"><app-icon name="download" [size]="13" /> SVG (fotos embutidas)</button>
-            <button class="tm-btn tm-wide" [disabled]="busy()" (click)="exportPdf()"><app-icon name="download" [size]="13" /> PDF pra impressão</button>
-            <p class="tm-note">
-              O PNG e o PDF são rasterizados pelo navegador: se o molde usar uma fonte instalada
-              no seu computador, o SVG é o único que preserva o texto como texto.
-            </p>
-            @if (exportStatus()) { <p class="tm-note">{{ exportStatus() }}</p> }
-          </div>
-        </section>
-      }
+      </div>
     </aside>
+
+    <footer class="il-status">
+      <div class="il-status-zoom">
+        <button type="button" class="il-ib il-ib-sm" data-tip="Afastar" aria-label="Afastar" (click)="zoomBy(1 / 1.25)">−</button>
+        <il-num label="" title="Zoom (100% = cabe na tela)" unit="%" [value]="zoom() * 100" [step]="10" [min]="MIN_ZOOM * 100" [max]="MAX_ZOOM * 100" [decimals]="0" (valueChange)="setZoomPct($event.value)" />
+        <button type="button" class="il-ib il-ib-sm" data-tip="Aproximar" aria-label="Aproximar" (click)="zoomBy(1.25)">+</button>
+        <button type="button" class="il-ib il-ib-sm" data-tip="Ajustar à janela" aria-label="Ajustar à janela" (click)="resetZoom()"><il-icon name="fit" [size]="13" /></button>
+      </div>
+      @if (store.hasTemplate()) {
+        <span class="il-status-info">{{ store.fileName() || 'molde.svg' }}</span>
+        <span>{{ store.slots().length }} encaixe(s) · {{ store.photos().length }} foto(s) · {{ store.widthMm().toFixed(1).replace('.', ',') }} × {{ store.heightMm().toFixed(1).replace('.', ',') }} mm</span>
+      }
+      <span class="il-status-msg">{{ statusHint() }}</span>
+    </footer>
   `,
   styles: [`
-    /* O host precisa sumir da grade: os dois filhos é que são as colunas da página. */
-    app-template-mode { display: contents; }
-
-    .tm-preview-wrap { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-    .tm-tabs { display: flex; align-items: center; gap: 8px; }
-    .tm-tab-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
-    .tm-zoom-bar { margin-left: auto; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
-    .tm-zoom-bar button { border: none; background: none; color: var(--text-muted); font-size: 13px; font-weight: 700; padding: 4px 9px; }
-    .tm-zoom-bar button:hover { color: var(--accent); }
-    .tm-zoom-level { font-size: 11px; min-width: 46px; }
-
-    .tm-stage {
-      flex: 1;
-      min-height: 320px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: auto;
-      padding: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-sm);
-      touch-action: none;
-    }
-    .tm-stage.tm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
-    .tm-stage.tm-marking { cursor: crosshair; }
-    .tm-svg-host { flex: none; line-height: 0; }
+    .tm-kind { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+    .tm-svg-host { flex: none; margin: auto; line-height: 0; background: #fff; }
     .tm-svg-host svg { display: block; width: 100%; height: 100%; }
+    .tm-stage { touch-action: none; }
+    .tm-stage.tm-marking { cursor: crosshair; }
+    .tm-pad { margin: 10px; }
+    .tm code, .tm-pad code { font-size: 10.5px; padding: 0 3px; border: 1px solid var(--il-line); border-radius: 3px; }
 
     /* O SVG do molde entra por appendChild: estes seletores precisam ser globais. */
     .tm-hit, .tm-hit * { pointer-events: all; }
     .tm-hit { cursor: grab; }
-    .tm-hit-empty * { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 4; }
-    .tm-hit-selected * { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; }
-
-    .tm-meta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text-muted); }
-    .tm-file-name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tm-hint { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.4; }
-    .tm-error { color: var(--danger); font-size: 12px; }
-
-    .tm-drop-zone {
-      flex: 1;
-      min-height: 320px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-      padding: 32px;
-      text-align: center;
-      color: var(--text-muted);
-      background: var(--surface);
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      cursor: pointer;
-    }
-    .tm-drop-zone:hover, .tm-drop-zone.tm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
-    .tm-drop-zone p { margin: 0; font-size: 13px; }
-    .tm-drop-zone .tm-sub { font-size: 12px; max-width: 380px; line-height: 1.45; }
-    .tm-drop-zone code, .tm-note code { font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
-
-    .tm-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-    .tm-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .tm-section-head {
-      width: 100%;
-      display: flex; align-items: center; gap: 8px;
-      padding: 11px 13px;
-      border: none; background: none; color: inherit; text-align: left;
-    }
-    .tm-section-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
-    .tm-section-summary { margin-left: auto; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
-    .tm-chevron { color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0; }
-    .tm-section.tm-open .tm-chevron { transform: rotate(180deg); }
-    .tm-section-body { display: none; flex-direction: column; gap: 9px; padding: 0 13px 13px; }
-    .tm-section.tm-open .tm-section-body { display: flex; }
-
-    .tm-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .tm-btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 7px 10px;
-      font-size: 12px; font-weight: 600;
-      color: var(--text-muted);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-    }
-    .tm-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-    .tm-btn:disabled { opacity: 0.5; }
-    .tm-btn.tm-wide { width: 100%; }
-    .tm-btn.tm-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-    .tm-btn.tm-danger:hover { border-color: var(--danger); color: var(--danger); }
-
-    .tm-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
-    .tm-field input { padding: 7px 9px; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-    .tm-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
-
-    .tm-item, .tm-layer {
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--bg);
-    }
-    .tm-item-active { border-color: var(--accent); background: var(--accent-soft); }
-    .tm-item-name { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
-    .tm-count { font-size: 11px; font-weight: 700; color: var(--text-muted); min-width: 16px; text-align: center; }
-    .tm-icon-btn {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; flex-shrink: 0;
-      font-size: 12px; font-weight: 700;
-      color: var(--text-muted); background: var(--surface);
-      border: 1px solid var(--border); border-radius: 6px;
-    }
-    .tm-icon-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .tm-icon-btn.tm-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-    .tm-icon-btn.tm-danger:hover { border-color: var(--danger); color: var(--danger); }
-    .tm-icon-btn.tm-depth { width: auto; padding: 0 6px; font-size: 10px; font-weight: 600; }
-
-    .tm-layer { cursor: pointer; }
-    .tm-thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex-shrink: 0; }
-    .tm-layer-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    .tm-layer-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tm-layer-sub { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .tm-layer-actions { display: flex; gap: 3px; flex-shrink: 0; }
-
-    .tm-slider { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-muted); }
-    .tm-slider strong { color: var(--text); }
-    .tm-slider input { width: 100%; accent-color: var(--accent); }
-
-    @media (max-width: 900px) {
-      .tm-stage, .tm-drop-zone { min-height: 240px; }
-      .tm-layer-actions { gap: 2px; }
-    }
+    .tm-hit-empty * { stroke: #2d7ff9; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .tm-hit-selected * { stroke: #2d7ff9; stroke-width: 2; stroke-dasharray: 4 3; }
   `],
 })
 export class TemplateModeComponent {
   readonly dpi = EXPORT_DPI;
+  readonly MIN_ZOOM = MIN_ZOOM;
+  readonly MAX_ZOOM = MAX_ZOOM;
+  readonly tabs: { id: TabId; label: string }[] = [
+    { id: 'molde', label: 'Molde' },
+    { id: 'fotos', label: 'Fotos' },
+    { id: 'exportar', label: 'Exportar' },
+  ];
+  tab = signal<TabId>('molde');
 
   svgHost = viewChild<ElementRef<HTMLDivElement>>('svgHost');
   stage = viewChild<ElementRef<HTMLDivElement>>('stage');
@@ -462,7 +325,6 @@ export class TemplateModeComponent {
   hint = signal('');
   busy = signal(false);
   exportStatus = signal('');
-  open = signal<Record<string, boolean>>({ molde: true, encaixes: true, fotos: true, ajuste: true, exportar: false });
 
   private mounted: ParsedTemplate | null = null;
   private drag: DragState | null = null;
@@ -500,12 +362,45 @@ export class TemplateModeComponent {
 
   // ---------- painel ----------
 
-  isOpen(id: SectionId): boolean {
-    return this.open()[id] ?? false;
+  /** Os campos numéricos da barra falam número; os handlers leem o valor de
+   * um evento de input. */
+  ev(value: number): Event {
+    return { target: { value: String(value) } } as unknown as Event;
   }
 
-  toggle(id: SectionId): void {
-    this.open.update((state) => ({ ...state, [id]: !state[id] }));
+  setWidth(mm: number): void {
+    if (Number.isFinite(mm) && mm > 0) this.store.widthMm.set(clamp(mm, 10, 2000));
+  }
+
+  setZoomPct(pct: number): void {
+    this.zoom.set(clamp(pct / 100, MIN_ZOOM, MAX_ZOOM));
+    this.applyZoom();
+  }
+
+  /** Foto pelo botão da barra: vai pro encaixe ativo (ou o primeiro vazio). */
+  pickPhoto(): void {
+    this.pendingSlotForPicker = null;
+    this.photoInput()?.nativeElement.click();
+  }
+
+  statusHint(): string {
+    if (this.marking()) return 'Clique numa forma do molde pra transformá-la em encaixe. Alt pega o grupo inteiro.';
+    if (this.hint()) return this.hint();
+    if (!this.store.hasTemplate()) return 'Solte um .svg no palco ou use "Abrir molde".';
+    return 'Arraste uma foto pra cima de um encaixe · solte outra no mesmo lugar pra empilhar · Ctrl+roda dá zoom';
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onKey(event: KeyboardEvent): void {
+    const el = event.target as HTMLElement | null;
+    if (event.ctrlKey || event.metaKey || event.altKey || el?.closest?.('input, textarea, select, [contenteditable]')) return;
+    const key = event.key.toLowerCase();
+    if (key === 'v' || key === 'escape') this.marking.set(false);
+    else if (key === 'm' && this.store.hasTemplate()) this.marking.set(true);
+    else if ((key === 'delete' || key === 'backspace') && this.store.selectedPhoto()) {
+      event.preventDefault();
+      this.store.removePhoto(this.store.selectedPhoto()!.id);
+    }
   }
 
   slotLabel(slotId: string): string {

@@ -1,14 +1,17 @@
 import { SocialModeComponent } from './social-mode';
 
 describe('host do modo social', () => {
-  it('some da grade da página, em vez de virar um item só', () => {
+  it('é a própria área de trabalho, com a grade de ferramentas, palco e dock', () => {
+    // Antes o host precisava sumir da grade da página (display: contents) pra
+    // prévia e painel virarem as duas colunas dela. Agora cada modo é a área de
+    // trabalho inteira: a grade mora no host, pelas classes `il-studio il-basic`.
+    // Sem elas, ferramentas, palco, dock e barra de status empilhariam.
+    const hostAttrs = (SocialModeComponent as unknown as { ɵcmp: { hostAttrs: unknown[] | null } }).ɵcmp.hostAttrs ?? [];
+    const classes = hostAttrs.filter((a): a is string => typeof a === 'string');
+    expect(classes).toContain('il-studio');
+    expect(classes).toContain('il-basic');
+
     const styles: string[] = (SocialModeComponent as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles;
-    const host = styles.find((s) => s.includes('display:contents') || s.includes('display: contents'));
-    expect(host).toBeDefined();
-    // O seletor tem de mirar o próprio elemento. Escrito como nome de tag, o
-    // escopo por atributo o transforma em algo que não casa com nada — foi o
-    // que empilhou prévia e painel e estourou a largura no celular.
-    expect(host).toMatch(/_nghost|:host/);
-    expect(host).not.toMatch(/app-social-mode\[/);
+    expect(styles.some((s) => /display:\s*contents/.test(s))).toBe(false);
   });
 });

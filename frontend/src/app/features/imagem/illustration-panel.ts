@@ -400,81 +400,22 @@ function loadOpen(): Record<string, boolean> {
     </div>
   `,
   styles: [`
-    .il-dock { grid-area: dock; display: flex; flex-direction: column; min-height: 0; background: var(--il-chrome); border-left: 1px solid var(--il-line); }
-    .il-tabs { display: flex; border-bottom: 1px solid var(--il-line); background: var(--il-chrome-2); flex-shrink: 0; }
-    .il-tab {
-      flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 8px; white-space: nowrap;
-      border: none; border-right: 1px solid var(--il-line); background: none; color: var(--text-muted); font-size: 11px; font-weight: 600;
-    }
-    .il-tab:last-child { border-right: none; }
-    .il-tab:hover { color: var(--text); }
-    .il-tab.il-on { background: var(--il-chrome); color: var(--text); box-shadow: inset 0 2px 0 var(--il-blue); }
-    .il-tab-body { flex: 1; min-height: 0; overflow-y: auto; }
-    .il-tab-body.il-tab-fill { display: flex; flex-direction: column; overflow: hidden; }
-    .il-sec { border-bottom: 1px solid var(--il-line); }
-    .il-sec-head {
-      width: 100%; display: flex; align-items: center; gap: 5px; padding: 8px 10px; border: none; background: none;
-      color: var(--text); font-size: 11px; font-weight: 700; text-align: left; letter-spacing: 0.01em;
-    }
-    .il-sec-head small { font-weight: 500; color: var(--text-muted); margin-left: 4px; }
-    .il-sec-head il-icon { color: var(--text-muted); transition: transform 0.12s; }
-    .il-sec.il-closed .il-sec-head il-icon { transform: rotate(-90deg); }
-    .il-sec.il-closed .il-sec-body { display: none; }
-    .il-sec-static { cursor: default; }
-    .il-sec-body { display: flex; flex-direction: column; gap: 7px; padding: 0 10px 10px; }
-    .il-sec-body-top { padding-top: 10px; }
-    .il-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-    .il-chips { display: flex; flex-wrap: wrap; gap: 3px; }
-    .il-chip { padding: 3px 8px; border-radius: 999px; border: 1px solid var(--il-line); background: none; color: var(--text-muted); font-size: 11px; }
-    .il-chip:hover { color: var(--text); border-color: var(--il-line-strong); }
-    .il-chip.il-on { color: var(--text); border-color: var(--text); }
     .il-paint-row { display: flex; align-items: center; gap: 6px; }
     .il-paint-label { flex: 1; font-size: 12px; cursor: pointer; }
     .il-paint-row.il-on .il-paint-label { font-weight: 700; }
     .il-hex { width: 76px; height: 24px; padding: 0 6px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
     .il-mini-title { font-size: 11px; font-weight: 700; margin-top: 3px; }
     .il-mini-title small { font-weight: 400; color: var(--text-muted); }
-    .il-swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-    .il-swatch { aspect-ratio: 1; width: 100%; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 2px; }
-    .il-swatch:hover { outline: 2px solid var(--il-blue); outline-offset: 1px; }
     .il-swatch-wrap { position: relative; }
     .il-swatch-edit {
       position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; display: flex; align-items: center; justify-content: center;
       font-size: 8px; background: var(--il-chrome); border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; color: var(--text-muted);
     }
     .il-swatch-edit input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-    .il-textarea { width: 100%; min-height: 48px; resize: vertical; padding: 5px 7px; font: 13px var(--font-body, inherit); color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
-    .il-textarea:focus { outline: none; border-color: var(--il-blue); }
-    .il-seg { display: inline-flex; border: 1px solid var(--il-line); border-radius: 4px; overflow: hidden; }
-    .il-seg button { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: none; border-right: 1px solid var(--il-line); background: var(--il-field); color: var(--text); }
-    .il-seg button:last-child { border-right: none; }
-    .il-seg button.il-on { background: var(--il-active); color: var(--il-blue); }
-    .il-seg button:disabled { opacity: 0.35; }
-    .il-range { display: grid; grid-template-columns: 64px 1fr 38px; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
-    .il-range input { width: 100%; accent-color: var(--il-blue); }
-    .il-range b { font-weight: 600; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
-    .il-suggest { color: var(--il-blue); }
     .il-trace-src { display: flex; gap: 8px; align-items: center; }
     .il-trace-src img { width: 72px; height: 72px; object-fit: contain; background: repeating-conic-gradient(#e6e6e6 0 25%, #fff 0 50%) 0 0 / 10px 10px; border: 1px solid var(--il-line); border-radius: 4px; }
     .il-trace-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 11px; color: var(--text-muted); }
     .il-trace-meta strong { color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .il-drop {
-      display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 12px; text-align: center;
-      background: var(--il-field); border: 1.5px dashed var(--il-line-strong); border-radius: 6px; color: var(--text-muted); font-size: 11px; line-height: 1.45;
-    }
-    .il-drop strong { color: var(--text); font-size: 12px; }
-    .il-drop:hover { border-color: var(--il-blue); color: var(--text); }
-    .il-trace-status { margin: 8px 10px; font-size: 11px; color: var(--text-muted); line-height: 1.45; }
-    .il-trace-status.il-busy { color: var(--il-blue); }
-    .il-export-list { display: flex; flex-direction: column; padding: 6px; gap: 2px; }
-    .il-export { display: flex; align-items: center; gap: 10px; padding: 8px 8px; border: none; border-radius: 4px; background: none; color: var(--text); text-align: left; }
-    .il-export:hover:not(:disabled) { background: var(--il-hover); }
-    .il-export:disabled { opacity: 0.45; }
-    .il-export span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-    .il-export strong { font-size: 12px; }
-    .il-export small { font-size: 10.5px; color: var(--text-muted); line-height: 1.35; }
-    .il-link { display: inline-flex; align-items: center; gap: 5px; margin: 10px; padding: 0; border: none; background: none; color: var(--text-muted); font-size: 11px; }
-    .il-link:hover { color: var(--text); }
   `],
 })
 export class IllustrationPanelComponent {

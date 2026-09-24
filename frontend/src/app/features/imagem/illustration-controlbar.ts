@@ -3,7 +3,7 @@
  * Inkscape. O que se mexe o tempo todo (cor, traço, fonte, posição,
  * alinhamento, Pathfinder) fica aqui; o resto mora no painel Propriedades. */
 
-import { Component, ViewEncapsulation, computed, inject, output } from '@angular/core';
+import { Component, computed, inject, output } from '@angular/core';
 import { nearestWeight } from './fonts';
 import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
@@ -34,9 +34,6 @@ const KIND_LABEL: Record<Layer['kind'], string> = { caminho: 'Caminho', forma: '
   selector: 'il-controlbar',
   standalone: true,
   imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent],
-  // Sem encapsulamento: além da barra, aqui moram os primitivos (botões,
-  // campos, amostras, dicas) que o palco e os painéis também usam.
-  encapsulation: ViewEncapsulation.None,
   host: { class: 'il-controlbar' },
   template: `
     <div class="il-cb-group">
@@ -129,77 +126,6 @@ const KIND_LABEL: Record<Layer['kind'], string> = { caminho: 'Caminho', forma: '
       <span class="il-cb-hint">{{ hint() }}</span>
     }
   `,
-  styles: [`
-    /* ---- barra de controle ---- */
-    .il-controlbar {
-      grid-area: control; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 38px; padding: 4px 8px;
-      background: var(--il-chrome); border-bottom: 1px solid var(--il-line); z-index: 4;
-    }
-    .il-cb-group { display: flex; align-items: center; gap: 3px; padding-right: 6px; border-right: 1px solid var(--il-line); }
-    .il-cb-kind { font-weight: 700; padding: 0 6px 0 2px; min-width: 72px; white-space: nowrap; }
-    .il-cb-label { color: var(--text-muted); font-size: 11px; padding: 0 3px; }
-    .il-cb-hint { color: var(--text-muted); font-size: 11px; padding-left: 4px; }
-    .il-cb-font { width: 150px; }
-    .il-controlbar .il-num input { width: 38px; }
-
-    /* ---- primitivos ---- */
-    .il-ib {
-      position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 4px;
-      border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text);
-    }
-    .il-ib:hover:not(:disabled) { background: var(--il-hover); }
-    .il-ib:disabled { opacity: 0.35; }
-    .il-ib.il-on { background: var(--il-active); color: var(--il-blue); }
-    .il-ib.il-danger:hover:not(:disabled) { color: var(--danger); }
-    .il-ib-sm { min-width: 22px; height: 22px; }
-    .il-ib-lg { min-width: 32px; height: 32px; }
-    .il-txt { font-size: 10px; font-weight: 700; }
-    .il-btn {
-      position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 26px; padding: 0 10px;
-      font-size: 12px; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line-strong); border-radius: 4px;
-    }
-    .il-btn:hover:not(:disabled) { border-color: var(--text-muted); }
-    .il-btn:disabled { opacity: 0.45; }
-    .il-btn.il-danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
-    .il-grow { flex: 1; }
-    .il-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-    .il-row-tight { gap: 1px; }
-    .il-sep { width: 1px; height: 18px; background: var(--il-line); margin: 0 4px; }
-    .il-num { display: inline-flex; align-items: center; height: 24px; background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; min-width: 0; }
-    .il-num:focus-within { border-color: var(--il-blue); }
-    .il-num-label { padding: 0 3px 0 6px; font-size: 11px; color: var(--text-muted); cursor: ew-resize; user-select: none; white-space: nowrap; touch-action: none; }
-    .il-num-label:hover { color: var(--text); }
-    .il-num input { width: 46px; min-width: 0; flex: 1; height: 100%; border: none; background: none; color: var(--text); font: 12px inherit; font-variant-numeric: tabular-nums; padding: 0 2px; outline: none; }
-    .il-num-unit { padding-right: 6px; font-size: 10px; color: var(--text-muted); }
-    .il-select { height: 24px; padding: 0 4px; font: inherit; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
-    .il-check { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text); }
-    .il-check input { accent-color: var(--il-blue); margin: 0; }
-    .il-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-muted); }
-    .il-field input { height: 26px; padding: 0 7px; font: inherit; font-size: 12px; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
-    .il-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
-    .il-error { margin: 0; font-size: 11.5px; color: var(--danger); }
-    .il-swatch-btn { position: relative; width: 26px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; border-radius: 4px; }
-    .il-swatch-btn:hover { background: var(--il-hover); }
-    .il-sw { width: 18px; height: 18px; border: 1px solid var(--il-line-strong); border-radius: 2px; }
-    .il-sw-stroke { background: var(--il-field); box-shadow: inset 0 0 0 4px var(--c, transparent); }
-    .il-sw-none { background: #fff linear-gradient(to top left, transparent calc(50% - 1px), #e5484d calc(50% - 1px), #e5484d calc(50% + 1px), transparent calc(50% + 1px)) !important; box-shadow: none; }
-    .il-hidden-color { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-
-    /* ---- dicas (como as dicas ricas da Adobe: nome, atalho, e o que faz) ---- */
-    @media (hover: hover) {
-      .il-studio [data-tip]:hover::after {
-        content: attr(data-tip); position: absolute; z-index: 90; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
-        padding: 4px 8px; white-space: pre; font-size: 11px; font-weight: 500; line-height: 1.4; text-align: left;
-        color: #f2f2f2; background: #262626; border-radius: 4px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-        pointer-events: none; animation: il-tip 0.12s 0.35s both;
-      }
-      .il-toolbar [data-tip]:hover::after { top: 50%; left: calc(100% + 10px); transform: translateY(-50%); content: attr(data-tip) '\\A' attr(data-help); }
-      .il-toolbar [data-tip]:not([data-help]):hover::after { content: attr(data-tip); }
-      .il-dock [data-tip]:hover::after, .il-status [data-tip]:hover::after { left: auto; right: 0; transform: none; }
-      .il-status [data-tip]:hover::after { top: auto; bottom: calc(100% + 6px); }
-    }
-    @keyframes il-tip { from { opacity: 0; } to { opacity: 1; } }
-  `],
 })
 export class IlControlbarComponent {
   store = inject(IllustrationStore);

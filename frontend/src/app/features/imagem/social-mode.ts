@@ -2,13 +2,15 @@
  * ajustes de cor. Tudo roda num canvas só — o mesmo caminho desenha a prévia e
  * a exportação, então o que aparece na tela é o que sai no arquivo.
  *
- * Todo seletor usa o prefixo `sm-` pra combinar com o resto da página. */
+ * A interface é a área de trabalho comum do editor (classes `il-`); o que é
+ * só deste modo usa o prefixo `sm-`. */
 
 import {
   Component, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild,
   viewChildren,
 } from '@angular/core';
-import { IconComponent } from '../../shared/icon';
+import { IlIconComponent } from './illustration-icons';
+import { IlNumComponent } from './illustration-num';
 import {
   Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
   SOCIAL_FORMATS, SocialFormat, coversFrame, filterString, fitWithinPixels, frameRect,
@@ -166,610 +168,328 @@ async function heicToJpeg(file: File): Promise<Blob> {
 @Component({
   selector: 'app-social-mode',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IlIconComponent, IlNumComponent],
+  host: { class: 'il-studio il-basic sm' },
   template: `
-    <div class="sm-preview-wrap">
-      <div class="sm-tabs">
-        <span class="sm-tab-label">
-          @if (image()) { {{ fileName() }} · {{ exportW() }} × {{ exportH() }} px } @else { Redes sociais }
-        </span>
-        @if (image()) {
-          <div class="sm-bar">
-            <button (click)="undo()" [disabled]="!canUndo()" title="Desfazer (Ctrl+Z)" aria-label="Desfazer">
-              <app-icon name="undo" [size]="14" />
-            </button>
-            <button (click)="redo()" [disabled]="!canRedo()" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer">
-              <app-icon name="redo" [size]="14" />
-            </button>
-            <button
-              class="sm-compare"
-              [class.sm-active]="comparing()"
-              title="Segure pra ver a foto original (ou segure a tecla C)"
-              (pointerdown)="startCompare($event)"
-              (pointerup)="stopCompare()"
-              (pointerleave)="stopCompare()"
-              (pointercancel)="stopCompare()"
-            >
-              <app-icon name="eye" [size]="14" /> Antes
-            </button>
-          </div>
-          <div class="sm-zoom-bar" title="Tamanho da foto dentro do quadro — a roda do mouse também muda">
-            <span class="sm-zoom-name">Escala da foto</span>
-            <button (click)="zoomBy(1 / 1.15)" aria-label="Diminuir a foto no quadro">−</button>
-            <button class="sm-zoom-level" (click)="resetFraming()" title="Voltar ao enquadramento original">{{ (scale() * 100).toFixed(0) }}%</button>
-            <button (click)="zoomBy(1.15)" aria-label="Aumentar a foto no quadro">+</button>
-          </div>
-        }
-      </div>
+    <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
 
+    <div class="il-controlbar">
+      <div class="il-cb-group">
+        <button type="button" class="il-ib" [disabled]="!canUndo()" data-tip="Desfazer  Ctrl+Z" aria-label="Desfazer" (click)="undo()"><il-icon name="undo" /></button>
+        <button type="button" class="il-ib" [disabled]="!canRedo()" data-tip="Refazer  Ctrl+Shift+Z" aria-label="Refazer" (click)="redo()"><il-icon name="redo" /></button>
+      </div>
+      <span class="il-cb-kind sm-kind" [title]="fileName()">{{ image() ? fileName() : 'Redes sociais' }}</span>
+      <div class="il-cb-group">
+        <span class="il-cb-label">Formato</span>
+        <select class="il-select" [value]="format().id" (change)="setFormatId($any($event.target).value)" aria-label="Formato do post">
+          @for (f of formats; track f.id) { <option [value]="f.id">{{ f.label }} — {{ f.hint }}</option> }
+        </select>
+      </div>
       @if (image()) {
-        <div
-          class="sm-stage"
-          [class.sm-drag-over]="dragOver()"
-          (wheel)="onWheel($event)"
-          (dragover)="onDragOver($event)"
-          (dragleave)="onDragLeave()"
-          (drop)="onDrop($event)"
-          (pointerdown)="onPointerDown($event)"
-          (pointermove)="onPointerMove($event)"
-          (pointerup)="onPointerUp($event)"
-          (pointercancel)="onPointerUp($event)"
-        >
-          <canvas #preview class="sm-canvas" [style.aspect-ratio]="format().ratio"></canvas>
-          @if (comparing()) { <span class="sm-badge">Foto original</span> }
+        <div class="il-cb-group">
+          <il-num label="Escala" title="Tamanho da foto dentro do quadro (a roda do mouse também muda)" unit="%" [value]="scale() * 100" [step]="5" [min]="20" [max]="600" [decimals]="0" (valueChange)="setScalePct($event.value)" />
+          <div class="il-seg">
+            <button type="button" [class.il-on]="fit() === 'cover'" data-tip="Preencher o quadro" aria-label="Preencher" (click)="setFit('cover')"><il-icon name="cover" /></button>
+            <button type="button" [class.il-on]="fit() === 'contain'" data-tip="Caber a foto inteira" aria-label="Caber" (click)="setFit('contain')"><il-icon name="contain" /></button>
+          </div>
+          <button type="button" class="il-ib" data-tip="Reenquadrar" aria-label="Reenquadrar" (click)="resetFraming()"><il-icon name="reframe" /></button>
+          <button
+            type="button" class="il-btn" [class.il-on]="comparing()"
+            data-tip="Segure pra ver a original (ou a tecla C)"
+            (pointerdown)="startCompare($event)" (pointerup)="stopCompare()" (pointerleave)="stopCompare()" (pointercancel)="stopCompare()"
+          ><il-icon name="compare" [size]="14" /> Antes</button>
         </div>
-        <p class="sm-hint">Arraste a foto pra reenquadrar. A prévia já mostra o resultado final.</p>
+        <span class="sm-spacer"></span>
+        <span class="il-cb-label">{{ exportW() }} × {{ exportH() }} px</span>
+        <button type="button" class="il-btn il-primary" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ type() === 'png' ? 'PNG' : 'JPEG' }}</button>
       } @else {
-        <div
-          class="sm-drop-zone"
-          [class.sm-drag-over]="dragOver()"
-          (click)="pick(fileInput)"
-          (dragover)="onDragOver($event)"
-          (dragleave)="onDragLeave()"
-          (drop)="onDrop($event)"
-        >
-          <app-icon name="image" [size]="34" />
-          <p><strong>Solte uma foto aqui</strong></p>
-          <p class="sm-sub">Escolha o formato do post, aplique um filtro pronto e ajuste as cores na mão.</p>
-          <p class="sm-sub">JPEG, PNG, WebP e HEIC do iPhone.</p>
-          <button class="sm-link" (click)="pick(fileInput, true); $event.stopPropagation()">
-            Não achou o arquivo na lista? Abra sem filtro
-          </button>
-          @if (converting()) { <p class="sm-sub">Convertendo HEIC…</p> }
-          @if (error()) { <p class="sm-error">{{ error() }}</p> }
-        </div>
+        <span class="il-cb-hint">Abra uma foto pra escolher o formato, aplicar um filtro e ajustar as cores.</span>
       }
     </div>
 
-    <aside class="sm-panel">
-      <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
+    <nav class="il-tools-col" aria-label="Ferramentas">
+      <div class="il-tb-group">
+        <button type="button" class="il-tool il-on" aria-label="Enquadrar" data-tip="Enquadrar" data-help="Arraste a foto no quadro; a roda dá zoom"><il-icon name="hand" [size]="18" /></button>
+        <button
+          type="button" class="il-tool" [class.il-on]="comparing()" [disabled]="!image()" aria-label="Comparar com a original"
+          data-tip="Antes / depois  C" data-help="Segure pra ver a foto original"
+          (pointerdown)="startCompare($event)" (pointerup)="stopCompare()" (pointerleave)="stopCompare()" (pointercancel)="stopCompare()"
+        ><il-icon name="compare" [size]="18" /></button>
+      </div>
+      <div class="il-tb-group">
+        <button type="button" class="il-tool" aria-label="Abrir foto" data-tip="Abrir foto" data-help="JPEG, PNG, WebP e HEIC do iPhone" (click)="pick(fileInput)"><il-icon name="folder" [size]="18" /></button>
+        <button type="button" class="il-tool" [disabled]="!image()" aria-label="Filtros" data-tip="Filtros prontos" (click)="tab.set('filtros')"><il-icon name="filter" [size]="18" /></button>
+        <button type="button" class="il-tool" [disabled]="!image()" aria-label="Cor e luz" data-tip="Cor e luz" (click)="tab.set('ajustes')"><il-icon name="sun" [size]="18" /></button>
+      </div>
+    </nav>
 
-      <section class="sm-section" [class.sm-open]="isOpen('foto')">
-        <button class="sm-section-head" (click)="toggle('foto')">
-          <span class="sm-section-title"><app-icon name="image" [size]="13" /> Foto</span>
-          <span class="sm-section-summary">{{ fileName() || 'nenhuma' }}</span>
-          <app-icon class="sm-chevron" name="chevron" [size]="14" />
+    @if (image()) {
+      <div
+        class="il-stage sm-stage"
+        [class.il-drag-over]="dragOver()"
+        (wheel)="onWheel($event)"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave()"
+        (drop)="onDrop($event)"
+        (pointerdown)="onPointerDown($event)"
+        (pointermove)="onPointerMove($event)"
+        (pointerup)="onPointerUp($event)"
+        (pointercancel)="onPointerUp($event)"
+      >
+        <canvas #preview class="sm-canvas il-paper" [style.aspect-ratio]="format().ratio"></canvas>
+        @if (comparing()) { <span class="sm-badge">Foto original</span> }
+      </div>
+    } @else {
+      <div class="il-stage" [class.il-drag-over]="dragOver()" (dragover)="onDragOver($event)" (dragleave)="onDragLeave()" (drop)="onDrop($event)">
+        <button type="button" class="il-empty" (click)="pick(fileInput)">
+          <il-icon name="photo-add" [size]="34" />
+          <strong>Solte uma foto aqui</strong>
+          <span>Escolha o formato do post, aplique um filtro pronto e ajuste as cores na mão. JPEG, PNG, WebP e HEIC do iPhone.</span>
+          @if (converting()) { <span>Convertendo HEIC…</span> }
+          @if (error()) { <span class="il-error">{{ error() }}</span> }
         </button>
-        <div class="sm-section-body">
-          <div class="sm-row">
-            <button class="sm-btn" (click)="pick(fileInput)"><app-icon name="folder" [size]="13" /> Trocar foto</button>
-            @if (image()) {
-              <button class="sm-btn sm-danger" (click)="removeImage()"><app-icon name="delete" [size]="13" /> Remover</button>
-            }
-          </div>
-          <button class="sm-link" (click)="pick(fileInput, true)">Abrir sem filtro de tipo</button>
+      </div>
+    }
 
-          @if (image() && upscale.disponivel()) {
-            <div class="sm-divider"></div>
-            <button
-              class="sm-btn sm-wide"
-              [disabled]="ampliando() || !ampliacaoUtil()"
-              (click)="ampliarComIa()"
-            >
-              <app-icon name="image" [size]="13" />
-              {{ ampliando() ? 'Ampliando…' : 'Ampliar 2× com IA' }}
-            </button>
-            <p class="sm-note">
-              @if (ampliando()) {
-                @if (tentativa() > 1) {
-                  A GPU do serviço estava cheia — tentando de novo com a foto menor
-                  ({{ tentativa() }}ª tentativa).
-                } @else {
-                  A foto foi pro serviço de ampliação; costuma levar alguns segundos.
-                }
-              } @else if (upscaleErro()) {
-                <span class="sm-warn">{{ upscaleErro() }}</span>
-              } @else if (ampliacaoUtil()) {
-                A foto é pequena pro tamanho que você pediu na exportação: ampliar aqui
-                acrescenta detalhe de verdade. A foto vai pra um serviço externo e cada
-                ampliação tem custo.
-              } @else {
-                A foto já tem pixel de sobra pra este formato — ampliar não acrescentaria nada.
-                O botão liga sozinho quando o tamanho pedido na exportação passar do que ela tem.
-              }
-            </p>
-          }
-          @if (image()) {
-            <div class="sm-row">
-              <button class="sm-btn" [class.sm-active]="fit() === 'cover'" (click)="setFit('cover')">Preencher</button>
-              <button class="sm-btn" [class.sm-active]="fit() === 'contain'" (click)="setFit('contain')">Caber</button>
-              <button class="sm-btn" (click)="resetFraming()">Reenquadrar</button>
-            </div>
-            <p class="sm-note">Origem: {{ photoSize().width }} × {{ photoSize().height }} px.</p>
-          }
-        </div>
-      </section>
-
-      <section class="sm-section" [class.sm-open]="isOpen('formato')">
-        <button class="sm-section-head" (click)="toggle('formato')">
-          <span class="sm-section-title"><app-icon name="rect" [size]="13" /> Formato</span>
-          <span class="sm-section-summary">{{ format().label }}</span>
-          <app-icon class="sm-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="sm-section-body">
-          <div class="sm-formats">
-            @for (f of formats; track f.id) {
-              <button class="sm-format" [class.sm-active]="format().id === f.id" (click)="setFormat(f)" [title]="f.hint">
-                <span class="sm-format-box" [style.aspect-ratio]="f.ratio"></span>
-                <span class="sm-format-label">{{ f.label }}</span>
-              </button>
-            }
-          </div>
-          @if (showsBackground()) {
-            <div class="sm-row">
-              <button class="sm-btn" [class.sm-active]="bgMode() === 'cor'" (click)="setBgMode('cor')">Fundo cor</button>
-              <button class="sm-btn" [class.sm-active]="bgMode() === 'desfoque'" (click)="setBgMode('desfoque')">Fundo borrado</button>
-            </div>
-            @if (bgMode() === 'cor') {
-              <label class="sm-field sm-inline">
-                <span>Cor do fundo</span>
-                <input type="color" [value]="bgColor()" (input)="onBgColor($event)" />
-              </label>
-            }
-          } @else {
-            <p class="sm-note">A foto cobre o quadro inteiro — não há fundo à mostra. Use "Caber"
-              ou diminua a escala da foto pra escolher um.</p>
-          }
-        </div>
-      </section>
-
-      <section class="sm-section" [class.sm-open]="isOpen('filtros')">
-        <button class="sm-section-head" (click)="toggle('filtros')">
-          <span class="sm-section-title"><app-icon name="sticky" [size]="13" /> Filtros prontos</span>
-          <span class="sm-section-summary">{{ presetSummary() }}</span>
-          <app-icon class="sm-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="sm-section-body">
-          @for (g of groups; track g.name) {
-            <div class="sm-group">
-              <span class="sm-group-name">{{ g.name }}</span>
-              <div class="sm-presets" role="list">
-                @for (p of g.presets; track p.id) {
-                  <button
-                    class="sm-preset"
-                    [class.sm-active]="preset() === p.id"
-                    [class.sm-edited]="preset() === p.id && presetEdited()"
-                    (click)="applyPreset(p)"
-                    [title]="preset() === p.id && presetEdited() ? p.label + ' (com ajustes seus — clique pra voltar ao original)' : p.label"
-                  >
-                    @if (image()) {
-                      <canvas #presetCanvas class="sm-preset-chip" [attr.data-preset]="p.id"></canvas>
-                    } @else {
-                      <span class="sm-preset-chip sm-chip-demo" [style.filter]="chipFilter(p)"></span>
+    <aside class="il-dock">
+      <div class="il-tabs" role="tablist">
+        @for (t of tabs; track t.id) {
+          <button type="button" role="tab" class="il-tab" [class.il-on]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)">{{ t.label }}</button>
+        }
+      </div>
+      <div class="il-tab-body">
+        @switch (tab()) {
+          @case ('filtros') {
+            @for (g of groups; track g.name) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">{{ g.name }}</div>
+                <div class="il-sec-body">
+                  <div class="sm-presets" role="list">
+                    @for (p of g.presets; track p.id) {
+                      <button
+                        type="button"
+                        class="sm-preset"
+                        [class.il-on]="preset() === p.id"
+                        [class.sm-edited]="preset() === p.id && presetEdited()"
+                        (click)="applyPreset(p)"
+                        [title]="preset() === p.id && presetEdited() ? p.label + ' (com ajustes seus — clique pra voltar ao original)' : p.label"
+                      >
+                        @if (image()) {
+                          <canvas #presetCanvas class="sm-preset-chip" [attr.data-preset]="p.id"></canvas>
+                        } @else {
+                          <span class="sm-preset-chip sm-chip-demo" [style.filter]="chipFilter(p)"></span>
+                        }
+                        <span class="sm-preset-label">{{ p.label }}</span>
+                      </button>
                     }
-                    <span class="sm-preset-label">{{ p.label }}</span>
+                  </div>
+                </div>
+              </section>
+            }
+            <p class="il-note sm-pad">{{ presets.length }} filtros. A miniatura mostra a sua foto; depois de aplicar, dá pra continuar ajustando em "Cor e luz".</p>
+          }
+          @case ('ajustes') {
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Cor e luz <small>{{ dirty() ? 'ajustado' : 'neutro' }}</small></div>
+              <div class="il-sec-body">
+                @for (s of basicSliders; track s.key) {
+                  <label class="il-range sm-r">
+                    <span>{{ s.label }}</span>
+                    <input type="range" [min]="s.min" [max]="s.max" step="1" [value]="adjust()[s.key]" (input)="onSlider(s.key, $event)" (change)="commit()" />
+                    <button type="button" class="sm-reset" (click)="resetOne(s.key, $event)" title="Voltar ao padrão">{{ display(s.key) }}</button>
+                  </label>
+                }
+                <button type="button" class="il-link sm-more" (click)="toggleAdvanced()">
+                  <il-icon name="chevron" [size]="12" [class.sm-up]="advanced()" /> Ajustes avançados
+                  @if (!advanced() && advancedTouched()) { <span class="sm-dot" title="Há ajustes avançados em uso"></span> }
+                </button>
+                @if (advanced()) {
+                  @for (s of advancedSliders; track s.key) {
+                    <label class="il-range sm-r">
+                      <span>{{ s.label }}</span>
+                      <input type="range" [min]="s.min" [max]="s.max" step="1" [value]="adjust()[s.key]" (input)="onSlider(s.key, $event)" (change)="commit()" />
+                      <button type="button" class="sm-reset" (click)="resetOne(s.key, $event)" title="Voltar ao padrão">{{ display(s.key) }}</button>
+                    </label>
+                  }
+                }
+                <button type="button" class="il-btn il-wide" (click)="resetAdjust()"><il-icon name="undo" [size]="13" /> Zerar ajustes</button>
+              </div>
+            </section>
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Detalhe</div>
+              <div class="il-sec-body">
+                <label class="il-range sm-r">
+                  <span>Ruído</span>
+                  <input type="range" min="0" max="100" step="1" [value]="denoise()" (input)="onDenoise($event)" (change)="commit()" />
+                  <button type="button" class="sm-reset" (click)="resetDenoise($event)" title="Desligar">{{ denoise() }}</button>
+                </label>
+                <p class="il-note">{{ denoising() ? 'Limpando o ruído…' : 'Tira o granulado sem borrar as bordas. Fica de fora dos filtros e do "zerar".' }}</p>
+                <label class="il-range sm-r">
+                  <span>Nitidez</span>
+                  <input type="range" min="0" max="100" step="1" [value]="sharpen()" (input)="onSharpen($event)" (change)="commit()" />
+                  <button type="button" class="sm-reset" (click)="resetSharpen($event)" title="Desligar">{{ sharpen() }}</button>
+                </label>
+                <p class="il-note">Devolve o micro-contraste que a redução de tamanho come — 30 a 40 costuma bastar.</p>
+              </div>
+            </section>
+            @if (upscale.disponivel()) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static"><il-icon name="sparkle" [size]="13" /> Luz com IA</div>
+                <div class="il-sec-body">
+                  <div class="il-seg sm-seg-full">
+                    @for (d of direcoes; track d.id) {
+                      <button type="button" [class.il-on]="direcaoLuz() === d.id" [disabled]="iluminando()" (click)="direcaoLuz.set(d.id)">{{ d.rotulo }}</button>
+                    }
+                  </div>
+                  <button type="button" class="il-btn il-wide" [disabled]="!image() || iluminando()" (click)="iluminarComIa()">
+                    <il-icon name="sun" [size]="13" /> {{ iluminando() ? 'Criando a luz…' : (luzIa() ? 'Refazer a luz com IA' : 'Iluminar com IA') }}
                   </button>
+                  @if (luzIa()) {
+                    <label class="il-range sm-r">
+                      <span>Intensidade</span>
+                      <input type="range" min="0" max="100" step="1" [value]="luzForca()" (input)="onLuzForca($event)" (change)="commit()" />
+                      <button type="button" class="sm-reset" (click)="removerLuzIa($event)" title="Remover a luz da IA">{{ luzForca() }}</button>
+                    </label>
+                  }
+                  <p class="il-note">
+                    @if (iluminando()) {
+                      A IA está desenhando a luz; leva de trinta segundos a um minuto e meio.
+                    } @else if (luzErro()) {
+                      <span class="il-warn">{{ luzErro() }}</span>
+                    } @else if (luzIa()) {
+                      A luz é da IA; os pixels são os seus. Mexer na intensidade não chama o serviço de novo.
+                    } @else {
+                      A IA gera uma versão iluminada e o editor aproveita só a luz dela: produto, texto e cores continuam os da sua foto. Cada geração tem custo.
+                    }
+                  </p>
+                </div>
+              </section>
+            }
+          }
+          @case ('foto') {
+            <section class="il-sec">
+              <div class="il-sec-body il-sec-body-top">
+                <div class="il-row">
+                  <button type="button" class="il-btn il-grow" (click)="pick(fileInput)"><il-icon name="folder" [size]="13" /> {{ image() ? 'Trocar foto' : 'Abrir foto' }}</button>
+                  @if (image()) { <button type="button" class="il-btn il-danger" data-tip="Remover a foto" (click)="removeImage()"><il-icon name="trash" [size]="13" /></button> }
+                </div>
+                <button type="button" class="il-link sm-link" (click)="pick(fileInput, true)">Não achou o arquivo na lista? Abra sem filtro de tipo</button>
+                @if (image()) {
+                  <p class="il-note">Origem: {{ photoSize().width }} × {{ photoSize().height }} px.</p>
                 }
               </div>
-            </div>
-          }
-          <p class="sm-note">
-            {{ presets.length }} filtros. A miniatura mostra a sua foto — depois de aplicar, dá pra
-            continuar ajustando tudo na seção de cor.
-          </p>
-        </div>
-      </section>
-
-      <section class="sm-section" [class.sm-open]="isOpen('cor')">
-        <button class="sm-section-head" (click)="toggle('cor')">
-          <span class="sm-section-title"><app-icon name="pen" [size]="13" /> Cor e luz</span>
-          <span class="sm-section-summary">{{ dirty() ? 'ajustado' : 'neutro' }}</span>
-          <app-icon class="sm-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="sm-section-body">
-          <label class="sm-slider">
-            <span class="sm-slider-head">
-              <span>Redução de ruído</span>
-              <button class="sm-reset" (click)="resetDenoise($event)" title="Desligar">{{ denoise() }}</button>
-            </span>
-            <input type="range" min="0" max="100" step="1" [value]="denoise()" (input)="onDenoise($event)" (change)="commit()" />
-          </label>
-          <p class="sm-note">
-            @if (denoising()) {
-              Limpando o ruído…
-            } @else {
-              Tira o granulado da foto (sombra, foto noturna) sem borrar as bordas. Não é um
-              filtro: fica de fora dos presets e do "zerar ajustes".
-            }
-          </p>
-          @if (upscale.disponivel()) {
-            <div class="sm-divider"></div>
-            <div class="sm-row">
-              @for (d of direcoes; track d.id) {
-                <button
-                  class="sm-btn"
-                  [class.sm-active]="direcaoLuz() === d.id"
-                  [disabled]="iluminando()"
-                  (click)="direcaoLuz.set(d.id)"
-                >{{ d.rotulo }}</button>
-              }
-            </div>
-            <button class="sm-btn sm-wide" [disabled]="!image() || iluminando()" (click)="iluminarComIa()">
-              <app-icon name="sun" [size]="13" />
-              {{ iluminando() ? 'Criando a luz…' : (luzIa() ? 'Refazer a luz com IA' : 'Iluminar com IA') }}
-            </button>
-
-            @if (luzIa()) {
-              <label class="sm-slider">
-                <span class="sm-slider-head">
-                  <span>Intensidade da luz</span>
-                  <button class="sm-reset" (click)="removerLuzIa($event)" title="Remover a luz da IA">{{ luzForca() }}</button>
-                </span>
-                <input
-                  type="range" min="0" max="100" step="1"
-                  [value]="luzForca()" (input)="onLuzForca($event)" (change)="commit()"
-                />
-              </label>
-            }
-
-            <p class="sm-note">
-              @if (iluminando()) {
-                A IA está desenhando a luz; leva de trinta segundos a um minuto e meio.
-              } @else if (luzErro()) {
-                <span class="sm-warn">{{ luzErro() }}</span>
-              } @else if (luzIa()) {
-                A luz é da IA; os pixels são os seus. Mexa na intensidade à vontade — isso não
-                chama o serviço de novo.
-              } @else {
-                A IA gera uma versão iluminada da foto e o editor aproveita só a LUZ dela: o
-                produto, o texto e as cores continuam sendo os da sua foto. Cada geração tem custo.
-              }
-            </p>
-          }
-
-          <div class="sm-divider"></div>
-
-          <label class="sm-slider">
-            <span class="sm-slider-head">
-              <span>Nitidez</span>
-              <button class="sm-reset" (click)="resetSharpen($event)" title="Desligar">{{ sharpen() }}</button>
-            </span>
-            <input
-              type="range" min="0" max="100" step="1"
-              [value]="sharpen()" (input)="onSharpen($event)" (change)="commit()"
-            />
-          </label>
-          <p class="sm-note">
-            Devolve o micro-contraste que a redução de tamanho come. Vai por último, sobre a
-            imagem no tamanho final — 30 a 40 costuma bastar.
-          </p>
-
-          <div class="sm-divider"></div>
-          @for (s of basicSliders; track s.key) {
-            <label class="sm-slider">
-              <span class="sm-slider-head">
-                <span>{{ s.label }}</span>
-                <button class="sm-reset" (click)="resetOne(s.key, $event)" title="Voltar ao padrão">{{ display(s.key) }}</button>
-              </span>
-              <input
-                type="range"
-                [min]="s.min" [max]="s.max" step="1"
-                [value]="adjust()[s.key]"
-                (input)="onSlider(s.key, $event)"
-                (change)="commit()"
-              />
-            </label>
-          }
-
-          <button class="sm-more" (click)="toggleAdvanced()">
-            <app-icon class="sm-chevron" [class.sm-chevron-up]="advanced()" name="chevron" [size]="13" />
-            Ajustes avançados
-            @if (!advanced() && advancedTouched()) { <span class="sm-dot" title="Há ajustes avançados em uso"></span> }
-          </button>
-          @if (advanced()) {
-            @for (s of advancedSliders; track s.key) {
-              <label class="sm-slider">
-                <span class="sm-slider-head">
-                  <span>{{ s.label }}</span>
-                  <button class="sm-reset" (click)="resetOne(s.key, $event)" title="Voltar ao padrão">{{ display(s.key) }}</button>
-                </span>
-                <input
-                  type="range"
-                  [min]="s.min" [max]="s.max" step="1"
-                  [value]="adjust()[s.key]"
-                  (input)="onSlider(s.key, $event)"
-                  (change)="commit()"
-                />
-              </label>
+            </section>
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Formato</div>
+              <div class="il-sec-body">
+                <div class="sm-formats">
+                  @for (f of formats; track f.id) {
+                    <button type="button" class="sm-format" [class.il-on]="format().id === f.id" (click)="setFormat(f)" [title]="f.hint">
+                      <span class="sm-format-box" [style.aspect-ratio]="f.ratio"></span>
+                      <span class="sm-format-label">{{ f.label }}</span>
+                    </button>
+                  }
+                </div>
+                @if (showsBackground()) {
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [class.il-on]="bgMode() === 'cor'" (click)="setBgMode('cor')">Fundo cor</button>
+                    <button type="button" class="il-btn il-grow" [class.il-on]="bgMode() === 'desfoque'" (click)="setBgMode('desfoque')">Fundo borrado</button>
+                    @if (bgMode() === 'cor') { <input type="color" class="il-color-input" [value]="bgColor()" (input)="onBgColor($event)" aria-label="Cor do fundo" /> }
+                  </div>
+                } @else {
+                  <p class="il-note">A foto cobre o quadro inteiro — não há fundo à mostra. Use "Caber" ou diminua a escala pra escolher um.</p>
+                }
+              </div>
+            </section>
+            @if (image() && upscale.disponivel()) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static"><il-icon name="sparkle" [size]="13" /> Ampliar com IA</div>
+                <div class="il-sec-body">
+                  <button type="button" class="il-btn il-wide" [disabled]="ampliando() || !ampliacaoUtil()" (click)="ampliarComIa()">
+                    <il-icon name="image" [size]="13" /> {{ ampliando() ? 'Ampliando…' : 'Ampliar 2× com IA' }}
+                  </button>
+                  <p class="il-note">
+                    @if (ampliando()) {
+                      @if (tentativa() > 1) { A GPU do serviço estava cheia — tentando de novo com a foto menor ({{ tentativa() }}ª tentativa). }
+                      @else { A foto foi pro serviço de ampliação; costuma levar alguns segundos. }
+                    } @else if (upscaleErro()) {
+                      <span class="il-warn">{{ upscaleErro() }}</span>
+                    } @else if (ampliacaoUtil()) {
+                      A foto é pequena pro tamanho da exportação: ampliar acrescenta detalhe de verdade. Vai pra um serviço externo e cada ampliação tem custo.
+                    } @else {
+                      A foto já tem pixel de sobra pra este formato. O botão liga sozinho quando o tamanho pedido passar do que ela tem.
+                    }
+                  </p>
+                </div>
+              </section>
             }
           }
-
-          <button class="sm-btn sm-wide" (click)="resetAdjust()"><app-icon name="undo" [size]="13" /> Zerar ajustes</button>
-        </div>
-      </section>
-
-      <section class="sm-section" [class.sm-open]="isOpen('exportar')">
-        <button class="sm-section-head" (click)="toggle('exportar')">
-          <span class="sm-section-title"><app-icon name="download" [size]="13" /> Exportar</span>
-          <span class="sm-section-summary">{{ exportW() }}×{{ exportH() }}</span>
-          <app-icon class="sm-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="sm-section-body">
-          <div class="sm-row">
-            <button class="sm-btn" [class.sm-active]="type() === 'jpeg'" (click)="setType('jpeg')">JPEG</button>
-            <button class="sm-btn" [class.sm-active]="type() === 'png'" (click)="setType('png')">PNG</button>
-          </div>
-          @if (type() === 'jpeg') {
-            <label class="sm-slider">
-              <span class="sm-slider-head"><span>Qualidade</span><span>{{ quality() }}%</span></span>
-              <input type="range" min="50" max="100" step="1" [value]="quality()" (input)="onQuality($event)" />
-            </label>
+          @case ('exportar') {
+            <section class="il-sec">
+              <div class="il-sec-body il-sec-body-top">
+                <div class="il-seg sm-seg-full">
+                  <button type="button" [class.il-on]="type() === 'jpeg'" (click)="setType('jpeg')">JPEG</button>
+                  <button type="button" [class.il-on]="type() === 'png'" (click)="setType('png')">PNG</button>
+                </div>
+                @if (type() === 'jpeg') {
+                  <label class="il-range"><span>Qualidade</span><input type="range" min="50" max="100" step="1" [value]="quality()" (input)="onQuality($event)" /><b>{{ quality() }}%</b></label>
+                }
+                <label class="il-field"><span>Largura de saída (px)</span><input type="number" min="200" max="4000" step="10" [value]="exportW()" (input)="onExportW($event)" /></label>
+                <p class="il-note">Altura {{ exportH() }} px, pela proporção do formato.</p>
+                @if (upscaling(); as falta) {
+                  <p class="il-note il-warn">A foto tem pixel pra {{ falta }} px de largura neste corte — acima disso o arquivo sai interpolado, maior mas não mais definido.</p>
+                }
+                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ exportW() }} × {{ exportH() }}</button>
+                @if (status()) { <p class="il-note">{{ status() }}</p> }
+              </div>
+            </section>
           }
-          <label class="sm-field">
-            <span>Largura de saída (px)</span>
-            <input type="number" min="200" max="4000" step="10" [value]="exportW()" (input)="onExportW($event)" />
-          </label>
-          @if (upscaling(); as falta) {
-            <p class="sm-note sm-warn">
-              A foto tem pixel pra {{ falta }} px de largura neste corte — acima disso o arquivo
-              sai interpolado, maior mas não mais definido.
-            </p>
-          }
-          <button class="sm-btn sm-wide sm-primary" [disabled]="!image()" (click)="exportImage()">
-            <app-icon name="download" [size]="13" /> Baixar {{ exportW() }} × {{ exportH() }}
-          </button>
-          @if (status()) { <p class="sm-note">{{ status() }}</p> }
-        </div>
-      </section>
+        }
+      </div>
     </aside>
+
+    <footer class="il-status">
+      @if (image()) {
+        <span class="il-status-info">{{ fileName() }}</span>
+        <span>{{ format().label }} · {{ exportW() }} × {{ exportH() }} px · escala {{ (scale() * 100).toFixed(0) }}%</span>
+      }
+      <span class="il-status-msg">{{ status() || (image() ? 'Arraste a foto pra reenquadrar · roda do mouse muda a escala · segure C pra comparar' : 'Solte, cole ou abra uma foto') }}</span>
+    </footer>
   `,
   styles: [`
-    /* O host some da grade: os dois filhos é que são as colunas da página.
-       Precisa ser :host, e não o nome da tag — o estilo deste componente é
-       escopado por atributo, e o seletor de tag viraria algo que não casa com o
-       próprio elemento. Sem isso o host continuava sendo um item de grade só,
-       com prévia e painel empilhados dentro dele, e no celular a coluna inchava
-       até o dobro da largura da tela. */
-    :host { display: contents; }
-
-    /* A prévia acompanha a rolagem: a lista de filtros e os dez controles de cor
-       são mais altos que a tela, e editar sem ver a foto não serve pra nada. */
-    .sm-preview-wrap {
-      display: flex; flex-direction: column; gap: 10px; min-width: 0;
-      position: sticky; top: 16px;
-      max-height: calc(100dvh - 32px);
-    }
-    .sm-tabs { display: flex; align-items: center; gap: 8px; }
-    .sm-tab-label { font-size: 12px; font-weight: 600; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sm-bar { margin-left: auto; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
-    .sm-bar button {
-      display: inline-flex; align-items: center; gap: 4px;
-      border: none; background: none; color: var(--text-muted);
-      font-size: 11px; font-weight: 700; padding: 5px 8px;
-    }
-    .sm-bar button:hover:not(:disabled) { color: var(--accent); }
-    .sm-bar button:disabled { opacity: 0.35; }
-    .sm-compare { touch-action: none; user-select: none; }
-    .sm-compare.sm-active { color: var(--accent); }
+    .sm-kind { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    .sm-spacer { flex: 1; }
+    .sm-stage { touch-action: none; cursor: grab; }
+    .sm-stage:active { cursor: grabbing; }
+    .sm-canvas { display: block; margin: auto; max-width: 100%; max-height: 100%; }
     .sm-badge {
-      position: absolute; top: 12px; left: 12px;
-      padding: 3px 8px; border-radius: 999px;
-      font-size: 11px; font-weight: 700;
-      color: #fff; background: rgba(0, 0, 0, 0.6);
-      pointer-events: none;
+      position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.65); pointer-events: none;
     }
-    .sm-zoom-bar { margin-left: 6px; display: flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
-    .sm-zoom-bar button { border: none; background: none; color: var(--text-muted); font-size: 13px; font-weight: 700; padding: 4px 9px; }
-    .sm-zoom-bar button:hover { color: var(--accent); }
-    .sm-zoom-level { font-size: 11px; min-width: 46px; }
-    .sm-zoom-name { font-size: 10px; font-weight: 700; color: var(--text-muted); padding-left: 8px; }
-
-    .sm-stage {
-      flex: 1;
-      min-height: 220px;
-      display: flex; align-items: center; justify-content: center;
-      padding: 16px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow-sm);
-      touch-action: none;
-      cursor: grab;
-      overflow: hidden;
-    }
-    .sm-stage { position: relative; }
-    .sm-stage.sm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
-    .sm-canvas { display: block; max-width: 100%; max-height: 100%; border-radius: 4px; object-fit: contain; }
-
-    .sm-hint { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.4; }
-    .sm-error { color: var(--danger); font-size: 12px; }
-
-    .sm-drop-zone {
-      flex: 1;
-      min-height: 320px;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-      padding: 32px;
-      text-align: center;
-      color: var(--text-muted);
-      background: var(--surface);
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      cursor: pointer;
-    }
-    .sm-drop-zone:hover, .sm-drop-zone.sm-drag-over { border-color: var(--accent); background: var(--accent-soft); }
-    .sm-drop-zone p { margin: 0; font-size: 13px; }
-    .sm-drop-zone .sm-sub { font-size: 12px; max-width: 380px; line-height: 1.45; }
-
-    .sm-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-    .sm-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .sm-section-head {
-      width: 100%;
-      display: flex; align-items: center; gap: 8px;
-      padding: 11px 13px;
-      border: none; background: none; color: inherit; text-align: left;
-    }
-    .sm-section-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
-    .sm-section-summary { margin-left: auto; font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
-    .sm-chevron { color: var(--text-muted); transition: transform 0.15s; flex-shrink: 0; }
-    .sm-section.sm-open .sm-chevron { transform: rotate(180deg); }
-    .sm-section-body { display: none; flex-direction: column; gap: 10px; padding: 0 13px 13px; }
-    .sm-section.sm-open .sm-section-body { display: flex; }
-
-    .sm-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .sm-btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-      padding: 7px 10px;
-      font-size: 12px; font-weight: 600;
-      color: var(--text-muted);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-    }
-    .sm-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-    .sm-btn:disabled { opacity: 0.5; }
-    .sm-btn.sm-wide { width: 100%; }
-    .sm-btn.sm-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-    .sm-btn.sm-primary { color: #fff; background: var(--accent); border-color: var(--accent); }
-    .sm-btn.sm-primary:hover:not(:disabled) { color: #fff; filter: brightness(1.08); }
-    .sm-btn.sm-danger:hover { border-color: var(--danger); color: var(--danger); }
-
-    .sm-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
-    .sm-field.sm-inline { flex-direction: row; align-items: center; justify-content: space-between; }
-    .sm-field input { padding: 7px 9px; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-    .sm-field input[type="color"] { padding: 2px; width: 46px; height: 30px; }
-    .sm-link {
-      align-self: flex-start;
-      padding: 0; border: none; background: none;
-      font-size: 11px; font-weight: 600; color: var(--text-muted);
-      text-decoration: underline; text-underline-offset: 2px;
-    }
-    .sm-link:hover { color: var(--accent); }
-    .sm-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--text-muted); }
-    .sm-warn { color: var(--danger); }
-
+    .sm-pad { margin: 10px; }
+    .sm-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .sm-preset { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text); }
+    .sm-preset:hover { background: var(--il-hover); }
+    .sm-preset.il-on { border-color: var(--il-blue); background: var(--il-active); }
+    .sm-preset.sm-edited .sm-preset-label::after { content: ' •'; color: var(--il-blue); }
+    .sm-preset-chip { width: 100%; aspect-ratio: 1; border-radius: 4px; display: block; background: var(--il-line); }
+    .sm-chip-demo { background: linear-gradient(135deg, #f6c177 0%, #e07a5f 45%, #3d5a80 100%); }
+    .sm-preset-label { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
     .sm-formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-    .sm-format {
-      display: flex; flex-direction: column; align-items: center; gap: 5px;
-      padding: 8px 4px;
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    }
-    .sm-format:hover { border-color: var(--accent); }
-    .sm-format.sm-active { border-color: var(--accent); background: var(--accent-soft); }
-    .sm-format-box { width: 100%; max-width: 30px; max-height: 30px; border: 1.5px solid currentColor; border-radius: 3px; color: var(--text-muted); }
-    .sm-format.sm-active .sm-format-box { color: var(--accent); }
-    .sm-format-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
-    .sm-format.sm-active .sm-format-label { color: var(--accent); }
-
-    .sm-group { display: flex; flex-direction: column; gap: 6px; }
-    .sm-group-name { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-    /* Uma fileira por família, rolando na horizontal: a grade empilhada fazia
-       34 filtros virarem uma página inteira de rolagem. */
-    .sm-presets {
-      display: flex; gap: 6px;
-      overflow-x: auto; scroll-snap-type: x proximity;
-      padding-bottom: 4px;
-      scrollbar-width: thin;
-    }
-    .sm-presets > * { flex: 0 0 76px; scroll-snap-align: start; }
-    .sm-preset {
-      display: flex; flex-direction: column; align-items: center; gap: 5px;
-      padding: 6px 3px;
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    }
-    .sm-preset:hover { border-color: var(--accent); }
-    .sm-preset.sm-active { border-color: var(--accent); background: var(--accent-soft); }
-    /* Miniatura do filtro: a própria foto, no enquadramento atual. Sem foto,
-       cai num degradê que recebe o mesmo tratamento de cor. */
-    .sm-preset-chip { display: block; width: 100%; height: auto; max-height: 56px; border-radius: 4px; object-fit: cover; }
-    .sm-chip-demo {
-      height: 28px;
-      background: linear-gradient(135deg, #f7b733 0%, #e96443 38%, #7b4397 72%, #1f6f8b 100%);
-    }
-    .sm-preset-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-align: center; }
-    .sm-preset.sm-active .sm-preset-label { color: var(--accent); }
-    /* Filtro aplicado e depois mexido à mão: continua sendo o ponto de partida,
-       mas o tracejado avisa que o que está na tela já não é ele. */
-    .sm-preset.sm-edited { border-style: dashed; }
-    .sm-preset.sm-edited .sm-preset-label::after { content: " ·"; }
-
-    .sm-divider { height: 1px; background: var(--border); margin: 2px 0; }
-    .sm-more {
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px 0;
-      border: none; background: none;
-      font-size: 12px; font-weight: 600; color: var(--text-muted);
-    }
-    .sm-more:hover { color: var(--accent); }
-    .sm-more .sm-chevron { transition: transform 0.15s; }
-    .sm-more .sm-chevron-up { transform: rotate(180deg); }
-    .sm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-    .sm-slider { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
-    .sm-slider-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .sm-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
-    .sm-reset { border: none; background: none; color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 0 2px; }
-    .sm-reset:hover { color: var(--accent); }
-
-    /* No celular as colunas viram uma só: a prévia gruda no topo e encolhe pra
-       sobrar tela pros controles logo abaixo. */
-    @media (max-width: 900px) {
-      .sm-preview-wrap {
-        position: sticky; top: 0; z-index: 5;
-        max-height: none;
-        padding-bottom: 8px;
-        background: var(--bg);
-        /* A prévia fica por cima do painel que rola por baixo dela; sem uma
-           borda embaixo, as duas coisas se misturam. */
-        box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.45);
-      }
-      .sm-stage { min-height: 0; padding: 8px; }
-      .sm-canvas { max-height: clamp(160px, 32dvh, 320px); }
-      .sm-hint { display: none; }
-      .sm-tabs { flex-wrap: wrap; row-gap: 6px; }
-      /* As duas barrinhas dividem a linha em vez de empurrar o nome do arquivo
-         pra fora da tela. */
-      .sm-tab-label { flex: 1 1 100%; order: -1; }
-      .sm-bar, .sm-zoom-bar { margin-left: 0; }
-      .sm-zoom-bar { margin-left: auto; }
-      .sm-zoom-name { display: none; }
-      .sm-drop-zone { min-height: 200px; padding: 24px 16px; }
-    }
-
-    /* Toque: nenhum alvo abaixo de ~40px, e controle deslizante grosso o
-       bastante pra pegar de primeira com o dedo. */
-    @media (pointer: coarse) {
-      .sm-section-head { padding: 14px 13px; }
-      .sm-btn { padding: 10px 12px; font-size: 13px; }
-      .sm-icon-btn { width: 34px; height: 34px; }
-      .sm-bar button { padding: 9px 11px; font-size: 12px; }
-      .sm-zoom-bar button { padding: 9px 12px; font-size: 15px; }
-      .sm-slider input[type="range"] { height: 34px; }
-      .sm-reset { padding: 6px 8px; font-size: 12px; }
-      .sm-more { padding: 12px 0; font-size: 13px; }
-      .sm-link { padding: 8px 0; font-size: 12px; }
-      .sm-format { padding: 12px 4px; }
-      .sm-preset { padding: 8px 4px; }
-      .sm-field input { padding: 10px 11px; font-size: 16px; }
-    }
-
-    /* Telas estreitas de verdade: menos colunas, e o painel encosta nas bordas
-       pra não sobrar 40px de nada. */
-    @media (max-width: 540px) {
-      .sm-formats { grid-template-columns: repeat(2, 1fr); }
-      .sm-presets > * { flex-basis: 84px; }
-      .sm-preset-chip { max-height: 64px; }
-      .sm-section-summary { max-width: 88px; }
-      .sm-canvas { max-height: clamp(150px, 30dvh, 280px); }
-    }
+    .sm-format { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 64px; padding: 6px 4px; border: 1px solid var(--il-line); border-radius: 5px; background: var(--il-field); color: var(--text); }
+    .sm-format:hover { border-color: var(--il-line-strong); }
+    .sm-format.il-on { border-color: var(--il-blue); background: var(--il-active); }
+    .sm-format-box { max-width: 36px; max-height: 32px; width: 100%; border: 1.5px solid currentColor; border-radius: 2px; opacity: 0.7; }
+    .sm-format-label { font-size: 10px; color: var(--text-muted); }
+    .sm-r { grid-template-columns: 72px 1fr 40px; }
+    .sm-reset { padding: 0; border: none; background: none; color: var(--text); font-weight: 600; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+    .sm-reset:hover { color: var(--il-blue); }
+    .sm-more { margin: 2px 0; }
+    .sm-up { transform: rotate(180deg); }
+    .sm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--il-blue); }
+    .sm-link { margin: 0; justify-content: flex-start; }
+    .sm-seg-full { display: flex; }
+    .sm-seg-full button { flex: 1; width: auto; font-size: 11px; }
   `],
 })
 export class SocialModeComponent {
@@ -778,6 +498,13 @@ export class SocialModeComponent {
   private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
 
   readonly formats = SOCIAL_FORMATS;
+  readonly tabs: { id: 'filtros' | 'ajustes' | 'foto' | 'exportar'; label: string }[] = [
+    { id: 'filtros', label: 'Filtros' },
+    { id: 'ajustes', label: 'Cor e luz' },
+    { id: 'foto', label: 'Foto' },
+    { id: 'exportar', label: 'Exportar' },
+  ];
+  readonly tab = signal<'filtros' | 'ajustes' | 'foto' | 'exportar'>('filtros');
   readonly presets = FILTER_PRESETS;
   readonly groups = FILTER_GROUPS;
   /** Os quatro que resolvem a maior parte das fotos. */
@@ -1645,6 +1372,17 @@ export class SocialModeComponent {
     this.exportW.set(f.width);
     this.store.resetFraming();
     this.commit();
+  }
+
+  setFormatId(id: string): void {
+    const f = this.formats.find((x) => x.id === id);
+    if (f) this.setFormat(f);
+  }
+
+  /** Escala digitada ou arrastada na barra de controle. */
+  setScalePct(pct: number): void {
+    const next = clamp(pct / 100, MIN_SCALE, MAX_SCALE);
+    if (this.scale() > 0) this.zoomBy(next / this.scale());
   }
 
   setBgMode(mode: BgMode): void {

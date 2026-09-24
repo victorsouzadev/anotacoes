@@ -119,7 +119,7 @@ function fmt(v: number, d = 1): string {
   imports: [IlIconComponent, IlNumComponent, IlToolbarComponent, IlControlbarComponent, IllustrationPanelComponent],
   encapsulation: ViewEncapsulation.None,
   host: {
-    class: 'il-studio',
+    class: 'il-studio il-illus',
     '[class.il-hide-dock]': 'hideDock()',
     '[class.il-hide-all]': 'hideAll()',
   },
@@ -294,29 +294,16 @@ function fmt(v: number, d = 1): string {
     }
   `,
   styles: [`
-    /* ---- tokens da área de trabalho: um "cromo" neutro derivado do tema ---- */
-    .il-studio {
-      --il-chrome: color-mix(in srgb, var(--text) 3%, var(--bg));
-      --il-chrome-2: color-mix(in srgb, var(--text) 6%, var(--bg));
-      --il-field: var(--bg);
-      --il-line: color-mix(in srgb, var(--text) 11%, transparent);
-      --il-line-strong: color-mix(in srgb, var(--text) 24%, transparent);
-      --il-hover: color-mix(in srgb, var(--text) 7%, transparent);
-      --il-active: color-mix(in srgb, var(--il-blue) 16%, transparent);
-      --il-paste: color-mix(in srgb, var(--text) 12%, var(--bg));
-      --il-blue: #2d7ff9;
-      display: grid; height: 100%; min-height: 0; overflow: hidden; position: relative;
+    .il-illus {
+      display: grid;
       grid-template-columns: 44px ${RULER}px minmax(0, 1fr) 304px;
       grid-template-rows: auto ${RULER}px minmax(0, 1fr) 26px;
       grid-template-areas: "control control control control" "tools corner rulerx dock" "tools rulery canvas dock" "status status status status";
-      font: 12px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; color: var(--text); background: var(--il-chrome);
     }
     .il-studio.il-hide-dock { grid-template-columns: 44px ${RULER}px minmax(0, 1fr) 0; }
     .il-studio.il-hide-dock app-illustration-panel { display: none; }
     .il-studio.il-hide-all { grid-template-columns: 0 ${RULER}px minmax(0, 1fr) 0; grid-template-rows: 0 ${RULER}px minmax(0, 1fr) 26px; }
     .il-studio.il-hide-all il-toolbar, .il-studio.il-hide-all il-controlbar, .il-studio.il-hide-all app-illustration-panel { display: none; }
-    .il-studio button { font: inherit; cursor: pointer; }
-    .il-studio button:disabled { cursor: default; }
 
     /* ---- réguas ---- */
     .il-corner { grid-area: corner; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--text-muted); background: var(--il-chrome-2); border-right: 1px solid var(--il-line); border-bottom: 1px solid var(--il-line); }
@@ -357,18 +344,6 @@ function fmt(v: number, d = 1): string {
     .il-handle-line { stroke: var(--il-blue); stroke-width: 1; pointer-events: none; }
     .il-pen-path { fill: none; stroke: var(--il-blue); stroke-width: 1.5; pointer-events: none; }
 
-    /* ---- barra de status ---- */
-    .il-status {
-      grid-area: status; display: flex; align-items: center; gap: 10px; padding: 0 6px; font-size: 11px; color: var(--text-muted);
-      background: var(--il-chrome-2); border-top: 1px solid var(--il-line); min-width: 0;
-    }
-    .il-status-zoom { display: flex; align-items: center; gap: 1px; }
-    .il-status-zoom .il-num { height: 20px; }
-    .il-status-zoom .il-num input { width: 36px; font-size: 11px; }
-    .il-status-pos { min-width: 124px; font-variant-numeric: tabular-nums; }
-    .il-status-msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .il-status-info { max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
-
     /* ---- menu de contexto e atalhos ---- */
     .il-menu {
       position: fixed; z-index: 100; min-width: 230px; padding: 4px; background: var(--il-chrome);
@@ -391,7 +366,7 @@ function fmt(v: number, d = 1): string {
 
     /* ---- celular: uma coluna, régua some, dock embaixo ---- */
     @media (max-width: 900px) {
-      .il-studio { display: flex; flex-direction: column; height: auto; overflow: visible; }
+      .il-illus { display: flex; flex-direction: column; height: auto; overflow: visible; }
       .il-studio.il-hide-all il-toolbar, .il-studio.il-hide-all il-controlbar { display: flex; }
       .il-corner, .il-ruler { display: none; }
       .il-controlbar { order: 1; }

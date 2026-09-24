@@ -151,9 +151,19 @@ mesmos dados.
 
 ### Editor de Imagens
 
-Uma rota (`/imagens`), dois modos, escolhidos no seletor do cabeçalho. Os dois
-convivem no mesmo projeto salvo (`/api/imagens/projetos`, um JSON opaco de até 9 MB
-com as artes embutidas em data URL).
+Uma rota (`/imagens`), quatro modos (Print & Cut, Molde SVG, Redes sociais e
+Ilustração), escolhidos na barra do app. Todos convivem no mesmo projeto salvo
+(`/api/imagens/projetos`, um JSON opaco de até 9 MB com as artes embutidas em data
+URL); nome, **Salvar** (Ctrl+S) e **Abrir/Novo** ficam na barra do app, valendo
+pra qualquer modo.
+
+Os quatro modos usam a mesma área de trabalho de tela cheia, no molde do
+Illustrator e do Inkscape: ferramentas numa coluna à esquerda (com dica de nome,
+atalho e uso), barra de controle contextual em cima, palco sobre a área de
+rascunho, dock de painéis com abas à direita e barra de status com zoom. As cores
+vêm do tema do app (claro ou escuro); os estilos comuns moram em
+`studio-styles.ts`. No Print & Cut as ferramentas também têm tecla: V visualizar,
+W remover fundo, E borracha de contorno, C remover linha de corte, D dividir.
 
 **Print & Cut** — o fluxo original, pra recortadora ScanNCut:
 
