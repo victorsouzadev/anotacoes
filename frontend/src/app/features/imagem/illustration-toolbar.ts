@@ -21,6 +21,8 @@ export const TOOL_GROUPS: ToolDef[][] = [
   ],
   [
     { id: 'caneta', icon: 'pen', label: 'Caneta', key: 'P', help: 'Clique pra reta, arraste pra curva' },
+    { id: 'lapis', icon: 'pencil', label: 'Lápis', key: 'N', help: 'Desenhe à mão livre; termine perto do início pra fechar' },
+    { id: 'borracha', icon: 'vector-eraser', label: 'Borracha', key: 'Shift+E', help: 'Apaga pedaços dos vetores · [ e ] mudam o tamanho' },
     { id: 'texto', icon: 'text', label: 'Texto', key: 'T', help: 'Clique na prancheta pra escrever' },
   ],
   [

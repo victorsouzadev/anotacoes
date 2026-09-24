@@ -23,7 +23,7 @@ import {
   Bounds, Layer, PathLayer, Point, VPath, applyMatrix, boundsCorners, dist, invertMatrix, layerMatrix,
   localStrokeWidth, matrixAttr, pathsToD, rgbToHex, unionBounds,
 } from './illustration-model';
-import { moveHandle, moveNode, nodeCount, nodeInfo } from './vector-ops';
+import { fitFreehand, moveHandle, moveNode, nodeCount, nodeInfo } from './vector-ops';
 import { clipDef, clipId, fillRef, paintDef, underlays } from './illustration-paint';
 
 /** Pixels de tela por mm no zoom 100% (tamanho real, 96 DPI do CSS). */
@@ -68,6 +68,8 @@ type Drag =
   | { kind: 'node'; layerId: string; path: number; node: number; which: 'anchor' | 'in' | 'out'; base: VPath; smooth: boolean }
   | { kind: 'shape'; start: Point; id: string }
   | { kind: 'pen'; index: number }
+  | { kind: 'pencil'; points: Point[] }
+  | { kind: 'erase'; points: Point[] }
   | { kind: 'pan'; x: number; y: number; left: number; top: number };
 
 interface PenAnchor {
@@ -86,7 +88,7 @@ interface MenuItem {
 
 const SHORTCUTS: { title: string; items: [string, string][] }[] = [
   { title: 'Ferramentas', items: [
-    ['V', 'Seleção'], ['A', 'Seleção direta (nós)'], ['P', 'Caneta'], ['T', 'Texto'], ['R · E · S · G', 'Retângulo · Elipse · Estrela · Polígono'],
+    ['V', 'Seleção'], ['A', 'Seleção direta (nós)'], ['P', 'Caneta'], ['N', 'Lápis (mão livre)'], ['Shift+E', 'Borracha  ( [ ] tamanho )'], ['T', 'Texto'], ['R · E · S · G', 'Retângulo · Elipse · Estrela · Polígono'],
     ['I', 'Conta-gotas'], ['H  ou  Espaço', 'Mão (segure pra rolar)'], ['Z', 'Zoom (Alt afasta)'],
   ] },
   { title: 'Vista', items: [
@@ -254,6 +256,16 @@ function fmt(v: number, d = 1): string {
               />
             }
           }
+          @if (freehand(); as fh) {
+            @if (fh.erase) {
+              <polyline class="il-erase-trail" [attr.points]="fh.points" [attr.stroke-width]="store.eraserMm() * 2" />
+            } @else {
+              <polyline class="il-pen-path" [attr.points]="fh.points" />
+            }
+          }
+          @if (store.tool() === 'borracha' && cursor(); as c) {
+            <circle class="il-eraser-ring" [attr.cx]="c[0]" [attr.cy]="c[1]" [attr.r]="store.eraserMm()" />
+          }
           @if (penPreview(); as pp) {
             <path class="il-pen-path" [attr.d]="pp.d" />
             @for (a of pp.anchors; track $index) {
@@ -334,7 +346,10 @@ function fmt(v: number, d = 1): string {
     .il-canvas { grid-area: canvas; overflow: scroll; background: var(--il-paste); touch-action: none; position: relative; overscroll-behavior: contain; }
     .il-canvas.il-drag-over { outline: 2px dashed var(--il-blue); outline-offset: -6px; }
     .il-canvas[data-tool='caneta'], .il-canvas[data-tool='retangulo'], .il-canvas[data-tool='elipse'],
-    .il-canvas[data-tool='estrela'], .il-canvas[data-tool='poligono'] { cursor: crosshair; }
+    .il-canvas[data-tool='estrela'], .il-canvas[data-tool='poligono'], .il-canvas[data-tool='lapis'] { cursor: crosshair; }
+    .il-canvas[data-tool='borracha'] { cursor: none; }
+    .il-eraser-ring { fill: none; stroke: #e53935; stroke-width: 1px; pointer-events: none; }
+    .il-erase-trail { fill: none; stroke: #e53935; stroke-opacity: .25; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; vector-effect: none !important; }
     .il-canvas[data-tool='texto'] { cursor: text; }
     .il-canvas[data-tool='contagotas'] { cursor: copy; }
     .il-canvas[data-tool='zoom'] { cursor: zoom-in; }
@@ -422,6 +437,8 @@ export class IllustrationModeComponent {
   dragOver = signal(false);
   guides = signal<{ x?: number; y?: number }[]>([]);
   marquee = signal<Bounds | null>(null);
+  /** Traço em andamento do lápis ou da borracha. */
+  freehand = signal<{ points: string; erase: boolean } | null>(null);
   pen = signal<PenAnchor[]>([]);
   penHover = signal<Point | null>(null);
   hoverId = signal<string | null>(null);
@@ -780,6 +797,8 @@ export class IllustrationModeComponent {
         : 'Clique num caminho (texto e forma: converta em caminho antes)';
       case 'caneta': return this.pen().length ? 'Clique no primeiro ponto pra fechar · Enter termina · Esc cancela' : 'Clique pra começar · arraste pra fazer curva';
       case 'texto': return 'Clique na prancheta pra escrever';
+      case 'lapis': return 'Desenhe à mão livre · termine perto do início pra fechar a forma';
+      case 'borracha': return `Arraste sobre os vetores (${fmt(this.store.eraserMm() * 2)} mm) · [ e ] mudam o tamanho · com seleção, só apaga nela`;
       case 'contagotas': return 'Clique numa cor: vai pra seleção e pros próximos objetos';
       case 'mao': return 'Arraste pra mover a vista';
       case 'zoom': return 'Clique aproxima · Alt+clique afasta';
@@ -879,6 +898,12 @@ export class IllustrationModeComponent {
       this.penDown(p);
       return;
     }
+    if (tool === 'lapis' || tool === 'borracha') {
+      this.drag = { kind: tool === 'lapis' ? 'pencil' : 'erase', points: [p] };
+      this.freehand.set({ points: `${p[0]},${p[1]}`, erase: tool === 'borracha' });
+      this.dragging.set(true);
+      return;
+    }
     if (tool === 'retangulo' || tool === 'elipse' || tool === 'estrela' || tool === 'poligono') {
       const s = this.store.newShape(tool, p[0], p[1], 0.01, 0.01);
       this.store.addLayers([s]);
@@ -965,6 +990,14 @@ export class IllustrationModeComponent {
         return;
       }
       case 'node': return this.dragNode(drag, p, event.altKey);
+      case 'pencil':
+      case 'erase': {
+        const last = drag.points[drag.points.length - 1];
+        if (dist(last, p) * this.ppm() < 1.5) return;
+        drag.points.push(p);
+        this.freehand.set({ points: drag.points.map((q) => `${q[0]},${q[1]}`).join(' '), erase: drag.kind === 'erase' });
+        return;
+      }
       case 'shape': return this.dragShape(drag, p, event.shiftKey);
       case 'pen': {
         const anchors = [...this.pen()];
@@ -983,6 +1016,12 @@ export class IllustrationModeComponent {
     this.dragging.set(false);
     this.guides.set([]);
     if (!drag || drag.kind === 'pan' || drag.kind === 'pen') return;
+    if (drag.kind === 'pencil' || drag.kind === 'erase') {
+      this.freehand.set(null);
+      if (drag.kind === 'erase') this.finishErase(drag.points);
+      else this.finishPencil(drag.points);
+      return;
+    }
     // A medida que o arrasto mostrava na barra de status não vale mais.
     if (drag.kind !== 'marquee') this.store.status.set('');
     if (drag.kind === 'marquee') {
@@ -1009,6 +1048,25 @@ export class IllustrationModeComponent {
       return;
     }
     this.store.end();
+  }
+
+  private finishPencil(points: Point[]): void {
+    const s = this.store;
+    const closed = points.length >= 8 && dist(points[0], points[points.length - 1]) * this.ppm() < 12;
+    const path = fitFreehand(points, Math.max(0.03, 1.2 / this.ppm()), closed);
+    if (!path) return;
+    const stroke = s.currentStroke() ?? (closed ? null : s.currentFill()) ?? '#222222';
+    const layer = s.newPathLayer(closed ? 'Forma à mão' : 'Traço à mão', [path], {
+      fill: closed ? s.currentFill() : null,
+      stroke,
+      strokeWidth: Math.max(0.35, s.currentStrokeWidth()),
+    });
+    s.addLayers([layer]);
+  }
+
+  private finishErase(points: Point[]): void {
+    const n = this.store.eraseAlong(points, this.store.eraserMm());
+    this.store.status.set(n ? `Borracha: ${n} objeto(s) alterado(s).` : 'A borracha não encostou em nenhum vetor.');
   }
 
   onDoubleClick(event: MouseEvent): void {
@@ -1411,7 +1469,13 @@ export class IllustrationModeComponent {
     }
     if (key === 'd') { s.defaultColors(); return; }
     if (key === '/') { s.setPaint(s.paintTarget(), null); return; }
-    const tool = TOOL_GROUPS.flat().find((t) => t.key.toLowerCase() === key);
+    if (s.tool() === 'borracha' && (key === '[' || key === ']')) {
+      s.eraserMm.update((r) => Math.min(50, Math.max(0.25, key === ']' ? r * 1.25 : r / 1.25)));
+      return;
+    }
+    const tools = TOOL_GROUPS.flat();
+    const tool = (event.shiftKey ? tools.find((t) => t.key.toLowerCase() === `shift+${key}`) : null)
+      ?? tools.find((t) => t.key.toLowerCase() === key);
     if (tool) this.setTool(tool.id);
   }
 }

@@ -12,7 +12,7 @@ import {
 } from './illustration-model';
 import { TextLayout, layoutText } from './svg-text';
 import {
-  AreaSource, BoolOp, addNodeAfter, booleanPaths, cornerNode, deleteNode, offsetOutline, smoothNode, splitIslands,
+  AreaSource, BoolOp, addNodeAfter, booleanPaths, cornerNode, deleteNode, eraseArea, offsetOutline, smoothNode, splitIslands,
 } from './vector-ops';
 import { ImageStats, PresetId, VectorizeParams, VectorizeResult } from './vectorize';
 
@@ -30,7 +30,7 @@ interface DocState {
   heightMm: number;
 }
 
-export type Tool = 'selecionar' | 'nos' | 'caneta' | 'texto' | 'retangulo' | 'elipse' | 'estrela' | 'poligono' | 'contagotas' | 'mao' | 'zoom';
+export type Tool = 'selecionar' | 'nos' | 'caneta' | 'lapis' | 'borracha' | 'texto' | 'retangulo' | 'elipse' | 'estrela' | 'poligono' | 'contagotas' | 'mao' | 'zoom';
 export type PaintTarget = 'fill' | 'stroke';
 
 export interface SelectionGeometry {
@@ -99,6 +99,8 @@ export class IllustrationStore {
   paintTarget = signal<PaintTarget>('fill');
   keepRatio = signal(true);
   snap = signal(true);
+  /** Raio da borracha vetorial, em mm. */
+  eraserMm = signal(3);
   /** Sobe quando o painel deve focar o campo de texto. */
   focusText = signal(0);
   canUndo = signal(false);
@@ -827,6 +829,44 @@ export class IllustrationStore {
       if (l.clipBy && masks.has(l.clipBy)) return { ...l, clipBy: null, groupId: null } as Layer;
       return l;
     }));
+  }
+
+  /** Borracha: apaga a faixa varrida (pontos em mm da prancheta) das camadas
+   * selecionadas — ou, sem seleção, de tudo o que ela tocou. Forma e texto
+   * apagados viram caminho. */
+  eraseAlong(stroke: Point[], radiusMm: number): number {
+    if (!stroke.length) return 0;
+    const sel = this.selection().filter((l) => l.kind !== 'imagem' && !l.locked);
+    const pool = sel.length ? sel : this.layers().filter((l) => l.visible && !l.locked && l.kind !== 'imagem' && !l.mask);
+    const replaced = new Map<string, Layer | null>();
+    for (const l of pool) {
+      const out = eraseArea(this.areaSource(l), stroke, radiusMm);
+      if (!out) continue;
+      if (!out.length) {
+        replaced.set(l.id, null);
+        continue;
+      }
+      const strokeOnly = !l.fill && !l.paint;
+      const c = centerPaths(out);
+      const { id, name, opacity, visible, locked, groupId, cut, paint, effects, clipBy, mask } = l;
+      replaced.set(l.id, {
+        ...layerBase(id, name), opacity, visible, locked, groupId, cut, paint, effects, clipBy, mask,
+        // Área que era só traço vira preenchimento com a cor do traço.
+        fill: strokeOnly ? l.stroke : l.fill,
+        stroke: strokeOnly ? null : l.stroke,
+        strokeWidth: l.strokeWidth,
+        kind: 'caminho', paths: c.paths, x: c.cx, y: c.cy,
+      } as PathLayer);
+    }
+    if (!replaced.size) return 0;
+    this.record();
+    this.layers.update((list) => list.flatMap((l) => {
+      if (!replaced.has(l.id)) return [l];
+      const r = replaced.get(l.id);
+      return r ? [r] : [];
+    }));
+    this.selectedIds.update((ids) => ids.filter((id) => replaced.get(id) !== null));
+    return replaced.size;
   }
 
   /** Texto e forma viram caminho (é o que permite editar nós). */

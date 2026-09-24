@@ -5,7 +5,7 @@
  * da linha de corte do Print & Cut — polilinha faz a lâmina engasgar. */
 
 import * as ClipperLib from 'clipper-lib';
-import { CORNER_ANGLE, CubicSegment, Point, Polygon, pointInPolygon, polygonArea, polygonToCubics } from './contour';
+import { CORNER_ANGLE, CubicSegment, Point, Polygon, pointInPolygon, polygonArea, polygonToCubics, polylineToCubics } from './contour';
 import { VPath, dist, flattenPath } from './illustration-model';
 
 /** Micrômetros por mm: a grade inteira do Clipper. */
@@ -155,6 +155,79 @@ export function fitPolygon(poly: Polygon, toleranceMm = FIT_TOLERANCE_MM): VPath
     closed: true,
     segments: cubic.segments.map((s) => ({ c1: s.c1 ? f(s.c1) : null, c2: s.c2 ? f(s.c2) : null, to: f(s.to) })),
   };
+}
+
+// ---------- mão livre e borracha ----------
+
+/** Reamostra uma polilinha com passo fixo (em mm). */
+function resample(poly: Polygon, step: number): Polygon {
+  const out: Polygon = [poly[0]];
+  let carry = 0;
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1], b = poly[i];
+    const len = dist(a, b);
+    let t = step - carry;
+    while (t <= len) {
+      out.push([a[0] + ((b[0] - a[0]) * t) / len, a[1] + ((b[1] - a[1]) * t) / len]);
+      t += step;
+    }
+    carry = len - (t - step);
+  }
+  const end = poly[poly.length - 1];
+  if (dist(out[out.length - 1], end) > step * 0.2) out.push(end);
+  return out;
+}
+
+/** Média móvel: tira o tremido da mão sem mexer nas pontas. */
+function smoothPolyline(poly: Polygon, radius: number, closed: boolean): Polygon {
+  const n = poly.length;
+  if (n < 3 || radius < 1) return poly;
+  return poly.map((p, i) => {
+    if (!closed && (i === 0 || i === n - 1)) return p;
+    let sx = 0, sy = 0, c = 0;
+    for (let k = -radius; k <= radius; k++) {
+      let j = i + k;
+      if (closed) j = (j + n) % n;
+      else if (j < 0 || j >= n) continue;
+      sx += poly[j][0];
+      sy += poly[j][1];
+      c++;
+    }
+    return [sx / c, sy / c] as Point;
+  });
+}
+
+/** Traço do lápis (pontos em mm, como a mão passou) vira curva. `closed`
+ * fecha a forma (terminou perto de onde começou). */
+export function fitFreehand(points: Polygon, toleranceMm: number, closed: boolean): VPath | null {
+  if (points.length < 2) return null;
+  const total = points.slice(1).reduce((s, p, i) => s + dist(points[i], p), 0);
+  if (total < 0.2) return null;
+  // passo de ~1/40 do comprimento, entre 0,1 e 1 mm: denso o bastante pro
+  // ajuste, esparso o bastante pra média móvel alisar o tremido
+  const step = Math.min(1, Math.max(0.1, total / 400));
+  const smooth = smoothPolyline(resample(points, step), 3, closed);
+  if (closed && smooth.length >= 4) return fitPolygon(smooth, toleranceMm);
+  const dense = resample(smooth, 1 / FIT_SCALE).map(([x, y]) => [x * FIT_SCALE, y * FIT_SCALE] as Point);
+  const cubic = polylineToCubics(dense, { tolerance: toleranceMm * FIT_SCALE });
+  const f = (p: Point): Point => [p[0] / FIT_SCALE, p[1] / FIT_SCALE];
+  return {
+    start: f(cubic.start),
+    closed: false,
+    segments: cubic.segments.map((s) => ({ c1: s.c1 ? f(s.c1) : null, c2: s.c2 ? f(s.c2) : null, to: f(s.to) })),
+  };
+}
+
+/** Borracha vetorial: tira da área da camada a faixa que a borracha varreu.
+ * `null` quando a borracha nem encostou (a camada fica como está). */
+export function eraseArea(src: AreaSource, stroke: Polygon, radiusMm: number): VPath[] | null {
+  const region = regionOf(src);
+  if (!region.length || !stroke.length) return null;
+  const line = toInt(stroke.length === 1 ? [stroke[0], [stroke[0][0] + 0.001, stroke[0][1]]] : stroke);
+  const band = offsetInt([line], radiusMm, ClipperLib.EndType.etOpenRound);
+  const nz = ClipperLib.PolyFillType.pftNonZero;
+  if (!execute(ClipperLib.ClipType.ctIntersection, region, band, nz).length) return null;
+  return intPathsToCurves(execute(ClipperLib.ClipType.ctDifference, region, band, nz));
 }
 
 // ---------- separar formas ----------

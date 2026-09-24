@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { polygonArea } from './contour';
 import { VPath, ellipsePaths, flattenPath, polygonToVPath, rectPaths, translatePaths } from './illustration-model';
 import {
-  AreaSource, addNodeAfter, booleanPaths, cornerNode, deleteNode, fitPolygon, moveNode, nodeCount, nodeInfo,
+  AreaSource, addNodeAfter, booleanPaths, cornerNode, deleteNode, eraseArea, fitFreehand, fitPolygon, moveNode, nodeCount, nodeInfo,
   offsetOutline, smoothNode, splitIslands,
 } from './vector-ops';
 
@@ -155,5 +155,37 @@ describe('edição de nós', () => {
     const more = addNodeAfter(circle, 1);
     expect(nodeCount(more)).toBe(5);
     expect(Math.abs(polygonArea(flattenPath(more, 0.01)))).toBeCloseTo(Math.abs(polygonArea(flattenPath(circle, 0.01))), 3);
+  });
+});
+
+describe('lápis e borracha', () => {
+  it('traço tremido vira poucas curvas, com as pontas no lugar', () => {
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= 200; i++) pts.push([i * 0.5, Math.sin(i / 20) * 10 + (i % 2 ? 0.08 : -0.08)]);
+    const path = fitFreehand(pts, 0.1, false)!;
+    expect(path.closed).toBe(false);
+    expect(path.start[0]).toBeCloseTo(0, 1);
+    expect(path.segments[path.segments.length - 1].to[0]).toBeCloseTo(100, 1);
+    expect(path.segments.length).toBeLessThan(20);
+  });
+
+  it('traço que volta ao início fecha a forma', () => {
+    const pts: [number, number][] = [];
+    for (let i = 0; i < 120; i++) pts.push([Math.cos((i / 120) * Math.PI * 2) * 20, Math.sin((i / 120) * Math.PI * 2) * 20]);
+    const path = fitFreehand(pts, 0.1, true)!;
+    expect(path.closed).toBe(true);
+    expect(Math.abs(area([path]))).toBeGreaterThan(1100);
+  });
+
+  it('borracha abre um corte no meio do retângulo', () => {
+    const rect = fill(translatePaths(rectPaths(40, 20, 0), 20, 10));
+    const out = eraseArea(rect, [[20, -5], [20, 25]], 2)!;
+    expect(splitIslands(out).length).toBe(2);
+    expect(area(out)).toBeCloseTo(800 - 4 * 20, 0);
+  });
+
+  it('borracha que não encosta devolve null', () => {
+    const rect = fill(translatePaths(rectPaths(40, 20, 0), 20, 10));
+    expect(eraseArea(rect, [[100, 100], [120, 100]], 2)).toBeNull();
   });
 });

@@ -550,6 +550,19 @@ export function polygonToCubics(poly: Polygon, options: FitOptions = {}): CubicP
   return { start: poly[quebras[0]], segments };
 }
 
+/** Mesmo ajuste, pra uma linha aberta (traço à mão livre): as pontas ficam
+ * onde estão e as tangentes delas olham pro vizinho. */
+export function polylineToCubics(poly: Polygon, options: FitOptions = {}): CubicPath {
+  const { tolerance = 0.25 } = options;
+  const pts = poly.filter((p, i) => i === 0 || p[0] !== poly[i - 1][0] || p[1] !== poly[i - 1][1]);
+  if (pts.length < 2) return { start: pts[0] ?? [0, 0], segments: [] };
+  if (pts.length === 2) return { start: pts[0], segments: [{ c1: null, c2: null, to: pts[1] }] };
+  const segments: CubicSegment[] = [];
+  const last = pts.length - 1;
+  fitCubic(pts, 0, last, tangentAt(pts, 0, 1), tangentAt(pts, last, -1), tolerance * tolerance, 0, segments);
+  return { start: pts[0], segments };
+}
+
 /** Direção do contorno na ponta de um trecho, olhando pra dentro dele. */
 function tangentAt(d: Polygon, i: number, passo: number): Point {
   return unit(sub(d[i + passo], d[i]));

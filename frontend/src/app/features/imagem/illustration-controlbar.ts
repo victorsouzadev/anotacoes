@@ -122,6 +122,12 @@ const KIND_LABEL: Record<Layer['kind'], string> = { caminho: 'Caminho', forma: '
         <button type="button" class="il-ib" [class.il-on]="store.snap()" data-tip="Guias inteligentes (atração)" aria-label="Guias inteligentes" (click)="store.snap.set(!store.snap())"><il-icon name="magnet" /></button>
       </div>
       <span class="il-cb-hint">{{ hint() }}</span>
+    } @else if (store.tool() === 'borracha') {
+      <div class="il-cb-group">
+        <span class="il-cb-label">Borracha</span>
+        <il-num label="⌀" title="Diâmetro da borracha" unit="mm" [value]="store.eraserMm() * 2" [step]="0.5" [min]="0.5" [max]="100" (valueChange)="store.eraserMm.set($event.value / 2)" />
+      </div>
+      <span class="il-cb-hint">{{ hint() }}</span>
     } @else {
       <span class="il-cb-hint">{{ hint() }}</span>
     }
@@ -174,6 +180,8 @@ export class IlControlbarComponent {
       case 'mao': return 'Arraste pra mover a vista';
       case 'zoom': return 'Clique aproxima · Alt+clique afasta';
       case 'nos': return 'Clique num caminho pra ver os nós';
+      case 'lapis': return 'Desenhe à mão livre · termine perto do início pra fechar · usa as cores atuais';
+      case 'borracha': return 'Arraste sobre os vetores · [ e ] mudam o tamanho · com seleção, só apaga nela';
       case 'selecionar': return '';
       default: return 'Arraste na prancheta · Shift deixa proporcional';
     }
