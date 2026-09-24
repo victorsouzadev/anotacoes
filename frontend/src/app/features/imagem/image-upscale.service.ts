@@ -64,6 +64,18 @@ export class ImageUpscaleService {
     }
   }
 
+  /** Recorte por IA: volta um PNG do mesmo enquadramento, fundo transparente. */
+  async removerFundo(imagem: string): Promise<string> {
+    try {
+      const resposta = await firstValueFrom(
+        this.http.post<{ imagem: string }>('/api/imagens/remover-fundo', { imagem }),
+      );
+      return resposta.imagem;
+    } catch (err) {
+      throw erroDe(err);
+    }
+  }
+
   /**
    * Amplia tentando de novo, menor, quando a GPU do serviço estiver sem
    * memória. O tamanho que cabe lá não é fixo: depende de quem mais está

@@ -143,6 +143,41 @@ public static class ImagemEndpoints
             }
         });
 
+        // Recorte por IA: volta um PNG do mesmo enquadramento com o fundo transparente.
+        group.MapPost("/remover-fundo", async (
+            RemoveBgRequest req, ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
+        {
+            var removedor = await factory.CriarRemovedorDeFundoAsync(user.UserId(), ct);
+            if (!removedor.Disponivel)
+            {
+                return Results.Json(
+                    new { error = "Nenhuma chave de IA de imagem configurada. Cadastre a sua em Configurações." },
+                    statusCode: 503);
+            }
+
+            if (!TentarLerDataUrl(req.Imagem, out var bytes, out var contentType))
+                return Results.BadRequest(new { error = "Imagem inválida." });
+
+            try
+            {
+                var recorte = await removedor.RemoverFundoAsync(bytes, contentType, ct);
+                var dataUrl = $"data:{recorte.ContentType};base64,{Convert.ToBase64String(recorte.Conteudo)}";
+                return Results.Ok(new UpscaleResponse(dataUrl));
+            }
+            catch (UpscaleIndisponivelException ex)
+            {
+                return Results.Json(new { error = ex.Message, tentarMenor = ex.TentarMenor }, statusCode: 502);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return Results.StatusCode(499);
+            }
+            catch (TaskCanceledException)
+            {
+                return Results.Json(new { error = "A remoção de fundo demorou demais e foi cancelada." }, statusCode: 504);
+            }
+        });
+
         group.MapPost("/upscale", async (
             UpscaleRequest req, ClaimsPrincipal user, IUpscalerFactory factory, CancellationToken ct) =>
         {

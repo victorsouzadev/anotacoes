@@ -30,6 +30,8 @@ import { IlStudioBaseStylesComponent, IlStudioChromeStylesComponent } from './st
 import { BridgePayload, BridgeTarget, ModeBridge, canvasToFile } from './mode-bridge';
 import { ProjectDraft, clearDraft, loadDraft, saveDraft } from './project-draft';
 import { SnapshotHistory } from './snapshot-history';
+import { ImageUpscaleService } from './image-upscale.service';
+import { aiCutout } from './ai-cutout';
 import { VectorizeService } from './vectorize.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
@@ -94,6 +96,9 @@ interface ImportedImage {
   cutRemovals: CutRemoval[];
   /** Sobe a cada borrachada/ajuste destrutivo, pra invalidar o cache da peça. */
   editVersion: number;
+  /** A foto de antes do recorte por IA (o recorte vira o original). Só na
+   * sessão: salvar as duas dobraria o projeto. */
+  preAi?: { canvas: HTMLCanvasElement; dataUrl: string };
 }
 
 interface Piece {
@@ -518,6 +523,10 @@ function loadPrefs(): Prefs {
                         @if (tool() === 'fundo') {
                           <label class="il-range"><span>Tolerância</span><input type="range" min="5" max="120" step="5" [value]="tolerance()" (input)="onToleranceInput($event)" /><b>{{ tolerance() }}</b></label>
                         }
+                        @if (upscale.disponivel()) {
+                          <button type="button" class="il-btn il-wide" [disabled]="aiBusy()" data-help="Cabelo, pelo, degradê e cenário: a IA recorta onde o balde não dá conta" (click)="aiCutoutSelected()"><il-icon name="sparkle" [size]="14" /> {{ aiBusy() ? 'Recortando com IA…' : 'Remover fundo com IA' }}</button>
+                          @if (aiError()) { <p class="il-note il-warn">{{ aiError() }}</p> }
+                        }
                         @if (sel.bgRemoved) { <button type="button" class="il-btn il-wide" (click)="restoreOriginal()">Restaurar imagem original</button> }
                         <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'dividir'" (click)="setTool('dividir')"><il-icon name="split" [size]="14" /> {{ tool() === 'dividir' ? 'Fechar divisão' : 'Dividir em elementos' }}</button>
                         @if (tool() === 'dividir') {
@@ -727,6 +736,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     700, (a, b) => a.items === b.items,
   );
   draftOffer = signal<ProjectDraft | null>(null);
+  aiBusy = signal(false);
+  aiError = signal('');
   private dirty = false;
   private draftTimer?: ReturnType<typeof setTimeout>;
   private applyingProject = false;
@@ -787,6 +798,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public social: SocialStore,
     public illustration: IllustrationStore,
     public bridge: ModeBridge,
+    public upscale: ImageUpscaleService,
   ) {
     this.bridge.register((target, payload) => void this.receive(target, payload));
     effect(() => {
@@ -807,6 +819,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.scheduleRender();
     void this.refreshProjects();
+    void this.upscale.verificar();
     void loadDraft().then((d) => {
       if (d?.data && !this.dirty) this.draftOffer.set(d);
     });
@@ -1545,9 +1558,49 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.updateSelected({ erasures: [], editVersion: sel.editVersion + 1 });
   }
 
+  /** Recorte por IA: o recorte vira a arte original da peça (é o que se salva),
+   * e a foto de antes fica guardada pra "Restaurar". */
+  async aiCutoutSelected(): Promise<void> {
+    const sel = this.selected();
+    if (!sel || this.aiBusy()) return;
+    this.aiBusy.set(true);
+    this.aiError.set('');
+    this.setTool('nenhuma');
+    try {
+      const cut = await aiCutout(this.upscale, sel.original);
+      const source = document.createElement('canvas');
+      source.width = cut.width;
+      source.height = cut.height;
+      source.getContext('2d')!.drawImage(cut, 0, 0);
+      const live = this.images().find((i) => i.id === sel.id);
+      if (!live) return;
+      this.images.update((list) => list.map((i) => (i.id === sel.id ? {
+        ...i, original: cut, source, originalDataUrl: encodeCanvas(cut), bgRemovals: [], bgRemoved: true,
+        srcVersion: i.srcVersion + 1, thumbUrl: makeThumb(source),
+        preAi: i.preAi ?? { canvas: i.original, dataUrl: i.originalDataUrl },
+      } : i)));
+      this.scheduleRender();
+    } catch (e) {
+      this.aiError.set(e instanceof Error ? e.message : 'Não consegui remover o fundo agora.');
+    } finally {
+      this.aiBusy.set(false);
+    }
+  }
+
   restoreOriginal(): void {
     const sel = this.selected();
     if (!sel) return;
+    if (sel.preAi) {
+      const source = document.createElement('canvas');
+      source.width = sel.preAi.canvas.width;
+      source.height = sel.preAi.canvas.height;
+      source.getContext('2d')!.drawImage(sel.preAi.canvas, 0, 0);
+      this.updateSelected({
+        original: sel.preAi.canvas, originalDataUrl: sel.preAi.dataUrl, source, preAi: undefined,
+        srcVersion: sel.srcVersion + 1, bgRemoved: false, thumbUrl: makeThumb(source), bgRemovals: [],
+      });
+      return;
+    }
     const ctx = sel.source.getContext('2d')!;
     ctx.clearRect(0, 0, sel.source.width, sel.source.height);
     ctx.drawImage(sel.original, 0, 0);

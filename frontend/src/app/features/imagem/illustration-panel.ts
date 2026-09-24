@@ -325,6 +325,9 @@ function loadOpen(): Record<string, boolean> {
                       <button type="button" class="il-btn" (click)="imageInput.click()">Trocar</button>
                       <button type="button" class="il-btn" data-tip="Finaliza: o resultado vira desenho comum" (click)="tracer.release()">Soltar</button>
                     </div>
+                    @if (tracer.upscale.disponivel()) {
+                      <button type="button" class="il-btn" [disabled]="tracer.aiBusy()" data-tip="Tira o fundo com IA antes de vetorizar" (click)="tracer.cutoutWithAi()"><il-icon name="sparkle" [size]="13" /> {{ tracer.aiBusy() ? 'Recortando…' : 'Tirar fundo (IA)' }}</button>
+                    }
                   </div>
                 </div>
               } @else {

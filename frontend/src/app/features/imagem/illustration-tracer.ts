@@ -7,6 +7,8 @@ import { Injectable, signal } from '@angular/core';
 import { IllustrationStore } from './illustration-store';
 import { countNodes } from './illustration-model';
 import { encodeCanvas } from './raster';
+import { ImageUpscaleService } from './image-upscale.service';
+import { aiCutout } from './ai-cutout';
 import { isHeicFile } from './social-mode';
 import { PresetId, VectorizeParams, presetParams, suggestPreset } from './vectorize';
 import { StaleRequest, VectorizeService, vectorizeCanvas } from './vectorize.service';
@@ -29,7 +31,13 @@ export class IllustrationTracer {
 
   private timer?: ReturnType<typeof setTimeout>;
 
-  constructor(private store: IllustrationStore, private vectorizer: VectorizeService) {}
+  aiBusy = signal(false);
+
+  constructor(
+    private store: IllustrationStore,
+    private vectorizer: VectorizeService,
+    public upscale: ImageUpscaleService,
+  ) {}
 
   async loadFile(file: File): Promise<void> {
     this.error.set('');
@@ -52,17 +60,21 @@ export class IllustrationTracer {
     }
   }
 
-  /** Começa um rastreamento novo: mede a imagem, escolhe a leitura e roda. */
-  async loadCanvas(source: HTMLImageElement | HTMLCanvasElement, name: string): Promise<void> {
+  /** Começa um rastreamento novo: mede a imagem, escolhe a leitura e roda.
+   * Com `replace`, troca só a imagem do rastreamento em curso (mesmo grupo,
+   * mesma largura) — é o caso do recorte por IA. */
+  async loadCanvas(source: HTMLImageElement | HTMLCanvasElement, name: string, replace = false): Promise<void> {
     this.error.set('');
-    this.opened.update((v) => v + 1);
     const canvas = vectorizeCanvas(source);
     this.store.vecSource.set({ name, canvas, dataUrl: encodeCanvas(canvas) });
-    this.store.vecGroupId.set(null);
-    this.store.vecRefId.set(null);
-    const W = this.store.widthMm(), H = this.store.heightMm();
-    const aspect = canvas.width / canvas.height;
-    this.store.vecWidthMm.set(Math.round(Math.min(W * 0.8, H * 0.8 * aspect)));
+    if (!replace) {
+      this.opened.update((v) => v + 1);
+      this.store.vecGroupId.set(null);
+      this.store.vecRefId.set(null);
+      const W = this.store.widthMm(), H = this.store.heightMm();
+      const aspect = canvas.width / canvas.height;
+      this.store.vecWidthMm.set(Math.round(Math.min(W * 0.8, H * 0.8 * aspect)));
+    }
     this.busy.set(true);
     try {
       const stats = await this.vectorizer.analyze(canvas);
@@ -76,6 +88,23 @@ export class IllustrationTracer {
     } catch {
       this.busy.set(false);
       this.error.set('Não consegui analisar essa imagem.');
+    }
+  }
+
+  /** Tira o fundo da imagem em rastreamento com IA e vetoriza de novo: sem o
+   * cenário, a leitura sai limpa e a silhueta é a do objeto. */
+  async cutoutWithAi(): Promise<void> {
+    const src = this.store.vecSource();
+    if (!src || this.aiBusy()) return;
+    this.aiBusy.set(true);
+    this.error.set('');
+    try {
+      const cut = await aiCutout(this.upscale, src.canvas);
+      await this.loadCanvas(cut, src.name, true);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : 'Não consegui remover o fundo agora.');
+    } finally {
+      this.aiBusy.set(false);
     }
   }
 

@@ -64,6 +64,10 @@ builder.Services.Configure<RelightOptions>(builder.Configuration.GetSection(Reli
 builder.Services.AddHttpClient(nameof(ReplicateRelighter), c =>
     c.Timeout = TimeSpan.FromSeconds(
         Math.Clamp(builder.Configuration.GetValue("Relight:TimeoutSegundos", 180), 30, 600) + 15));
+builder.Services.Configure<RemoveBgOptions>(builder.Configuration.GetSection(RemoveBgOptions.SectionName));
+builder.Services.AddHttpClient(nameof(ReplicateBackgroundRemover), c =>
+    c.Timeout = TimeSpan.FromSeconds(
+        Math.Clamp(builder.Configuration.GetValue("RemoveBg:TimeoutSegundos", 90), 15, 300) + 15));
 builder.Services.AddScoped<IUpscalerFactory, UpscalerFactory>();
 
 // Nomear os elementos do editor é outra conversa com o LLM (imagens entram,

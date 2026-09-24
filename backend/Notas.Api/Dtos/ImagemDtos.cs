@@ -19,6 +19,8 @@ public record UpscaleResponse(string Imagem);
 /// <summary>Foto a reiluminar e de onde a luz deve vir.</summary>
 public record RelightRequest(string? Imagem, string? Direcao);
 
+public record RemoveBgRequest(string? Imagem);
+
 /// <summary>Miniaturas dos elementos, na ordem em que estão na lista do editor.</summary>
 public record NomearElementosRequest(List<string>? Imagens);
 

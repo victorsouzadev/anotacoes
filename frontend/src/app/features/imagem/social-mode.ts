@@ -22,6 +22,7 @@ import { melhorarAutomaticamente } from './auto';
 import { aplicarRazaoDeLuz, razaoDeLuz, tamanhoDaRazao } from './light';
 import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
+import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
@@ -407,6 +408,20 @@ async function heicToJpeg(file: File): Promise<Blob> {
             </section>
             @if (image() && upscale.disponivel()) {
               <section class="il-sec">
+                <div class="il-sec-head il-sec-static"><il-icon name="wand" [size]="13" /> Recortar com IA</div>
+                <div class="il-sec-body">
+                  <button type="button" class="il-btn il-wide" [disabled]="recortando()" (click)="recortarComIa()">
+                    <il-icon name="wand" [size]="13" /> {{ recortando() ? 'Recortando…' : 'Remover o fundo com IA' }}
+                  </button>
+                  <p class="il-note">
+                    @if (recorteErro()) { <span class="il-warn">{{ recorteErro() }}</span> }
+                    @else { Tira o fundo mesmo com cabelo, pelo ou cenário. Depois escolha a cor nova em Formato → Fundo cor. }
+                  </p>
+                </div>
+              </section>
+            }
+            @if (image() && upscale.disponivel()) {
+              <section class="il-sec">
                 <div class="il-sec-head il-sec-static"><il-icon name="sparkle" [size]="13" /> Ampliar com IA</div>
                 <div class="il-sec-body">
                   <button type="button" class="il-btn il-wide" [disabled]="ampliando() || !ampliacaoUtil()" (click)="ampliarComIa()">
@@ -579,6 +594,10 @@ export class SocialModeComponent {
   /** Em qual tentativa está, quando a GPU do serviço obriga a encolher. */
   readonly tentativa = signal(1);
   readonly upscaleErro = signal('');
+  readonly recortando = signal(false);
+  readonly recorteErro = signal('');
+  /** A foto atual veio do recorte: o fundo aparece mesmo com ela cobrindo o quadro. */
+  readonly recortada = signal(false);
   readonly luzIa = this.store.luzIa;
   readonly luzForca = this.store.luzForca;
   readonly iluminando = signal(false);
@@ -657,6 +676,7 @@ export class SocialModeComponent {
   readonly showsBackground = computed(() => {
     const img = this.image();
     if (!img) return false;
+    if (this.recortada()) return true;
     const box = 1000;
     return !coversFrame(
       this.photoSize().width, this.photoSize().height, box, Math.round(box / this.format().ratio),
@@ -1126,6 +1146,25 @@ export class SocialModeComponent {
     }
   }
 
+  /** Troca a foto pelo recorte da IA e põe um fundo de cor por trás. */
+  async recortarComIa(): Promise<void> {
+    const photo = this.image();
+    if (!photo || this.recortando()) return;
+    this.recortando.set(true);
+    this.recorteErro.set('');
+    try {
+      const recorte = await aiCutout(this.upscale, photo);
+      const url = recorte.toDataURL('image/png');
+      this.store.replacePhoto(await loadImageElement(url), url, 'image/png');
+      this.recortada.set(true);
+      if (this.bgMode() !== 'cor') this.setBgMode('cor');
+    } catch (e) {
+      this.recorteErro.set(e instanceof Error ? e.message : 'Não consegui remover o fundo agora.');
+    } finally {
+      this.recortando.set(false);
+    }
+  }
+
   // --- desfazer e comparar ----------------------------------------------------
 
   /** Avisa que há interação em curso; ao parar, a prévia volta ao tamanho cheio. */
@@ -1241,6 +1280,7 @@ export class SocialModeComponent {
   }
 
   private async loadFile(file: File): Promise<void> {
+    this.recortada.set(false);
     const heic = isHeicFile(file);
     if (!heic && !file.type.startsWith('image/')) {
       this.error.set('Esse arquivo não é uma imagem.');

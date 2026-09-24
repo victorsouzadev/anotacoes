@@ -20,6 +20,9 @@ public interface IUpscalerFactory
     /// <summary>Reiluminador, com a MESMA chave: é a mesma conta no mesmo
     /// serviço, e pedir dois tokens pela mesma origem seria ruído.</summary>
     Task<IImageRelighter> CriarRelighterAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>Removedor de fundo, também com a mesma chave.</summary>
+    Task<IBackgroundRemover> CriarRemovedorDeFundoAsync(string userId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -34,6 +37,7 @@ public class UpscalerFactory : IUpscalerFactory
     private readonly IProtetorDeSegredos _protetor;
     private readonly UpscaleOptions _padrao;
     private readonly RelightOptions _relight;
+    private readonly RemoveBgOptions _removeBg;
     private readonly ILoggerFactory _loggerFactory;
 
     public UpscalerFactory(
@@ -42,6 +46,7 @@ public class UpscalerFactory : IUpscalerFactory
         IProtetorDeSegredos protetor,
         IOptions<UpscaleOptions> padrao,
         IOptions<RelightOptions> relight,
+        IOptions<RemoveBgOptions> removeBg,
         ILoggerFactory loggerFactory)
     {
         _db = db;
@@ -49,6 +54,7 @@ public class UpscalerFactory : IUpscalerFactory
         _protetor = protetor;
         _padrao = padrao.Value;
         _relight = relight.Value;
+        _removeBg = removeBg.Value;
         _loggerFactory = loggerFactory;
     }
 
@@ -86,6 +92,16 @@ public class UpscalerFactory : IUpscalerFactory
             _relight,
             chave is { Length: > 0 } ? chave : _padrao.ApiKey,
             _loggerFactory.CreateLogger<ReplicateRelighter>());
+    }
+
+    public async Task<IBackgroundRemover> CriarRemovedorDeFundoAsync(string userId, CancellationToken ct = default)
+    {
+        var chave = await ChaveDoUsuarioAsync(userId, ct);
+        return new ReplicateBackgroundRemover(
+            _httpClientFactory.CreateClient(nameof(ReplicateBackgroundRemover)),
+            _removeBg,
+            chave is { Length: > 0 } ? chave : _padrao.ApiKey,
+            _loggerFactory.CreateLogger<ReplicateBackgroundRemover>());
     }
 
     private async Task<string?> ChaveDoUsuarioAsync(string userId, CancellationToken ct)
