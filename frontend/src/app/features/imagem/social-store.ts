@@ -73,6 +73,8 @@ export class SocialStore {
   /** A foto de trabalho, na maior resolução que vale a pena manter — é dela
    * que sai tudo. Reduzir na importação, como antes, jogava fora resolução que
    * a exportação ainda ia querer. */
+  /** Foto mandada por outro modo ("Enviar para…"), esperando o modo abrir. */
+  readonly pendingImport = signal<File | null>(null);
   readonly image = signal<PhotoSource | null>(null);
   /** Data URL de origem. Pode ser grande: a versão que vai pro projeto salvo é
    * reduzida na hora de salvar, não na hora de importar. */

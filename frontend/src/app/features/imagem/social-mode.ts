@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { IlIconComponent } from './illustration-icons';
 import { IlNumComponent } from './illustration-num';
+import { BridgeTarget, ModeBridge } from './mode-bridge';
 import {
   Adjustments, BgMode, FILTER_GROUPS, FILTER_PRESETS, FilterPreset, FitMode, NEUTRAL,
   SOCIAL_FORMATS, SocialFormat, coversFrame, filterString, fitWithinPixels, frameRect,
@@ -193,6 +194,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
             <button type="button" [class.il-on]="fit() === 'contain'" data-tip="Caber a foto inteira" aria-label="Caber" (click)="setFit('contain')"><il-icon name="contain" /></button>
           </div>
           <button type="button" class="il-ib" data-tip="Reenquadrar" aria-label="Reenquadrar" (click)="resetFraming()"><il-icon name="reframe" /></button>
+          <button type="button" class="il-btn" data-tip="Mede a foto e acerta luz, cor, grão e nitidez" (click)="melhorarAuto()"><il-icon name="sparkle" [size]="14" /> Automático</button>
           <button
             type="button" class="il-btn" [class.il-on]="comparing()"
             data-tip="Segure pra ver a original (ou a tecla C)"
@@ -292,6 +294,8 @@ async function heicToJpeg(file: File): Promise<Blob> {
             <section class="il-sec">
               <div class="il-sec-head il-sec-static">Cor e luz <small>{{ dirty() ? 'ajustado' : 'neutro' }}</small></div>
               <div class="il-sec-body">
+                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="melhorarAuto()"><il-icon name="sparkle" [size]="13" /> Melhorar automaticamente</button>
+                @if (autoResumo()) { <p class="il-note">{{ autoResumo() }} Ctrl+Z desfaz; segure C pra comparar.</p> }
                 @for (s of basicSliders; track s.key) {
                   <label class="il-range sm-r">
                     <span>{{ s.label }}</span>
@@ -443,6 +447,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 @if (status()) { <p class="il-note">{{ status() }}</p> }
               </div>
             </section>
+            <div class="il-sec-head il-sec-static">Enviar para outro modo</div>
+            <div class="il-export-list">
+              @for (t of bridge.targetsFrom('social'); track t.id) {
+                <button type="button" class="il-export" [disabled]="!image()" (click)="sendTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
+              }
+            </div>
           }
         }
       </div>
@@ -675,6 +685,13 @@ export class SocialModeComponent {
   private denoiseJob = 0;
 
   constructor() {
+    // Foto mandada por outro modo ("Enviar para…").
+    effect(() => {
+      const file = this.store.pendingImport();
+      if (!file) return;
+      this.store.pendingImport.set(null);
+      untracked(() => void this.loadFile(file));
+    });
     // Redesenha a prévia sempre que qualquer entrada muda — um efeito só, já que
     // todo o estado do render mora em signals.
     effect(() => {
@@ -1464,6 +1481,34 @@ export class SocialModeComponent {
   onExportW(event: Event): void {
     const v = Math.round(Number((event.target as HTMLInputElement).value));
     if (Number.isFinite(v) && v >= 200) this.exportW.set(Math.min(4000, v));
+  }
+
+  readonly bridge = inject(ModeBridge);
+
+  /** A imagem final (formato, filtro, ajustes, nitidez), no tamanho de saída. */
+  private renderFinal(): HTMLCanvasElement | null {
+    const source = this.currentSource();
+    if (!source) return null;
+    let w = this.exportW();
+    let h = this.exportH();
+    if (w * h > MAX_EXPORT_PIXELS) {
+      const factor = Math.sqrt(MAX_EXPORT_PIXELS / (w * h));
+      w = Math.round(w * factor);
+      h = Math.round(h * factor);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    paintFrame(canvas, source, this.frameOptions(this.adjust()));
+    this.applySharpen(canvas);
+    return canvas;
+  }
+
+  sendTo(target: BridgeTarget): void {
+    const canvas = this.renderFinal();
+    if (!canvas) return;
+    const base = (this.fileName() || 'post').replace(/\.[^.]+$/, '');
+    this.bridge.send(target, { canvas, name: `${base}-${this.format().id}` });
   }
 
   exportImage(): void {

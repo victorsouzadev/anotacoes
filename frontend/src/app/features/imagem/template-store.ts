@@ -4,6 +4,7 @@
 
 import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../core/uuid';
+import { SnapshotHistory } from './snapshot-history';
 import {
   ParsedTemplate,
   PhotoDepth,
@@ -24,6 +25,19 @@ export interface TemplateProjectData {
   widthMm: number;
   slots: TemplateSlot[];
   photos: PhotoLayer[];
+}
+
+export interface TemplateSnapshot {
+  slots: TemplateSlot[];
+  photos: PhotoLayer[];
+  widthMm: number;
+}
+
+/** Os retângulos dos encaixes são remedidos ao montar o molde na tela; isso
+ * não é edição do usuário, então não vira passo no desfazer. */
+function sameTemplateState(a: TemplateSnapshot, b: TemplateSnapshot): boolean {
+  const key = (s: TemplateSnapshot) => s.slots.map((x) => `${x.id}:${x.label}:${x.elId}`).join('|');
+  return a.photos === b.photos && a.widthMm === b.widthMm && key(a) === key(b);
 }
 
 export const NEW_PHOTO_DEFAULTS = {
@@ -48,6 +62,35 @@ export class TemplateStore {
   selectedPhotoId = signal<string | null>(null);
   widthMm = signal(100);
   error = signal('');
+  /** Fotos mandadas por outro modo ("Enviar para…"), esperando o molde abrir. */
+  pendingPhotos = signal<File[]>([]);
+
+  readonly history = new SnapshotHistory<TemplateSnapshot>(700, sameTemplateState);
+
+  /** O que o histórico fotografa. Quem observa é o componente do modo (um
+   * effect precisa de contexto de injeção, e o store também nasce solto nos
+   * testes). */
+  snapshotState(): TemplateSnapshot {
+    return { slots: this.slots(), photos: this.photos(), widthMm: this.widthMm() };
+  }
+
+  undo(): void {
+    const s = this.history.undo();
+    if (s) this.applySnapshot(s);
+  }
+
+  redo(): void {
+    const s = this.history.redo();
+    if (s) this.applySnapshot(s);
+  }
+
+  private applySnapshot(s: TemplateSnapshot): void {
+    this.slots.set(s.slots);
+    this.photos.set(s.photos);
+    this.widthMm.set(s.widthMm);
+    const sel = this.selectedPhotoId();
+    if (sel && !s.photos.some((p) => p.id === sel)) this.selectedPhotoId.set(null);
+  }
 
   hasTemplate = computed(() => this.parsed() !== null);
 
@@ -92,6 +135,7 @@ export class TemplateStore {
     this.photos.set([]);
     this.selectedPhotoId.set(null);
     this.error.set('');
+    this.history.reset();
     return parsed;
   }
 
@@ -104,6 +148,7 @@ export class TemplateStore {
     this.selectedPhotoId.set(null);
     this.widthMm.set(100);
     this.error.set('');
+    this.history.reset();
   }
 
   // ---------- encaixes ----------

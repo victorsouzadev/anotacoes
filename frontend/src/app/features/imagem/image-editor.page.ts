@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -27,6 +27,9 @@ import { IllustrationTracer } from './illustration-tracer';
 import { IlIconComponent, IlIconName } from './illustration-icons';
 import { IlNumComponent } from './illustration-num';
 import { IlStudioBaseStylesComponent, IlStudioChromeStylesComponent } from './studio-styles';
+import { BridgePayload, BridgeTarget, ModeBridge, canvasToFile } from './mode-bridge';
+import { ProjectDraft, clearDraft, loadDraft, saveDraft } from './project-draft';
+import { SnapshotHistory } from './snapshot-history';
 import { VectorizeService } from './vectorize.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
@@ -35,6 +38,16 @@ import { uuid } from '../../core/uuid';
 /** Um clique de "remover fundo". Guardado em vez do bitmap resultante: ao abrir
  * um projeto salvo, os cliques são reaplicados sobre a arte original, então o
  * backend só precisa carregar a imagem de origem. */
+/** O JSON de um projeto salvo (ou do rascunho), de qualquer versão. */
+interface ProjectData {
+  smoothing?: number; keepCorners?: boolean; fillHoles?: boolean; sheetSize?: SheetSize;
+  orientation?: SheetOrientation; spacingMm?: number;
+  images?: (Partial<ImportedImage> & { original: string })[];
+  molde?: TemplateProjectData | null;
+  social?: SocialProjectData | null;
+  ilustracao?: IllustrationProjectData | null;
+}
+
 interface BgRemoval {
   x: number;
   y: number;
@@ -254,7 +267,7 @@ function loadPrefs(): Prefs {
     RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent,
     IlIconComponent, IlNumComponent, IlStudioBaseStylesComponent, IlStudioChromeStylesComponent,
   ],
-  providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService, IllustrationTracer],
+  providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService, IllustrationTracer, ModeBridge],
   template: `
     <il-studio-base-styles /><il-studio-chrome-styles />
     <div class="page">
@@ -298,12 +311,24 @@ function loadPrefs(): Prefs {
         </div>
       </header>
 
+      @if (draftOffer(); as d) {
+        <div class="ab-draft" role="alert">
+          <il-icon name="save" [size]="15" />
+          <span>Há trabalho não salvo{{ d.projectName ? ' em "' + d.projectName + '"' : '' }}, de {{ d.savedAt | date: 'dd/MM HH:mm' }}.</span>
+          <button type="button" class="il-btn il-primary" (click)="recoverDraft(d)">Recuperar</button>
+          <button type="button" class="il-btn" (click)="discardDraft()">Descartar</button>
+        </div>
+      }
       <main class="content">
         @if (modo() === 'corte') {
         <div class="il-studio il-basic pc">
           <input #fileInput type="file" accept="image/*" multiple hidden (change)="onFilesSelected($event)" />
 
           <div class="il-controlbar">
+            <div class="il-cb-group">
+              <button type="button" class="il-ib" [disabled]="!pcHistory.canUndo()" data-tip="Desfazer  Ctrl+Z" aria-label="Desfazer" (click)="pcUndo()"><il-icon name="undo" /></button>
+              <button type="button" class="il-ib" [disabled]="!pcHistory.canRedo()" data-tip="Refazer  Ctrl+Shift+Z" aria-label="Refazer" (click)="pcRedo()"><il-icon name="redo" /></button>
+            </div>
             <div class="il-cb-group">
               <div class="il-seg pc-seg">
                 <button type="button" [class.il-on]="view() === 'peca'" (click)="setView('peca')"><il-icon name="piece" [size]="14" /> Peça</button>
@@ -560,6 +585,12 @@ function loadPrefs(): Prefs {
                     <button type="button" class="il-export" [disabled]="images().length < 2 || zipping()" (click)="exportCutSvgZip()"><il-icon name="split" [size]="20" /><span><strong>{{ zipping() ? 'Nomeando com IA…' : 'ZIP com um SVG por imagem' }}</strong><small>Cada arquivo nomeado por IA pelo que o desenho é</small></span></button>
                   </div>
                   @if (zipStatus()) { <p class="il-note pc-pad">{{ zipStatus() }}</p> }
+                  <div class="il-sec-head il-sec-static">Enviar a arte selecionada para</div>
+                  <div class="il-export-list">
+                    @for (t of bridge.targetsFrom('corte'); track t.id) {
+                      <button type="button" class="il-export" [disabled]="!selected()" (click)="sendSelectedTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
+                    }
+                  </div>
                   <p class="il-note pc-pad">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
                 }
               }
@@ -635,6 +666,12 @@ function loadPrefs(): Prefs {
     .ab-right { display: flex; align-items: center; gap: 4px; }
     .ab-user { font-size: 11px; color: var(--text-muted); max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+    .ab-draft {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px; flex-shrink: 0; font-size: 12px;
+      background: color-mix(in srgb, var(--il-blue) 12%, var(--bg)); border-bottom: 1px solid var(--il-line); color: var(--text);
+    }
+    .ab-draft span { flex: 1; min-width: 0; }
+
     /* ---- Print & Cut ---- */
     .pc-seg button { width: auto; padding: 0 10px; gap: 5px; font-size: 12px; }
     .pc-seg-full { display: flex; }
@@ -684,6 +721,15 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   modo = signal<EditorMode>(this.prefs.modo ?? 'corte');
   pcTab = signal<PcTab>('imagens');
+  /** Desfazer do Print & Cut: fotografa a lista de artes (objetos imutáveis;
+   * só o canvas da arte é compartilhado, e é refeito ao voltar). */
+  readonly pcHistory = new SnapshotHistory<{ items: ImportedImage[]; selectedId: string | null }>(
+    700, (a, b) => a.items === b.items,
+  );
+  draftOffer = signal<ProjectDraft | null>(null);
+  private dirty = false;
+  private draftTimer?: ReturnType<typeof setTimeout>;
+  private applyingProject = false;
   /** Tamanho físico da peça desenhada por último (arte + borda). */
   pieceLabel = signal('');
   projectsOpen = signal(false);
@@ -740,15 +786,39 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public templates: TemplateStore,
     public social: SocialStore,
     public illustration: IllustrationStore,
-  ) {}
+    public bridge: ModeBridge,
+  ) {
+    this.bridge.register((target, payload) => void this.receive(target, payload));
+    effect(() => {
+      const items = this.images();
+      this.pcHistory.observe({ items, selectedId: untracked(() => this.selectedId()) });
+    });
+    // Rascunho automático: qualquer mudança em qualquer modo marca o projeto
+    // como sujo e agenda uma gravação no navegador.
+    effect(() => {
+      this.images(); this.sheetSize(); this.orientation(); this.spacingMm(); this.projectName();
+      this.templates.svgText(); this.templates.slots(); this.templates.photos(); this.templates.widthMm();
+      this.social.image(); this.social.canUndo(); this.social.canRedo(); this.social.exportW();
+      this.illustration.layers(); this.illustration.widthMm(); this.illustration.heightMm();
+      untracked(() => this.markDirty());
+    });
+  }
 
   ngAfterViewInit(): void {
     this.scheduleRender();
     void this.refreshProjects();
+    void loadDraft().then((d) => {
+      if (d?.data && !this.dirty) this.draftOffer.set(d);
+    });
   }
 
   ngOnDestroy(): void {
     clearTimeout(this.interactionTimer);
+    // saindo da página com mudanças pendentes: grava já, sem esperar o intervalo
+    if (this.draftTimer) {
+      clearTimeout(this.draftTimer);
+      void this.writeDraft();
+    }
     this.pieceCache.clear();
   }
 
@@ -1056,6 +1126,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     }
     if (this.modo() !== 'corte' || isTyping(event.target) || event.altKey) return;
     if (ctrl) {
+      const k = event.key.toLowerCase();
+      if (k === 'z' || k === 'y') {
+        event.preventDefault();
+        if (k === 'y' || event.shiftKey) this.pcRedo(); else this.pcUndo();
+        return;
+      }
       if (event.code === 'Digit0') { event.preventDefault(); this.resetZoom(); }
       else if (event.key === '=' || event.key === '+') { event.preventDefault(); this.zoomBy(1.25); }
       else if (event.key === '-') { event.preventDefault(); this.zoomBy(1 / 1.25); }
@@ -1086,6 +1162,136 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     } catch {
       this.projectStatus.set('Não consegui abrir a ilustração como molde.');
     }
+  }
+
+  // ---------- enviar para outro modo ----------
+
+  /** Recebe a arte que outro modo mandou pelo "Enviar para…". */
+  async receive(target: BridgeTarget, p: BridgePayload): Promise<void> {
+    try {
+      if (target === 'corte') {
+        const item = this.addArt(p.name, p.canvas, p.widthMm ? { widthMm: p.widthMm } : {});
+        this.selectedId.set(item.id);
+        this.setModo('corte');
+        this.scheduleRender();
+      } else if (target === 'molde') {
+        const file = await canvasToFile(p.canvas, p.name);
+        this.templates.pendingPhotos.update((list) => [...list, file]);
+        this.setModo('molde');
+      } else if (target === 'social') {
+        this.social.pendingImport.set(await canvasToFile(p.canvas, p.name));
+        this.setModo('social');
+      } else {
+        this.illustration.pendingImport.set({ name: p.name, canvas: p.canvas });
+        this.setModo('ilustracao');
+      }
+    } catch {
+      this.projectStatus.set('Não consegui enviar a arte para o outro modo.');
+    }
+  }
+
+  /** A arte selecionada do Print & Cut (com o fundo já tirado, se foi). */
+  sendSelectedTo(target: BridgeTarget): void {
+    const sel = this.selected();
+    if (!sel) return;
+    if (target === 'ilustracao') {
+      this.vectorizeSelected();
+      return;
+    }
+    const copy = document.createElement('canvas');
+    copy.width = sel.source.width;
+    copy.height = sel.source.height;
+    copy.getContext('2d')!.drawImage(sel.source, 0, 0);
+    this.bridge.send(target, { canvas: copy, name: sel.name.replace(/\.[^.]+$/, ''), widthMm: sel.widthMm });
+  }
+
+  // ---------- desfazer do Print & Cut ----------
+
+  pcUndo(): void {
+    const s = this.pcHistory.undo();
+    if (s) this.restorePc(s);
+  }
+
+  pcRedo(): void {
+    const s = this.pcHistory.redo();
+    if (s) this.restorePc(s);
+  }
+
+  /** Volta a lista de artes. Os objetos são imutáveis, menos o canvas da arte
+   * (a remoção de fundo pinta nele): quando as remoções da fotografia não são
+   * as que estão no canvas, ele é refeito a partir do original. */
+  private restorePc(s: { items: ImportedImage[]; selectedId: string | null }): void {
+    const live = new Map(this.images().map((i) => [i.id, i]));
+    for (const item of s.items) {
+      const now = live.get(item.id);
+      const painted = now ? now.bgRemovals : null;
+      if (painted === item.bgRemovals) continue;
+      const ctx = item.source.getContext('2d')!;
+      ctx.clearRect(0, 0, item.source.width, item.source.height);
+      ctx.drawImage(item.original, 0, 0);
+      for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
+    }
+    this.images.set(s.items);
+    const keep = s.items.some((i) => i.id === this.selectedId());
+    if (!keep) this.selectedId.set(s.selectedId && s.items.some((i) => i.id === s.selectedId) ? s.selectedId : (s.items[0]?.id ?? null));
+    this.tool.set('nenhuma');
+    this.pieceCache.clear();
+    this.scheduleRender();
+  }
+
+  // ---------- rascunho automático ----------
+
+  private hasContent(): boolean {
+    return !!this.images().length || this.templates.hasTemplate() || this.social.hasImage() || this.illustration.hasContent();
+  }
+
+  private markDirty(): void {
+    if (this.applyingProject) return;
+    if (!this.hasContent()) return;
+    this.dirty = true;
+    clearTimeout(this.draftTimer);
+    this.draftTimer = setTimeout(() => void this.writeDraft(), 2500);
+  }
+
+  private async writeDraft(): Promise<void> {
+    this.draftTimer = undefined;
+    if (!this.dirty || !this.hasContent()) return;
+    // trabalho novo por cima: o rascunho antigo oferecido deixa de existir
+    this.draftOffer.set(null);
+    try {
+      await saveDraft({
+        savedAt: new Date().toISOString(),
+        projectId: this.projectId(),
+        projectName: this.projectName(),
+        data: this.serialize(),
+      });
+    } catch { /* sem rascunho desta vez */ }
+  }
+
+  /** Salvo, aberto ou começado do zero: nada pendente pra recuperar. */
+  private settleDraft(): void {
+    clearTimeout(this.draftTimer);
+    this.draftTimer = undefined;
+    this.dirty = false;
+    void clearDraft();
+  }
+
+  async recoverDraft(d: ProjectDraft): Promise<void> {
+    this.draftOffer.set(null);
+    try {
+      await this.applyProjectData(JSON.parse(d.data) as ProjectData);
+      this.projectId.set(d.projectId);
+      this.projectName.set(d.projectName);
+      this.projectStatus.set('Trabalho recuperado. Salve pra guardar na conta.');
+      this.dirty = true;
+    } catch {
+      this.projectStatus.set('Não consegui recuperar o rascunho.');
+    }
+  }
+
+  discardDraft(): void {
+    this.draftOffer.set(null);
+    void clearDraft();
   }
 
   /** Manda a arte selecionada (com o fundo já removido, se foi) pra vetorizar. */
@@ -1860,6 +2066,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.projectName.set(saved.name);
       this.projectCreatedAt = saved.createdAt;
       this.projectStatus.set(`Salvo às ${new Date().toLocaleTimeString('pt-BR')}`);
+      this.settleDraft();
       await this.refreshProjects();
     } catch (err: unknown) {
       const status = (err as { status?: number }).status;
@@ -1875,15 +2082,22 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.projectStatus.set('Abrindo…');
     try {
       const dto = await this.projectsApi.get(id);
-      const data = JSON.parse(dto.data) as {
-        smoothing?: number; keepCorners?: boolean; fillHoles?: boolean; sheetSize?: SheetSize;
-        orientation?: SheetOrientation; spacingMm?: number;
-        images?: (Partial<ImportedImage> & { original: string })[];
-        molde?: TemplateProjectData | null;
-        social?: SocialProjectData | null;
-        ilustracao?: IllustrationProjectData | null;
-      };
+      await this.applyProjectData(JSON.parse(dto.data) as ProjectData);
+      this.projectId.set(dto.id);
+      this.projectName.set(dto.name);
+      this.projectCreatedAt = dto.createdAt;
+      this.projectStatus.set(`Aberto: ${dto.name}`);
+      this.settleDraft();
+      this.draftOffer.set(null);
+    } catch {
+      this.projectStatus.set('Falha ao abrir o projeto.');
+    }
+  }
 
+  /** Põe um projeto (do servidor ou do rascunho) nos quatro modos. */
+  private async applyProjectData(data: ProjectData): Promise<void> {
+    this.applyingProject = true;
+    try {
       this.images.set([]);
       this.pieceCache.clear();
       this.selectedId.set(null);
@@ -1927,14 +2141,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       } else {
         this.illustration.clear();
       }
-
-      this.projectId.set(dto.id);
-      this.projectName.set(dto.name);
-      this.projectCreatedAt = dto.createdAt;
-      this.projectStatus.set(`Aberto: ${dto.name}`);
-    } catch {
-      this.projectStatus.set('Falha ao abrir o projeto.');
+      this.resetPcHistory();
+    } finally {
+      // os effects rodam depois desta volta; só então mudanças contam como edição
+      setTimeout(() => (this.applyingProject = false));
     }
+  }
+
+  private resetPcHistory(): void {
+    this.pcHistory.reset();
+    this.pcHistory.observe({ items: this.images(), selectedId: this.selectedId() });
   }
 
   async deleteProject(id: string, event: Event): Promise<void> {
@@ -1958,6 +2174,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.projectName.set('');
     this.projectCreatedAt = new Date().toISOString();
     this.projectStatus.set('');
+    this.resetPcHistory();
+    this.settleDraft();
     this.scheduleRender();
   }
 

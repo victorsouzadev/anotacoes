@@ -7,6 +7,7 @@ import { Component, ElementRef, ViewEncapsulation, computed, effect, inject, out
 import { pngBlobWithDpi } from './contour';
 import { nearestWeight } from './fonts';
 import { ALIGN_BUTTONS, PATHFINDER } from './illustration-controlbar';
+import { ModeBridge } from './mode-bridge';
 import { buildSvg, canvasToBlob, contentBounds, rasterizeSvg } from './illustration-export';
 import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
@@ -421,6 +422,7 @@ function loadOpen(): Record<string, boolean> {
 export class IllustrationPanelComponent {
   store = inject(IllustrationStore);
   tracer = inject(IllustrationTracer);
+  private bridge = inject(ModeBridge, { optional: true });
 
   readonly Math = Math;
   readonly docPresets = DOC_PRESETS;
@@ -449,13 +451,14 @@ export class IllustrationPanelComponent {
     { id: 'arco', icon: 'text-arc', label: 'Texto em arco' },
     { id: 'caminho', icon: 'text-path', label: 'Texto em caminho' },
   ];
-  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde'; icon: IlIconName; label: string; help: string }[] = [
+  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde' | 'social'; icon: IlIconName; label: string; help: string }[] = [
     { id: 'svg', icon: 'export', label: 'SVG', help: 'Vetor em mm, abre no Inkscape, Illustrator e CanvasWorkspace' },
     { id: 'corte', icon: 'cut', label: 'SVG de corte', help: 'Só as linhas de corte, em vermelho — pra ScanNCut' },
     { id: 'png', icon: 'image', label: `PNG ${EXPORT_DPI} DPI`, help: 'Imagem transparente no tamanho físico, sem as linhas de corte' },
     { id: 'pdf', icon: 'artboard', label: 'PDF', help: 'Página no tamanho da prancheta, pronta pra imprimir' },
     { id: 'printcut', icon: 'offset', label: 'Enviar pro Print & Cut', help: 'A arte entra como imagem nova, na largura do desenho' },
     { id: 'molde', icon: 'properties', label: 'Usar como Molde SVG', help: 'Abre a ilustração no modo de molde, pra encaixar fotos' },
+    { id: 'social', icon: 'photo-add', label: 'Enviar pro Redes sociais', help: 'A prancheta vira a foto do post, com filtros e formatos' },
   ];
 
   readonly sendToCut = output<{ canvas: HTMLCanvasElement; name: string; widthMm: number }>();
@@ -746,6 +749,12 @@ export class IllustrationPanelComponent {
           const w = b.maxX - b.minX;
           const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds: b }), w, b.maxY - b.minY, EXPORT_DPI, null, 9_000_000);
           this.sendToCut.emit({ canvas, name: this.baseName(), widthMm: Math.round(w * 10) / 10 });
+          this.exportStatus.set('');
+          break;
+        }
+        case 'social': {
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, '#ffffff', 9_000_000);
+          this.bridge?.send('social', { canvas, name: this.baseName(), widthMm: this.store.widthMm() });
           this.exportStatus.set('');
           break;
         }

@@ -2,9 +2,10 @@
  * arrasta fotos pra dentro deles e ajusta o enquadramento. Cada foto é uma
  * camada — o mesmo buraco aceita várias, com ordem e opacidade próprias. */
 
-import { Component, ElementRef, HostListener, ViewEncapsulation, effect, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, ViewEncapsulation, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { IlIconComponent } from './illustration-icons';
 import { IlNumComponent } from './illustration-num';
+import { BridgeTarget, ModeBridge } from './mode-bridge';
 import { pngBlobWithDpi } from './contour';
 import { jpegToPdf } from './sheet';
 import { NEW_PHOTO_DEFAULTS, TemplateStore } from './template-store';
@@ -110,6 +111,10 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
     <input #photoInput type="file" accept="image/*" multiple hidden (change)="onPhotoInput($event)" />
 
     <div class="il-controlbar">
+      <div class="il-cb-group">
+        <button type="button" class="il-ib" [disabled]="!store.history.canUndo()" data-tip="Desfazer  Ctrl+Z" aria-label="Desfazer" (click)="store.undo()"><il-icon name="undo" /></button>
+        <button type="button" class="il-ib" [disabled]="!store.history.canRedo()" data-tip="Refazer  Ctrl+Shift+Z" aria-label="Refazer" (click)="store.redo()"><il-icon name="redo" /></button>
+      </div>
       @if (store.selectedPhoto(); as photo) {
         <span class="il-cb-kind tm-kind" [title]="photo.name">Foto · {{ photo.name }}</span>
         <div class="il-cb-group">
@@ -266,6 +271,12 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
               <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="exportSvg()"><il-icon name="export" [size]="20" /><span><strong>SVG</strong><small>Fotos embutidas, em mm — editável no Inkscape/Illustrator</small></span></button>
               <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="exportPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF</strong><small>Página no tamanho do molde, pra imprimir</small></span></button>
             </div>
+            <div class="il-sec-head il-sec-static">Enviar para outro modo</div>
+            <div class="il-export-list">
+              @for (t of bridge.targetsFrom('molde'); track t.id) {
+                <button type="button" class="il-export" [disabled]="busy() || !store.hasTemplate()" (click)="sendTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
+              }
+            </div>
             <p class="il-note tm-pad">O PNG e o PDF são rasterizados pelo navegador: se o molde usar uma fonte instalada no seu computador, só o SVG preserva o texto como texto.</p>
             @if (exportStatus()) { <p class="il-note tm-pad">{{ exportStatus() }}</p> }
           }
@@ -330,7 +341,27 @@ export class TemplateModeComponent {
   private drag: DragState | null = null;
   private pendingSlotForPicker: string | null = null;
 
+  readonly bridge = inject(ModeBridge);
+
   constructor(public store: TemplateStore) {
+    // Desfazer: o histórico fotografa encaixes, fotos e largura a cada mudança.
+    effect(() => this.store.history.observe(this.store.snapshotState()));
+    // Fotos mandadas por outro modo entram assim que houver onde encaixar.
+    effect(() => {
+      const files = this.store.pendingPhotos();
+      if (!files.length) return;
+      const hasSlots = this.store.slots().length > 0;
+      const slotId = hasSlots ? untracked(() => this.targetSlotId()) : null;
+      if (!slotId) {
+        untracked(() => this.hint.set('Recebi a foto — abra um molde (ou marque um encaixe) pra ela entrar.'));
+        return;
+      }
+      this.store.pendingPhotos.set([]);
+      untracked(() => {
+        this.tab.set('fotos');
+        void this.addPhotos(files, slotId);
+      });
+    });
     effect(() => {
       const host = this.svgHost()?.nativeElement;
       const parsed = this.store.parsed();
@@ -390,10 +421,30 @@ export class TemplateModeComponent {
     return 'Arraste uma foto pra cima de um encaixe · solte outra no mesmo lugar pra empilhar · Ctrl+roda dá zoom';
   }
 
+  /** Rasteriza o molde com as fotos e manda pro modo escolhido. */
+  async sendTo(target: BridgeTarget): Promise<void> {
+    await this.withRaster(false, async (canvas) => {
+      this.bridge.send(target, { canvas, name: this.baseName(), widthMm: this.store.widthMm() });
+      this.exportStatus.set('');
+    });
+  }
+
   @HostListener('document:keydown', ['$event'])
   onKey(event: KeyboardEvent): void {
     const el = event.target as HTMLElement | null;
-    if (event.ctrlKey || event.metaKey || event.altKey || el?.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (el?.closest?.('input, textarea, select, [contenteditable]')) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) this.store.redo();
+      else this.store.undo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      this.store.redo();
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.toLowerCase();
     if (key === 'v' || key === 'escape') this.marking.set(false);
     else if (key === 'm' && this.store.hasTemplate()) this.marking.set(true);
