@@ -27,8 +27,11 @@ inicial, sem exigir outro login nem outro deploy.
   — com prévia do que vai ser separado, vão escolhido sozinho e ajustes próprios
   por elemento —, folha de montagem A4/A3 e exports em PNG 300 DPI, PDF, SVG de
   corte e ZIP com um SVG por elemento, com os arquivos nomeados por IA pelo que o
-  desenho é) e **moldes SVG** (você sobe o próprio molde e encaixa
-  fotos nos buracos dele, em camadas com ordem e transparência).
+  desenho é), **moldes SVG** (você sobe o próprio molde e encaixa
+  fotos nos buracos dele, em camadas com ordem e transparência) e **ilustração**
+  (um editor vetorial que lê imagens e extrai os contornos em curvas, escreve texto
+  em 37 fontes ou na fonte que você enviar, solda formas e gera contorno de corte
+  com margem).
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
 
@@ -190,6 +193,54 @@ com as artes embutidas em data URL).
 - Exporta **SVG** (fotos embutidas, tamanho em mm, editável no Inkscape/Illustrator),
   **PNG** 300 DPI e **PDF** no tamanho físico.
 
+**Ilustração** — um editor vetorial pequeno, feito pra arte de corte e impressão.
+O palco é um SVG de verdade em mm, então o que se vê é o que sai no arquivo.
+
+- **Vetorizar imagem** (PNG, JPG, HEIC; por arquivo, arrastar ou `Ctrl+V`). A
+  imagem é medida (cores efetivas, quanto é chapada, preto e branco, fundo liso) e
+  uma leitura é **sugerida sozinha**, com o motivo: *logo/ícone*, *desenho a
+  traço*, *clipart*, *foto*, *silhueta* ou *linha central*. Quatro modos por baixo:
+  - **cores** — k-means em N cores; cada cor vira uma camada, e as camadas são
+    *empilhadas* (cada uma cobre também a área das de cima), o que elimina as
+    frestas brancas entre cores vizinhas. A cor da borda (fundo) pode sair;
+  - **traço** — limiar de Otsu (no meio do platô, pra não cravar em cima da cor
+    do traço), com furos preservados;
+  - **silhueta** — só a forma de fora, pelo alfa ou pela diferença do fundo;
+  - **linha central** — afinamento de Zhang-Suen, esqueleto seguido até as pontas
+    e junções, esporões podados e curva de Catmull-Rom: sai *uma* linha no meio do
+    risco, com a espessura medida, pra caneta da plotter ou caligrafia.
+
+  Controles de detalhe, suavização, cantos, limiar e cores refazem a prévia na
+  hora (num Web Worker). A imagem fica como camada de referência oculta e travada
+  no fundo, pra desenhar por cima.
+- **Texto em curvas**: 37 famílias do Google Fonts servidas pelo próprio app
+  (`public/fonts`, WOFF — ver a licença lá) e **upload de .ttf/.otf/.woff**, que
+  viaja dentro do projeto salvo. A diagramação é feita glifo a glifo com o
+  opentype.js (kerning, espaço entre letras, entrelinha, alinhamento), então o texto
+  já aparece como contorno, pode ser soldado e contornado, e a prévia é idêntica ao
+  arquivo. Texto **em arco** (curvatura de −100% a 100%) e **em caminho** (qualquer
+  forma; em forma fechada começa centrado no topo, com "inverter lado"). "Converter
+  em curvas" e "Separar letras" (uma camada por letra, pra ajustar o espaço à mão).
+- **Soldar, subtrair, interseção e excluir** (Clipper, em micrômetros), **separar
+  formas** em ilhas (sem refazer as curvas) e **contorno com margem** em mm, direto
+  no vetor — o recorte de adesivo, que sai vermelho, marcado como linha de corte e
+  atrás da arte. O resultado das operações volta a virar Bézier com o mesmo ajuste
+  da linha de corte do Print & Cut.
+- **Edição de nós** (mover nó e alças, suavizar, canto, acrescentar, apagar) e
+  **caneta Bézier** (clique pra reta, arraste pra curva, clique no primeiro ponto
+  pra fechar); formas prontas (retângulo com cantos arredondados, elipse, estrela,
+  polígono).
+- Selecionar, mover, escalar pelas alças (a partir do canto oposto) e girar
+  (Shift de 15 em 15°), **guias** que atraem pra bordas e centros da prancheta e
+  das outras camadas, **alinhar e distribuir**, grupos, ordem, espelhar,
+  **conta-gotas** (lê a arte e a referência) e **paleta do documento** que troca uma
+  cor em tudo. Desfazer/refazer e atalhos (V, A, P, T, R, E, S, G, I, Delete,
+  setas, Ctrl+D/G/Z).
+- Exporta **SVG completo** (em mm, com texto em curvas ou texto reto editável com a
+  fonte embutida), **SVG só de corte**, **PNG 300 DPI** e **PDF**; **envia a arte pro
+  Print & Cut** (recortada no desenho, na largura física) ou **pro Molde SVG**. No
+  Print & Cut, "Vetorizar na Ilustração" faz o caminho inverso.
+
 ### Simulador de Bolo 3D
 
 Monta um bolo em CSS 3D (`perspective` + `preserve-3d`, cada camada é um prisma de
@@ -278,6 +329,15 @@ O modo Molde SVG do Editor de Imagens mora em `frontend/src/app/features/imagem/
 testes em `svg-template.spec.ts`), `template-store.ts` (estado em signals, provido
 pela page pra sobreviver à troca de modo) e `template-mode.ts` (o componente do
 palco e do painel).
+
+O modo Ilustração mora na mesma pasta, com a lógica fora do Angular e testada:
+`illustration-model.ts` (camadas, caminhos, matrizes, formas), `vector-ops.ts`
+(soldar/contornar com Clipper, separar ilhas, edição de nós), `svg-text.ts`
+(diagramação do texto sobre uma interface de fonte), `vectorize.ts` (análise,
+sugestão e os quatro modos de vetorização, rodando em `vectorize.worker.ts`),
+`fonts.ts` (catálogo e fontes enviadas), `illustration-store.ts` (estado,
+histórico e operações), `illustration-export.ts` (SVG/PNG/PDF) e os componentes
+`illustration-mode.ts` (palco e ferramentas) e `illustration-panel.ts` (painel).
 
 Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
 com uma rota lazy-loaded em `app.routes.ts`, um card na tela `features/hub/hub.page.ts`,

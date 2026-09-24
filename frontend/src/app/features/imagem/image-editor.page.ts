@@ -20,6 +20,10 @@ import { SocialProjectData, SocialStore } from './social-store';
 import { SplitElement, SplitOptions, SplitPlan, planSplit } from './split';
 import { TemplateModeComponent } from './template-mode';
 import { ElementNamingService } from './element-naming.service';
+import { FontLibrary } from './fonts';
+import { IllustrationModeComponent } from './illustration-mode';
+import { IllustrationProjectData, IllustrationStore } from './illustration-store';
+import { VectorizeService } from './vectorize.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
@@ -90,7 +94,7 @@ interface Piece {
   scale: number;
 }
 
-type EditorMode = 'corte' | 'molde' | 'social';
+type EditorMode = 'corte' | 'molde' | 'social' | 'ilustracao';
 
 interface Prefs {
   modo: EditorMode;
@@ -210,8 +214,8 @@ function loadPrefs(): Prefs {
 @Component({
   selector: 'app-image-editor-page',
   standalone: true,
-  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent],
-  providers: [TemplateStore, SocialStore],
+  imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent],
+  providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService],
   template: `
     <div class="page">
       <header class="top-bar">
@@ -223,6 +227,7 @@ function loadPrefs(): Prefs {
           <button [class.active]="modo() === 'corte'" (click)="setModo('corte')">Print &amp; Cut</button>
           <button [class.active]="modo() === 'molde'" (click)="setModo('molde')">Molde SVG</button>
           <button [class.active]="modo() === 'social'" (click)="setModo('social')">Redes sociais</button>
+          <button [class.active]="modo() === 'ilustracao'" (click)="setModo('ilustracao')">Ilustração</button>
         </div>
         <div class="top-bar-actions">
           <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
@@ -487,6 +492,7 @@ function loadPrefs(): Prefs {
                 @if (sel.bgRemoved) {
                   <button class="btn full" (click)="restoreOriginal()">Restaurar imagem original</button>
                 }
+                <button class="btn full" (click)="vectorizeSelected()">Vetorizar na Ilustração (curvas, cores, linha central)</button>
                 <label class="check-field">
                   <input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" />
                   <span>Espelhar na horizontal — necessário só pra vinil termocolante</span>
@@ -634,8 +640,10 @@ function loadPrefs(): Prefs {
         </aside>
         } @else if (modo() === 'molde') {
           <app-template-mode />
-        } @else {
+        } @else if (modo() === 'social') {
           <app-social-mode />
+        } @else {
+          <app-illustration-mode (sendToCut)="onIllustrationToCut($event)" (sendToTemplate)="onIllustrationToTemplate($event)" />
         }
       </main>
     </div>
@@ -946,6 +954,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     private naming: ElementNamingService,
     public templates: TemplateStore,
     public social: SocialStore,
+    public illustration: IllustrationStore,
   ) {}
 
   ngAfterViewInit(): void {
@@ -1196,6 +1205,34 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (!id) return;
     this.images.update((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
     this.scheduleRender();
+  }
+
+  // ---------- ponte com a Ilustração ----------
+
+  /** A arte da ilustração entra como imagem nova do Print & Cut, já na largura
+   * física do desenho. */
+  onIllustrationToCut(event: { canvas: HTMLCanvasElement; name: string; widthMm: number }): void {
+    const item = this.addArt(event.name, event.canvas, { widthMm: event.widthMm });
+    this.selectedId.set(item.id);
+    this.setModo('corte');
+    this.scheduleRender();
+  }
+
+  onIllustrationToTemplate(event: { svg: string; name: string }): void {
+    try {
+      this.templates.loadSvgText(event.svg, event.name);
+      this.setModo('molde');
+    } catch {
+      this.projectStatus.set('Não consegui abrir a ilustração como molde.');
+    }
+  }
+
+  /** Manda a arte selecionada (com o fundo já removido, se foi) pra vetorizar. */
+  vectorizeSelected(): void {
+    const sel = this.selected();
+    if (!sel) return;
+    this.illustration.pendingImport.set({ name: sel.name.replace(/\.[^.]+$/, ''), canvas: sel.source });
+    this.setModo('ilustracao');
   }
 
   setModo(modo: EditorMode): void {
@@ -1939,14 +1976,15 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       // O molde entra no mesmo projeto: um documento do Editor de Imagens tem todos os modos.
       molde: this.templates.serialize(),
       social: this.social.serialize(),
+      ilustracao: this.illustration.serialize(),
     });
   }
 
   async saveProject(): Promise<void> {
     if (this.savingProject()) return;
     const name = this.projectName().trim() || 'Projeto sem nome';
-    if (!this.images().length && !this.templates.hasTemplate() && !this.social.hasImage()) {
-      this.projectStatus.set('Importe ao menos uma imagem (ou um molde) antes de salvar.');
+    if (!this.images().length && !this.templates.hasTemplate() && !this.social.hasImage() && !this.illustration.hasContent()) {
+      this.projectStatus.set('Importe ao menos uma imagem (ou um molde, ou desenhe na ilustração) antes de salvar.');
       return;
     }
     this.savingProject.set(true);
@@ -1979,6 +2017,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         images?: (Partial<ImportedImage> & { original: string })[];
         molde?: TemplateProjectData | null;
         social?: SocialProjectData | null;
+        ilustracao?: IllustrationProjectData | null;
       };
 
       this.images.set([]);
@@ -2017,6 +2056,14 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         this.social.clear();
       }
 
+      // Projetos salvos antes do modo ilustração simplesmente não têm a seção.
+      if (data.ilustracao?.layers?.length) {
+        this.illustration.hydrate(data.ilustracao);
+        if (!data.images?.length && !data.molde?.svg && !data.social?.src) this.setModo('ilustracao');
+      } else {
+        this.illustration.clear();
+      }
+
       this.projectId.set(dto.id);
       this.projectName.set(dto.name);
       this.projectCreatedAt = dto.createdAt;
@@ -2039,6 +2086,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   newProject(): void {
     this.templates.clear();
+    this.illustration.clear();
     this.images.set([]);
     this.pieceCache.clear();
     this.selectedId.set(null);

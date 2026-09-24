@@ -42,6 +42,9 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "allowedCommonJsDependencies": [
+              "clipper-lib"
+            ],
             "tsConfig": "tsconfig.app.json",
             "assets": [
               {
