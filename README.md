@@ -196,6 +196,31 @@ com as artes embutidas em data URL).
 **Ilustração** — um editor vetorial pequeno, feito pra arte de corte e impressão.
 O palco é um SVG de verdade em mm, então o que se vê é o que sai no arquivo.
 
+A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela inteira:
+
+- **Ferramentas à esquerda** com dica rica (nome, atalho e o que faz) e o widget de
+  **preenchimento/traço** (dois quadrados; X alterna, Shift+X troca, D volta ao
+  padrão, / tira a cor).
+- **Barra de controle** no topo, que muda com a seleção: cor, traço, opacidade,
+  fonte (menu com amostra de cada família no texto selecionado), X/Y/L/A com
+  trava de proporção, giro, alinhar e Pathfinder; na seleção direta, as ações de nó.
+- **Campos numéricos no estilo Adobe**: arrastar o rótulo muda o valor (Shift 10×,
+  Alt 0,1×), setas sobem e descem, aceita conta ("40+10") e o arrasto inteiro vira
+  um passo só no desfazer.
+- **Réguas em mm** com marcação do cursor, **área de rascunho** em volta da
+  prancheta, zoom no cursor (Ctrl+roda ou pinça), 100% = tamanho real, Ctrl+0
+  ajusta, Espaço/botão do meio/ferramenta Mão pra rolar, ferramenta Zoom.
+- **Dock com abas**: Propriedades (contextual — Transformar, Aparência com amostras
+  e cores do documento, Caractere, Forma, Nós, Alinhar, Pathfinder e contornos,
+  Organizar), **Camadas** (olho e cadeado, miniatura, renomear com duplo clique,
+  reordenar arrastando), **Vetorizar** e **Exportar**.
+- Destaque do objeto sob o cursor, **menu de contexto** no botão direito,
+  copiar/recortar/colar e colar no lugar, travar (Ctrl+2) e ocultar (Ctrl+3),
+  Tab esconde os painéis, barra de status com zoom, posição do cursor e medidas
+  do arrasto, e a lista de atalhos no F1.
+- As cores do cromo derivam do tema do app (claro ou escuro); no celular as
+  ferramentas viram uma faixa horizontal e o dock vai pra baixo do palco.
+
 - **Vetorizar imagem** (PNG, JPG, HEIC; por arquivo, arrastar ou `Ctrl+V`). A
   imagem é medida (cores efetivas, quanto é chapada, preto e branco, fundo liso) e
   uma leitura é **sugerida sozinha**, com o motivo: *logo/ícone*, *desenho a
@@ -336,8 +361,13 @@ O modo Ilustração mora na mesma pasta, com a lógica fora do Angular e testada
 (diagramação do texto sobre uma interface de fonte), `vectorize.ts` (análise,
 sugestão e os quatro modos de vetorização, rodando em `vectorize.worker.ts`),
 `fonts.ts` (catálogo e fontes enviadas), `illustration-store.ts` (estado,
-histórico e operações), `illustration-export.ts` (SVG/PNG/PDF) e os componentes
-`illustration-mode.ts` (palco e ferramentas) e `illustration-panel.ts` (painel).
+histórico e operações), `illustration-tracer.ts` (o rastreamento de imagem, fora
+dos componentes), `illustration-export.ts` (SVG/PNG/PDF) e os componentes:
+`illustration-mode.ts` (a casca da área de trabalho: palco, réguas, status, menu
+de contexto e atalhos), `illustration-toolbar.ts`, `illustration-controlbar.ts`
+(que também guarda os estilos compartilhados), `illustration-panel.ts` (dock),
+`illustration-layers.ts`, `illustration-font-picker.ts`, `illustration-num.ts`
+(campo numérico com arrasto) e `illustration-icons.ts`.
 
 Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
 com uma rota lazy-loaded em `app.routes.ts`, um card na tela `features/hub/hub.page.ts`,

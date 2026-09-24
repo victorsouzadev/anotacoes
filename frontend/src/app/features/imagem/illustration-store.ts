@@ -8,10 +8,12 @@ import { DEFAULT_FONT_ID, FontLibrary, UploadedFont } from './fonts';
 import {
   Bounds, ImageLayer, Layer, PathLayer, Point, ShapeLayer, ShapeType, TextLayer, VPath,
   applyMatrix, boundsCenter, boundsCorners, centerPaths, growBounds, layerBase, layerMatrix, normalizeHex,
-  pathsBounds, reversePath, round, shapePaths, topFraction, transformPaths, unionBounds,
+  pathsBounds, pathsToD, reversePath, round, shapePaths, topFraction, transformPaths, unionBounds,
 } from './illustration-model';
 import { TextLayout, layoutText } from './svg-text';
-import { AreaSource, BoolOp, booleanPaths, offsetOutline, splitIslands } from './vector-ops';
+import {
+  AreaSource, BoolOp, addNodeAfter, booleanPaths, cornerNode, deleteNode, offsetOutline, smoothNode, splitIslands,
+} from './vector-ops';
 import { ImageStats, PresetId, VectorizeParams, VectorizeResult } from './vectorize';
 
 export interface IllustrationProjectData {
@@ -28,7 +30,15 @@ interface DocState {
   heightMm: number;
 }
 
-export type Tool = 'selecionar' | 'nos' | 'caneta' | 'texto' | 'retangulo' | 'elipse' | 'estrela' | 'poligono' | 'contagotas';
+export type Tool = 'selecionar' | 'nos' | 'caneta' | 'texto' | 'retangulo' | 'elipse' | 'estrela' | 'poligono' | 'contagotas' | 'mao' | 'zoom';
+export type PaintTarget = 'fill' | 'stroke';
+
+export interface SelectionGeometry {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
 
 export interface NodeSelection {
@@ -76,7 +86,13 @@ export class IllustrationStore {
   tool = signal<Tool>('selecionar');
   nodeSel = signal<NodeSelection | null>(null);
   /** Cor dos elementos novos (o conta-gotas troca). */
-  currentFill = signal('#6d5ef8');
+  currentFill = signal<string | null>('#6d5ef8');
+  currentStroke = signal<string | null>(null);
+  currentStrokeWidth = signal(0.35);
+  /** Qual quadrado do widget de cores está na frente (X alterna). */
+  paintTarget = signal<PaintTarget>('fill');
+  keepRatio = signal(true);
+  snap = signal(true);
   /** Sobe quando o painel deve focar o campo de texto. */
   focusText = signal(0);
   canUndo = signal(false);
@@ -87,6 +103,8 @@ export class IllustrationStore {
   vecSource = signal<VectorSource | null>(null);
   vecStats = signal<ImageStats | null>(null);
   vecPreset = signal<PresetId | null>(null);
+  /** A leitura que a análise escolheu (o menu marca com ✦). */
+  vecSuggested = signal<PresetId | null>(null);
   vecReason = signal('');
   vecParams = signal<VectorizeParams | null>(null);
   vecWidthMm = signal(120);
@@ -96,15 +114,53 @@ export class IllustrationStore {
   /** Imagem mandada pelo Print & Cut, esperando o modo abrir. */
   pendingImport = signal<{ name: string; canvas: HTMLCanvasElement } | null>(null);
 
+  private clipboard: Layer[] = [];
+  private pasteCount = 0;
+  private liveEditing = false;
   private past: DocState[] = [];
   private future: DocState[] = [];
   private dragBase: DocState | null = null;
   private geoCache = new WeakMap<Layer, { v: number; paths: VPath[] }>();
   private layoutCache = new WeakMap<Layer, { v: number; layout: TextLayout | null }>();
+  private dCache = new WeakMap<Layer, { v: number; d: string }>();
 
   constructor(public fonts: FontLibrary) {}
 
   hasContent = computed(() => this.layers().length > 0);
+
+  /** Caixa da seleção como o painel Transformar mostra: com uma camada, o
+   * tamanho dela sem o giro; com várias, a caixa que envolve tudo. */
+  geometry = computed<SelectionGeometry | null>(() => {
+    this.fonts.version();
+    const b = this.selectionBounds();
+    if (!b) return null;
+    const l = this.primary();
+    if (this.selection().length === 1 && l) {
+      const lb = this.localBounds(l);
+      return { x: b.minX, y: b.minY, w: (lb.maxX - lb.minX) * Math.abs(l.scaleX), h: (lb.maxY - lb.minY) * Math.abs(l.scaleY) };
+    }
+    return { x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY };
+  });
+
+  /** Cor que o widget mostra: a da seleção, ou a padrão sem seleção. */
+  shownFill = computed(() => {
+    const l = this.primary();
+    return l && l.kind !== 'imagem' ? l.fill : this.currentFill();
+  });
+
+  shownStroke = computed(() => {
+    const l = this.primary();
+    return l && l.kind !== 'imagem' ? l.stroke : this.currentStroke();
+  });
+
+  shownStrokeWidth = computed(() => {
+    const l = this.primary();
+    return l && l.kind !== 'imagem' ? l.strokeWidth : this.currentStrokeWidth();
+  });
+
+  private defaultPaint(): Pick<Layer, 'fill' | 'stroke' | 'strokeWidth'> {
+    return { fill: this.currentFill(), stroke: this.currentStroke(), strokeWidth: this.currentStrokeWidth() };
+  }
 
   selection = computed(() => {
     const ids = new Set(this.selectedIds());
@@ -259,13 +315,13 @@ export class IllustrationStore {
 
   newPathLayer(name: string, paths: VPath[], style: Partial<Layer> = {}): PathLayer {
     const c = centerPaths(paths);
-    return { ...layerBase(uuid(), name), fill: this.currentFill(), ...style, kind: 'caminho', paths: c.paths, x: c.cx, y: c.cy } as PathLayer;
+    return { ...layerBase(uuid(), name), ...this.defaultPaint(), ...style, kind: 'caminho', paths: c.paths, x: c.cx, y: c.cy } as PathLayer;
   }
 
   newShape(shape: ShapeType, x: number, y: number, w: number, h: number): ShapeLayer {
     const names: Record<ShapeType, string> = { retangulo: 'Retângulo', elipse: 'Elipse', estrela: 'Estrela', poligono: 'Polígono' };
     return {
-      ...layerBase(uuid(), names[shape]), fill: this.currentFill(), kind: 'forma', shape, x, y, w, h,
+      ...layerBase(uuid(), names[shape]), ...this.defaultPaint(), kind: 'forma', shape, x, y, w, h,
       radius: 0, points: shape === 'estrela' ? 5 : 6, innerRatio: 0.45,
     };
   }
@@ -410,11 +466,175 @@ export class IllustrationStore {
     this.vecSource.set(null);
     this.vecStats.set(null);
     this.vecPreset.set(null);
+    this.vecSuggested.set(null);
     this.vecParams.set(null);
     this.vecGroupId.set(null);
     this.vecRefId.set(null);
     this.vecInfo.set('');
     this.fonts.setUploads([]);
+  }
+
+  // ---------- edição contínua ----------
+
+  /** Controle deslizante, seletor de cor, digitação: cada movimento aplica na
+   * hora, mas o histórico ganha um passo só, fechado em `commitLive()`. */
+  live(fn: () => void): void {
+    if (!this.liveEditing) {
+      this.liveEditing = true;
+      this.begin();
+    }
+    fn();
+  }
+
+  commitLive(): void {
+    if (!this.liveEditing) return;
+    this.liveEditing = false;
+    this.end();
+  }
+
+  // ---------- cores ----------
+
+  /** Preenchimento ou traço da seleção; sem seleção, o padrão dos próximos. */
+  setPaint(which: PaintTarget, value: string | null, live = false): void {
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (!ids.length) {
+      if (which === 'fill') this.currentFill.set(value);
+      else this.currentStroke.set(value);
+      return;
+    }
+    if (value) (which === 'fill' ? this.currentFill : this.currentStroke).set(value);
+    const apply = () => this.patchMany(ids, (l) => (which === 'stroke' && value && !l.stroke && !l.strokeWidth ? { stroke: value, strokeWidth: 0.35 } : { [which]: value }), false);
+    if (live) this.live(apply);
+    else {
+      this.record();
+      apply();
+    }
+  }
+
+  setStrokeWidth(mm: number, live = false): void {
+    const w = Math.max(0, Math.min(50, mm));
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (!ids.length) {
+      this.currentStrokeWidth.set(w);
+      return;
+    }
+    const apply = () => this.patchMany(ids, (l) => ({ strokeWidth: w, stroke: l.stroke ?? (w > 0 ? '#000000' : null) }), false);
+    if (live) this.live(apply);
+    else {
+      this.record();
+      apply();
+    }
+  }
+
+  /** Shift+X: troca preenchimento e traço. */
+  swapPaint(): void {
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (!ids.length) {
+      const f = this.currentFill();
+      this.currentFill.set(this.currentStroke());
+      this.currentStroke.set(f);
+      return;
+    }
+    this.patchMany(ids, (l) => ({ fill: l.stroke, stroke: l.fill, strokeWidth: l.strokeWidth || 0.35 }));
+  }
+
+  /** D: cores padrão (preenchimento branco, traço preto), como no Illustrator. */
+  defaultColors(): void {
+    this.currentFill.set('#ffffff');
+    this.currentStroke.set('#000000');
+    this.currentStrokeWidth.set(0.35);
+    const ids = this.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
+    if (ids.length) this.patchMany(ids, () => ({ fill: '#ffffff', stroke: '#000000', strokeWidth: 0.35 }));
+  }
+
+  // ---------- transformar ----------
+
+  moveSelectionTo(axis: 'x' | 'y', value: number, record = true): void {
+    const g = this.geometry();
+    if (!g || !Number.isFinite(value)) return;
+    const d = value - (axis === 'x' ? g.x : g.y);
+    this.patchMany(this.selectedIds(), (l) => (l.locked ? null : axis === 'x' ? { x: l.x + d } : { y: l.y + d }), record);
+  }
+
+  resizeSelectionTo(axis: 'w' | 'h', value: number, record = true): void {
+    const g = this.geometry();
+    if (!g || !(value > 0)) return;
+    const f = value / (axis === 'w' ? g.w : g.h);
+    if (!Number.isFinite(f) || f <= 0) return;
+    const fx = axis === 'w' || this.keepRatio() ? f : 1;
+    const fy = axis === 'h' || this.keepRatio() ? f : 1;
+    const sel = this.selection();
+    if (sel.length === 1) {
+      this.patch(sel[0].id, { scaleX: sel[0].scaleX * fx, scaleY: sel[0].scaleY * fy }, record);
+      return;
+    }
+    // Várias: escala a partir do canto de cima à esquerda da seleção.
+    this.patchMany(sel.map((l) => l.id), (l) => ({
+      x: g.x + (l.x - g.x) * fx, y: g.y + (l.y - g.y) * fy, scaleX: l.scaleX * fx, scaleY: l.scaleY * fy,
+    }), record);
+  }
+
+  rotateSelectionTo(deg: number, record = true): void {
+    const l = this.primary();
+    if (!l || !Number.isFinite(deg)) return;
+    this.patch(l.id, { rotation: ((((deg + 180) % 360) + 360) % 360) - 180 }, record);
+  }
+
+  /** Leva a camada pra uma posição da pilha (0 = fundo), como arrastar no
+   * painel Camadas. */
+  moveLayerTo(id: string, index: number): void {
+    const list = [...this.layers()];
+    const from = list.findIndex((l) => l.id === id);
+    if (from < 0) return;
+    const to = Math.max(0, Math.min(list.length - 1, index));
+    if (from === to) return;
+    this.record();
+    const [l] = list.splice(from, 1);
+    list.splice(to, 0, l);
+    this.layers.set(list);
+  }
+
+  /** Atributo `d` da camada no espaço local, guardado por objeto (camadas são
+   * imutáveis) — o palco e as miniaturas do painel Camadas leem daqui. */
+  pathD(l: Layer): string {
+    if (l.kind === 'imagem') return '';
+    const v = l.kind === 'texto' ? this.fonts.version() : 0;
+    const hit = this.dCache.get(l);
+    if (hit && hit.v === v) return hit.d;
+    const d = pathsToD(this.localPaths(l));
+    this.dCache.set(l, { v, d });
+    return d;
+  }
+
+  // ---------- área de transferência ----------
+
+  copy(): number {
+    this.clipboard = clone(this.selection());
+    this.pasteCount = 0;
+    return this.clipboard.length;
+  }
+
+  cut(): number {
+    const n = this.copy();
+    this.remove(this.selectedIds());
+    return n;
+  }
+
+  hasClipboard(): boolean {
+    return this.clipboard.length > 0;
+  }
+
+  /** Colar desloca um pouco a cada vez; "colar no lugar" (Ctrl+Shift+V) não. */
+  paste(inPlace: boolean): void {
+    if (!this.clipboard.length) return;
+    this.pasteCount++;
+    const off = inPlace ? 0 : 5 * this.pasteCount;
+    const groups = new Map<string, string>();
+    const copies = this.clipboard.map((l) => {
+      const groupId = l.groupId ? (groups.get(l.groupId) ?? groups.set(l.groupId, uuid()).get(l.groupId)!) : null;
+      return { ...clone(l), id: uuid(), x: l.x + off, y: l.y + off, groupId } as Layer;
+    });
+    this.addLayers(copies);
   }
 
   // ---------- organizar ----------
@@ -516,7 +736,7 @@ export class IllustrationStore {
       this.status.set('A operação não deixou nenhuma área.');
       return true;
     }
-    const layer = this.newPathLayer(names[op], result, { fill: base.fill ?? base.stroke ?? this.currentFill(), stroke: null, opacity: base.opacity });
+    const layer = this.newPathLayer(names[op], result, { fill: base.fill ?? base.stroke ?? this.currentFill() ?? '#222222', stroke: null, opacity: base.opacity });
     this.addLayers([layer], { at: Math.max(0, Math.min(at, this.layers().length)), record: false });
     return true;
   }
@@ -648,6 +868,24 @@ export class IllustrationStore {
       return;
     }
     this.patch(layerId, { paths } as Partial<PathLayer>, record);
+  }
+
+  /** Suavizar, canto, acrescentar ou apagar o nó selecionado. */
+  nodeOp(op: 'smooth' | 'corner' | 'add' | 'delete'): void {
+    const sel = this.nodeSel();
+    const l = sel ? this.layer(sel.layerId) : null;
+    if (!sel || !l || l.kind !== 'caminho') return;
+    const path = l.paths[sel.path];
+    if (!path) return;
+    this.record();
+    if (op === 'delete') {
+      this.setPath(l.id, sel.path, deleteNode(path, sel.node), false);
+      this.nodeSel.set(null);
+      return;
+    }
+    const next = op === 'smooth' ? smoothNode(path, sel.node) : op === 'corner' ? cornerNode(path, sel.node) : addNodeAfter(path, sel.node);
+    this.setPath(l.id, sel.path, next, false);
+    if (op === 'add') this.nodeSel.set({ ...sel, node: sel.node + 1 });
   }
 
   // ---------- vetorização ----------

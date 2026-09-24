@@ -1,550 +1,579 @@
-/** Painel lateral do modo Ilustração. As classes vêm do `app-illustration-mode`
- * (sem encapsulamento), então aqui só mora o que é próprio do painel. */
+/** Dock de painéis à direita, com abas, como no Illustrator: Propriedades
+ * (contextual — mostra só o que vale pra seleção), Camadas, Vetorizar (o
+ * "Rastreamento de imagem") e Exportar. As classes compartilhadas vêm do
+ * `app-illustration-mode`. */
 
-import { Component, ElementRef, ViewEncapsulation, computed, effect, output, signal, viewChild } from '@angular/core';
-import { uuid } from '../../core/uuid';
-import { IconComponent } from '../../shared/icon';
+import { Component, ElementRef, ViewEncapsulation, computed, effect, inject, output, signal, viewChild } from '@angular/core';
 import { pngBlobWithDpi } from './contour';
-import { FONT_CATEGORIES, FontCategory, FontError, FontFamily } from './fonts';
+import { nearestWeight } from './fonts';
+import { ALIGN_BUTTONS, PATHFINDER } from './illustration-controlbar';
 import { buildSvg, canvasToBlob, contentBounds, rasterizeSvg } from './illustration-export';
-import { AlignMode, CUT_COLOR, IllustrationStore } from './illustration-store';
+import { IlFontPickerComponent } from './illustration-font-picker';
+import { IlIconComponent, IlIconName } from './illustration-icons';
+import { IlLayersComponent } from './illustration-layers';
+import { IlNumComponent, NumChange } from './illustration-num';
+import { CUT_COLOR, IllustrationStore, PaintTarget } from './illustration-store';
+import { IllustrationTracer } from './illustration-tracer';
 import { Layer, ShapeLayer, TextAlign, TextCurve, TextLayer, countNodes, normalizeHex } from './illustration-model';
-import { encodeCanvas } from './raster';
 import { jpegToPdf } from './sheet';
-import { isHeicFile } from './social-mode';
 import { downloadBlob } from './svg-template';
-import { BoolOp, addNodeAfter, cornerNode, deleteNode, smoothNode } from './vector-ops';
-import { PRESET_LABELS, PresetId, VectorizeParams, presetParams, suggestPreset } from './vectorize';
-import { StaleRequest, VectorizeService, vectorizeCanvas } from './vectorize.service';
+import { PRESET_LABELS, PresetId, VectorizeParams } from './vectorize';
 
 const EXPORT_DPI = 300;
+const OPEN_KEY = 'imagem-ilustracao-paineis';
 
-type SectionId = 'documento' | 'vetorizar' | 'texto' | 'estilo' | 'forma' | 'organizar' | 'combinar' | 'nos' | 'camadas' | 'exportar';
+export type DockTab = 'props' | 'camadas' | 'vetorizar' | 'exportar';
 
 const DOC_PRESETS: { label: string; w: number; h: number }[] = [
   { label: 'A4', w: 210, h: 297 },
   { label: 'A4 deitado', w: 297, h: 210 },
   { label: 'A3', w: 297, h: 420 },
+  { label: 'Carta', w: 216, h: 279 },
   { label: '10 × 10 cm', w: 100, h: 100 },
   { label: '20 × 20 cm', w: 200, h: 200 },
   { label: '30 × 30 cm', w: 300, h: 300 },
 ];
 
+/** Amostras fixas, como o painel Amostras: neutros e cores básicas. */
+const SWATCHES = [
+  '#000000', '#3a3a3a', '#7a7a7a', '#bdbdbd', '#ffffff',
+  '#e53935', '#fb8c00', '#fdd835', '#43a047', '#00897b',
+  '#1e88e5', '#3949ab', '#8e24aa', '#d81b60', '#6d4c41',
+  '#ffcdd2', '#ffe0b2', '#fff9c4', '#c8e6c9', '#bbdefb',
+];
+
 const PRESET_ORDER: PresetId[] = ['logo', 'traco', 'clipart', 'foto', 'silhueta', 'centro'];
 
-function num(event: Event): number {
-  return Number((event.target as HTMLInputElement).value);
-}
-
-function readImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Não consegui abrir essa imagem.'));
-    img.src = src;
-  });
+function loadOpen(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(OPEN_KEY) ?? '{}') as Record<string, boolean>;
+  } catch {
+    return {};
+  }
 }
 
 @Component({
   selector: 'app-illustration-panel',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent, IlLayersComponent],
   encapsulation: ViewEncapsulation.None,
+  host: { class: 'il-dock' },
   template: `
-    <aside class="il-panel">
-      <input #imageInput type="file" accept="image/*,.heic,.heif" hidden (change)="onImageInput($event)" />
-      <input #fontInput type="file" accept=".ttf,.otf,.woff,font/ttf,font/otf,font/woff" hidden (change)="onFontInput($event)" />
-
-      <!-- vetorizar -->
-      <section class="il-section" [class.il-open]="isOpen('vetorizar')">
-        <button class="il-section-head" (click)="toggle('vetorizar')">
-          <span class="il-section-title"><app-icon name="image" [size]="13" /> Vetorizar imagem</span>
-          <span class="il-section-summary">{{ store.vecSource()?.name ?? 'nenhuma' }}</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
+    <div class="il-tabs" role="tablist">
+      @for (t of tabs; track t.id) {
+        <button type="button" role="tab" class="il-tab" [class.il-on]="tab() === t.id" [attr.aria-selected]="tab() === t.id" (click)="tab.set(t.id)">
+          <span>{{ t.label }}</span>
         </button>
-        <div class="il-section-body">
-          <button class="il-btn il-wide" (click)="imageInput.click()"><app-icon name="folder" [size]="13" /> {{ store.vecSource() ? 'Trocar imagem' : 'Escolher imagem' }}</button>
-          @if (!store.vecSource()) {
-            <p class="il-note">Ou solte / cole (Ctrl+V) a imagem no palco. PNG, JPG ou foto de iPhone.</p>
+      }
+    </div>
+
+    <div class="il-tab-body" [class.il-tab-fill]="tab() === 'camadas'">
+      @switch (tab()) {
+        @case ('props') {
+          @if (!store.selection().length) {
+            <section class="il-sec" [class.il-closed]="closed('doc')">
+              <button type="button" class="il-sec-head" (click)="flip('doc')"><il-icon name="chevron" [size]="12" /> Documento</button>
+              <div class="il-sec-body">
+                <div class="il-grid2">
+                  <il-num label="L" title="Largura" unit="mm" [value]="store.widthMm()" [min]="10" [max]="3000" [decimals]="0" (valueChange)="store.setDocSize(round0($event.value), store.heightMm())" />
+                  <il-num label="A" title="Altura" unit="mm" [value]="store.heightMm()" [min]="10" [max]="3000" [decimals]="0" (valueChange)="store.setDocSize(store.widthMm(), round0($event.value))" />
+                </div>
+                <div class="il-chips">
+                  @for (d of docPresets; track d.label) {
+                    <button type="button" class="il-chip" [class.il-on]="store.widthMm() === d.w && store.heightMm() === d.h" (click)="store.setDocSize(d.w, d.h)">{{ d.label }}</button>
+                  }
+                </div>
+                <label class="il-check"><input type="checkbox" [checked]="store.snap()" (change)="store.snap.set(!store.snap())" /> Guias inteligentes (atração)</label>
+                <div class="il-row">
+                  <button type="button" class="il-btn il-grow" [disabled]="!store.layers().length" (click)="fitBoard()"><il-icon name="artboard" [size]="13" /> Ajustar ao desenho</button>
+                  <button type="button" class="il-btn il-danger" [disabled]="!store.layers().length" (click)="clearAll()" data-tip="Apagar tudo"><il-icon name="trash" [size]="13" /></button>
+                </div>
+              </div>
+            </section>
           }
-          @if (vecError()) { <p class="il-error">{{ vecError() }}</p> }
-          @if (store.vecSource() && store.vecParams(); as p) {
-            @if (store.vecReason()) { <p class="il-note il-suggest">✦ {{ store.vecReason() }}</p> }
-            <div class="il-chips">
-              @for (id of presetOrder; track id) {
-                <button class="il-chip" [class.il-active]="store.vecPreset() === id" (click)="choosePreset(id)">{{ presetLabels[id] }}</button>
+
+          @if (store.selection().length) {
+            <section class="il-sec" [class.il-closed]="closed('transform')">
+              <button type="button" class="il-sec-head" (click)="flip('transform')"><il-icon name="chevron" [size]="12" /> Transformar</button>
+              @if (store.geometry(); as g) {
+                <div class="il-sec-body">
+                  <div class="il-grid2">
+                    <il-num label="X" unit="mm" [value]="g.x" [step]="0.5" (valueChange)="onGeom('x', $event)" (done)="store.commitLive()" />
+                    <il-num label="Y" unit="mm" [value]="g.y" [step]="0.5" (valueChange)="onGeom('y', $event)" (done)="store.commitLive()" />
+                    <il-num label="L" title="Largura" unit="mm" [value]="g.w" [step]="0.5" [min]="0.1" (valueChange)="onGeom('w', $event)" (done)="store.commitLive()" />
+                    <il-num label="A" title="Altura" unit="mm" [value]="g.h" [step]="0.5" [min]="0.1" (valueChange)="onGeom('h', $event)" (done)="store.commitLive()" />
+                  </div>
+                  <div class="il-row">
+                    @if (store.primary(); as l) {
+                      <il-num class="il-grow" label="⟳" title="Giro" unit="°" [value]="l.rotation" [decimals]="1" (valueChange)="onRotate($event)" (done)="store.commitLive()" />
+                    }
+                    <button type="button" class="il-ib" [class.il-on]="store.keepRatio()" data-tip="Manter proporção" aria-label="Manter proporção" (click)="store.keepRatio.set(!store.keepRatio())"><il-icon [name]="store.keepRatio() ? 'link' : 'unlink'" /></button>
+                    <button type="button" class="il-ib" data-tip="Espelhar na horizontal" aria-label="Espelhar na horizontal" (click)="store.flip('h')"><il-icon name="flip-h" /></button>
+                    <button type="button" class="il-ib" data-tip="Espelhar na vertical" aria-label="Espelhar na vertical" (click)="store.flip('v')"><il-icon name="flip-v" /></button>
+                  </div>
+                </div>
               }
-            </div>
-            @if (p.mode === 'cores') {
-              <label class="il-slider"><span>Cores <strong>{{ p.colors }}</strong></span>
-                <input type="range" min="2" max="16" step="1" [value]="p.colors" (input)="setParam('colors', num($event))" /></label>
-              <label class="il-slider"><span>Tirar textura <strong>{{ p.blur }}</strong></span>
-                <input type="range" min="0" max="3" step="1" [value]="p.blur" (input)="setParam('blur', num($event))" /></label>
-              <label class="il-check"><input type="checkbox" [checked]="p.removeBackground" (change)="setParam('removeBackground', !p.removeBackground)" /> Remover a cor do fundo</label>
-            }
-            @if (p.mode === 'traco' || p.mode === 'centro' || p.mode === 'silhueta') {
-              <label class="il-slider">
-                <span>{{ p.mode === 'silhueta' ? 'Tolerância do fundo' : 'Limiar' }} <strong>{{ p.threshold < 0 ? 'auto' : p.threshold }}</strong></span>
-                <input type="range" min="-1" max="255" step="1" [value]="p.threshold" (input)="setParam('threshold', num($event))" />
-              </label>
-            }
-            @if (p.mode === 'traco' || p.mode === 'centro') {
-              <label class="il-check"><input type="checkbox" [checked]="p.invert" (change)="setParam('invert', !p.invert)" /> Traço claro em fundo escuro</label>
-            }
-            @if (p.mode === 'silhueta') {
-              <label class="il-check"><input type="checkbox" [checked]="p.keepHoles" (change)="setParam('keepHoles', !p.keepHoles)" /> Manter vãos internos</label>
-            }
-            <label class="il-slider"><span>Detalhe <strong>{{ p.detail }}</strong></span>
-              <input type="range" min="0" max="100" step="1" [value]="p.detail" (input)="setParam('detail', num($event))" /></label>
-            <label class="il-slider"><span>Suavização <strong>{{ p.smoothing.toFixed(1) }}</strong></span>
-              <input type="range" min="0" max="6" step="0.1" [value]="p.smoothing" (input)="setParam('smoothing', num($event))" /></label>
-            <label class="il-check"><input type="checkbox" [checked]="p.keepCorners" (change)="setParam('keepCorners', !p.keepCorners)" /> Preservar cantos</label>
-            <label class="il-field"><span>Largura na prancheta (mm)</span>
-              <input type="number" min="5" max="2000" step="1" [value]="store.vecWidthMm()" (change)="setVecWidth(num($event))" /></label>
-            <p class="il-note">{{ vecBusy() ? 'Vetorizando…' : store.vecInfo() }}</p>
+            </section>
           }
-        </div>
-      </section>
 
-      <!-- texto -->
-      <section class="il-section" [class.il-open]="isOpen('texto')">
-        <button class="il-section-head" (click)="toggle('texto')">
-          <span class="il-section-title"><app-icon name="text" [size]="13" /> Texto</span>
-          <span class="il-section-summary">{{ text() ? store.fonts.family(text()!.fontId).name : 'fontes' }}</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="il-section-body">
+          @if (vectorSel().length || !store.selection().length) {
+            <section class="il-sec" [class.il-closed]="closed('appearance')">
+              <button type="button" class="il-sec-head" (click)="flip('appearance')"><il-icon name="chevron" [size]="12" /> Aparência{{ store.selection().length ? '' : ' (próximos objetos)' }}</button>
+              <div class="il-sec-body">
+                @for (p of paints; track p.id) {
+                  <div class="il-paint-row" [class.il-on]="store.paintTarget() === p.id">
+                    <button type="button" class="il-swatch-btn" [attr.aria-label]="p.label" (click)="openColor(p.id)">
+                      <span class="il-sw" [class.il-sw-stroke]="p.id === 'stroke'" [class.il-sw-none]="!paintOf(p.id)" [style.background]="p.id === 'fill' ? paintOf('fill') : null" [style.--c]="p.id === 'stroke' ? paintOf('stroke') : null"></span>
+                    </button>
+                    <span class="il-paint-label" (click)="store.paintTarget.set(p.id)">{{ p.label }}</span>
+                    <input class="il-hex" [value]="paintOf(p.id) ?? ''" placeholder="nenhum" spellcheck="false" [attr.aria-label]="p.label + ' em hexadecimal'" (change)="onHex(p.id, $event)" />
+                    <button type="button" class="il-ib il-ib-sm" [class.il-on]="!paintOf(p.id)" data-tip="Sem cor" aria-label="Sem cor" (click)="store.setPaint(p.id, null)"><il-icon name="none" [size]="13" /></button>
+                  </div>
+                }
+                <div class="il-grid2">
+                  <il-num label="Traço" unit="mm" [value]="store.shownStroke() ? store.shownStrokeWidth() : 0" [step]="0.05" [min]="0" [max]="50" [decimals]="2" (valueChange)="onStroke($event)" (done)="store.commitLive()" />
+                  @if (store.selection().length) {
+                    <il-num label="Opac." unit="%" [value]="(store.primary()?.opacity ?? 1) * 100" [min]="0" [max]="100" [decimals]="0" (valueChange)="onOpacity($event)" (done)="store.commitLive()" />
+                  }
+                </div>
+                @if (store.primary(); as l) {
+                  <label class="il-check"><input type="checkbox" [checked]="l.cut" (change)="toggleCut(l)" /> <il-icon name="cut" [size]="13" /> Linha de corte (vai pro SVG de corte)</label>
+                }
+                <span class="il-mini-title">Amostras <small>(clique aplica em {{ store.paintTarget() === 'fill' ? 'preenchimento' : 'traço' }})</small></span>
+                <div class="il-swatches">
+                  @for (c of swatches; track c) {
+                    <button type="button" class="il-swatch" [style.background]="c" [title]="c" (click)="store.setPaint(store.paintTarget(), c)"></button>
+                  }
+                </div>
+                @if (store.palette().length) {
+                  <span class="il-mini-title">Cores do documento <small>(✎ troca em tudo)</small></span>
+                  <div class="il-swatches">
+                    @for (c of store.palette(); track c) {
+                      <span class="il-swatch-wrap">
+                        <button type="button" class="il-swatch" [style.background]="c" [title]="c" (click)="store.setPaint(store.paintTarget(), c)"></button>
+                        <label class="il-swatch-edit" title="Trocar esta cor em todo o documento">✎<input type="color" [value]="c" (change)="replaceColor(c, $any($event.target).value)" /></label>
+                      </span>
+                    }
+                  </div>
+                }
+                <input #color type="color" class="il-hidden-color" tabindex="-1" aria-hidden="true" (input)="onColor($event)" (change)="store.commitLive()" />
+              </div>
+            </section>
+          }
+
           @if (text(); as t) {
-            <label class="il-field"><span>Texto</span>
-              <textarea #textArea rows="2" [value]="t.text" (input)="patchText({ text: $any($event.target).value }, true)" (blur)="endTyping()"></textarea></label>
-            <div class="il-font-cats">
-              @for (c of categories(); track c) {
-                <button class="il-chip" [class.il-active]="fontCategory() === c" (click)="fontCategory.set(c)">{{ c }}</button>
-              }
-            </div>
-            <div class="il-font-list">
-              @for (f of fontsOf(fontCategory()); track f.id) {
-                <button class="il-font" [class.il-active]="t.fontId === f.id" [style.font-family]="store.fonts.previewFamily(f.id)" (click)="patchText({ fontId: f.id })" [title]="f.name">
-                  <span class="il-font-sample">Abc</span><span class="il-font-name">{{ f.name }}</span>
+            <section class="il-sec" [class.il-closed]="closed('char')">
+              <button type="button" class="il-sec-head" (click)="flip('char')"><il-icon name="chevron" [size]="12" /> Caractere</button>
+              <div class="il-sec-body">
+                <textarea #textArea class="il-textarea" rows="2" [value]="t.text" aria-label="Texto" (input)="liveText(t, { text: $any($event.target).value })" (blur)="store.commitLive()"></textarea>
+                <il-font-picker [fontId]="t.fontId" [sample]="t.text.split('\\n')[0].slice(0, 24)" (picked)="store.patch(t.id, { fontId: $event })" />
+                <div class="il-grid2">
+                  <select class="il-select" [value]="weightOf(t)" (change)="store.patch(t.id, { weight: +$any($event.target).value })" aria-label="Peso">
+                    <option value="400">Normal</option>
+                    @if (hasBold(t)) { <option value="700">Negrito</option> }
+                  </select>
+                  <il-num label="T" title="Tamanho do corpo" unit="mm" [value]="t.sizeMm" [step]="0.5" [min]="1" [max]="1000" (valueChange)="numText(t, 'sizeMm', $event)" (done)="store.commitLive()" />
+                  <il-num label="VA" title="Espaço entre letras (milésimos de em)" [value]="t.tracking" [step]="5" [min]="-200" [max]="800" [decimals]="0" (valueChange)="numText(t, 'tracking', $event)" (done)="store.commitLive()" />
+                  <il-num label="Entre." title="Entrelinha (× corpo)" [value]="t.lineHeight" [step]="0.05" [min]="0.5" [max]="4" [decimals]="2" (valueChange)="numText(t, 'lineHeight', $event)" (done)="store.commitLive()" />
+                </div>
+                <div class="il-row">
+                  <div class="il-seg">
+                    @for (a of textAligns; track a.id) {
+                      <button type="button" [class.il-on]="t.align === a.id" [attr.data-tip]="a.label" [attr.aria-label]="a.label" (click)="store.patch(t.id, { align: a.id })"><il-icon [name]="a.icon" /></button>
+                    }
+                  </div>
+                  <div class="il-seg">
+                    @for (c of curves; track c.id) {
+                      <button type="button" [class.il-on]="t.curve === c.id" [disabled]="c.id === 'caminho' && !t.guide && !guideCandidate()" [attr.data-tip]="c.label" [attr.aria-label]="c.label" (click)="setCurve(t, c.id)"><il-icon [name]="c.icon" /></button>
+                    }
+                  </div>
+                </div>
+                @if (t.curve === 'arco') {
+                  <label class="il-range"><span>Curvatura</span><input type="range" min="-100" max="100" step="1" [value]="t.bend" (input)="liveText(t, { bend: +$any($event.target).value })" (change)="store.commitLive()" /><b>{{ t.bend }}%</b></label>
+                }
+                @if (t.curve === 'caminho') {
+                  <label class="il-range"><span>Início</span><input type="range" min="0" max="100" step="1" [value]="t.guideOffset * 100" (input)="liveText(t, { guideOffset: $any($event.target).value / 100 })" (change)="store.commitLive()" /><b>{{ (t.guideOffset * 100).toFixed(0) }}%</b></label>
+                  <button type="button" class="il-btn" (click)="store.flipGuide(t.id)">Inverter lado do caminho</button>
+                } @else if (!t.guide) {
+                  <p class="il-note">Texto em caminho: selecione o texto e uma forma (Shift+clique) e escolha o terceiro modo.</p>
+                }
+                <div class="il-row">
+                  <button type="button" class="il-btn il-grow" (click)="store.convertToPath([t.id])"><il-icon name="to-path" [size]="13" /> Criar contornos</button>
+                  <button type="button" class="il-btn il-grow" (click)="store.separateLetters(t.id)"><il-icon name="letters" [size]="13" /> Separar letras</button>
+                </div>
+              </div>
+            </section>
+          }
+
+          @if (shape(); as s) {
+            <section class="il-sec" [class.il-closed]="closed('shape')">
+              <button type="button" class="il-sec-head" (click)="flip('shape')"><il-icon name="chevron" [size]="12" /> {{ s.name }}</button>
+              <div class="il-sec-body">
+                <div class="il-grid2">
+                  <il-num label="L" title="Largura da forma" unit="mm" [value]="s.w" [step]="0.5" [min]="0.5" [max]="5000" (valueChange)="numShape(s, 'w', $event)" (done)="store.commitLive()" />
+                  <il-num label="A" title="Altura da forma" unit="mm" [value]="s.h" [step]="0.5" [min]="0.5" [max]="5000" (valueChange)="numShape(s, 'h', $event)" (done)="store.commitLive()" />
+                  @if (s.shape === 'retangulo') {
+                    <il-num label="Raio" title="Cantos arredondados" unit="mm" [value]="s.radius" [step]="0.5" [min]="0" [max]="Math.min(s.w, s.h) / 2" (valueChange)="numShape(s, 'radius', $event)" (done)="store.commitLive()" />
+                  }
+                  @if (s.shape === 'estrela' || s.shape === 'poligono') {
+                    <il-num [label]="s.shape === 'estrela' ? 'Pontas' : 'Lados'" [value]="s.points" [min]="3" [max]="60" [decimals]="0" (valueChange)="numShape(s, 'points', $event)" (done)="store.commitLive()" />
+                  }
+                  @if (s.shape === 'estrela') {
+                    <il-num label="Miolo" title="Raio interno" unit="%" [value]="s.innerRatio * 100" [min]="5" [max]="95" [decimals]="0" (valueChange)="numShape(s, 'innerRatio', { value: $event.value / 100, live: $event.live })" (done)="store.commitLive()" />
+                  }
+                </div>
+              </div>
+            </section>
+          }
+
+          @if (store.tool() === 'nos') {
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Nós</div>
+              <div class="il-sec-body">
+                @if (pathLayer(); as pl) {
+                  <p class="il-note">{{ nodeTotal() }} nós em {{ pl.paths.length }} subcaminho(s). Arraste nós e alças no palco; Alt quebra a simetria.</p>
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="store.nodeOp('smooth')"><il-icon name="node-smooth" [size]="13" /> Suavizar</button>
+                    <button type="button" class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="store.nodeOp('corner')"><il-icon name="node-corner" [size]="13" /> Canto</button>
+                  </div>
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="store.nodeOp('add')"><il-icon name="node-add" [size]="13" /> Acrescentar</button>
+                    <button type="button" class="il-btn il-grow il-danger" [disabled]="!store.nodeSel()" (click)="store.nodeOp('delete')"><il-icon name="node-delete" [size]="13" /> Apagar</button>
+                  </div>
+                } @else if (store.primary(); as l) {
+                  <p class="il-note">"{{ l.name }}" não é caminho.</p>
+                  @if (l.kind === 'texto' || l.kind === 'forma') {
+                    <button type="button" class="il-btn" (click)="store.convertToPath([l.id])"><il-icon name="to-path" [size]="13" /> Converter em caminho</button>
+                  }
+                } @else {
+                  <p class="il-note">Clique num caminho pra editar os nós dele.</p>
+                }
+              </div>
+            </section>
+          }
+
+          @if (store.selection().length) {
+            <section class="il-sec" [class.il-closed]="closed('align')">
+              <button type="button" class="il-sec-head" (click)="flip('align')"><il-icon name="chevron" [size]="12" /> Alinhar <small>{{ store.selection().length > 1 ? 'à seleção' : 'à prancheta' }}</small></button>
+              <div class="il-sec-body">
+                <div class="il-row il-row-tight">
+                  @for (a of aligns; track a.id) {
+                    <button type="button" class="il-ib" [attr.data-tip]="a.label" [attr.aria-label]="a.label" (click)="store.align(a.id)"><il-icon [name]="a.icon" /></button>
+                  }
+                  <span class="il-sep"></span>
+                  <button type="button" class="il-ib" [disabled]="store.selection().length < 3" data-tip="Distribuir na horizontal" aria-label="Distribuir na horizontal" (click)="store.distribute('h')"><il-icon name="dist-h" /></button>
+                  <button type="button" class="il-ib" [disabled]="store.selection().length < 3" data-tip="Distribuir na vertical" aria-label="Distribuir na vertical" (click)="store.distribute('v')"><il-icon name="dist-v" /></button>
+                </div>
+              </div>
+            </section>
+
+            <section class="il-sec" [class.il-closed]="closed('pathfinder')">
+              <button type="button" class="il-sec-head" (click)="flip('pathfinder')"><il-icon name="chevron" [size]="12" /> Pathfinder e contornos</button>
+              <div class="il-sec-body">
+                <div class="il-row il-row-tight">
+                  @for (p of pathfinder; track p.id) {
+                    <button type="button" class="il-ib il-ib-lg" [disabled]="vectorSel().length < p.min" [attr.data-tip]="p.label" [attr.aria-label]="p.label" (click)="combine(p.id)"><il-icon [name]="p.icon" [size]="18" /></button>
+                  }
+                  <span class="il-sep"></span>
+                  <button type="button" class="il-ib il-ib-lg" [disabled]="!canBreak()" data-tip="Separar formas (ilhas)" aria-label="Separar formas" (click)="store.breakApart()"><il-icon name="break-apart" [size]="18" /></button>
+                  <button type="button" class="il-ib il-ib-lg" [disabled]="!canConvert()" data-tip="Converter em caminho" aria-label="Converter em caminho" (click)="store.convertToPath(store.selectedIds())"><il-icon name="to-path" [size]="18" /></button>
+                </div>
+                <div class="il-row">
+                  <il-num class="il-grow" label="Margem" title="Margem do contorno de corte" unit="mm" [value]="outlineMm()" [step]="0.5" [min]="0" [max]="50" (valueChange)="outlineMm.set($event.value)" />
+                  <button type="button" class="il-btn" (click)="outline()"><il-icon name="offset" [size]="13" /> Contorno</button>
+                </div>
+                <label class="il-check"><input type="checkbox" [checked]="outlineOuter()" (change)="outlineOuter.set(!outlineOuter())" /> Só o de fora (fecha os vãos internos)</label>
+              </div>
+            </section>
+
+            <section class="il-sec" [class.il-closed]="closed('arrange')">
+              <button type="button" class="il-sec-head" (click)="flip('arrange')"><il-icon name="chevron" [size]="12" /> Organizar</button>
+              <div class="il-sec-body">
+                <div class="il-row il-row-tight">
+                  <button type="button" class="il-ib" data-tip="Trazer pra frente  Ctrl+Shift+]" aria-label="Trazer pra frente" (click)="store.reorder(store.selectedIds(), 'topo')"><il-icon name="front" /></button>
+                  <button type="button" class="il-ib" data-tip="Avançar  Ctrl+]" aria-label="Avançar" (click)="store.reorder(store.selectedIds(), 'frente')"><il-icon name="forward" /></button>
+                  <button type="button" class="il-ib" data-tip="Recuar  Ctrl+[" aria-label="Recuar" (click)="store.reorder(store.selectedIds(), 'tras')"><il-icon name="backward" /></button>
+                  <button type="button" class="il-ib" data-tip="Enviar pra trás  Ctrl+Shift+[" aria-label="Enviar pra trás" (click)="store.reorder(store.selectedIds(), 'fundo')"><il-icon name="back" /></button>
+                  <span class="il-sep"></span>
+                  <button type="button" class="il-ib" [disabled]="store.selection().length < 2" data-tip="Agrupar  Ctrl+G" aria-label="Agrupar" (click)="store.group()"><il-icon name="group" /></button>
+                  <button type="button" class="il-ib" [disabled]="!grouped()" data-tip="Desagrupar  Ctrl+Shift+G" aria-label="Desagrupar" (click)="store.ungroup()"><il-icon name="ungroup" /></button>
+                  <button type="button" class="il-ib" data-tip="Duplicar  Ctrl+D" aria-label="Duplicar" (click)="store.duplicate(store.selectedIds())"><il-icon name="copy" /></button>
+                  <button type="button" class="il-ib il-danger" data-tip="Apagar  Delete" aria-label="Apagar" (click)="store.remove(store.selectedIds())"><il-icon name="trash" /></button>
+                </div>
+              </div>
+            </section>
+          }
+          <button type="button" class="il-link" (click)="showShortcuts.emit()"><il-icon name="keyboard" [size]="13" /> Atalhos de teclado</button>
+        }
+
+        @case ('camadas') {
+          <il-layers />
+        }
+
+        @case ('vetorizar') {
+          <section class="il-sec">
+            <div class="il-sec-body il-sec-body-top">
+              <input #imageInput type="file" accept="image/*,.heic,.heif" hidden (change)="onImageInput($event)" />
+              @if (store.vecSource(); as src) {
+                <div class="il-trace-src">
+                  <img [src]="src.dataUrl" alt="" />
+                  <div class="il-trace-meta">
+                    <strong>{{ src.name }}</strong>
+                    <span>{{ src.canvas.width }} × {{ src.canvas.height }} px</span>
+                    <div class="il-row il-row-tight">
+                      <button type="button" class="il-btn" (click)="imageInput.click()">Trocar</button>
+                      <button type="button" class="il-btn" data-tip="Finaliza: o resultado vira desenho comum" (click)="tracer.release()">Soltar</button>
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <button type="button" class="il-drop" (click)="imageInput.click()">
+                  <il-icon name="trace" [size]="30" />
+                  <strong>Abrir imagem pra vetorizar</strong>
+                  <span>PNG, JPG ou foto de iPhone. Também dá pra soltar ou colar (Ctrl+V) direto no palco.</span>
                 </button>
               }
+              @if (tracer.error()) { <p class="il-error">{{ tracer.error() }}</p> }
             </div>
-            @if (store.fonts.failed(t.fontId, t.weight)) { <p class="il-error">Não consegui carregar essa fonte.</p> }
-            <div class="il-row">
-              <button class="il-btn il-grow" [class.il-active]="t.weight < 600" (click)="patchText({ weight: 400 })">Normal</button>
-              <button class="il-btn il-grow" [class.il-active]="t.weight >= 600" [disabled]="!hasBold(t)" (click)="patchText({ weight: 700 })"><strong>Negrito</strong></button>
-            </div>
-            <div class="il-row">
-              <label class="il-field"><span>Tamanho (mm)</span><input type="number" min="1" max="1000" step="0.5" [value]="t.sizeMm" (change)="patchText({ sizeMm: clampNum(num($event), 1, 1000) })" /></label>
-              <label class="il-field"><span>Entrelinha</span><input type="number" min="0.5" max="4" step="0.05" [value]="t.lineHeight" (change)="patchText({ lineHeight: clampNum(num($event), 0.5, 4) })" /></label>
-            </div>
-            <label class="il-slider"><span>Espaço entre letras <strong>{{ t.tracking }}</strong></span>
-              <input type="range" min="-200" max="800" step="5" [value]="t.tracking" (input)="patchText({ tracking: num($event) }, true)" (change)="endTyping()" /></label>
-            <div class="il-row">
-              @for (a of aligns; track a.id) {
-                <button class="il-btn il-grow" [class.il-active]="t.align === a.id" (click)="patchText({ align: a.id })">{{ a.label }}</button>
-              }
-            </div>
-            <div class="il-row">
-              @for (c of curves; track c.id) {
-                <button class="il-btn il-grow" [class.il-active]="t.curve === c.id" [disabled]="c.id === 'caminho' && !t.guide && !guideCandidate()" (click)="setCurve(t, c.id)">{{ c.label }}</button>
-              }
-            </div>
-            @if (t.curve === 'arco') {
-              <label class="il-slider"><span>Curvatura <strong>{{ t.bend }}%</strong></span>
-                <input type="range" min="-100" max="100" step="1" [value]="t.bend" (input)="patchText({ bend: num($event) }, true)" (change)="endTyping()" /></label>
-            }
-            @if (t.curve === 'caminho') {
-              <label class="il-slider"><span>Início no caminho <strong>{{ (t.guideOffset * 100).toFixed(0) }}%</strong></span>
-                <input type="range" min="0" max="100" step="1" [value]="t.guideOffset * 100" (input)="patchText({ guideOffset: num($event) / 100 }, true)" (change)="endTyping()" /></label>
-              <button class="il-btn il-wide" (click)="store.flipGuide(t.id)">Inverter lado do caminho</button>
-            }
-            @if (!t.guide) {
-              <p class="il-note">Texto em caminho: selecione o texto e um caminho ou forma (Shift+clique) e escolha "Caminho".</p>
-            }
-            <div class="il-row">
-              <button class="il-btn il-grow" (click)="store.convertToPath([t.id])">Converter em curvas</button>
-              <button class="il-btn il-grow" (click)="store.separateLetters(t.id)">Separar letras</button>
-            </div>
-          } @else {
-            <button class="il-btn il-wide" (click)="addText()"><app-icon name="plus" [size]="13" /> Adicionar texto</button>
-            <p class="il-note">{{ store.fonts.families().length }} fontes; o texto já aparece em curvas, igual ao arquivo final.</p>
+          </section>
+          @if (store.vecSource() && store.vecParams(); as p) {
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Predefinição</div>
+              <div class="il-sec-body">
+                <select class="il-select" [value]="store.vecPreset() ?? ''" (change)="tracer.choosePreset($any($event.target).value)" aria-label="Predefinição">
+                  @for (id of presetOrder; track id) {
+                    <option [value]="id">{{ presetLabels[id] }}{{ id === suggested() ? '  ✦ sugerida' : '' }}</option>
+                  }
+                </select>
+                @if (store.vecReason()) { <p class="il-note il-suggest">✦ {{ store.vecReason() }}</p> }
+              </div>
+            </section>
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Ajustes</div>
+              <div class="il-sec-body">
+                @if (p.mode === 'cores') {
+                  <label class="il-range"><span>Cores</span><input type="range" min="2" max="16" step="1" [value]="p.colors" (input)="param('colors', $event)" /><b>{{ p.colors }}</b></label>
+                  <label class="il-range"><span>Textura</span><input type="range" min="0" max="3" step="1" [value]="p.blur" (input)="param('blur', $event)" /><b>{{ p.blur }}</b></label>
+                  <label class="il-check"><input type="checkbox" [checked]="p.removeBackground" (change)="tracer.setParam('removeBackground', !p.removeBackground)" /> Ignorar a cor do fundo</label>
+                } @else {
+                  <label class="il-range">
+                    <span>{{ p.mode === 'silhueta' ? 'Tolerância' : 'Limiar' }}</span>
+                    <input type="range" min="-1" max="255" step="1" [value]="p.threshold" (input)="param('threshold', $event)" /><b>{{ p.threshold < 0 ? 'auto' : p.threshold }}</b>
+                  </label>
+                  @if (p.mode !== 'silhueta') {
+                    <label class="il-check"><input type="checkbox" [checked]="p.invert" (change)="tracer.setParam('invert', !p.invert)" /> Traço claro em fundo escuro</label>
+                  } @else {
+                    <label class="il-check"><input type="checkbox" [checked]="p.keepHoles" (change)="tracer.setParam('keepHoles', !p.keepHoles)" /> Manter vãos internos</label>
+                  }
+                }
+                <label class="il-range"><span>Detalhe</span><input type="range" min="0" max="100" step="1" [value]="p.detail" (input)="param('detail', $event)" /><b>{{ p.detail }}</b></label>
+                <label class="il-range"><span>Suavizar</span><input type="range" min="0" max="6" step="0.1" [value]="p.smoothing" (input)="param('smoothing', $event)" /><b>{{ p.smoothing.toFixed(1) }}</b></label>
+                <label class="il-check"><input type="checkbox" [checked]="p.keepCorners" (change)="tracer.setParam('keepCorners', !p.keepCorners)" /> Preservar cantos</label>
+                <il-num label="Largura" title="Largura do resultado na prancheta" unit="mm" [value]="store.vecWidthMm()" [min]="5" [max]="2000" [decimals]="0" (valueChange)="tracer.setWidth($event.value)" />
+                @if (refLayer(); as ref) {
+                  <label class="il-check"><input type="checkbox" [checked]="ref.visible" (change)="store.patch(ref.id, { visible: !ref.visible })" /> Mostrar a imagem original por baixo</label>
+                }
+              </div>
+            </section>
+            <p class="il-trace-status" [class.il-busy]="tracer.busy()">{{ tracer.busy() ? 'Vetorizando…' : store.vecInfo() }}</p>
           }
-          <button class="il-btn il-wide" (click)="fontInput.click()"><app-icon name="plus" [size]="13" /> Enviar fonte (.ttf, .otf, .woff)</button>
-          @if (fontStatus()) { <p class="il-note">{{ fontStatus() }}</p> }
-        </div>
-      </section>
+        }
 
-      <!-- estilo -->
-      @if (store.selection().length) {
-        <section class="il-section" [class.il-open]="isOpen('estilo')">
-          <button class="il-section-head" (click)="toggle('estilo')">
-            <span class="il-section-title"><app-icon name="edit" [size]="13" /> Cor e traço</span>
-            <span class="il-section-summary">{{ store.selection().length }} selecionada(s)</span>
-            <app-icon class="il-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="il-section-body">
-            @if (store.primary(); as l) {
-              <div class="il-row">
-                <label class="il-color"><span>Preenchimento</span>
-                  <input type="color" [value]="l.fill ?? '#ffffff'" [disabled]="!l.fill" (input)="setPaint('fill', $any($event.target).value, true)" (change)="endTyping()" /></label>
-                <label class="il-check"><input type="checkbox" [checked]="!!l.fill" (change)="setPaint('fill', l.fill ? null : store.currentFill())" /> usar</label>
-              </div>
-              <div class="il-row">
-                <label class="il-color"><span>Traço</span>
-                  <input type="color" [value]="l.stroke ?? '#222222'" [disabled]="!l.stroke" (input)="setPaint('stroke', $any($event.target).value, true)" (change)="endTyping()" /></label>
-                <label class="il-check"><input type="checkbox" [checked]="!!l.stroke" (change)="setPaint('stroke', l.stroke ? null : '#222222')" /> usar</label>
-                @if (l.stroke) {
-                  <label class="il-field"><span>mm</span><input type="number" min="0.05" max="50" step="0.05" [value]="round(l.strokeWidth)" (change)="store.patchSelection({ strokeWidth: clampNum(num($event), 0.05, 50) })" /></label>
-                }
-              </div>
-              <label class="il-slider"><span>Opacidade <strong>{{ (l.opacity * 100).toFixed(0) }}%</strong></span>
-                <input type="range" min="0" max="100" step="1" [value]="l.opacity * 100" (input)="store.patchSelection({ opacity: num($event) / 100 }, false)" (pointerdown)="store.begin()" (change)="store.end()" /></label>
-              <label class="il-check"><input type="checkbox" [checked]="l.cut" (change)="toggleCut(l)" /> Linha de corte (entra no SVG de corte)</label>
-            }
-            @if (store.palette().length) {
-              <span class="il-note">Cores do documento — clique pra aplicar; o lápis troca a cor em tudo.</span>
-              <div class="il-swatches">
-                @for (c of store.palette(); track c) {
-                  <span class="il-swatch-wrap">
-                    <button class="il-swatch" [style.background]="c" [title]="c" (click)="setPaint('fill', c)"></button>
-                    <label class="il-swatch-edit" title="Trocar esta cor em todo o documento">✎<input type="color" [value]="c" (change)="replaceColor(c, $any($event.target).value)" /></label>
-                  </span>
-                }
-              </div>
+        @case ('exportar') {
+          <section class="il-sec">
+            <div class="il-sec-body il-sec-body-top">
+              <label class="il-field"><span>Nome do arquivo</span><input [value]="fileName()" (input)="fileName.set($any($event.target).value)" /></label>
+              <label class="il-check"><input type="checkbox" [checked]="textAsText()" (change)="textAsText.set(!textAsText())" /> Texto reto editável (fonte embutida)</label>
+            </div>
+          </section>
+          <div class="il-export-list">
+            @for (e of exports; track e.id) {
+              <button type="button" class="il-export" [disabled]="busy() || !store.layers().length" (click)="runExport(e.id)">
+                <il-icon [name]="e.icon" [size]="20" />
+                <span><strong>{{ e.label }}</strong><small>{{ e.help }}</small></span>
+              </button>
             }
           </div>
-        </section>
+          @if (exportStatus()) { <p class="il-trace-status">{{ exportStatus() }}</p> }
+        }
       }
-
-      <!-- forma -->
-      @if (shape(); as s) {
-        <section class="il-section" [class.il-open]="isOpen('forma')">
-          <button class="il-section-head" (click)="toggle('forma')">
-            <span class="il-section-title"><app-icon name="rect" [size]="13" /> Forma</span>
-            <span class="il-section-summary">{{ s.name }}</span>
-            <app-icon class="il-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="il-section-body">
-            <div class="il-row">
-              <label class="il-field"><span>Largura (mm)</span><input type="number" min="0.5" step="0.5" [value]="round(s.w)" (change)="patchShape({ w: clampNum(num($event), 0.5, 5000) })" /></label>
-              <label class="il-field"><span>Altura (mm)</span><input type="number" min="0.5" step="0.5" [value]="round(s.h)" (change)="patchShape({ h: clampNum(num($event), 0.5, 5000) })" /></label>
-            </div>
-            @if (s.shape === 'retangulo') {
-              <label class="il-slider"><span>Cantos arredondados <strong>{{ s.radius.toFixed(1) }} mm</strong></span>
-                <input type="range" min="0" [max]="Math.min(s.w, s.h) / 2" step="0.5" [value]="s.radius" (input)="patchShape({ radius: num($event) }, true)" (change)="endTyping()" /></label>
-            }
-            @if (s.shape === 'estrela' || s.shape === 'poligono') {
-              <label class="il-slider"><span>{{ s.shape === 'estrela' ? 'Pontas' : 'Lados' }} <strong>{{ s.points }}</strong></span>
-                <input type="range" min="3" max="24" step="1" [value]="s.points" (input)="patchShape({ points: num($event) }, true)" (change)="endTyping()" /></label>
-            }
-            @if (s.shape === 'estrela') {
-              <label class="il-slider"><span>Miolo <strong>{{ (s.innerRatio * 100).toFixed(0) }}%</strong></span>
-                <input type="range" min="10" max="90" step="1" [value]="s.innerRatio * 100" (input)="patchShape({ innerRatio: num($event) / 100 }, true)" (change)="endTyping()" /></label>
-            }
-          </div>
-        </section>
-      }
-
-      <!-- organizar -->
-      @if (store.selection().length) {
-        <section class="il-section" [class.il-open]="isOpen('organizar')">
-          <button class="il-section-head" (click)="toggle('organizar')">
-            <span class="il-section-title"><app-icon name="grid" [size]="13" /> Posição e alinhamento</span>
-            <app-icon class="il-chevron" name="chevron" [size]="14" />
-          </button>
-          <div class="il-section-body">
-            @if (geometry(); as g) {
-              <div class="il-row">
-                <label class="il-field"><span>X (mm)</span><input type="number" step="0.5" [value]="round(g.x)" (change)="moveTo('x', num($event))" /></label>
-                <label class="il-field"><span>Y (mm)</span><input type="number" step="0.5" [value]="round(g.y)" (change)="moveTo('y', num($event))" /></label>
-              </div>
-              <div class="il-row">
-                <label class="il-field"><span>Largura</span><input type="number" min="0.1" step="0.5" [value]="round(g.w)" (change)="resizeTo('w', num($event))" /></label>
-                <label class="il-field"><span>Altura</span><input type="number" min="0.1" step="0.5" [value]="round(g.h)" (change)="resizeTo('h', num($event))" /></label>
-                @if (store.primary(); as l) {
-                  <label class="il-field"><span>Giro (°)</span><input type="number" step="1" [value]="round(l.rotation)" (change)="rotateTo(num($event))" /></label>
-                }
-              </div>
-              <label class="il-check"><input type="checkbox" [checked]="keepRatio()" (change)="keepRatio.set(!keepRatio())" /> Manter proporção</label>
-            }
-            <span class="il-note">{{ store.selection().length > 1 ? 'Alinhar entre si' : 'Alinhar à prancheta' }}</span>
-            <div class="il-grid6">
-              @for (a of alignModes; track a.id) {
-                <button class="il-btn" [title]="a.label" (click)="store.align(a.id)">{{ a.glyph }}</button>
-              }
-            </div>
-            <div class="il-row">
-              <button class="il-btn il-grow" [disabled]="store.selection().length < 3" (click)="store.distribute('h')" title="Mesmo espaço na horizontal">⇹ Distribuir</button>
-              <button class="il-btn il-grow" [disabled]="store.selection().length < 3" (click)="store.distribute('v')" title="Mesmo espaço na vertical">⇅ Distribuir</button>
-            </div>
-            <div class="il-row">
-              <button class="il-btn il-grow" (click)="store.flip('h')">⇋ Espelhar</button>
-              <button class="il-btn il-grow" (click)="store.flip('v')">⇵ Virar</button>
-            </div>
-            <div class="il-row">
-              <button class="il-btn il-grow" (click)="store.reorder(store.selectedIds(), 'topo')" title="Trazer pra frente de tudo"><app-icon name="bring-to-front" [size]="13" /></button>
-              <button class="il-btn il-grow" (click)="store.reorder(store.selectedIds(), 'frente')" title="Um passo pra frente">↑</button>
-              <button class="il-btn il-grow" (click)="store.reorder(store.selectedIds(), 'tras')" title="Um passo pra trás">↓</button>
-              <button class="il-btn il-grow" (click)="store.reorder(store.selectedIds(), 'fundo')" title="Mandar pro fundo"><app-icon name="send-to-back" [size]="13" /></button>
-            </div>
-            <div class="il-row">
-              <button class="il-btn il-grow" [disabled]="store.selection().length < 2" (click)="store.group()">Agrupar</button>
-              <button class="il-btn il-grow" [disabled]="!selectionGrouped()" (click)="store.ungroup()">Desagrupar</button>
-            </div>
-            <div class="il-row">
-              <button class="il-btn il-grow" (click)="store.duplicate(store.selectedIds())"><app-icon name="duplicate" [size]="13" /> Duplicar</button>
-              <button class="il-btn il-grow il-danger" (click)="store.remove(store.selectedIds())"><app-icon name="delete" [size]="13" /> Apagar</button>
-            </div>
-          </div>
-        </section>
-      }
-
-      <!-- combinar -->
-      <section class="il-section" [class.il-open]="isOpen('combinar')">
-        <button class="il-section-head" (click)="toggle('combinar')">
-          <span class="il-section-title"><app-icon name="duplicate" [size]="13" /> Soldar e contornos</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="il-section-body">
-          <div class="il-row">
-            <button class="il-btn il-grow" [disabled]="vectorCount() < 1" (click)="combine('unir')" title="Solda tudo numa peça só (letras cursivas, peças encostadas)">Soldar</button>
-            <button class="il-btn il-grow" [disabled]="vectorCount() < 2" (click)="combine('subtrair')" title="Tira da camada de baixo o que está por cima">Subtrair</button>
-          </div>
-          <div class="il-row">
-            <button class="il-btn il-grow" [disabled]="vectorCount() < 2" (click)="combine('intersecao')">Interseção</button>
-            <button class="il-btn il-grow" [disabled]="vectorCount() < 2" (click)="combine('excluir')">Excluir sobreposição</button>
-          </div>
-          <div class="il-row">
-            <button class="il-btn il-grow" [disabled]="!canBreak()" (click)="store.breakApart()">Separar formas</button>
-            <button class="il-btn il-grow" [disabled]="!canConvert()" (click)="store.convertToPath(store.selectedIds())">Converter em caminho</button>
-          </div>
-          <hr class="il-hr" />
-          <label class="il-slider"><span>Contorno com margem <strong>{{ outlineMm().toFixed(1) }} mm</strong></span>
-            <input type="range" min="0" max="20" step="0.5" [value]="outlineMm()" (input)="outlineMm.set(num($event))" /></label>
-          <label class="il-check"><input type="checkbox" [checked]="outlineOuter()" (change)="outlineOuter.set(!outlineOuter())" /> Só o contorno de fora (fecha os vãos)</label>
-          <button class="il-btn il-wide" [disabled]="!store.layers().length" (click)="outline()">
-            Criar contorno {{ vectorCount() ? 'da seleção' : 'de tudo' }}
-          </button>
-          <p class="il-note">O contorno sai em vermelho, marcado como linha de corte e atrás da arte. Pra adesivo com fundo branco, dê preenchimento branco a ele.</p>
-        </div>
-      </section>
-
-      <!-- nós -->
-      @if (store.tool() === 'nos') {
-        <section class="il-section il-open">
-          <div class="il-section-head"><span class="il-section-title">◇ Nós</span></div>
-          <div class="il-section-body">
-            @if (pathLayer(); as pl) {
-              <p class="il-note">{{ nodeTotal() }} nós. Clique num nó pra ver as alças.</p>
-              <div class="il-row">
-                <button class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="nodeOp('smooth')">Suavizar</button>
-                <button class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="nodeOp('corner')">Canto</button>
-              </div>
-              <div class="il-row">
-                <button class="il-btn il-grow" [disabled]="!store.nodeSel()" (click)="nodeOp('add')">+ Nó depois</button>
-                <button class="il-btn il-grow il-danger" [disabled]="!store.nodeSel()" (click)="deleteNode()">Apagar nó</button>
-              </div>
-            } @else if (store.primary(); as l) {
-              <p class="il-note">"{{ l.name }}" não é caminho.</p>
-              @if (l.kind === 'texto' || l.kind === 'forma') {
-                <button class="il-btn il-wide" (click)="store.convertToPath([l.id])">Converter em caminho</button>
-              }
-            } @else {
-              <p class="il-note">Clique num caminho pra editar os nós dele.</p>
-            }
-          </div>
-        </section>
-      }
-
-      <!-- camadas -->
-      <section class="il-section" [class.il-open]="isOpen('camadas')">
-        <button class="il-section-head" (click)="toggle('camadas')">
-          <span class="il-section-title"><app-icon name="list-view" [size]="13" /> Camadas</span>
-          <span class="il-section-summary">{{ store.layers().length }}</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="il-section-body">
-          @if (!store.layers().length) { <p class="il-note">Nada ainda.</p> }
-          <div class="il-layers">
-            @for (l of stack(); track l.id) {
-              <div class="il-layer" [class.il-layer-sel]="isSelected(l.id)" [class.il-layer-off]="!l.visible" (click)="store.select(l.id, $any($event).shiftKey)">
-                <span class="il-layer-dot" [style.background]="l.kind === 'imagem' ? 'transparent' : (l.fill ?? l.stroke ?? 'transparent')" [class.il-layer-img]="l.kind === 'imagem'"></span>
-                <input class="il-layer-name" [value]="l.name" (click)="$event.stopPropagation()" (change)="store.patch(l.id, { name: $any($event.target).value })" />
-                @if (l.groupId) { <span class="il-layer-tag" title="Em grupo">G</span> }
-                @if (l.cut) { <span class="il-layer-tag il-cut" title="Linha de corte">✂</span> }
-                <button class="il-icon-btn" [class.il-active]="!l.visible" [title]="l.visible ? 'Ocultar' : 'Mostrar'" (click)="$event.stopPropagation(); store.patch(l.id, { visible: !l.visible })"><app-icon name="eye" [size]="12" /></button>
-                <button class="il-icon-btn" [class.il-active]="l.locked" [title]="l.locked ? 'Destravar' : 'Travar'" (click)="$event.stopPropagation(); store.patch(l.id, { locked: !l.locked })">{{ l.locked ? '🔒' : '🔓' }}</button>
-              </div>
-            }
-          </div>
-        </div>
-      </section>
-
-      <!-- documento -->
-      <section class="il-section" [class.il-open]="isOpen('documento')">
-        <button class="il-section-head" (click)="toggle('documento')">
-          <span class="il-section-title"><app-icon name="fit-to-screen" [size]="13" /> Prancheta</span>
-          <span class="il-section-summary">{{ store.widthMm() }} × {{ store.heightMm() }} mm</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="il-section-body">
-          <div class="il-chips">
-            @for (d of docPresets; track d.label) {
-              <button class="il-chip" [class.il-active]="store.widthMm() === d.w && store.heightMm() === d.h" (click)="store.setDocSize(d.w, d.h)">{{ d.label }}</button>
-            }
-          </div>
-          <div class="il-row">
-            <label class="il-field"><span>Largura (mm)</span><input type="number" min="10" max="3000" step="1" [value]="store.widthMm()" (change)="store.setDocSize(clampNum(num($event), 10, 3000), store.heightMm())" /></label>
-            <label class="il-field"><span>Altura (mm)</span><input type="number" min="10" max="3000" step="1" [value]="store.heightMm()" (change)="store.setDocSize(store.widthMm(), clampNum(num($event), 10, 3000))" /></label>
-          </div>
-          <button class="il-btn il-wide" [disabled]="!store.layers().length" (click)="fitBoard()">Ajustar a prancheta ao desenho</button>
-          <button class="il-btn il-wide il-danger" [disabled]="!store.layers().length" (click)="clearAll()"><app-icon name="delete" [size]="13" /> Começar do zero</button>
-        </div>
-      </section>
-
-      <!-- exportar -->
-      <section class="il-section" [class.il-open]="isOpen('exportar')">
-        <button class="il-section-head" (click)="toggle('exportar')">
-          <span class="il-section-title"><app-icon name="download" [size]="13" /> Exportar</span>
-          <app-icon class="il-chevron" name="chevron" [size]="14" />
-        </button>
-        <div class="il-section-body">
-          <label class="il-field"><span>Nome do arquivo</span><input [value]="fileName()" (input)="fileName.set($any($event.target).value)" /></label>
-          <label class="il-check"><input type="checkbox" [checked]="textAsText()" (change)="textAsText.set(!textAsText())" /> Texto reto editável (fonte embutida)</label>
-          <button class="il-btn il-wide il-primary" [disabled]="busy() || !store.layers().length" (click)="exportSvg(false)"><app-icon name="download" [size]="13" /> SVG completo</button>
-          <button class="il-btn il-wide" [disabled]="busy() || !store.layers().length" (click)="exportSvg(true)"><app-icon name="download" [size]="13" /> SVG só de corte</button>
-          <div class="il-row">
-            <button class="il-btn il-grow" [disabled]="busy() || !store.layers().length" (click)="exportPng()">PNG {{ dpi }} DPI</button>
-            <button class="il-btn il-grow" [disabled]="busy() || !store.layers().length" (click)="exportPdf()">PDF</button>
-          </div>
-          <hr class="il-hr" />
-          <button class="il-btn il-wide" [disabled]="busy() || !store.layers().length" (click)="toCut()">Enviar pro Print &amp; Cut</button>
-          <button class="il-btn il-wide" [disabled]="busy() || !store.layers().length" (click)="toTemplate()">Usar como Molde SVG</button>
-          <p class="il-note">O SVG de corte leva só as camadas marcadas como linha de corte (ou todo o vetor, se nenhuma estiver), em vermelho e em mm — pronto pro CanvasWorkspace.</p>
-          @if (exportStatus()) { <p class="il-note">{{ exportStatus() }}</p> }
-        </div>
-      </section>
-    </aside>
+    </div>
   `,
   styles: [`
-    app-illustration-panel { display: contents; }
-    .il-chips, .il-font-cats { display: flex; flex-wrap: wrap; gap: 4px; }
-    .il-chip {
-      padding: 5px 9px; font-size: 11px; font-weight: 600; color: var(--text-muted);
-      background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+    .il-dock { grid-area: dock; display: flex; flex-direction: column; min-height: 0; background: var(--il-chrome); border-left: 1px solid var(--il-line); }
+    .il-tabs { display: flex; border-bottom: 1px solid var(--il-line); background: var(--il-chrome-2); flex-shrink: 0; }
+    .il-tab {
+      flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 8px; white-space: nowrap;
+      border: none; border-right: 1px solid var(--il-line); background: none; color: var(--text-muted); font-size: 11px; font-weight: 600;
     }
-    .il-chip:hover { border-color: var(--accent); color: var(--accent); }
-    .il-chip.il-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-    .il-suggest { color: var(--accent); }
-    .il-font-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; max-height: 208px; overflow-y: auto; padding-right: 2px; }
-    .il-font {
-      display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 7px; min-width: 0;
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); text-align: left;
+    .il-tab:last-child { border-right: none; }
+    .il-tab:hover { color: var(--text); }
+    .il-tab.il-on { background: var(--il-chrome); color: var(--text); box-shadow: inset 0 2px 0 var(--il-blue); }
+    .il-tab-body { flex: 1; min-height: 0; overflow-y: auto; }
+    .il-tab-body.il-tab-fill { display: flex; flex-direction: column; overflow: hidden; }
+    .il-sec { border-bottom: 1px solid var(--il-line); }
+    .il-sec-head {
+      width: 100%; display: flex; align-items: center; gap: 5px; padding: 8px 10px; border: none; background: none;
+      color: var(--text); font-size: 11px; font-weight: 700; text-align: left; letter-spacing: 0.01em;
     }
-    .il-font:hover { border-color: var(--accent); }
-    .il-font.il-active { border-color: var(--accent); background: var(--accent-soft); }
-    .il-font-sample { font-size: 19px; line-height: 1.15; }
-    .il-font-name { font-family: var(--font-body, inherit); font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-    .il-color { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); flex: 1; }
-    .il-color input { width: 38px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
-    .il-color input:disabled { opacity: 0.35; }
-    .il-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+    .il-sec-head small { font-weight: 500; color: var(--text-muted); margin-left: 4px; }
+    .il-sec-head il-icon { color: var(--text-muted); transition: transform 0.12s; }
+    .il-sec.il-closed .il-sec-head il-icon { transform: rotate(-90deg); }
+    .il-sec.il-closed .il-sec-body { display: none; }
+    .il-sec-static { cursor: default; }
+    .il-sec-body { display: flex; flex-direction: column; gap: 7px; padding: 0 10px 10px; }
+    .il-sec-body-top { padding-top: 10px; }
+    .il-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .il-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+    .il-chip { padding: 3px 8px; border-radius: 999px; border: 1px solid var(--il-line); background: none; color: var(--text-muted); font-size: 11px; }
+    .il-chip:hover { color: var(--text); border-color: var(--il-line-strong); }
+    .il-chip.il-on { color: var(--text); border-color: var(--text); }
+    .il-paint-row { display: flex; align-items: center; gap: 6px; }
+    .il-paint-label { flex: 1; font-size: 12px; cursor: pointer; }
+    .il-paint-row.il-on .il-paint-label { font-weight: 700; }
+    .il-hex { width: 76px; height: 24px; padding: 0 6px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
+    .il-mini-title { font-size: 11px; font-weight: 700; margin-top: 3px; }
+    .il-mini-title small { font-weight: 400; color: var(--text-muted); }
+    .il-swatches { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+    .il-swatch { aspect-ratio: 1; width: 100%; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 2px; }
+    .il-swatch:hover { outline: 2px solid var(--il-blue); outline-offset: 1px; }
     .il-swatch-wrap { position: relative; }
-    .il-swatch { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); padding: 0; }
     .il-swatch-edit {
-      position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center;
-      font-size: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 50%; cursor: pointer; color: var(--text-muted);
+      position: absolute; right: -4px; bottom: -4px; width: 13px; height: 13px; display: flex; align-items: center; justify-content: center;
+      font-size: 8px; background: var(--il-chrome); border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; color: var(--text-muted);
     }
     .il-swatch-edit input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
-    .il-grid6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
-    .il-grid6 .il-btn { padding: 7px 0; font-size: 14px; }
-    .il-hr { border: none; border-top: 1px solid var(--border); margin: 2px 0; width: 100%; }
-    .il-layers { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
-    .il-layer {
-      display: flex; align-items: center; gap: 5px; padding: 4px 5px; cursor: pointer;
-      border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);
+    .il-textarea { width: 100%; min-height: 48px; resize: vertical; padding: 5px 7px; font: 13px var(--font-body, inherit); color: var(--text); background: var(--il-field); border: 1px solid var(--il-line); border-radius: 4px; }
+    .il-textarea:focus { outline: none; border-color: var(--il-blue); }
+    .il-seg { display: inline-flex; border: 1px solid var(--il-line); border-radius: 4px; overflow: hidden; }
+    .il-seg button { width: 28px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: none; border-right: 1px solid var(--il-line); background: var(--il-field); color: var(--text); }
+    .il-seg button:last-child { border-right: none; }
+    .il-seg button.il-on { background: var(--il-active); color: var(--il-blue); }
+    .il-seg button:disabled { opacity: 0.35; }
+    .il-range { display: grid; grid-template-columns: 64px 1fr 38px; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+    .il-range input { width: 100%; accent-color: var(--il-blue); }
+    .il-range b { font-weight: 600; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+    .il-suggest { color: var(--il-blue); }
+    .il-trace-src { display: flex; gap: 8px; align-items: center; }
+    .il-trace-src img { width: 72px; height: 72px; object-fit: contain; background: repeating-conic-gradient(#e6e6e6 0 25%, #fff 0 50%) 0 0 / 10px 10px; border: 1px solid var(--il-line); border-radius: 4px; }
+    .il-trace-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 11px; color: var(--text-muted); }
+    .il-trace-meta strong { color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .il-drop {
+      display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px 12px; text-align: center;
+      background: var(--il-field); border: 1.5px dashed var(--il-line-strong); border-radius: 6px; color: var(--text-muted); font-size: 11px; line-height: 1.45;
     }
-    .il-layer.il-layer-sel { border-color: var(--accent); background: var(--accent-soft); }
-    .il-layer.il-layer-off { opacity: 0.55; }
-    .il-layer-dot { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--border); flex-shrink: 0; }
-    .il-layer-img { background-image: linear-gradient(45deg, var(--border) 25%, transparent 25%, transparent 75%, var(--border) 75%); background-size: 6px 6px; }
-    .il-layer-name { flex: 1; min-width: 0; font-size: 12px; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 2px 4px; }
-    .il-layer-name:focus { border-color: var(--border); background: var(--surface); }
-    .il-layer-tag { font-size: 10px; font-weight: 700; color: var(--text-muted); }
-    .il-layer-tag.il-cut { color: #e53935; }
+    .il-drop strong { color: var(--text); font-size: 12px; }
+    .il-drop:hover { border-color: var(--il-blue); color: var(--text); }
+    .il-trace-status { margin: 8px 10px; font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+    .il-trace-status.il-busy { color: var(--il-blue); }
+    .il-export-list { display: flex; flex-direction: column; padding: 6px; gap: 2px; }
+    .il-export { display: flex; align-items: center; gap: 10px; padding: 8px 8px; border: none; border-radius: 4px; background: none; color: var(--text); text-align: left; }
+    .il-export:hover:not(:disabled) { background: var(--il-hover); }
+    .il-export:disabled { opacity: 0.45; }
+    .il-export span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .il-export strong { font-size: 12px; }
+    .il-export small { font-size: 10.5px; color: var(--text-muted); line-height: 1.35; }
+    .il-link { display: inline-flex; align-items: center; gap: 5px; margin: 10px; padding: 0; border: none; background: none; color: var(--text-muted); font-size: 11px; }
+    .il-link:hover { color: var(--text); }
   `],
 })
 export class IllustrationPanelComponent {
-  readonly dpi = EXPORT_DPI;
+  store = inject(IllustrationStore);
+  tracer = inject(IllustrationTracer);
+
   readonly Math = Math;
+  readonly docPresets = DOC_PRESETS;
+  readonly swatches = SWATCHES;
+  readonly aligns = ALIGN_BUTTONS;
+  readonly pathfinder = PATHFINDER;
   readonly presetOrder = PRESET_ORDER;
   readonly presetLabels = PRESET_LABELS;
-  readonly docPresets = DOC_PRESETS;
-  readonly num = num;
-  readonly aligns: { id: TextAlign; label: string }[] = [
-    { id: 'left', label: 'Esquerda' }, { id: 'center', label: 'Centro' }, { id: 'right', label: 'Direita' },
+  readonly tabs: { id: DockTab; label: string; icon: IlIconName }[] = [
+    { id: 'props', label: 'Propriedades', icon: 'properties' },
+    { id: 'camadas', label: 'Camadas', icon: 'layers' },
+    { id: 'vetorizar', label: 'Vetorizar', icon: 'trace' },
+    { id: 'exportar', label: 'Exportar', icon: 'export' },
   ];
-  readonly curves: { id: TextCurve; label: string }[] = [
-    { id: 'reta', label: 'Reto' }, { id: 'arco', label: 'Arco' }, { id: 'caminho', label: 'Caminho' },
+  readonly paints: { id: PaintTarget; label: string }[] = [
+    { id: 'fill', label: 'Preenchimento' },
+    { id: 'stroke', label: 'Traço' },
   ];
-  readonly alignModes: { id: AlignMode; label: string; glyph: string }[] = [
-    { id: 'left', label: 'Esquerda', glyph: '⇤' }, { id: 'hcenter', label: 'Centro horizontal', glyph: '↔' },
-    { id: 'right', label: 'Direita', glyph: '⇥' }, { id: 'top', label: 'Topo', glyph: '⤒' },
-    { id: 'vcenter', label: 'Centro vertical', glyph: '↕' }, { id: 'bottom', label: 'Base', glyph: '⤓' },
+  readonly textAligns: { id: TextAlign; icon: IlIconName; label: string }[] = [
+    { id: 'left', icon: 'text-left', label: 'À esquerda' },
+    { id: 'center', icon: 'text-center', label: 'Centralizado' },
+    { id: 'right', icon: 'text-right', label: 'À direita' },
+  ];
+  readonly curves: { id: TextCurve; icon: IlIconName; label: string }[] = [
+    { id: 'reta', icon: 'text-straight', label: 'Texto reto' },
+    { id: 'arco', icon: 'text-arc', label: 'Texto em arco' },
+    { id: 'caminho', icon: 'text-path', label: 'Texto em caminho' },
+  ];
+  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde'; icon: IlIconName; label: string; help: string }[] = [
+    { id: 'svg', icon: 'export', label: 'SVG', help: 'Vetor em mm, abre no Inkscape, Illustrator e CanvasWorkspace' },
+    { id: 'corte', icon: 'cut', label: 'SVG de corte', help: 'Só as linhas de corte, em vermelho — pra ScanNCut' },
+    { id: 'png', icon: 'image', label: `PNG ${EXPORT_DPI} DPI`, help: 'Imagem transparente no tamanho físico, sem as linhas de corte' },
+    { id: 'pdf', icon: 'artboard', label: 'PDF', help: 'Página no tamanho da prancheta, pronta pra imprimir' },
+    { id: 'printcut', icon: 'offset', label: 'Enviar pro Print & Cut', help: 'A arte entra como imagem nova, na largura do desenho' },
+    { id: 'molde', icon: 'properties', label: 'Usar como Molde SVG', help: 'Abre a ilustração no modo de molde, pra encaixar fotos' },
   ];
 
   readonly sendToCut = output<{ canvas: HTMLCanvasElement; name: string; widthMm: number }>();
   readonly sendToTemplate = output<{ svg: string; name: string }>();
+  readonly showShortcuts = output<void>();
 
-  textArea = viewChild<ElementRef<HTMLTextAreaElement>>('textArea');
-
-  open = signal<Record<string, boolean>>({ vetorizar: true, texto: true, estilo: true, forma: true, organizar: false, combinar: false, camadas: true, documento: false, exportar: false });
-  vecBusy = signal(false);
-  vecError = signal('');
-  fontCategory = signal<FontCategory>('Sem serifa');
-  fontStatus = signal('');
+  tab = signal<DockTab>('props');
+  open = signal<Record<string, boolean>>(loadOpen());
   outlineMm = signal(3);
   outlineOuter = signal(true);
-  keepRatio = signal(true);
   textAsText = signal(false);
   busy = signal(false);
   exportStatus = signal('');
   fileName = signal('ilustracao');
 
-  private runTimer?: ReturnType<typeof setTimeout>;
-  private typing = false;
+  private textArea = viewChild<ElementRef<HTMLTextAreaElement>>('textArea');
+  private color = viewChild<ElementRef<HTMLInputElement>>('color');
+  private colorTarget: PaintTarget = 'fill';
 
-  constructor(public store: IllustrationStore, private vectorizer: VectorizeService) {
-    // Texto novo (ferramenta Texto, duplo clique): foca o campo e seleciona tudo.
+  constructor() {
+    // Texto novo (ferramenta Texto, duplo clique): abre Propriedades e foca o campo.
     effect(() => {
       if (!this.store.focusText()) return;
-      this.open.update((o) => ({ ...o, texto: true }));
+      this.tab.set('props');
+      this.open.update((o) => ({ ...o, char: true }));
       setTimeout(() => {
         const el = this.textArea()?.nativeElement;
         el?.focus();
         el?.select();
       });
     });
+    // Imagem nova pra vetorizar: mostra a aba do rastreamento.
+    effect(() => {
+      if (this.tracer.opened()) this.tab.set('vetorizar');
+    });
+    effect(() => {
+      const src = this.store.vecSource();
+      if (src) this.fileName.set(src.name);
+    });
   }
 
-  isOpen(id: SectionId): boolean {
-    return this.open()[id] ?? false;
+  closed(id: string): boolean {
+    return this.open()[id] === false;
   }
 
-  toggle(id: SectionId): void {
-    this.open.update((o) => ({ ...o, [id]: !o[id] }));
+  flip(id: string): void {
+    this.open.update((o) => ({ ...o, [id]: o[id] === false }));
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(this.open()));
+    } catch { /* preferência é só conveniência */ }
   }
 
-  clampNum(v: number, lo: number, hi: number): number {
-    return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo;
-  }
-
-  round(v: number): number {
-    return Math.round(v * 100) / 100;
+  round0(v: number): number {
+    return Math.round(v);
   }
 
   // ---------- seleção ----------
+
+  vectorSel = computed(() => this.store.selection().filter((l) => l.kind !== 'imagem'));
 
   /** O texto em edição: o principal, ou o único texto da seleção — no "texto
    * em caminho" o último clique costuma ser na forma, não no texto. */
@@ -557,7 +586,7 @@ export class IllustrationPanelComponent {
 
   shape = computed(() => {
     const l = this.store.primary();
-    return l?.kind === 'forma' ? l : null;
+    return l?.kind === 'forma' && this.store.selection().length === 1 ? l : null;
   });
 
   pathLayer = computed(() => {
@@ -566,222 +595,85 @@ export class IllustrationPanelComponent {
   });
 
   nodeTotal = computed(() => countNodes(this.pathLayer()?.paths ?? []));
-
-  vectorCount = computed(() => this.store.selection().filter((l) => l.kind !== 'imagem').length);
   canBreak = computed(() => this.store.selection().some((l) => l.kind === 'caminho' || l.kind === 'forma'));
   canConvert = computed(() => this.store.selection().some((l) => l.kind === 'texto' || l.kind === 'forma'));
-  selectionGrouped = computed(() => this.store.selection().some((l) => l.groupId));
-  stack = computed(() => [...this.store.layers()].reverse());
-
-  /** Caminho ou forma selecionado junto com o texto: vira a guia. */
+  grouped = computed(() => this.store.selection().some((l) => l.groupId));
   guideCandidate = computed(() => this.store.selection().find((l) => l.kind === 'caminho' || l.kind === 'forma') ?? null);
-
-  geometry = computed(() => {
-    this.store.fonts.version();
-    const b = this.store.selectionBounds();
-    if (!b) return null;
-    const l = this.store.primary();
-    if (this.store.selection().length === 1 && l) {
-      const lb = this.store.localBounds(l);
-      return { x: b.minX, y: b.minY, w: (lb.maxX - lb.minX) * Math.abs(l.scaleX), h: (lb.maxY - lb.minY) * Math.abs(l.scaleY) };
-    }
-    return { x: b.minX, y: b.minY, w: b.maxX - b.minX, h: b.maxY - b.minY };
+  suggested = computed(() => this.store.vecSuggested());
+  refLayer = computed(() => {
+    const id = this.store.vecRefId();
+    const l = id ? this.store.layer(id) : null;
+    return l?.kind === 'imagem' ? l : null;
   });
 
-  isSelected(id: string): boolean {
-    return this.store.selectedIds().includes(id);
-  }
-
-  categories(): FontCategory[] {
-    return FONT_CATEGORIES.filter((c) => c !== 'Enviadas' || this.store.fonts.uploads().length);
-  }
-
-  fontsOf(c: FontCategory): FontFamily[] {
-    return this.store.fonts.families().filter((f) => f.category === c);
+  weightOf(t: TextLayer): number {
+    return nearestWeight(this.store.fonts.family(t.fontId).weights, t.weight);
   }
 
   hasBold(t: TextLayer): boolean {
     return this.store.fonts.family(t.fontId).weights.includes(700);
   }
 
-  // ---------- vetorização ----------
+  // ---------- transformar ----------
 
-  onImageInput(event: Event): void {
+  onGeom(axis: 'x' | 'y' | 'w' | 'h', e: NumChange): void {
+    const run = (record: boolean) => (axis === 'x' || axis === 'y'
+      ? this.store.moveSelectionTo(axis, e.value, record)
+      : this.store.resizeSelectionTo(axis, e.value, record));
+    if (e.live) this.store.live(() => run(false));
+    else run(true);
+  }
+
+  onRotate(e: NumChange): void {
+    if (e.live) this.store.live(() => this.store.rotateSelectionTo(e.value, false));
+    else this.store.rotateSelectionTo(e.value);
+  }
+
+  // ---------- aparência ----------
+
+  paintOf(which: PaintTarget): string | null {
+    return which === 'fill' ? this.store.shownFill() : this.store.shownStroke();
+  }
+
+  openColor(target: PaintTarget): void {
+    this.colorTarget = target;
+    this.store.paintTarget.set(target);
+    const el = this.color()?.nativeElement;
+    if (!el) return;
+    el.value = normalizeHex(this.paintOf(target)) ?? '#000000';
+    el.click();
+  }
+
+  onColor(event: Event): void {
+    this.store.setPaint(this.colorTarget, (event.target as HTMLInputElement).value, true);
+  }
+
+  onHex(which: PaintTarget, event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void this.loadFile(file);
-    input.value = '';
+    const raw = input.value.trim();
+    const hex = normalizeHex(raw.startsWith('#') ? raw : `#${raw}`);
+    if (!raw) this.store.setPaint(which, null);
+    else if (hex) this.store.setPaint(which, hex);
+    else input.value = this.paintOf(which) ?? '';
   }
 
-  async loadFile(file: File): Promise<void> {
-    this.vecError.set('');
-    this.open.update((o) => ({ ...o, vetorizar: true }));
-    try {
-      let blob: Blob = file;
-      if (isHeicFile(file)) {
-        this.store.vecInfo.set('Convertendo a foto do iPhone…');
-        const { heicTo } = await import('heic-to');
-        blob = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 });
-      }
-      const url = URL.createObjectURL(blob);
-      try {
-        const img = await readImage(url);
-        await this.loadCanvas(img, file.name.replace(/\.[^.]+$/, '') || 'imagem');
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    } catch (err) {
-      this.vecError.set(err instanceof Error ? err.message : 'Não consegui abrir essa imagem.');
-    }
+  onStroke(e: NumChange): void {
+    this.store.setStrokeWidth(e.value, e.live);
   }
 
-  /** Começa uma vetorização nova: mede a imagem, escolhe a leitura e roda. */
-  async loadCanvas(source: HTMLImageElement | HTMLCanvasElement, name: string): Promise<void> {
-    this.open.update((o) => ({ ...o, vetorizar: true }));
-    this.vecError.set('');
-    const canvas = vectorizeCanvas(source);
-    this.store.vecSource.set({ name, canvas, dataUrl: encodeCanvas(canvas) });
-    this.store.vecGroupId.set(null);
-    this.store.vecRefId.set(null);
-    const W = this.store.widthMm(), H = this.store.heightMm();
-    const aspect = canvas.width / canvas.height;
-    this.store.vecWidthMm.set(Math.round(Math.min(W * 0.8, H * 0.8 * aspect)));
-    this.vecBusy.set(true);
-    try {
-      const stats = await this.vectorizer.analyze(canvas);
-      const s = suggestPreset(stats);
-      this.store.vecStats.set(stats);
-      this.store.vecPreset.set(s.preset);
-      this.store.vecReason.set(s.reason);
-      this.store.vecParams.set(s.params);
-      this.fileName.set(name);
-      await this.run();
-    } catch {
-      this.vecBusy.set(false);
-      this.vecError.set('Não consegui analisar essa imagem.');
-    }
-  }
-
-  choosePreset(id: PresetId): void {
-    this.store.vecPreset.set(id);
-    this.store.vecParams.set(presetParams(id, this.store.vecStats()));
-    this.schedule(0);
-  }
-
-  setParam<K extends keyof VectorizeParams>(key: K, value: VectorizeParams[K]): void {
-    const p = this.store.vecParams();
-    if (!p) return;
-    this.store.vecParams.set({ ...p, [key]: value });
-    this.schedule(350);
-  }
-
-  setVecWidth(w: number): void {
-    if (!(w > 0)) return;
-    this.store.vecWidthMm.set(this.clampNum(w, 5, 2000));
-    this.schedule(0);
-  }
-
-  private schedule(ms: number): void {
-    clearTimeout(this.runTimer);
-    this.runTimer = setTimeout(() => void this.run(), ms);
-  }
-
-  private async run(): Promise<void> {
-    const src = this.store.vecSource();
-    const params = this.store.vecParams();
-    if (!src || !params) return;
-    this.vecBusy.set(true);
-    try {
-      const result = await this.vectorizer.run(src.canvas, params);
-      this.store.applyVectorization(result, this.store.vecWidthMm());
-      const nodes = result.layers.reduce((s, l) => s + countNodes(l.paths), 0);
-      const shapes = result.layers.reduce((s, l) => s + l.paths.length, 0);
-      this.store.vecInfo.set(result.layers.length
-        ? `${result.layers.length} camada(s) · ${shapes} forma(s) · ${nodes.toLocaleString('pt-BR')} nós${nodes > 40000 ? ' — é muito: baixe o detalhe ou as cores.' : ''}`
-        : 'Nada foi encontrado com esses ajustes — mexa no limiar ou no detalhe.');
-      this.vecBusy.set(false);
-    } catch (err) {
-      if (err instanceof StaleRequest) return;
-      this.vecBusy.set(false);
-      this.vecError.set('A vetorização falhou. Tente uma imagem menor ou menos cores.');
-    }
-  }
-
-  // ---------- texto ----------
-
-  addText(): void {
-    const t = this.store.newText(this.store.widthMm() / 2, this.store.heightMm() / 2);
-    this.store.addLayers([t]);
-    this.store.focusText.update((v) => v + 1);
-  }
-
-  /** Digitação e controles deslizantes viram um passo só no histórico. */
-  patchText(patch: Partial<TextLayer>, continuous = false): void {
-    const t = this.text();
-    if (!t) return;
-    if (continuous) {
-      if (!this.typing) {
-        this.typing = true;
-        this.store.begin();
-      }
-      this.store.patch(t.id, patch, false);
-    } else {
-      this.store.patch(t.id, patch);
-    }
-  }
-
-  endTyping(): void {
-    if (!this.typing) return;
-    this.typing = false;
-    this.store.end();
-  }
-
-  setCurve(t: TextLayer, curve: TextCurve): void {
-    if (curve === 'caminho' && !t.guide) {
-      const guide = this.guideCandidate();
-      if (!guide || !this.store.attachTextToPath(t.id, guide.id)) return;
-      this.store.patch(guide.id, { visible: false }, false);
-      this.store.select(t.id);
-      return;
-    }
-    this.patchText({ curve });
-  }
-
-  onFontInput(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    this.fontStatus.set('Lendo a fonte…');
-    this.store.fonts.addUpload(file, uuid().slice(0, 8))
-      .then((up) => {
-        this.fontStatus.set(`"${up.name}" adicionada em "Enviadas".`);
-        this.fontCategory.set('Enviadas');
-        const t = this.text();
-        if (t) this.patchText({ fontId: this.store.fonts.uploadFontId(up.id) });
-      })
-      .catch((err) => this.fontStatus.set(err instanceof FontError ? err.message : 'Não consegui ler essa fonte.'));
-  }
-
-  // ---------- estilo ----------
-
-  setPaint(which: 'fill' | 'stroke', value: string | null, continuous = false): void {
-    if (value) this.store.currentFill.set(value);
-    const ids = this.store.selection().filter((l) => l.kind !== 'imagem').map((l) => l.id);
-    if (continuous) {
-      if (!this.typing) {
-        this.typing = true;
-        this.store.begin();
-      }
-      this.store.patchMany(ids, () => ({ [which]: value }), false);
-    } else {
-      this.store.patchMany(ids, () => ({ [which]: value }));
+  onOpacity(e: NumChange): void {
+    const ids = this.store.selectedIds();
+    const apply = () => this.store.patchMany(ids, () => ({ opacity: Math.max(0, Math.min(1, e.value / 100)) }), false);
+    if (e.live) this.store.live(apply);
+    else {
+      this.store.record();
+      apply();
     }
   }
 
   toggleCut(l: Layer): void {
     const cut = !l.cut;
-    this.store.patchSelection(cut ? { cut, stroke: l.stroke ?? CUT_COLOR } : { cut });
+    this.store.patchSelection(cut ? { cut, stroke: l.stroke ?? CUT_COLOR, strokeWidth: l.stroke ? l.strokeWidth : 0.3 } : { cut });
   }
 
   replaceColor(from: string, to: string): void {
@@ -795,56 +687,38 @@ export class IllustrationPanelComponent {
     });
   }
 
-  patchShape(patch: Partial<ShapeLayer>, continuous = false): void {
-    const s = this.shape();
-    if (!s) return;
-    if (continuous) {
-      if (!this.typing) {
-        this.typing = true;
-        this.store.begin();
-      }
-      this.store.patch(s.id, patch, false);
-    } else {
-      this.store.patch(s.id, patch);
-    }
+  // ---------- texto e forma ----------
+
+  liveText(t: TextLayer, patch: Partial<TextLayer>): void {
+    this.store.live(() => this.store.patch(t.id, patch, false));
   }
 
-  // ---------- posição ----------
-
-  moveTo(axis: 'x' | 'y', value: number): void {
-    const g = this.geometry();
-    if (!g || !Number.isFinite(value)) return;
-    const d = value - (axis === 'x' ? g.x : g.y);
-    this.store.patchMany(this.store.selectedIds(), (l) => (l.locked ? null : axis === 'x' ? { x: l.x + d } : { y: l.y + d }));
+  numText(t: TextLayer, key: 'sizeMm' | 'tracking' | 'lineHeight', e: NumChange): void {
+    const patch = { [key]: e.value } as Partial<TextLayer>;
+    if (e.live) this.liveText(t, patch);
+    else this.store.patch(t.id, patch);
   }
 
-  resizeTo(axis: 'w' | 'h', value: number): void {
-    const g = this.geometry();
-    if (!g || !(value > 0)) return;
-    const f = value / (axis === 'w' ? g.w : g.h);
-    if (!Number.isFinite(f) || f <= 0) return;
-    const fx = axis === 'w' || this.keepRatio() ? f : 1;
-    const fy = axis === 'h' || this.keepRatio() ? f : 1;
-    const sel = this.store.selection();
-    if (sel.length === 1) {
-      this.store.patch(sel[0].id, { scaleX: sel[0].scaleX * fx, scaleY: sel[0].scaleY * fy });
+  numShape(s: ShapeLayer, key: 'w' | 'h' | 'radius' | 'points' | 'innerRatio', e: NumChange): void {
+    const patch = { [key]: key === 'points' ? Math.round(e.value) : e.value } as Partial<ShapeLayer>;
+    if (e.live) this.store.live(() => this.store.patch(s.id, patch, false));
+    else this.store.patch(s.id, patch);
+  }
+
+  setCurve(t: TextLayer, curve: TextCurve): void {
+    if (curve === 'caminho' && !t.guide) {
+      const guide = this.guideCandidate();
+      if (!guide || !this.store.attachTextToPath(t.id, guide.id)) return;
+      this.store.patch(guide.id, { visible: false }, false);
+      this.store.select(t.id);
       return;
     }
-    // Várias: escala a partir do canto de cima à esquerda da seleção.
-    this.store.patchMany(sel.map((l) => l.id), (l) => ({
-      x: g.x + (l.x - g.x) * fx, y: g.y + (l.y - g.y) * fy, scaleX: l.scaleX * fx, scaleY: l.scaleY * fy,
-    }));
-  }
-
-  rotateTo(deg: number): void {
-    const l = this.store.primary();
-    if (!l || !Number.isFinite(deg)) return;
-    this.store.patch(l.id, { rotation: ((deg + 180) % 360 + 360) % 360 - 180 });
+    this.store.patch(t.id, { curve });
   }
 
   // ---------- combinar ----------
 
-  combine(op: BoolOp): void {
+  combine(op: (typeof PATHFINDER)[number]['id']): void {
     if (!this.store.combine(op)) this.store.status.set('Selecione as formas primeiro.');
   }
 
@@ -852,29 +726,17 @@ export class IllustrationPanelComponent {
     if (!this.store.outline(this.outlineMm(), this.outlineOuter())) this.store.status.set('Não há área pra contornar.');
   }
 
-  // ---------- nós ----------
+  // ---------- vetorizar ----------
 
-  nodeOp(op: 'smooth' | 'corner' | 'add'): void {
-    const sel = this.store.nodeSel();
-    const l = this.pathLayer();
-    if (!sel || !l) return;
-    const path = l.paths[sel.path];
-    if (!path) return;
-    const next = op === 'smooth' ? smoothNode(path, sel.node) : op === 'corner' ? cornerNode(path, sel.node) : addNodeAfter(path, sel.node);
-    this.store.record();
-    this.store.setPath(l.id, sel.path, next, false);
-    if (op === 'add') this.store.nodeSel.set({ ...sel, node: sel.node + 1 });
+  onImageInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) void this.tracer.loadFile(file);
+    input.value = '';
   }
 
-  deleteNode(): void {
-    const sel = this.store.nodeSel();
-    const l = this.pathLayer();
-    if (!sel || !l) return;
-    const path = l.paths[sel.path];
-    if (!path) return;
-    this.store.record();
-    this.store.setPath(l.id, sel.path, deleteNode(path, sel.node), false);
-    this.store.nodeSel.set(null);
+  param<K extends keyof VectorizeParams>(key: K, event: Event): void {
+    this.tracer.setParam(key, Number((event.target as HTMLInputElement).value) as VectorizeParams[K]);
   }
 
   // ---------- documento ----------
@@ -892,15 +754,12 @@ export class IllustrationPanelComponent {
   }
 
   clearAll(): void {
-    if (!confirm('Apagar tudo da ilustração? (dá pra desfazer só até salvar o projeto)')) return;
+    if (!confirm('Apagar tudo da ilustração? Dá pra desfazer com Ctrl+Z.')) return;
     this.store.record();
     this.store.layers.set([]);
     this.store.selectedIds.set([]);
-    this.store.vecSource.set(null);
-    this.store.vecParams.set(null);
-    this.store.vecGroupId.set(null);
+    this.tracer.release();
     this.store.vecRefId.set(null);
-    this.store.vecInfo.set('');
   }
 
   // ---------- exportar ----------
@@ -909,72 +768,56 @@ export class IllustrationPanelComponent {
     return (this.fileName().trim() || 'ilustracao').replace(/[\\/:*?"<>|]+/g, '-');
   }
 
-  private async withBusy(label: string, job: () => Promise<void>): Promise<void> {
+  async runExport(id: (typeof this.exports)[number]['id']): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
-    this.exportStatus.set(label);
+    this.exportStatus.set('Gerando…');
     try {
-      await job();
+      switch (id) {
+        case 'svg':
+        case 'corte': {
+          const cutOnly = id === 'corte';
+          const svg = await buildSvg(this.store, { cutOnly, textAsText: this.textAsText() });
+          downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${this.baseName()}${cutOnly ? '-corte' : ''}.svg`);
+          this.exportStatus.set(cutOnly ? 'SVG de corte salvo.' : 'SVG salvo.');
+          break;
+        }
+        case 'png': {
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, null);
+          downloadBlob(await pngBlobWithDpi(await canvasToBlob(canvas, 'image/png'), EXPORT_DPI), `${this.baseName()}.png`);
+          this.exportStatus.set(`PNG ${canvas.width}×${canvas.height} px salvo.`);
+          break;
+        }
+        case 'pdf': {
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, '#ffffff');
+          const jpeg = new Uint8Array(await (await canvasToBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
+          downloadBlob(jpegToPdf(jpeg, this.store.widthMm(), this.store.heightMm(), canvas.width, canvas.height), `${this.baseName()}.pdf`);
+          this.exportStatus.set('PDF salvo no tamanho da prancheta.');
+          break;
+        }
+        case 'printcut': {
+          // A arte vai recortada no próprio desenho: o Print & Cut faz o contorno em volta.
+          const b = contentBounds(this.store, true);
+          if (!b) {
+            this.exportStatus.set('Nada pra enviar (só há linhas de corte).');
+            break;
+          }
+          const w = b.maxX - b.minX;
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds: b }), w, b.maxY - b.minY, EXPORT_DPI, null, 9_000_000);
+          this.sendToCut.emit({ canvas, name: this.baseName(), widthMm: Math.round(w * 10) / 10 });
+          this.exportStatus.set('');
+          break;
+        }
+        case 'molde': {
+          this.sendToTemplate.emit({ svg: await buildSvg(this.store, { skipCut: true }), name: `${this.baseName()}.svg` });
+          this.exportStatus.set('');
+          break;
+        }
+      }
     } catch {
       this.exportStatus.set('Falha ao exportar. Se houver imagens muito grandes, tente sem elas.');
     } finally {
       this.busy.set(false);
     }
-  }
-
-  exportSvg(cutOnly: boolean): Promise<void> {
-    return this.withBusy('Gerando SVG…', async () => {
-      const svg = await buildSvg(this.store, { cutOnly, textAsText: this.textAsText() });
-      downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${this.baseName()}${cutOnly ? '-corte' : ''}.svg`);
-      this.exportStatus.set(cutOnly ? 'SVG de corte salvo.' : 'SVG salvo.');
-    });
-  }
-
-  private async raster(background: string | null): Promise<HTMLCanvasElement> {
-    const svg = await buildSvg(this.store, { skipCut: true });
-    return rasterizeSvg(svg, this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, background);
-  }
-
-  exportPng(): Promise<void> {
-    return this.withBusy('Gerando PNG…', async () => {
-      const canvas = await this.raster(null);
-      const blob = await pngBlobWithDpi(await canvasToBlob(canvas, 'image/png'), EXPORT_DPI);
-      downloadBlob(blob, `${this.baseName()}.png`);
-      this.exportStatus.set(`PNG ${canvas.width}×${canvas.height} px salvo (sem as linhas de corte).`);
-    });
-  }
-
-  exportPdf(): Promise<void> {
-    return this.withBusy('Gerando PDF…', async () => {
-      const canvas = await this.raster('#ffffff');
-      const jpeg = new Uint8Array(await (await canvasToBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
-      downloadBlob(jpegToPdf(jpeg, this.store.widthMm(), this.store.heightMm(), canvas.width, canvas.height), `${this.baseName()}.pdf`);
-      this.exportStatus.set('PDF salvo no tamanho da prancheta.');
-    });
-  }
-
-  /** A arte (sem as linhas de corte) vai recortada no próprio desenho: o
-   * Print & Cut faz o contorno dele em volta. */
-  toCut(): Promise<void> {
-    return this.withBusy('Preparando…', async () => {
-      const b = contentBounds(this.store, true);
-      if (!b) {
-        this.exportStatus.set('Nada pra enviar (só há linhas de corte).');
-        return;
-      }
-      const svg = await buildSvg(this.store, { skipCut: true, bounds: b });
-      const w = b.maxX - b.minX;
-      const canvas = await rasterizeSvg(svg, w, b.maxY - b.minY, EXPORT_DPI, null, 9_000_000);
-      this.sendToCut.emit({ canvas, name: this.baseName(), widthMm: Math.round(w * 10) / 10 });
-      this.exportStatus.set('');
-    });
-  }
-
-  toTemplate(): Promise<void> {
-    return this.withBusy('Preparando…', async () => {
-      const svg = await buildSvg(this.store, { skipCut: true });
-      this.sendToTemplate.emit({ svg, name: `${this.baseName()}.svg` });
-      this.exportStatus.set('');
-    });
   }
 }

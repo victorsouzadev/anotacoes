@@ -23,6 +23,7 @@ import { ElementNamingService } from './element-naming.service';
 import { FontLibrary } from './fonts';
 import { IllustrationModeComponent } from './illustration-mode';
 import { IllustrationProjectData, IllustrationStore } from './illustration-store';
+import { IllustrationTracer } from './illustration-tracer';
 import { VectorizeService } from './vectorize.service';
 import { uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
@@ -215,7 +216,7 @@ function loadPrefs(): Prefs {
   selector: 'app-image-editor-page',
   standalone: true,
   imports: [RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent],
-  providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService],
+  providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService, IllustrationTracer],
   template: `
     <div class="page">
       <header class="top-bar">
@@ -236,7 +237,7 @@ function loadPrefs(): Prefs {
         </div>
       </header>
 
-      <main class="content">
+      <main class="content" [class.content-studio]="modo() === 'ilustracao'">
         @if (modo() === 'corte') {
         <div class="preview-wrap">
           <div class="tabs">
@@ -689,6 +690,9 @@ function loadPrefs(): Prefs {
       max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px;
       display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start;
     }
+    /* Ilustração: área de trabalho de tela cheia, como um app de desenho. */
+    .page:has(.content-studio) { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    .content.content-studio { max-width: none; margin: 0; padding: 0; display: block; flex: 1; min-height: 0; }
 
     .preview-wrap {
       background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -879,6 +883,8 @@ function loadPrefs(): Prefs {
       .mode-switch { flex: 1 1 100%; order: 3; }
       .mode-switch button { flex: 1; padding: 8px 9px; font-size: 12px; }
       .content { grid-template-columns: 1fr; padding: 16px 12px 48px; gap: 14px; }
+      .page:has(.content-studio) { height: auto; overflow: visible; }
+      .content.content-studio { padding: 0; }
       .preview-wrap { top: 0; z-index: 5; padding: 12px; }
       .preview-stage, .drop-zone { height: clamp(180px, 34dvh, 320px); }
       .cut-hint { display: none; }
