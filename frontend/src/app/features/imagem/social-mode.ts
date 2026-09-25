@@ -24,6 +24,10 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
+import { OverlayBox, drawOverlays, ensureOverlayFonts, hitOverlay } from './social-overlays';
+import { SocialOverlaysPanelComponent } from './social-overlays-panel';
+import { FontLibrary } from './fonts';
+import { ZipEntry, zipStore } from './zip';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
 
@@ -170,7 +174,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
 @Component({
   selector: 'app-social-mode',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent],
+  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent],
   host: { class: 'il-studio il-basic sm' },
   template: `
     <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
@@ -239,7 +243,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
         (pointerup)="onPointerUp($event)"
         (pointercancel)="onPointerUp($event)"
       >
-        <canvas #preview class="sm-canvas il-paper" [style.aspect-ratio]="format().ratio"></canvas>
+        <canvas #preview class="sm-canvas il-paper" [style.aspect-ratio]="store.frameRatio()"></canvas>
         @if (comparing()) { <span class="sm-badge">Foto original</span> }
       </div>
     } @else {
@@ -443,6 +447,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
               </section>
             }
           }
+          @case ('texto') {
+            <sm-overlays-panel />
+          }
           @case ('exportar') {
             <section class="il-sec">
               <div class="il-sec-body il-sec-body-top">
@@ -454,12 +461,24 @@ async function heicToJpeg(file: File): Promise<Blob> {
                   <label class="il-range"><span>Qualidade</span><input type="range" min="50" max="100" step="1" [value]="quality()" (input)="onQuality($event)" /><b>{{ quality() }}%</b></label>
                 }
                 <label class="il-field"><span>Largura de saída (px)</span><input type="number" min="200" max="4000" step="10" [value]="exportW()" (input)="onExportW($event)" /></label>
+                <il-num label="Carrossel" title="Posts lado a lado (1 = post comum)" unit="posts" [value]="store.slides()" [min]="1" [max]="slidesMax" [decimals]="0" (valueChange)="setSlides($event.value)" />
+                @if (store.slides() > 1) {
+                  <p class="il-note">A foto se espalha por {{ store.slides() }} posts em sequência — ao deslizar no Instagram vira um panorama. Sai um ZIP com os {{ store.slides() }} arquivos.</p>
+                }
                 <p class="il-note">Altura {{ exportH() }} px, pela proporção do formato.</p>
                 @if (upscaling(); as falta) {
                   <p class="il-note il-warn">A foto tem pixel pra {{ falta }} px de largura neste corte — acima disso o arquivo sai interpolado, maior mas não mais definido.</p>
                 }
-                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ exportW() }} × {{ exportH() }}</button>
+                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="exportImage()"><il-icon name="download" [size]="13" /> {{ store.slides() > 1 ? 'Baixar carrossel (' + store.slides() + ' posts)' : 'Baixar ' + exportW() + ' × ' + exportH() }}</button>
                 @if (status()) { <p class="il-note">{{ status() }}</p> }
+              </div>
+            </section>
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Lote</div>
+              <div class="il-sec-body">
+                <input #batchInput type="file" accept="image/*,.heic,.heif" multiple hidden (change)="runBatch($event)" />
+                <button type="button" class="il-btn il-wide" [disabled]="!!batching()" (click)="batchInput.click()"><il-icon name="photo-add" [size]="13" /> {{ batching() || 'Aplicar em várias fotos…' }}</button>
+                <p class="il-note">Mesmo formato, filtro, ajustes e textos em cada foto escolhida, enquadrada no centro. Sai um ZIP.</p>
               </div>
             </section>
             <div class="il-sec-head il-sec-static">Enviar para outro modo</div>
@@ -523,13 +542,14 @@ export class SocialModeComponent {
   private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
 
   readonly formats = SOCIAL_FORMATS;
-  readonly tabs: { id: 'filtros' | 'ajustes' | 'foto' | 'exportar'; label: string }[] = [
+  readonly tabs: { id: 'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar'; label: string }[] = [
     { id: 'filtros', label: 'Filtros' },
     { id: 'ajustes', label: 'Cor e luz' },
     { id: 'foto', label: 'Foto' },
+    { id: 'texto', label: 'Texto' },
     { id: 'exportar', label: 'Exportar' },
   ];
-  readonly tab = signal<'filtros' | 'ajustes' | 'foto' | 'exportar'>('filtros');
+  readonly tab = signal<'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar'>('filtros');
   readonly presets = FILTER_PRESETS;
   readonly groups = FILTER_GROUPS;
   /** Os quatro que resolvem a maior parte das fotos. */
@@ -650,7 +670,7 @@ export class SocialModeComponent {
     const photo = this.image();
     if (!photo) return 0;
     const source = this.photoSize();
-    const out = this.exportW();
+    const out = this.store.frameW();
     const r = frameRect(
       source.width, source.height, out, this.exportH(),
       this.fit(), this.scale(), this.offsetX(), this.offsetY(),
@@ -679,7 +699,7 @@ export class SocialModeComponent {
     if (this.recortada()) return true;
     const box = 1000;
     return !coversFrame(
-      this.photoSize().width, this.photoSize().height, box, Math.round(box / this.format().ratio),
+      this.photoSize().width, this.photoSize().height, box, Math.round(box / this.store.frameRatio()),
       this.fit(), this.scale(), this.offsetX(), this.offsetY(),
     );
   });
@@ -690,6 +710,13 @@ export class SocialModeComponent {
   readonly advanced = signal(this.prefs.advanced);
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
+  /** Arraste de texto/figurinha: posição inicial em fração do quadro. */
+  private overlayDrag: { pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean } | null = null;
+  private boxes: OverlayBox[] = [];
+  private readonly fontTick = signal(0);
+  private readonly fonts = inject(FontLibrary);
+  readonly slidesMax = 10;
+  batching = signal('');
   /** Dedos (ou ponteiros) em cima do palco agora. Dois viram pinça. */
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinch: { distance: number; scale: number } | null = null;
@@ -705,6 +732,11 @@ export class SocialModeComponent {
   private denoiseJob = 0;
 
   constructor() {
+    // Fontes dos textos: carregadas antes de desenhar, e a prévia refeita.
+    effect(() => {
+      const overlays = this.store.overlays();
+      void ensureOverlayFonts(overlays, this.fonts).then(() => this.fontTick.update((v) => v + 1));
+    });
     // Foto mandada por outro modo ("Enviar para…").
     effect(() => {
       const file = this.store.pendingImport();
@@ -729,8 +761,14 @@ export class SocialModeComponent {
       // que vai ser substituído em seguida. Ao parar, volta ao tamanho cheio.
       const w = Math.round(PREVIEW_CSS_WIDTH * dpr * (this.interacting() ? 0.55 : 1));
       canvas.width = w;
-      canvas.height = Math.round(w / this.format().ratio);
+      canvas.height = Math.round(w / this.store.frameRatio());
       paintFrame(canvas, source, this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()));
+      this.fontTick();
+      const overlays = this.store.overlays();
+      const selectedOverlay = this.store.selectedOverlay();
+      const ctx2 = canvas.getContext('2d')!;
+      this.boxes = compare ? [] : drawOverlays(ctx2, canvas.width, canvas.height, overlays, this.fonts, selectedOverlay);
+      this.drawSlideGuides(ctx2, canvas.width, canvas.height);
       // A nitidez custa uns 50 ms e não pode engasgar quem arrasta um controle:
       // a imagem aparece na hora e ganha o acabamento quando a mão para.
       if (this.sharpenTimer !== null) clearTimeout(this.sharpenTimer);
@@ -809,7 +847,7 @@ export class SocialModeComponent {
     effect(() => {
       const refs = this.presetRefs();
       const source = this.currentSource();
-      const frame = { ...this.frameOptions(NEUTRAL), ratio: this.format().ratio };
+      const frame = { ...this.frameOptions(NEUTRAL), ratio: this.store.frameRatio() };
       if (!refs.length || !source) return;
       this.schedule(() => this.paintThumbs(refs, source, frame));
     });
@@ -892,7 +930,7 @@ export class SocialModeComponent {
     // dela são usados, e ler esses sinais aqui refaria a redução a cada
     // movimento do ponteiro.
     const r = frameRect(
-      source.width, source.height, this.exportW(), this.exportH(),
+      source.width, source.height, this.store.frameW(), this.exportH(),
       this.fit(), this.scale(), 0, 0,
     );
     const needed = Math.ceil((r.w * 1.15) / 200) * 200;
@@ -978,7 +1016,7 @@ export class SocialModeComponent {
     // devolver, porque é a redução que come o micro-contraste.
     const source = sourceOf(photo);
     const r = frameRect(
-      source.width, source.height, this.exportW(), this.exportH(),
+      source.width, source.height, this.store.frameW(), this.exportH(),
       this.fit(), this.scale(), 0, 0,
     );
     const reducao = r.w > 0 ? source.width / r.w : 1;
@@ -1210,6 +1248,12 @@ export class SocialModeComponent {
     // A tecla solta só vale fora de campo: digitar a largura de exportação não
     // pode piscar a comparação.
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+    const selOverlay = this.store.selectedOverlay();
+    if (selOverlay && !typing && (key === 'delete' || key === 'backspace')) {
+      event.preventDefault();
+      this.store.removeOverlay(selOverlay);
+      return;
+    }
     if (key === 'c' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat) {
       this.startCompare();
     }
@@ -1346,6 +1390,16 @@ export class SocialModeComponent {
   }
 
   onWheel(event: WheelEvent): void {
+    const sel = this.store.selectedOverlay();
+    const pt = sel ? this.canvasPoint(event) : null;
+    if (sel && pt && hitOverlay(this.boxes, pt.x, pt.y) === sel) {
+      event.preventDefault();
+      const o = this.store.overlays().find((x) => x.id === sel)!;
+      this.store.patchOverlay(sel, { size: clamp(o.size * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 0.02, 0.8) });
+      if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
+      this.wheelTimer = setTimeout(() => this.commit(), 300);
+      return;
+    }
     if (!this.image()) return;
     event.preventDefault();
     this.touch();
@@ -1355,9 +1409,27 @@ export class SocialModeComponent {
     this.wheelTimer = setTimeout(() => this.commit(), 300);
   }
 
+  /** Ponto do evento em px do canvas da prévia. */
+  private canvasPoint(event: { clientX: number; clientY: number }): { x: number; y: number; box: DOMRect } | null {
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas) return null;
+    const box = canvas.getBoundingClientRect();
+    return { x: ((event.clientX - box.left) / box.width) * canvas.width, y: ((event.clientY - box.top) / box.height) * canvas.height, box };
+  }
+
   onPointerDown(event: PointerEvent): void {
     if (!this.image()) return;
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    const pt = this.canvasPoint(event);
+    const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
+    if (hit) {
+      const o = this.store.overlays().find((x) => x.id === hit)!;
+      this.store.selectedOverlay.set(hit);
+      this.tab.set('texto');
+      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false };
+      return;
+    }
+    if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
     this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.pointers.size === 2) {
       this.pinch = { distance: this.pointerDistance(), scale: this.scale() };
@@ -1373,6 +1445,17 @@ export class SocialModeComponent {
   }
 
   onPointerMove(event: PointerEvent): void {
+    const od = this.overlayDrag;
+    if (od && od.pointer === event.pointerId) {
+      const pt = this.canvasPoint(event);
+      if (!pt) return;
+      od.moved = true;
+      this.store.patchOverlay(od.id, {
+        x: clamp(od.ox + (event.clientX - od.x) / pt.box.width, 0, 1),
+        y: clamp(od.oy + (event.clientY - od.y) / pt.box.height, 0, 1),
+      });
+      return;
+    }
     if (this.pointers.has(event.pointerId)) {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
@@ -1400,6 +1483,12 @@ export class SocialModeComponent {
   }
 
   onPointerUp(event: PointerEvent): void {
+    if (this.overlayDrag?.pointer === event.pointerId) {
+      const moved = this.overlayDrag.moved;
+      this.overlayDrag = null;
+      if (moved) this.commit();
+      return;
+    }
     this.pointers.delete(event.pointerId);
     if (this.pinch && this.pointers.size < 2) {
       this.pinch = null;
@@ -1525,11 +1614,11 @@ export class SocialModeComponent {
 
   readonly bridge = inject(ModeBridge);
 
-  /** A imagem final (formato, filtro, ajustes, nitidez), no tamanho de saída. */
-  private renderFinal(): HTMLCanvasElement | null {
-    const source = this.currentSource();
+  /** A imagem final (formato, filtro, ajustes, nitidez, textos), no tamanho
+   * de saída — no carrossel, a faixa inteira com todos os posts. */
+  private renderFinal(source = this.currentSource(), framing?: Partial<FrameOptions>): HTMLCanvasElement | null {
     if (!source) return null;
-    let w = this.exportW();
+    let w = this.store.frameW();
     let h = this.exportH();
     if (w * h > MAX_EXPORT_PIXELS) {
       const factor = Math.sqrt(MAX_EXPORT_PIXELS / (w * h));
@@ -1539,9 +1628,33 @@ export class SocialModeComponent {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    paintFrame(canvas, source, this.frameOptions(this.adjust()));
+    paintFrame(canvas, source, { ...this.frameOptions(this.adjust()), ...framing });
     this.applySharpen(canvas);
+    drawOverlays(canvas.getContext('2d')!, w, h, this.store.overlays(), this.fonts, null);
     return canvas;
+  }
+
+  /** Linhas tracejadas entre os posts do carrossel (só na prévia). */
+  private drawSlideGuides(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const n = this.store.slides();
+    if (n < 2) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = Math.max(1, w / 900);
+    ctx.setLineDash([8, 6]);
+    for (let i = 1; i < n; i++) {
+      const x = Math.round((w * i) / n) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  setSlides(n: number): void {
+    this.store.slides.set(Math.round(clamp(n, 1, this.slidesMax)));
+    this.commit();
   }
 
   sendTo(target: BridgeTarget): void {
@@ -1551,34 +1664,91 @@ export class SocialModeComponent {
     this.bridge.send(target, { canvas, name: `${base}-${this.format().id}` });
   }
 
-  exportImage(): void {
-    const source = this.currentSource();
-    if (!source) return;
-    let w = this.exportW();
-    let h = this.exportH();
-    if (w * h > MAX_EXPORT_PIXELS) {
-      const factor = Math.sqrt(MAX_EXPORT_PIXELS / (w * h));
-      w = Math.round(w * factor);
-      h = Math.round(h * factor);
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    paintFrame(canvas, source, this.frameOptions(this.adjust()));
-    this.applySharpen(canvas);
+  private encode(canvas: HTMLCanvasElement): Promise<Blob | null> {
     const png = this.type() === 'png';
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          this.status.set('Não consegui gerar o arquivo — tente uma largura menor.');
-          return;
+    return new Promise((resolve) => canvas.toBlob(resolve, png ? 'image/png' : 'image/jpeg', png ? undefined : this.quality() / 100));
+  }
+
+  /** Corta a faixa do carrossel em posts do mesmo tamanho. */
+  private slices(canvas: HTMLCanvasElement): HTMLCanvasElement[] {
+    const n = this.store.slides();
+    if (n < 2) return [canvas];
+    const sw = Math.round(canvas.width / n);
+    return Array.from({ length: n }, (_, i) => {
+      const c = document.createElement('canvas');
+      c.width = sw;
+      c.height = canvas.height;
+      c.getContext('2d')!.drawImage(canvas, i * sw, 0, sw, canvas.height, 0, 0, sw, canvas.height);
+      return c;
+    });
+  }
+
+  async exportImage(): Promise<void> {
+    const canvas = this.renderFinal();
+    if (!canvas) return;
+    const ext = this.type() === 'png' ? 'png' : 'jpg';
+    const base = (this.fileName() || 'post').replace(/\.[^.]+$/, '');
+    const parts = this.slices(canvas);
+    if (parts.length === 1) {
+      const blob = await this.encode(canvas);
+      if (!blob) {
+        this.status.set('Não consegui gerar o arquivo — tente uma largura menor.');
+        return;
+      }
+      downloadBlob(blob, `${base}-${this.format().id}.${ext}`);
+      this.status.set(`Exportado em ${canvas.width} × ${canvas.height} px.`);
+      return;
+    }
+    const files: ZipEntry[] = [];
+    for (const [i, part] of parts.entries()) {
+      const blob = await this.encode(part);
+      if (blob) files.push({ name: `${base}-${String(i + 1).padStart(2, '0')}.${ext}`, content: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    downloadBlob(zipStore(files), `${base}-carrossel.zip`);
+    this.status.set(`Carrossel com ${files.length} posts de ${parts[0].width} × ${parts[0].height} px.`);
+  }
+
+  /** Lote: o mesmo look (formato, filtro, ajustes, textos) em várias fotos,
+   * cada uma enquadrada do zero. Sai um ZIP. */
+  async runBatch(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/') || isHeicFile(f));
+    input.value = '';
+    if (!files.length) return;
+    const ext = this.type() === 'png' ? 'png' : 'jpg';
+    const out: ZipEntry[] = [];
+    const names = new Set<string>();
+    for (const [i, file] of files.entries()) {
+      this.batching.set(`Processando ${i + 1} de ${files.length}…`);
+      try {
+        const blob0: Blob = isHeicFile(file) ? await heicToJpeg(file) : file;
+        const img = await loadImageElement(await readAsDataUrl(blob0));
+        const src = sourceOf(img);
+        const r = frameRect(src.width, src.height, this.store.frameW(), this.exportH(), this.fit(), 1, 0, 0);
+        const source = r.w < src.width * 0.9
+          ? sourceOf(stepDownscale(src, Math.ceil(r.w), Math.ceil((r.w * src.height) / src.width)))
+          : src;
+        const canvas = this.renderFinal(source, { scale: 1, dx: 0, dy: 0 });
+        if (!canvas) continue;
+        const base = file.name.replace(/\.[^.]+$/, '') || `foto-${i + 1}`;
+        for (const [k, part] of this.slices(canvas).entries()) {
+          const blob = await this.encode(part);
+          if (!blob) continue;
+          let name = this.store.slides() > 1 ? `${base}-${k + 1}.${ext}` : `${base}.${ext}`;
+          while (names.has(name)) name = name.replace(/(\.\w+)$/, '-b$1');
+          names.add(name);
+          out.push({ name, content: new Uint8Array(await blob.arrayBuffer()) });
         }
-        const base = (this.fileName() || 'post').replace(/\.[^.]+$/, '');
-        downloadBlob(blob, `${base}-${this.format().id}.${png ? 'png' : 'jpg'}`);
-        this.status.set(`Exportado em ${w} × ${h} px.`);
-      },
-      png ? 'image/png' : 'image/jpeg',
-      png ? undefined : this.quality() / 100,
-    );
+      } catch {
+        // foto que não abre fica de fora; o resto do lote segue
+      }
+    }
+    this.batching.set('');
+    if (!out.length) {
+      this.status.set('Nenhuma foto do lote pôde ser processada.');
+      return;
+    }
+    downloadBlob(zipStore(out), `lote-${this.format().id}.zip`);
+    this.status.set(`Lote pronto: ${out.length} arquivo(s).`);
   }
 }

@@ -7,6 +7,7 @@ import {
   Adjustments, BgMode, FitMode, NEUTRAL, SOCIAL_FORMATS, SocialFormat,
 } from './social-model';
 import { PhotoSource, sourceOf, stepDownscale } from './social-render';
+import { Overlay } from './social-overlays';
 
 export interface SocialProjectData {
   version: number;
@@ -32,6 +33,9 @@ export interface SocialProjectData {
   type: 'jpeg' | 'png';
   quality: number;
   exportW: number;
+  overlays?: Overlay[];
+  /** Carrossel: quantos posts lado a lado (1 = post comum). */
+  slides?: number;
 }
 
 /** A foto vai embutida no projeto salvo (teto de 9 MB no backend) — 2000 px já
@@ -54,6 +58,8 @@ export interface LookSnapshot {
   sharpen: number;
   luzIa: string;
   luzForca: number;
+  overlays: Overlay[];
+  slides: number;
 }
 
 /** Teto do histórico. Cada passo é um punhado de números, mas guardar sem
@@ -64,7 +70,7 @@ function sameLook(a: LookSnapshot, b: LookSnapshot): boolean {
   return a.formatId === b.formatId && a.fit === b.fit && a.scale === b.scale
     && a.dx === b.dx && a.dy === b.dy && a.bgMode === b.bgMode && a.bgColor === b.bgColor
     && a.preset === b.preset && a.denoise === b.denoise && a.sharpen === b.sharpen
-    && a.luzIa === b.luzIa && a.luzForca === b.luzForca
+    && a.luzIa === b.luzIa && a.luzForca === b.luzForca && a.overlays === b.overlays && a.slides === b.slides
     && (Object.keys(NEUTRAL) as (keyof Adjustments)[]).every((k) => a.adjust[k] === b.adjust[k]);
 }
 
@@ -114,6 +120,40 @@ export class SocialStore {
 
   readonly hasImage = computed(() => this.image() !== null);
   readonly exportH = computed(() => Math.round(this.exportW() / this.format().ratio));
+  /** Textos e figurinhas por cima do post. */
+  readonly overlays = signal<Overlay[]>([]);
+  readonly slides = signal(1);
+  /** Camada selecionada no palco (não vai pro projeto nem pro histórico). */
+  readonly selectedOverlay = signal<string | null>(null);
+
+  addOverlay(o: Overlay): void {
+    this.overlays.update((l) => [...l, o]);
+    this.selectedOverlay.set(o.id);
+    this.commit();
+  }
+
+  patchOverlay(id: string, patch: Partial<Overlay>): void {
+    this.overlays.update((l) => l.map((o) => (o.id === id ? ({ ...o, ...patch } as Overlay) : o)));
+  }
+
+  removeOverlay(id: string): void {
+    this.overlays.update((l) => l.filter((o) => o.id !== id));
+    if (this.selectedOverlay() === id) this.selectedOverlay.set(null);
+    this.commit();
+  }
+
+  moveOverlay(id: string, dir: 1 | -1): void {
+    const l = [...this.overlays()];
+    const i = l.findIndex((o) => o.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= l.length) return;
+    [l[i], l[j]] = [l[j], l[i]];
+    this.overlays.set(l);
+    this.commit();
+  }
+  /** O quadro inteiro: no carrossel, os posts lado a lado formam um só. */
+  readonly frameRatio = computed(() => this.format().ratio * this.slides());
+  readonly frameW = computed(() => this.exportW() * this.slides());
 
   // ---------- desfazer ----------
 
@@ -141,6 +181,8 @@ export class SocialStore {
       sharpen: this.sharpen(),
       luzIa: this.luzIa(),
       luzForca: this.luzForca(),
+      overlays: this.overlays(),
+      slides: this.slides(),
     };
   }
 
@@ -191,6 +233,8 @@ export class SocialStore {
     this.sharpen.set(look.sharpen);
     this.luzIa.set(look.luzIa);
     this.luzForca.set(look.luzForca);
+    this.overlays.set(look.overlays);
+    this.slides.set(look.slides);
     this.revision.update((v) => v + 1);
   }
 
@@ -240,6 +284,8 @@ export class SocialStore {
     this.type.set('jpeg');
     this.quality.set(92);
     this.exportW.set(SOCIAL_FORMATS[0].width);
+    this.overlays.set([]);
+    this.slides.set(1);
     this.resetFraming();
     this.resetHistory();
   }
@@ -284,6 +330,8 @@ export class SocialStore {
       type: this.type(),
       quality: this.quality(),
       exportW: this.exportW(),
+      overlays: this.overlays(),
+      slides: this.slides(),
     };
   }
 
@@ -309,6 +357,8 @@ export class SocialStore {
     this.type.set(data.type === 'png' ? 'png' : 'jpeg');
     this.quality.set(data.quality || 92);
     this.exportW.set(data.exportW || format.width);
+    this.overlays.set(data.overlays ?? []);
+    this.slides.set(Math.min(10, Math.max(1, data.slides ?? 1)));
 
     const img = await load(data.src);
     this.image.set(img);
