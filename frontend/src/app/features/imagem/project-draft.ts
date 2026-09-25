@@ -13,6 +13,8 @@ const KEY = 'atual';
 export interface ProjectDraft {
   savedAt: string;
   projectId: string | null;
+  /** Programa desktop: o arquivo .edimg aberto. */
+  projectPath?: string | null;
   projectName: string;
   /** O mesmo JSON que vai pro backend ao salvar. */
   data: string;

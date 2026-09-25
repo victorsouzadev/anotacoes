@@ -6,9 +6,11 @@
  * só deste modo usa o prefixo `sm-`. */
 
 import {
-  Component, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild,
+  Component, DestroyRef, ElementRef, HostListener, computed, effect, inject, signal, untracked, viewChild,
   viewChildren,
 } from '@angular/core';
+import { Subscription } from 'rxjs';
+import { DesktopService, bytesToBase64 } from '../../core/desktop';
 import { IlIconComponent } from './illustration-icons';
 import { IlNumComponent } from './illustration-num';
 import { BridgeTarget, ModeBridge } from './mode-bridge';
@@ -341,7 +343,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 <p class="il-note">Devolve o micro-contraste que a redução de tamanho come — 30 a 40 costuma bastar.</p>
               </div>
             </section>
-            @if (upscale.disponivel()) {
+            @if (upscale.disponivel() && upscale.luz()) {
               <section class="il-sec">
                 <div class="il-sec-head il-sec-static"><il-icon name="sparkle" [size]="13" /> Luz com IA</div>
                 <div class="il-sec-body">
@@ -479,6 +481,15 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 <input #batchInput type="file" accept="image/*,.heic,.heif" multiple hidden (change)="runBatch($event)" />
                 <button type="button" class="il-btn il-wide" [disabled]="!!batching()" (click)="batchInput.click()"><il-icon name="photo-add" [size]="13" /> {{ batching() || 'Aplicar em várias fotos…' }}</button>
                 <p class="il-note">Mesmo formato, filtro, ajustes e textos em cada foto escolhida, enquadrada no centro. Sai um ZIP.</p>
+                @if (desktop.enabled) {
+                  <button type="button" class="il-btn il-wide" [class.il-on]="!!watching()" (click)="toggleWatch()"><il-icon name="folder" [size]="13" /> {{ watching() ? 'Parar de monitorar' : 'Monitorar uma pasta…' }}</button>
+                  @if (watching(); as w) {
+                    <p class="il-note">Cada foto que chegar em <strong>{{ w.pasta }}</strong> sai com este look na subpasta "prontas". Mudou o look? As próximas já saem com ele.</p>
+                  } @else {
+                    <p class="il-note">Pra fotos que chegam aos poucos (celular sincronizado, cartão da câmera): o programa vigia a pasta e aplica o lote sozinho.</p>
+                  }
+                  @if (watchStatus()) { <p class="il-note">{{ watchStatus() }}</p> }
+                }
               </div>
             </section>
             <div class="il-sec-head il-sec-static">Enviar para outro modo</div>
@@ -1715,30 +1726,12 @@ export class SocialModeComponent {
     const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/') || isHeicFile(f));
     input.value = '';
     if (!files.length) return;
-    const ext = this.type() === 'png' ? 'png' : 'jpg';
     const out: ZipEntry[] = [];
     const names = new Set<string>();
     for (const [i, file] of files.entries()) {
       this.batching.set(`Processando ${i + 1} de ${files.length}…`);
       try {
-        const blob0: Blob = isHeicFile(file) ? await heicToJpeg(file) : file;
-        const img = await loadImageElement(await readAsDataUrl(blob0));
-        const src = sourceOf(img);
-        const r = frameRect(src.width, src.height, this.store.frameW(), this.exportH(), this.fit(), 1, 0, 0);
-        const source = r.w < src.width * 0.9
-          ? sourceOf(stepDownscale(src, Math.ceil(r.w), Math.ceil((r.w * src.height) / src.width)))
-          : src;
-        const canvas = this.renderFinal(source, { scale: 1, dx: 0, dy: 0 });
-        if (!canvas) continue;
-        const base = file.name.replace(/\.[^.]+$/, '') || `foto-${i + 1}`;
-        for (const [k, part] of this.slices(canvas).entries()) {
-          const blob = await this.encode(part);
-          if (!blob) continue;
-          let name = this.store.slides() > 1 ? `${base}-${k + 1}.${ext}` : `${base}.${ext}`;
-          while (names.has(name)) name = name.replace(/(\.\w+)$/, '-b$1');
-          names.add(name);
-          out.push({ name, content: new Uint8Array(await blob.arrayBuffer()) });
-        }
+        out.push(...await this.batchOne(file, `foto-${i + 1}`, names));
       } catch {
         // foto que não abre fica de fora; o resto do lote segue
       }
@@ -1751,4 +1744,106 @@ export class SocialModeComponent {
     downloadBlob(zipStore(out), `lote-${this.format().id}.zip`);
     this.status.set(`Lote pronto: ${out.length} arquivo(s).`);
   }
+
+  /** Uma foto do lote: enquadrada do zero, com o look atual; um arquivo por slide. */
+  private async batchOne(file: File, fallback: string, names: Set<string>): Promise<ZipEntry[]> {
+    const ext = this.type() === 'png' ? 'png' : 'jpg';
+    const blob0: Blob = isHeicFile(file) ? await heicToJpeg(file) : file;
+    const img = await loadImageElement(await readAsDataUrl(blob0));
+    const src = sourceOf(img);
+    const r = frameRect(src.width, src.height, this.store.frameW(), this.exportH(), this.fit(), 1, 0, 0);
+    const source = r.w < src.width * 0.9
+      ? sourceOf(stepDownscale(src, Math.ceil(r.w), Math.ceil((r.w * src.height) / src.width)))
+      : src;
+    const canvas = this.renderFinal(source, { scale: 1, dx: 0, dy: 0 });
+    if (!canvas) return [];
+    const base = file.name.replace(/\.[^.]+$/, '') || fallback;
+    const out: ZipEntry[] = [];
+    for (const [k, part] of this.slices(canvas).entries()) {
+      const blob = await this.encode(part);
+      if (!blob) continue;
+      let name = this.store.slides() > 1 ? `${base}-${k + 1}.${ext}` : `${base}.${ext}`;
+      while (names.has(name)) name = name.replace(/(\.\w+)$/, '-b$1');
+      names.add(name);
+      out.push({ name, content: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    return out;
+  }
+
+  // ---------- pasta monitorada (programa desktop) ----------
+
+  readonly desktop = inject(DesktopService);
+  readonly watching = signal<{ pasta: string; saida: string } | null>(null);
+  readonly watchStatus = signal('');
+  private watchQueue: string[] = [];
+  private watchBusy = false;
+  private watchDone = 0;
+  private watchSub?: Subscription;
+  private readonly watchNames = new Set<string>();
+  private readonly stopOnDestroy = inject(DestroyRef).onDestroy(() => {
+    if (this.watching()) void this.desktop.stopWatching().catch(() => undefined);
+    this.watchSub?.unsubscribe();
+  });
+
+  async toggleWatch(): Promise<void> {
+    if (this.watching()) {
+      this.watching.set(null);
+      this.watchSub?.unsubscribe();
+      this.watchQueue = [];
+      await this.desktop.stopWatching().catch(() => undefined);
+      this.watchStatus.set('');
+      return;
+    }
+    try {
+      const chosen = await this.desktop.chooseFolder();
+      if (!chosen) return;
+      const w = await this.desktop.watchFolder(chosen.caminho);
+      this.watching.set({ pasta: w.caminho, saida: w.saida });
+      this.watchDone = 0;
+      this.watchNames.clear();
+      this.watchSub?.unsubscribe();
+      this.watchSub = this.desktop.events.subscribe((e) => {
+        if (e.tipo === 'pasta-foto') this.enqueueWatched(e.caminho);
+      });
+      this.watchStatus.set(w.pendentes.length ? `${w.pendentes.length} foto(s) já na pasta — processando…` : 'Esperando fotos…');
+      for (const p of w.pendentes) this.enqueueWatched(p);
+    } catch {
+      this.watchStatus.set('Não consegui monitorar essa pasta.');
+    }
+  }
+
+  private enqueueWatched(caminho: string): void {
+    if (this.watchQueue.includes(caminho)) return;
+    this.watchQueue.push(caminho);
+    void this.drainWatched();
+  }
+
+  private async drainWatched(): Promise<void> {
+    if (this.watchBusy) return;
+    this.watchBusy = true;
+    try {
+      while (this.watchQueue.length && this.watching()) {
+        const caminho = this.watchQueue.shift()!;
+        const name = caminho.split(/[\\/]/).pop() ?? 'foto';
+        try {
+          const blob = await this.desktop.readFromFolder(caminho);
+          const file = new File([blob], name, { type: imageTypeOf(name) });
+          for (const e of await this.batchOne(file, 'foto', this.watchNames)) {
+            await this.desktop.writeToFolder(e.name, bytesToBase64(e.content as Uint8Array));
+          }
+          this.watchDone++;
+          this.watchStatus.set(`${this.watchDone} pronta(s) — a última: ${name}`);
+        } catch {
+          this.watchStatus.set(`Não consegui processar ${name}; sigo com as próximas.`);
+        }
+      }
+    } finally {
+      this.watchBusy = false;
+    }
+  }
+}
+
+function imageTypeOf(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  return ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' } as Record<string, string>)[ext] ?? 'application/octet-stream';
 }

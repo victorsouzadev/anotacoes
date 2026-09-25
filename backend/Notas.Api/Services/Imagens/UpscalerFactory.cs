@@ -8,7 +8,7 @@ namespace Notas.Api.Services.Imagens;
 /// <summary>
 /// De quem é a chave que vai ampliar, e se existe alguma.
 /// </summary>
-public record UpscaleEfetivo(bool Disponivel, bool ChavePropria);
+public record UpscaleEfetivo(bool Disponivel, bool ChavePropria, bool Luz = true);
 
 public interface IUpscalerFactory
 {

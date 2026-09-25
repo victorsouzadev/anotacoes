@@ -341,6 +341,15 @@ A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela intei
   Print & Cut** (recortada no desenho, na largura física) ou **pro Molde SVG**. No
   Print & Cut, "Vetorizar na Ilustração" faz o caminho inverso.
 
+#### Versão Windows (offline)
+
+O editor também existe como programa do Windows (`desktop/`), que funciona sem
+internet: a mesma página e a mesma API rodando dentro do programa, IAs de remover
+fundo e ampliar na placa de vídeo (ONNX Runtime + DirectML), projetos em arquivo
+`.edimg`, exportação direto em pasta, impressão em tamanho real com calibração,
+"Abrir no Silhouette Studio", fontes do Windows e pasta monitorada no lote. Detalhes,
+instalador e a avaliação do corte direto pela USB em [`desktop/README.md`](desktop/README.md).
+
 ### Simulador de Bolo 3D
 
 Monta um bolo em CSS 3D (`perspective` + `preserve-3d`, cada camada é um prisma de
@@ -374,7 +383,8 @@ desenhar. Uma linha sem esse prefixo é texto comum, exatamente como antes.
 ```
 notas-vps/
 ├── backend/Notas.Api/
-│   ├── Program.cs                    # bootstrap, JWT, forwarded headers, registro de cada ferramenta
+│   ├── Program.cs                    # só sobe o NotasApp
+│   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta); o desktop hospeda a mesma
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
 │   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
 │   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
@@ -411,6 +421,7 @@ notas-vps/
 │   │   ├── data/remote/AuthApi.kt    # login/registro/refresh contra /api/auth/*
 │   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
 │   └── README.md
+├── desktop/                          # Editor de Imagens pra Windows (WPF + WebView2, API e IA locais) — ver desktop/README.md
 ├── mcp/                               # servidor MCP (Node/TS) — expõe tarefas como tools pra um LLM
 │   ├── src/tasksApi.ts               # client REST contra /api/tasks/* (mesmo contrato do web/Android)
 │   ├── src/auth.ts                   # login/refresh contra /api/auth/*, token só em memória

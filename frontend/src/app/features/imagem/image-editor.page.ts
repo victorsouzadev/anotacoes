@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, signal, untracked } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -36,6 +37,8 @@ import { IlNumComponent } from './illustration-num';
 import { IlStudioBaseStylesComponent, IlStudioChromeStylesComponent } from './studio-styles';
 import { BridgePayload, BridgeTarget, ModeBridge, canvasToFile } from './mode-bridge';
 import { ProjectDraft, clearDraft, loadDraft, saveDraft } from './project-draft';
+import { DesktopPrinter, DesktopRecent, DesktopService, blobToBase64, bytesToBase64 } from '../../core/desktop';
+import { mensagemDeErro } from '../../core/erro-http';
 import { SnapshotHistory } from './snapshot-history';
 import { ImageUpscaleService } from './image-upscale.service';
 import { ImageLibraryService } from './image-library.service';
@@ -297,6 +300,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** Nome do arquivo sem a pasta (caminho do Windows ou não). */
+function fileNameOf(caminho: string): string {
+  return caminho.split(/[\\/]/).pop() ?? caminho;
+}
+
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -317,7 +325,7 @@ function loadPrefs(): Prefs {
     <il-studio-base-styles /><il-studio-chrome-styles />
     <div class="page">
       <header class="il-appbar">
-        <a class="ab-home" routerLink="/" title="Voltar ao início" aria-label="Voltar ao início"><app-icon name="grid" [size]="15" /></a>
+        @if (!desktop.enabled) { <a class="ab-home" routerLink="/" title="Voltar ao início" aria-label="Voltar ao início"><app-icon name="grid" [size]="15" /></a> }
         <span class="ab-title"><span class="ab-mark"><app-icon name="image" [size]="12" /></span> Editor de Imagens</span>
         <nav class="ab-modes" role="tablist" aria-label="Modo">
           @for (m of modes; track m.id) {
@@ -326,7 +334,7 @@ function loadPrefs(): Prefs {
         </nav>
         <div class="ab-project">
           <input class="ab-name" type="text" maxlength="300" placeholder="Projeto sem nome" aria-label="Nome do projeto" [value]="projectName()" (input)="onProjectNameInput($event)" />
-          <button type="button" class="il-btn il-primary" [disabled]="savingProject()" data-tip="Salvar projeto  Ctrl+S" (click)="saveProject()">
+          <button type="button" class="il-btn il-primary" [disabled]="savingProject()" [attr.data-tip]="desktop.enabled ? 'Salvar no arquivo  Ctrl+S' : 'Salvar projeto  Ctrl+S'" (click)="saveProject()">
             <il-icon name="save" [size]="13" /> {{ savingProject() ? 'Salvando…' : 'Salvar' }}
           </button>
           <div class="ab-menu-wrap">
@@ -334,6 +342,24 @@ function loadPrefs(): Prefs {
             @if (projectsOpen()) {
               <div class="ab-menu" role="menu">
                 <button type="button" class="ab-menu-item ab-new" (click)="newProject(); projectsOpen.set(false)"><il-icon name="file-new" [size]="14" /> Novo projeto</button>
+                @if (desktop.enabled) {
+                  <button type="button" class="ab-menu-item" (click)="openFileDialog(); projectsOpen.set(false)"><il-icon name="folder" [size]="14" /> Abrir arquivo…</button>
+                  <button type="button" class="ab-menu-item" (click)="saveProjectAs(); projectsOpen.set(false)"><il-icon name="save" [size]="14" /> Salvar como…  <span class="ab-p-date">Ctrl+Shift+S</span></button>
+                  @if (projectPath(); as path) {
+                    <button type="button" class="ab-menu-item" (click)="reveal(path); projectsOpen.set(false)"><il-icon name="folder" [size]="14" /> Mostrar na pasta</button>
+                  }
+                  <p class="ab-menu-label">Recentes</p>
+                  @for (r of recents(); track r.caminho) {
+                    <div class="ab-menu-row" [class.il-on]="r.caminho === projectPath()">
+                      <button type="button" class="ab-menu-item" [disabled]="!r.existe" [title]="r.caminho" (click)="openFile(r.caminho); projectsOpen.set(false)">
+                        <span class="ab-p-name">{{ r.nome }}</span><span class="ab-p-date">{{ r.existe ? (r.alteradoEm | date: 'dd/MM HH:mm') : 'sumiu' }}</span>
+                      </button>
+                      <button type="button" class="il-ib il-ib-sm" title="Tirar da lista" aria-label="Tirar da lista" (click)="forgetRecent(r.caminho, $event)"><il-icon name="x" [size]="12" /></button>
+                    </div>
+                  } @empty {
+                    <p class="ab-menu-empty">Nenhum arquivo aberto ainda.</p>
+                  }
+                } @else {
                 @for (p of projects(); track p.id) {
                   <div class="ab-menu-row" [class.il-on]="p.id === projectId()">
                     <button type="button" class="ab-menu-item" (click)="openProject(p.id); projectsOpen.set(false)">
@@ -344,6 +370,7 @@ function loadPrefs(): Prefs {
                 } @empty {
                   <p class="ab-menu-empty">Nenhum projeto salvo ainda.</p>
                 }
+                }
               </div>
             }
           </div>
@@ -353,11 +380,21 @@ function loadPrefs(): Prefs {
         </div>
         <div class="ab-right">
           <button type="button" class="il-ib" (click)="theme.cycle()" [title]="themeLabel()" [attr.aria-label]="themeLabel()"><app-icon [name]="themeIconName()" [size]="15" /></button>
-          <span class="ab-user">{{ auth.user()?.email }}</span>
-          <button type="button" class="il-ib" (click)="auth.logout()" title="Sair" aria-label="Sair"><app-icon name="logout" [size]="14" /></button>
+          @if (!desktop.enabled) {
+            <span class="ab-user">{{ auth.user()?.email }}</span>
+            <button type="button" class="il-ib" (click)="auth.logout()" title="Sair" aria-label="Sair"><app-icon name="logout" [size]="14" /></button>
+          }
         </div>
       </header>
 
+      @if (lastDownload(); as d) {
+        <div class="ab-draft" role="status">
+          <il-icon name="download" [size]="15" />
+          <span>Salvo: {{ d.nome }}</span>
+          <button type="button" class="il-btn il-primary" (click)="reveal(d.caminho)">Mostrar na pasta</button>
+          <button type="button" class="il-btn" (click)="lastDownload.set(null)">OK</button>
+        </div>
+      }
       @if (draftOffer(); as d) {
         <div class="ab-draft" role="alert">
           <il-icon name="save" [size]="15" />
@@ -682,9 +719,42 @@ function loadPrefs(): Prefs {
                   </div></section>
                   <div class="il-export-list">
                     @if (machine() === 'silhouette') {
+                      @if (desktop.enabled) {
+                        <button type="button" class="il-export" [disabled]="!images().length || sendingStudio()" (click)="openInStudio()"><il-icon name="cut" [size]="20" /><span><strong>{{ sendingStudio() ? 'Gravando…' : 'Abrir no Silhouette Studio' }}</strong><small>Grava o pacote em Documentos e abre o corte no Studio</small></span></button>
+                      }
                       <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSilhouettePackage()"><il-icon name="cut" [size]="20" /><span><strong>Pacote pro Silhouette Studio</strong><small>PNG da impressão + DXF do corte, alinhados, com o passo a passo</small></span></button>
                       <button type="button" class="il-export" (click)="exportAlignmentTest()"><il-icon name="sheet" [size]="20" /><span><strong>Folha de teste de alinhamento</strong><small>Cinco quadrados pra conferir impressão e corte antes de gastar papel</small></span></button>
                       <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetDxf()"><il-icon name="cut" [size]="20" /><span><strong>DXF de corte da folha</strong><small>Só as linhas de corte, em mm, pro Studio Basic</small></span></button>
+                    }
+                    @if (desktop.enabled) {
+                      <section class="il-sec pc-print"><div class="il-sec-body">
+                        <div class="il-sec-head il-sec-static"><il-icon name="sheet" [size]="13" /> Imprimir direto, em tamanho real</div>
+                        <label class="il-field"><span>Impressora</span>
+                          <select class="il-select" [value]="printer()" (change)="printer.set($any($event.target).value)">
+                            @for (p of printers(); track p.nome) { <option [value]="p.nome" [selected]="p.nome === printer()">{{ p.nome }}{{ p.padrao ? ' (padrão)' : '' }}</option> }
+                          </select>
+                        </label>
+                        <div class="il-row">
+                          <label class="il-field"><span>Cópias</span><input type="number" min="1" max="99" [value]="printCopies()" (input)="printCopies.set(+$any($event.target).value || 1)" /></label>
+                          <button type="button" class="il-btn il-primary il-grow" [disabled]="!images().length || !printer() || printing()" (click)="printDirect()">{{ printing() ? 'Enviando…' : 'Imprimir a folha' }}</button>
+                        </div>
+                        @if (machine() === 'silhouette') { <p class="il-note">Pra cortar na Silhouette, imprima pelo Studio (ele põe as marcas que a máquina lê). Aqui é pra folha sem corte ou pra outras máquinas.</p> }
+                        <p class="il-note">{{ printerCalibrated() ? 'Esta impressora está calibrada.' : 'Sem calibração: sai na medida que a impressora entregar.' }} <button type="button" class="il-link" (click)="calibrating.set(!calibrating())">{{ calibrating() ? 'Fechar' : 'Calibrar' }}</button></p>
+                        @if (calibrating()) {
+                          <ol class="il-note pc-cal">
+                            <li><button type="button" class="il-btn" [disabled]="!printer()" (click)="printCalibrationPage()">Imprimir a página de calibração</button></li>
+                            <li>Meça com régua, em mm:</li>
+                          </ol>
+                          <div class="il-row pc-cal-grid">
+                            <label class="il-field"><span>A (≈ 20)</span><input type="number" step="0.1" [value]="calib().a" (input)="setCalib('a', $event)" /></label>
+                            <label class="il-field"><span>B (≈ 20)</span><input type="number" step="0.1" [value]="calib().b" (input)="setCalib('b', $event)" /></label>
+                            <label class="il-field"><span>C (≈ 150)</span><input type="number" step="0.1" [value]="calib().c" (input)="setCalib('c', $event)" /></label>
+                            <label class="il-field"><span>D (≈ 200)</span><input type="number" step="0.1" [value]="calib().d" (input)="setCalib('d', $event)" /></label>
+                          </div>
+                          <button type="button" class="il-btn il-wide" [disabled]="!printer()" (click)="saveCalibration()">Salvar calibração desta impressora</button>
+                        }
+                        @if (printStatus()) { <p class="il-note">{{ printStatus() }}</p> }
+                      </div></section>
                     }
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportPrintCutPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF impressão + corte</strong><small>Página 1 pra imprimir, página 2 com o corte em vetor</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF da folha</strong><small>No tamanho físico, pronto pra imprimir</small></span></button>
@@ -779,6 +849,14 @@ function loadPrefs(): Prefs {
     .ab-p-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ab-p-date { flex-shrink: 0; font-size: 11px; color: var(--text-muted); }
     .ab-menu-empty { margin: 8px; font-size: 11px; color: var(--text-muted); }
+    .ab-menu-label { margin: 8px 8px 2px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+    .pc-print { border: 1px solid var(--il-line); border-radius: 6px; margin-bottom: 6px; }
+    .pc-print .il-sec-body { display: flex; flex-direction: column; gap: 8px; }
+    .pc-print .il-row { display: flex; gap: 8px; align-items: flex-end; }
+    .pc-print .il-field input { width: 64px; }
+    .pc-cal { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+    .pc-cal-grid { display: grid !important; grid-template-columns: repeat(4, 1fr); }
+    .pc-cal-grid .il-field input { width: 100%; }
     .ab-right { display: flex; align-items: center; gap: 4px; }
     .ab-user { font-size: 11px; color: var(--text-muted); max-width: 170px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -901,6 +979,26 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   selected = computed(() => this.images().find((i) => i.id === this.selectedId()) ?? null);
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
+  readonly desktop = inject(DesktopService);
+  /** Desktop: o arquivo .edimg deste projeto (null = ainda não salvo em disco). */
+  projectPath = signal<string | null>(null);
+  recents = signal<DesktopRecent[]>([]);
+  lastDownload = signal<{ caminho: string; nome: string } | null>(null);
+  private downloadTimer?: ReturnType<typeof setTimeout>;
+  private desktopSub?: Subscription;
+  printers = signal<DesktopPrinter[]>([]);
+  printer = signal('');
+  printCopies = signal(1);
+  printing = signal(false);
+  printStatus = signal('');
+  calibrating = signal(false);
+  calib = signal({ a: 20, b: 20, c: 150, d: 200 });
+  sendingStudio = signal(false);
+  printerCalibrated = computed(() => {
+    const c = this.printers().find((p) => p.nome === this.printer())?.calibracao;
+    return !!c && (c.dxMm !== 0 || c.dyMm !== 0 || c.escalaX !== 1 || c.escalaY !== 1);
+  });
+
   projects = signal<ImageProjectMetaDto[]>([]);
   projectId = signal<string | null>(null);
   projectName = signal('');
@@ -944,11 +1042,35 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.illustration.layers(); this.illustration.widthMm(); this.illustration.heightMm();
       untracked(() => this.markDirty());
     });
+    if (this.desktop.enabled) {
+      // o programa pergunta antes de fechar a janela com trabalho não salvo
+      window.__editorAlterado = () => this.dirty && this.hasContent();
+      this.desktopSub = this.desktop.events.subscribe((e) => {
+        if (e.tipo === 'abrir') void this.openFile(e.caminho);
+        else if (e.tipo === 'baixado') {
+          this.lastDownload.set({ caminho: e.caminho, nome: e.nome });
+          clearTimeout(this.downloadTimer);
+          this.downloadTimer = setTimeout(() => this.lastDownload.set(null), 10000);
+        }
+      });
+      effect(() => {
+        const name = this.projectName().trim();
+        document.title = name ? `${name} — Editor de Imagens` : 'Editor de Imagens';
+      });
+    }
   }
 
   ngAfterViewInit(): void {
     this.scheduleRender();
-    void this.refreshProjects();
+    if (this.desktop.enabled) {
+      void this.refreshRecents();
+      void this.loadPrinters();
+      void this.desktop.info().then((i) => {
+        if (i.arquivoInicial) void this.openFile(i.arquivoInicial);
+      }).catch(() => undefined);
+    } else {
+      void this.refreshProjects();
+    }
     void this.upscale.verificar();
     void this.materials.load();
     void loadDraft().then((d) => {
@@ -958,6 +1080,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearTimeout(this.interactionTimer);
+    clearTimeout(this.downloadTimer);
+    this.desktopSub?.unsubscribe();
+    if (this.desktop.enabled) delete window.__editorAlterado;
     // saindo da página com mudanças pendentes: grava já, sem esperar o intervalo
     if (this.draftTimer) {
       clearTimeout(this.draftTimer);
@@ -1268,7 +1393,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctrl = event.ctrlKey || event.metaKey;
     if (ctrl && event.key.toLowerCase() === 's') {
       event.preventDefault();
-      void this.saveProject();
+      if (event.shiftKey && this.desktop.enabled) void this.saveProjectAs();
+      else void this.saveProject();
       return;
     }
     if (this.modo() !== 'corte' || isTyping(event.target) || event.altKey) return;
@@ -1420,6 +1546,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       await saveDraft({
         savedAt: new Date().toISOString(),
         projectId: this.projectId(),
+        projectPath: this.projectPath(),
         projectName: this.projectName(),
         data: this.serialize(),
       });
@@ -1439,8 +1566,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     try {
       await this.applyProjectData(JSON.parse(d.data) as ProjectData);
       this.projectId.set(d.projectId);
+      this.projectPath.set(d.projectPath ?? null);
       this.projectName.set(d.projectName);
-      this.projectStatus.set('Trabalho recuperado. Salve pra guardar na conta.');
+      this.projectStatus.set(this.desktop.enabled ? 'Trabalho recuperado. Salve pra gravar no arquivo.' : 'Trabalho recuperado. Salve pra guardar na conta.');
       this.dirty = true;
     } catch {
       this.projectStatus.set('Não consegui recuperar o rascunho.');
@@ -2399,11 +2527,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Impressão (PNG da página inteira, sem marcas: quem imprime as marcas é o
    * Studio) + corte (DXF com a moldura da página) + o passo a passo. */
   async exportSilhouettePackage(): Promise<void> {
+    const files = await this.silhouetteFiles();
+    if (files) this.downloadBlob(zipStore(files), `folha-${this.sheetSize()}-silhouette.zip`);
+  }
+
+  private async silhouetteFiles(): Promise<ZipEntry[] | null> {
     const sheet = this.renderSheetHiRes(false);
     const dxf = this.sheetDxfText();
-    if (!sheet || !dxf) return;
+    if (!sheet || !dxf) return null;
     const png = await new Promise<Blob | null>((r) => sheet.canvas.toBlob(r, 'image/png'));
-    if (!png) return;
+    if (!png) return null;
     const kiss = this.kissCut();
     const extra = kiss
       ? [
@@ -2424,7 +2557,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       files.push({ name: 'folha-meio-corte.dxf', content: this.sheetDxfText('MEIO_CORTE')! });
       files.push({ name: 'folha-corte-total.dxf', content: this.sheetDxfText('CORTE_TOTAL')! });
     }
-    this.downloadBlob(zipStore(files), `folha-${this.sheetSize()}-silhouette.zip`);
+    return files;
   }
 
   /** Folha de teste: quadrados impressos com um corte 1 mm maior em volta, nos
@@ -2824,10 +2957,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   async saveProject(): Promise<void> {
     if (this.savingProject()) return;
     const name = this.projectName().trim() || 'Projeto sem nome';
-    if (!this.images().length && !this.templates.hasTemplate() && !this.social.hasImage() && !this.illustration.hasContent()) {
+    if (!this.hasContent()) {
       this.projectStatus.set('Importe ao menos uma imagem (ou um molde, ou desenhe na ilustração) antes de salvar.');
       return;
     }
+    if (this.desktop.enabled) return this.saveToFile(name, false);
     this.savingProject.set(true);
     this.projectStatus.set('Salvando…');
     const id = this.projectId() ?? uuid();
@@ -2846,6 +2980,177 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         : 'Falha ao salvar. Tente de novo.');
     } finally {
       this.savingProject.set(false);
+    }
+  }
+
+  // ---------- arquivos .edimg (programa desktop) ----------
+
+  async saveProjectAs(): Promise<void> {
+    if (this.savingProject()) return;
+    if (!this.hasContent()) {
+      this.projectStatus.set('Importe ao menos uma imagem (ou um molde, ou desenhe na ilustração) antes de salvar.');
+      return;
+    }
+    await this.saveToFile(this.projectName().trim() || 'Projeto sem nome', true);
+  }
+
+  private async saveToFile(name: string, asNew: boolean): Promise<void> {
+    this.savingProject.set(true);
+    this.projectStatus.set('Salvando…');
+    try {
+      const saved = await this.desktop.save(asNew ? null : this.projectPath(), name, this.serialize(), asNew);
+      if (!saved) {
+        this.projectStatus.set('');
+        return;
+      }
+      this.projectPath.set(saved.caminho);
+      this.projectName.set(saved.nome);
+      this.projectStatus.set(`Salvo às ${new Date().toLocaleTimeString('pt-BR')} — ${fileNameOf(saved.caminho)}`);
+      this.settleDraft();
+      void this.refreshRecents();
+    } catch (err: unknown) {
+      this.projectStatus.set(mensagemDeErro(err, 'Falha ao salvar o arquivo'));
+    } finally {
+      this.savingProject.set(false);
+    }
+  }
+
+  private confirmDiscard(): boolean {
+    return !(this.dirty && this.hasContent()) || confirm('Há alterações não salvas neste projeto. Abrir outro mesmo assim?');
+  }
+
+  async openFileDialog(): Promise<void> {
+    if (!this.confirmDiscard()) return;
+    try {
+      const file = await this.desktop.openDialog();
+      if (file) await this.loadFile(file);
+    } catch (err: unknown) {
+      this.projectStatus.set(mensagemDeErro(err, 'Falha ao abrir o arquivo'));
+    }
+  }
+
+  async openFile(caminho: string): Promise<void> {
+    if (caminho === this.projectPath() && !this.dirty) return;
+    if (!this.confirmDiscard()) return;
+    this.projectStatus.set('Abrindo…');
+    try {
+      await this.loadFile(await this.desktop.read(caminho));
+    } catch (err: unknown) {
+      this.projectStatus.set(mensagemDeErro(err, 'Falha ao abrir o arquivo'));
+      void this.refreshRecents();
+    }
+  }
+
+  private async loadFile(file: { caminho: string; nome: string; dados: string }): Promise<void> {
+    await this.applyProjectData(JSON.parse(file.dados) as ProjectData);
+    this.projectId.set(null);
+    this.projectPath.set(file.caminho);
+    this.projectName.set(file.nome);
+    this.projectStatus.set(`Aberto: ${fileNameOf(file.caminho)}`);
+    this.settleDraft();
+    this.draftOffer.set(null);
+    void this.refreshRecents();
+  }
+
+  async refreshRecents(): Promise<void> {
+    try {
+      this.recents.set(await this.desktop.recents());
+    } catch { /* a lista é só atalho */ }
+  }
+
+  async forgetRecent(caminho: string, event: Event): Promise<void> {
+    event.stopPropagation();
+    await this.desktop.forgetRecent(caminho).catch(() => undefined);
+    await this.refreshRecents();
+  }
+
+  reveal(caminho: string): void {
+    this.desktop.reveal(caminho).catch((err: unknown) => this.projectStatus.set(mensagemDeErro(err, 'Não consegui mostrar o arquivo')));
+  }
+
+  // ---------- impressão direta e Silhouette Studio (programa desktop) ----------
+
+  async loadPrinters(): Promise<void> {
+    try {
+      const list = await this.desktop.printers();
+      this.printers.set(list);
+      if (!list.some((p) => p.nome === this.printer())) this.printer.set((list.find((p) => p.padrao) ?? list[0])?.nome ?? '');
+    } catch {
+      this.printStatus.set('Não consegui listar as impressoras.');
+    }
+  }
+
+  async printDirect(): Promise<void> {
+    const sheet = this.renderSheetHiRes();
+    if (!sheet || !this.printer()) return;
+    this.printing.set(true);
+    this.printStatus.set('Preparando a folha…');
+    try {
+      const png = await new Promise<Blob | null>((r) => sheet.canvas.toBlob(r, 'image/png'));
+      if (!png) throw new Error('png');
+      await this.desktop.print(this.printer(), 'data:image/png;base64,' + (await blobToBase64(png)), sheet.wMm, sheet.hMm, Math.min(99, Math.max(1, this.printCopies())));
+      this.printStatus.set(`Enviado pra ${this.printer()}. Confira no driver que a escala está em 100% (sem "ajustar à página").`);
+    } catch (err: unknown) {
+      this.printStatus.set(mensagemDeErro(err, 'Falha ao imprimir'));
+    } finally {
+      this.printing.set(false);
+    }
+  }
+
+  async printCalibrationPage(): Promise<void> {
+    const { wMm, hMm } = sheetDimensionsMm(this.sheetSize(), 'retrato');
+    try {
+      await this.desktop.printCalibration(this.printer(), wMm, hMm);
+      this.printStatus.set('Página de calibração enviada. Meça A, B, C e D e salve.');
+    } catch (err: unknown) {
+      this.printStatus.set(mensagemDeErro(err, 'Falha ao imprimir'));
+    }
+  }
+
+  setCalib(k: 'a' | 'b' | 'c' | 'd', event: Event): void {
+    const v = parseFloat((event.target as HTMLInputElement).value.replace(',', '.'));
+    if (Number.isFinite(v)) this.calib.update((c) => ({ ...c, [k]: v }));
+  }
+
+  /** A página sai sem calibração: a cruz (20, 20) e as réguas (150, 200)
+   * medidas dizem quanto a impressora estica (s) e desloca (o): impresso =
+   * x·s + o. Pra sair certo, desenha-se em x·(1/s) − o/s. */
+  async saveCalibration(): Promise<void> {
+    const { a, b, c, d } = this.calib();
+    if (c < 135 || c > 165 || d < 180 || d > 220 || a < 0 || a > 50 || b < 0 || b > 50) {
+      this.printStatus.set('As medidas parecem erradas — confira: A e B perto de 20, C perto de 150, D perto de 200.');
+      return;
+    }
+    const sx = c / 150, sy = d / 200;
+    const cal = { dxMm: -(a - 20 * sx) / sx, dyMm: -(b - 20 * sy) / sy, escalaX: 1 / sx, escalaY: 1 / sy };
+    try {
+      await this.desktop.saveCalibration(this.printer(), cal);
+      await this.loadPrinters();
+      this.calibrating.set(false);
+      this.printStatus.set(`Calibração salva: desloca ${cal.dxMm.toFixed(1).replace('.', ',')} × ${cal.dyMm.toFixed(1).replace('.', ',')} mm, escala ${(cal.escalaX * 100).toFixed(1).replace('.', ',')}% × ${(cal.escalaY * 100).toFixed(1).replace('.', ',')}%.`);
+    } catch (err: unknown) {
+      this.printStatus.set(mensagemDeErro(err, 'Falha ao salvar a calibração'));
+    }
+  }
+
+  async openInStudio(): Promise<void> {
+    const files = await this.silhouetteFiles();
+    if (!files) return;
+    this.sendingStudio.set(true);
+    try {
+      const enc = new TextEncoder();
+      const arquivos = files.map((f) => ({
+        nome: f.name,
+        dados: bytesToBase64(typeof f.content === 'string' ? enc.encode(f.content) : f.content),
+      }));
+      const r = await this.desktop.openInStudio(`folha ${this.sheetSize()}`, arquivos, 'folha-corte.dxf');
+      this.projectStatus.set(r.studio
+        ? 'Pacote gravado e aberto no Silhouette Studio. Siga o COMO-USAR.txt da pasta.'
+        : 'Pacote gravado na pasta que abriu — não achei o Silhouette Studio instalado.');
+    } catch (err: unknown) {
+      this.projectStatus.set(mensagemDeErro(err, 'Falha ao gravar o pacote'));
+    } finally {
+      this.sendingStudio.set(false);
     }
   }
 
@@ -2948,6 +3253,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.pieceCache.clear();
     this.selectedId.set(null);
     this.projectId.set(null);
+    this.projectPath.set(null);
     this.projectName.set('');
     this.projectCreatedAt = new Date().toISOString();
     this.projectStatus.set('');

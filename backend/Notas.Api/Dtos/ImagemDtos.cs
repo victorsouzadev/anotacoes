@@ -9,7 +9,9 @@ public record ImageProjectUpsertRequest(string Id, string Name, string Data,
     DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt);
 
 /// <summary>Ampliação por IA está ligada? E até que tamanho de foto o modelo aceita?</summary>
-public record UpscaleStatusDto(bool Disponivel, int MaxPixelsEntrada);
+/// <summary>Ampliação por IA está ligada? Até que tamanho? E a luz por IA (fica
+/// de fora na versão desktop, que roda sem internet)?</summary>
+public record UpscaleStatusDto(bool Disponivel, int MaxPixelsEntrada, bool Luz = true);
 
 /// <summary>Foto a ampliar, em data URL, e quantas vezes.</summary>
 public record UpscaleRequest(string? Imagem, int Escala);

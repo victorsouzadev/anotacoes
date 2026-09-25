@@ -11,6 +11,10 @@ export class ImageUpscaleService {
   /** `null` enquanto não se sabe; depois, ligado ou não. */
   readonly disponivel = signal<boolean | null>(null);
 
+  /** Luz por IA ligada. O programa desktop roda as IAs no próprio PC e não tem
+   * esta (é um modelo de difusão pesado demais). */
+  readonly luz = signal(true);
+
   /** Teto de pixels da foto de entrada, dito pelo servidor. O modelo roda numa
    * GPU e recusa acima disso — melhor reduzir antes de subir do que descobrir
    * depois de esperar o upload. */
@@ -26,10 +30,11 @@ export class ImageUpscaleService {
   verificar(forcar = false): Promise<boolean> {
     if (forcar) this.consulta = null;
     this.consulta ??= firstValueFrom(
-      this.http.get<{ disponivel: boolean; maxPixelsEntrada: number }>('/api/imagens/upscale'),
+      this.http.get<{ disponivel: boolean; maxPixelsEntrada: number; luz?: boolean }>('/api/imagens/upscale'),
     )
       .then((r) => {
         this.disponivel.set(r.disponivel);
+        this.luz.set(r.luz ?? true);
         if (r.maxPixelsEntrada > 0) this.maxPixelsEntrada.set(r.maxPixelsEntrada);
         return r.disponivel;
       })

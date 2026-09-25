@@ -7,6 +7,7 @@ import { uuid } from '../../core/uuid';
 import { FONT_CATEGORIES, FontCategory, FontError } from './fonts';
 import { IlIconComponent } from './illustration-icons';
 import { IllustrationStore } from './illustration-store';
+import { DesktopFont, DesktopService } from '../../core/desktop';
 
 @Component({
   selector: 'il-font-picker',
@@ -30,6 +31,18 @@ import { IllustrationStore } from './illustration-store';
             <button type="button" [class.il-on]="category() === c" (click)="category.set(c)">{{ c }}</button>
           }
         </div>
+        @if (windowsMode()) {
+          <div class="il-fp-list">
+            @for (f of windowsList(); track f.id) {
+              <button type="button" class="il-fp-item" (click)="chooseWindows(f)">
+                <span class="il-fp-sample" [style.font-family]="'&quot;' + f.nome + '&quot;, sans-serif'">{{ sample() || f.nome }}</span>
+                <span class="il-fp-meta">{{ f.nome }} · Windows</span>
+              </button>
+            } @empty {
+              <p class="il-fp-empty">{{ windowsFonts() ? 'Nenhuma fonte com esse nome.' : 'Lendo as fontes do Windows…' }}</p>
+            }
+          </div>
+        } @else {
         <div class="il-fp-list">
           @for (f of list(); track f.id) {
             <button type="button" class="il-fp-item" [class.il-on]="f.id === fontId()" (click)="choose(f.id)">
@@ -40,7 +53,11 @@ import { IllustrationStore } from './illustration-store';
             <p class="il-fp-empty">Nenhuma fonte com esse nome.</p>
           }
         </div>
+        }
         <div class="il-fp-foot">
+          @if (desktop.enabled) {
+            <button type="button" class="il-btn il-grow" [class.il-on]="windowsMode()" (click)="toggleWindows()"><il-icon name="folder" [size]="13" /> {{ windowsMode() ? 'Fontes do editor' : 'Fontes do Windows' }}</button>
+          }
           <input #file type="file" accept=".ttf,.otf,.woff,font/ttf,font/otf,font/woff" hidden (change)="upload($event)" />
           <button type="button" class="il-btn il-grow" (click)="file.click()"><il-icon name="upload" [size]="13" /> Enviar fonte (.ttf, .otf, .woff)</button>
         </div>
@@ -113,6 +130,44 @@ export class IlFontPickerComponent {
   choose(id: string): void {
     this.picked.emit(id);
     this.open.set(false);
+  }
+
+  // ---------- fontes do Windows (programa desktop) ----------
+
+  desktop = inject(DesktopService);
+  windowsMode = signal(false);
+  windowsFonts = signal<DesktopFont[] | null>(null);
+  windowsList = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    return (this.windowsFonts() ?? []).filter((f) => !q || f.nome.toLowerCase().includes(q));
+  });
+
+  toggleWindows(): void {
+    this.windowsMode.update((v) => !v);
+    if (this.windowsMode() && !this.windowsFonts()) {
+      this.desktop.fonts().then((l) => this.windowsFonts.set(l)).catch(() => {
+        this.windowsFonts.set([]);
+        this.status.set('Não consegui ler as fontes do Windows.');
+      });
+    }
+  }
+
+  /** A fonte do Windows entra como fonte enviada: o arquivo vai junto no projeto. */
+  async chooseWindows(f: DesktopFont): Promise<void> {
+    const id = 'win-' + f.id;
+    if (this.store.fonts.uploads().some((u) => u.id === id)) {
+      this.choose(this.store.fonts.uploadFontId(id));
+      return;
+    }
+    this.status.set('Lendo a fonte…');
+    try {
+      const blob = await this.desktop.fontFile(f.id);
+      const up = await this.store.fonts.addUpload(new File([blob], `${f.nome}.ttf`), id);
+      this.status.set(`"${up.name}" adicionada.`);
+      this.choose(this.store.fonts.uploadFontId(up.id));
+    } catch (err) {
+      this.status.set(err instanceof FontError ? err.message : 'Não consegui ler essa fonte.');
+    }
   }
 
   upload(event: Event): void {

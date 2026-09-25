@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Motor de CPU: roda os modelos de verdade em qualquer sistema. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/EditorImagens.Ia/EditorImagens.Ia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- O formato .edimg não depende de WPF: testa o arquivo do programa direto. -->
+    <Compile Include="../../src/EditorImagens.Desktop/ArquivoProjeto.cs" Link="Desktop/ArquivoProjeto.cs" />
+  </ItemGroup>
+
+</Project>

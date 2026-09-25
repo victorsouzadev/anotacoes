@@ -78,7 +78,7 @@ public static class AuthEndpoints
         });
     }
 
-    private static async Task<AuthResponse> IssueTokens(
+    internal static async Task<AuthResponse> IssueTokens(
         User user, AppDbContext db, TokenService tokens, bool saveNow = true)
     {
         var refresh = TokenService.GenerateRefreshToken();

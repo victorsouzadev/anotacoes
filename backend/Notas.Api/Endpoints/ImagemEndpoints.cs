@@ -220,7 +220,7 @@ public static class ImagemEndpoints
             Microsoft.Extensions.Options.IOptions<UpscaleOptions> options, CancellationToken ct) =>
         {
             var efetivo = await factory.ResolverAsync(user.UserId(), ct);
-            return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel, options.Value.MaxInputPixels));
+            return Results.Ok(new UpscaleStatusDto(efetivo.Disponivel, options.Value.MaxInputPixels, efetivo.Luz));
         });
 
         group.MapPost("/reiluminar", async (

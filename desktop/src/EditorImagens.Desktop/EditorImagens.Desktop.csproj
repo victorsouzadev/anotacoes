@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- Compila (sem rodar) também no Linux, pro CI checar o código. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>EditorImagens</AssemblyName>
+    <RootNamespace>EditorImagens.Desktop</RootNamespace>
+    <ApplicationIcon>icone.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>Editor de Imagens</Product>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../backend/Notas.Api/Notas.Api.csproj" />
+    <ProjectReference Include="../EditorImagens.Ia/EditorImagens.Ia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="icone.ico" />
+    <!-- O Angular compilado e os modelos de IA entram no pacote pelo CI (ver
+         .github/workflows/desktop.yml); aqui só são copiados se existirem. -->
+    <None Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="modelos/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

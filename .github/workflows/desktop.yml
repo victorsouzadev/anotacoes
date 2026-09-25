@@ -1,0 +1,97 @@
+name: Desktop (Windows)
+
+# Monta o instalador do Editor de Imagens pra Windows: o Angular compilado, os
+# modelos de IA e a API rodando dentro do programa, num Setup.exe do Velopack.
+# Tag desktop-v1.2.3 publica uma Release (o programa instalado se atualiza por
+# ela); "Run workflow" só gera o instalador como artefato.
+
+on:
+  push:
+    tags: ['desktop-v*']
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: 'Versão (ex.: 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+env:
+  BIREFNET_URL: https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx
+  ESRGAN_URL: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.63.0/real_esrgan_x4plus-onnx-float.zip
+
+jobs:
+  instalador:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versão
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/desktop-v* ]]; then v="${GITHUB_REF#refs/tags/desktop-v}"; else v="${{ inputs.versao }}"; fi
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Angular
+        working-directory: frontend
+        run: |
+          npm ci
+          npx ng build --configuration production
+          mkdir -p ../desktop/src/EditorImagens.Desktop/wwwroot
+          cp -r dist/frontend/browser/. ../desktop/src/EditorImagens.Desktop/wwwroot/
+
+      - name: Cache dos modelos
+        id: cache-modelos
+        uses: actions/cache@v4
+        with:
+          path: desktop/src/EditorImagens.Desktop/modelos
+          key: modelos-${{ hashFiles('.github/workflows/desktop.yml') }}
+      - name: Modelos de IA (BiRefNet, Real-ESRGAN)
+        if: steps.cache-modelos.outputs.cache-hit != 'true'
+        run: |
+          d=desktop/src/EditorImagens.Desktop/modelos
+          mkdir -p "$d" tmp-esrgan
+          curl -fsSL "$BIREFNET_URL" -o "$d/birefnet.onnx"
+          curl -fsSL "$ESRGAN_URL" -o esrgan.zip
+          7z x esrgan.zip -otmp-esrgan > /dev/null
+          find tmp-esrgan -name 'real_esrgan_x4plus.onnx' -exec cp {} "$d/" \;
+          find tmp-esrgan -name 'real_esrgan_x4plus.data' -exec cp {} "$d/" \;
+          ls -la "$d"
+          test -s "$d/birefnet.onnx" && test -s "$d/real_esrgan_x4plus.onnx" && test -s "$d/real_esrgan_x4plus.data"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Testes (IA com os modelos de verdade, formato .edimg)
+        run: dotnet test desktop/tests/EditorImagens.Ia.Tests --configuration Release
+        env:
+          EDITOR_MODELOS: ${{ github.workspace }}/desktop/src/EditorImagens.Desktop/modelos
+      - name: Publicar
+        run: dotnet publish desktop/src/EditorImagens.Desktop -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.versao }} -o publish
+      - name: Instalador (Velopack)
+        run: |
+          dotnet tool install -g vpk --version 1.2.158
+          vpk pack --packId EditorImagens --packVersion ${{ steps.v.outputs.versao }} --packDir publish \
+            --mainExe EditorImagens.exe --packTitle "Editor de Imagens" --packAuthors "Editor de Imagens" \
+            --icon desktop/src/EditorImagens.Desktop/icone.ico --framework webview2 --outputDir Releases
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EditorImagens-${{ steps.v.outputs.versao }}
+          path: Releases/
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Editor de Imagens ${{ steps.v.outputs.versao }} (Windows)
+          files: Releases/*

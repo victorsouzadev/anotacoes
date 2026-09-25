@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { desktopKey, isDesktop } from './desktop';
 
 export interface AuthUser {
   id: string;
@@ -66,6 +67,14 @@ export class AuthService {
     this.persist(res);
   }
 
+  /** Programa desktop: um usuário local, sem senha — a chave da janela basta. */
+  async loginLocal(): Promise<void> {
+    const res = await firstValueFrom(
+      this.http.post<AuthResponse>('/api/auth/local', {}, { headers: { 'X-Desktop-Key': desktopKey() } }),
+    );
+    this.persist(res);
+  }
+
   async logout(): Promise<void> {
     const refreshToken = this.refreshTokenValue();
     this.accessToken.set(null);
@@ -86,6 +95,11 @@ export class AuthService {
 
   /** Limpa a sessão local (sem chamar a API) e manda o usuário para o login. */
   private clearSessionAndRedirect(): void {
+    if (isDesktop()) {
+      // no desktop não há tela de login: a sessão se refaz sozinha na próxima navegação
+      void this.loginLocal().catch(() => undefined);
+      return;
+    }
     this.accessToken.set(null);
     this.refreshTokenValue.set(null);
     this.user.set(null);
@@ -105,6 +119,14 @@ export class AuthService {
     if (refreshToken && refreshToken !== this.refreshTokenValue()) {
       this.refreshTokenValue.set(refreshToken);
     }
+    if (!refreshToken && isDesktop()) {
+      try {
+        await this.loginLocal();
+        return this.accessToken();
+      } catch {
+        return null;
+      }
+    }
     if (!refreshToken) {
       // Sem token de acesso nem refresh: a sessão nunca existiu ou foi perdida
       // (ex.: storage limpo). Mandar para o login em vez de falhar em silêncio.
@@ -120,6 +142,14 @@ export class AuthService {
         this.persist(res);
         return res.accessToken;
       } catch {
+        if (isDesktop()) {
+          try {
+            await this.loginLocal();
+            return this.accessToken();
+          } catch {
+            return null;
+          }
+        }
         this.clearSessionAndRedirect();
         return null;
       } finally {
