@@ -9,11 +9,19 @@ import { BridgeTarget, ModeBridge } from './mode-bridge';
 import { pngBlobWithDpi } from './contour';
 import { jpegToPdf } from './sheet';
 import { NEW_PHOTO_DEFAULTS, TemplateStore } from './template-store';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { FontLibrary, nearestWeight } from './fonts';
+import { GALLERY, GalleryTemplate } from './template-gallery';
+import { pngToTemplate } from './png-template';
 import {
   ParsedTemplate,
   PhotoLayer,
   TemplateError,
+  TemplateTextInfo,
+  applyTextEdits,
   downloadBlob,
+  listTemplateTexts,
+  renderAddedTexts,
   loadImageElement,
   renderPhotos,
   renderSlotHits,
@@ -31,7 +39,10 @@ const MAX_ZOOM = 8;
 const MIN_PHOTO_SCALE = 0.2;
 const MAX_PHOTO_SCALE = 8;
 
-type TabId = 'molde' | 'fotos' | 'exportar';
+type TabId = 'molde' | 'fotos' | 'textos' | 'exportar';
+
+/** Fontes oferecidas pros textos novos (vão embutidas no SVG). */
+const TEXT_FONTS = ['poppins', 'montserrat', 'fredoka', 'luckiest-guy', 'pacifico', 'great-vibes', 'dancing-script', 'caveat', 'playfair-display', 'cinzel', 'bebas-neue'];
 
 interface DragState {
   pointerId: number;
@@ -109,6 +120,7 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
   template: `
     <input #svgInput type="file" accept=".svg,image/svg+xml" hidden (change)="onSvgInput($event)" />
     <input #photoInput type="file" accept="image/*" multiple hidden (change)="onPhotoInput($event)" />
+    <input #pngInput type="file" accept="image/png" hidden (change)="onPngInput($event)" />
 
     <div class="il-controlbar">
       <div class="il-cb-group">
@@ -203,11 +215,25 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
                     <button type="button" class="il-btn il-danger" (click)="removeTemplate()" data-tip="Remover o molde"><il-icon name="trash" [size]="13" /></button>
                   }
                 </div>
+                <button type="button" class="il-btn il-wide" data-help="Moldura ou cartão com janelas transparentes: cada janela vira um encaixe" (click)="pngInput.click()"><il-icon name="image" [size]="13" /> Molde de um PNG transparente</button>
                 @if (store.hasTemplate()) {
                   <span class="il-item-sub">{{ store.fileName() || 'molde.svg' }}</span>
                   <il-num label="Largura" unit="mm" [value]="store.widthMm()" [min]="10" [max]="2000" (valueChange)="setWidth($event.value)" />
                   <p class="il-note">Altura {{ store.heightMm().toFixed(1).replace('.', ',') }} mm — segue a proporção do molde.</p>
                 }
+              </div>
+            </section>
+            <section class="il-sec">
+              <div class="il-sec-head il-sec-static">Moldes prontos</div>
+              <div class="il-sec-body">
+                <div class="tm-gallery">
+                  @for (g of gallery; track g.tpl.id) {
+                    <button type="button" class="tm-card" [attr.data-help]="g.tpl.help" (click)="useGallery(g.tpl)">
+                      <span class="tm-card-img" [innerHTML]="g.preview"></span>
+                      <span>{{ g.tpl.label }}</span>
+                    </button>
+                  }
+                </div>
               </div>
             </section>
             @if (store.hasTemplate()) {
@@ -227,6 +253,51 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
                     <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Remover encaixe" aria-label="Remover encaixe" (click)="store.removeSlot(slot.id)"><il-icon name="trash" [size]="13" /></button>
                   </div>
                 }
+              </section>
+            }
+          }
+          @case ('textos') {
+            @if (!store.hasTemplate()) {
+              <p class="il-note tm-pad">Abra um molde pra editar os textos dele.</p>
+            } @else {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">Textos do molde <small>{{ moldTexts().length }}</small></div>
+                <div class="il-sec-body">
+                  @if (!moldTexts().length) { <p class="il-note">Este molde não tem texto. Acrescente um abaixo.</p> }
+                  @for (t of moldTexts(); track t.index) {
+                    <div class="tm-text">
+                      <textarea class="il-textarea" rows="1" [value]="textValue(t)" [attr.aria-label]="'Texto ' + (t.index + 1)" (input)="store.editText(t.index, { text: $any($event.target).value })"></textarea>
+                      <div class="il-row il-row-tight">
+                        <input type="color" class="il-color-input" [value]="textColor(t)" aria-label="Cor do texto" (input)="store.editText(t.index, { color: $any($event.target).value })" />
+                        <button type="button" class="il-btn" [disabled]="!store.textEdits()[t.index]" (click)="store.resetText(t.index)">Original</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </section>
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">Textos novos</div>
+                <div class="il-sec-body">
+                  <button type="button" class="il-btn il-wide" (click)="store.addText()"><il-icon name="plus" [size]="13" /> Adicionar texto</button>
+                  @for (t of store.addedTexts(); track t.id) {
+                    <div class="tm-text">
+                      <textarea class="il-textarea" rows="2" [value]="t.text" aria-label="Texto" (input)="store.patchText(t.id, { text: $any($event.target).value })"></textarea>
+                      <div class="il-grid2">
+                        <select class="il-select" [value]="t.fontId" aria-label="Fonte" (change)="store.patchText(t.id, { fontId: $any($event.target).value })">
+                          @for (f of fontOptions; track f.id) { <option [value]="f.id">{{ f.name }}</option> }
+                        </select>
+                        <div class="il-row il-row-tight">
+                          <input type="color" class="il-color-input" [value]="t.color" aria-label="Cor" (input)="store.patchText(t.id, { color: $any($event.target).value })" />
+                          <button type="button" class="il-ib" [class.il-on]="t.bold" data-tip="Negrito" aria-label="Negrito" (click)="store.patchText(t.id, { bold: !t.bold })"><b>N</b></button>
+                          <button type="button" class="il-ib il-danger" data-tip="Remover" aria-label="Remover texto" (click)="store.removeText(t.id)"><il-icon name="trash" [size]="13" /></button>
+                        </div>
+                      </div>
+                      <label class="il-range"><span>Tamanho</span><input type="range" min="2" max="40" step="0.5" [value]="t.size * 100" (input)="store.patchText(t.id, { size: $any($event.target).value / 100 })" /><b>{{ (t.size * 100).toFixed(1) }}%</b></label>
+                      <label class="il-range"><span>Horizontal</span><input type="range" min="0" max="100" step="0.5" [value]="t.x * 100" (input)="store.patchText(t.id, { x: $any($event.target).value / 100 })" /><b>{{ (t.x * 100).toFixed(0) }}%</b></label>
+                      <label class="il-range"><span>Vertical</span><input type="range" min="0" max="100" step="0.5" [value]="t.y * 100" (input)="store.patchText(t.id, { y: $any($event.target).value / 100 })" /><b>{{ (t.y * 100).toFixed(0) }}%</b></label>
+                    </div>
+                  }
+                </div>
               </section>
             }
           }
@@ -305,6 +376,12 @@ function normalizePhoto(img: HTMLImageElement, original: string, mime: string): 
     .tm-stage { touch-action: none; }
     .tm-stage.tm-marking { cursor: crosshair; }
     .tm-pad { margin: 10px; }
+    .tm-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .tm-card { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 5px 3px; border: 1px solid var(--il-line); border-radius: 6px; background: var(--il-field); color: var(--text); font-size: 10px; cursor: pointer; }
+    .tm-card:hover { border-color: var(--il-blue); }
+    .tm-card-img { width: 56px; height: 48px; display: flex; align-items: center; justify-content: center; }
+    .tm-card-img svg { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+    .tm-text { display: flex; flex-direction: column; gap: 5px; padding: 6px 0; border-top: 1px solid var(--il-line); }
     .tm code, .tm-pad code { font-size: 10.5px; padding: 0 3px; border: 1px solid var(--il-line); border-radius: 3px; }
 
     /* O SVG do molde entra por appendChild: estes seletores precisam ser globais. */
@@ -321,6 +398,7 @@ export class TemplateModeComponent {
   readonly tabs: { id: TabId; label: string }[] = [
     { id: 'molde', label: 'Molde' },
     { id: 'fotos', label: 'Fotos' },
+    { id: 'textos', label: 'Textos' },
     { id: 'exportar', label: 'Exportar' },
   ];
   tab = signal<TabId>('molde');
@@ -342,8 +420,27 @@ export class TemplateModeComponent {
   private pendingSlotForPicker: string | null = null;
 
   readonly bridge = inject(ModeBridge);
+  private fonts = inject(FontLibrary);
+  private sanitizer = inject(DomSanitizer);
+  /** Textos que vieram no molde, lidos antes de qualquer edição. */
+  moldTexts = signal<TemplateTextInfo[]>([]);
+  private fontCss = signal('');
+  private fontCache = new Map<string, string>();
+  /** Aviso pra mostrar quando o molde novo terminar de montar. */
+  private mountHint = '';
+  readonly fontOptions = TEXT_FONTS.map((id) => ({ id, name: this.fonts.family(id).name }));
+  /** Miniaturas: marcação fixa daqui mesmo, não entrada de usuário. */
+  readonly gallery = GALLERY.map((tpl) => ({
+    tpl,
+    preview: this.sanitizer.bypassSecurityTrustHtml(tpl.svg.replace(/<\?xml[^>]*>/, '')) as SafeHtml,
+  }));
 
   constructor(public store: TemplateStore) {
+    // Fontes dos textos novos: embutidas como @font-face no próprio SVG.
+    effect(() => {
+      const used = [...new Set(this.store.addedTexts().map((t) => `${t.fontId}@${t.bold ? 700 : 400}`))];
+      void untracked(() => this.loadFontCss(used));
+    });
     // Desfazer: o histórico fotografa encaixes, fotos e largura a cada mudança.
     effect(() => this.store.history.observe(this.store.snapshotState()));
     // Fotos mandadas por outro modo entram assim que houver onde encaixar.
@@ -372,6 +469,7 @@ export class TemplateModeComponent {
       if (this.mounted !== parsed) {
         host.replaceChildren(document.adoptNode(parsed.root));
         this.mounted = parsed;
+        this.moldTexts.set(listTemplateTexts(parsed.root));
         this.applyZoom();
         if (this.store.slots().length) {
           this.store.refreshRects(parsed.root);
@@ -379,11 +477,14 @@ export class TemplateModeComponent {
           this.hint.set('Nenhum encaixe detectado — use "Marcar encaixe" e clique na forma que recebe a foto.');
           this.marking.set(true);
         } else {
-          this.hint.set('');
+          untracked(() => this.hint.set(this.mountHint));
         }
+        this.mountHint = '';
       }
-      // Repinta a cada mudança de encaixe, camada ou seleção.
+      // Repinta a cada mudança de encaixe, camada, texto ou seleção.
+      applyTextEdits(parsed.root, untracked(() => this.moldTexts()), this.store.textEdits());
       renderPhotos(parsed.root, this.store.slots(), this.store.photos(), parsed.idPrefix);
+      renderAddedTexts(parsed.root, this.store.addedTexts(), parsed.viewBox, this.familyNames(), this.fontCss());
       renderSlotHits(parsed.root, this.store.slots(), {
         selectedSlot: this.store.selectedPhoto()?.slotId ?? this.activeSlot(),
         emptySlots: this.store.emptySlotIds(),
@@ -482,6 +583,80 @@ export class TemplateModeComponent {
       // Com um molde já na tela a área de soltar some, e com ela o aviso de erro.
       this.hint.set(message);
     }
+  }
+
+  // ---------- moldes prontos, PNG e textos ----------
+
+  useGallery(tpl: GalleryTemplate): void {
+    this.store.loadSvgText(tpl.svg, `${tpl.id}.svg`);
+    this.resetView();
+  }
+
+  onPngInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    void (async () => {
+      try {
+        const { svg, holes } = await pngToTemplate(file);
+        this.store.loadSvgText(svg, file.name.replace(/\.png$/i, '.svg'));
+        this.store.photosBehind.set(true);
+        this.resetView();
+        this.mountHint = `${holes} janela(s) viraram encaixe — as fotos entram por trás da moldura.`;
+      } catch (err) {
+        const message = err instanceof TemplateError ? err.message : 'Não consegui usar esse PNG como molde.';
+        this.store.error.set(message);
+        this.hint.set(message);
+      }
+    })();
+  }
+
+  private resetView(): void {
+    this.store.error.set('');
+    this.mounted = null;
+    this.zoom.set(1);
+    this.marking.set(false);
+    this.hint.set('');
+    this.tab.set('molde');
+  }
+
+  textValue(t: TemplateTextInfo): string {
+    return this.store.textEdits()[t.index]?.text ?? t.lines.join('\n');
+  }
+
+  textColor(t: TemplateTextInfo): string {
+    const c = this.store.textEdits()[t.index]?.color ?? t.fill ?? '#000000';
+    return /^#[0-9a-f]{6}$/i.test(c) ? c : '#000000';
+  }
+
+  private familyNames(): Record<string, string> {
+    return Object.fromEntries(TEXT_FONTS.map((id) => [id, this.fonts.family(id).name]));
+  }
+
+  private async loadFontCss(keys: string[]): Promise<void> {
+    const rules: string[] = [];
+    for (const key of keys) {
+      const [id, w] = key.split('@');
+      const fam = this.fonts.family(id);
+      const weight = nearestWeight(fam.weights, Number(w));
+      const cacheKey = `${id}@${weight}`;
+      let rule = this.fontCache.get(cacheKey);
+      if (!rule) {
+        try {
+          const res = await fetch(new URL(`fonts/${id}-${weight}.woff`, document.baseURI).href);
+          const buf = new Uint8Array(await res.arrayBuffer());
+          let bin = '';
+          for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+          rule = `@font-face{font-family:'${fam.name}';font-weight:${Number(w)};src:url(data:font/woff;base64,${btoa(bin)}) format('woff');}`;
+          this.fontCache.set(cacheKey, rule);
+        } catch {
+          continue;
+        }
+      }
+      rules.push(rule);
+    }
+    this.fontCss.set(rules.join(''));
   }
 
   removeTemplate(): void {

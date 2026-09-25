@@ -9,7 +9,9 @@ import {
   ParsedTemplate,
   PhotoDepth,
   PhotoLayer,
+  AddedText,
   TemplateSlot,
+  TextEdit,
   autoDetectSlots,
   ensureElementId,
   isSlotCandidate,
@@ -25,19 +27,26 @@ export interface TemplateProjectData {
   widthMm: number;
   slots: TemplateSlot[];
   photos: PhotoLayer[];
+  textEdits?: Record<number, TextEdit>;
+  addedTexts?: AddedText[];
+  /** Molde feito de PNG: as fotos entram por trás da moldura. */
+  photosBehind?: boolean;
 }
 
 export interface TemplateSnapshot {
   slots: TemplateSlot[];
   photos: PhotoLayer[];
   widthMm: number;
+  textEdits: Record<number, TextEdit>;
+  addedTexts: AddedText[];
 }
 
 /** Os retângulos dos encaixes são remedidos ao montar o molde na tela; isso
  * não é edição do usuário, então não vira passo no desfazer. */
 function sameTemplateState(a: TemplateSnapshot, b: TemplateSnapshot): boolean {
   const key = (s: TemplateSnapshot) => s.slots.map((x) => `${x.id}:${x.label}:${x.elId}`).join('|');
-  return a.photos === b.photos && a.widthMm === b.widthMm && key(a) === key(b);
+  return a.photos === b.photos && a.widthMm === b.widthMm && key(a) === key(b)
+    && a.textEdits === b.textEdits && a.addedTexts === b.addedTexts;
 }
 
 export const NEW_PHOTO_DEFAULTS = {
@@ -64,6 +73,9 @@ export class TemplateStore {
   error = signal('');
   /** Fotos mandadas por outro modo ("Enviar para…"), esperando o molde abrir. */
   pendingPhotos = signal<File[]>([]);
+  textEdits = signal<Record<number, TextEdit>>({});
+  addedTexts = signal<AddedText[]>([]);
+  photosBehind = signal(false);
 
   readonly history = new SnapshotHistory<TemplateSnapshot>(700, sameTemplateState);
 
@@ -71,7 +83,7 @@ export class TemplateStore {
    * effect precisa de contexto de injeção, e o store também nasce solto nos
    * testes). */
   snapshotState(): TemplateSnapshot {
-    return { slots: this.slots(), photos: this.photos(), widthMm: this.widthMm() };
+    return { slots: this.slots(), photos: this.photos(), widthMm: this.widthMm(), textEdits: this.textEdits(), addedTexts: this.addedTexts() };
   }
 
   undo(): void {
@@ -88,6 +100,8 @@ export class TemplateStore {
     this.slots.set(s.slots);
     this.photos.set(s.photos);
     this.widthMm.set(s.widthMm);
+    this.textEdits.set(s.textEdits);
+    this.addedTexts.set(s.addedTexts);
     const sel = this.selectedPhotoId();
     if (sel && !s.photos.some((p) => p.id === sel)) this.selectedPhotoId.set(null);
   }
@@ -133,6 +147,9 @@ export class TemplateStore {
     this.widthMm.set(parsed.widthMm);
     this.slots.set([]);
     this.photos.set([]);
+    this.textEdits.set({});
+    this.addedTexts.set([]);
+    this.photosBehind.set(false);
     this.selectedPhotoId.set(null);
     this.error.set('');
     this.history.reset();
@@ -147,8 +164,39 @@ export class TemplateStore {
     this.photos.set([]);
     this.selectedPhotoId.set(null);
     this.widthMm.set(100);
+    this.textEdits.set({});
+    this.addedTexts.set([]);
+    this.photosBehind.set(false);
     this.error.set('');
     this.history.reset();
+  }
+
+  // ---------- textos ----------
+
+  editText(index: number, patch: TextEdit): void {
+    this.textEdits.update((m) => ({ ...m, [index]: { ...(m[index] ?? {}), ...patch } }));
+  }
+
+  resetText(index: number): void {
+    this.textEdits.update((m) => {
+      const next = { ...m };
+      delete next[index];
+      return next;
+    });
+  }
+
+  addText(text = 'Seu texto'): AddedText {
+    const t: AddedText = { id: uuid(), text, x: 0.5, y: 0.5, size: 0.08, color: '#222222', fontId: 'poppins', bold: true };
+    this.addedTexts.update((l) => [...l, t]);
+    return t;
+  }
+
+  patchText(id: string, patch: Partial<AddedText>): void {
+    this.addedTexts.update((l) => l.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }
+
+  removeText(id: string): void {
+    this.addedTexts.update((l) => l.filter((t) => t.id !== id));
   }
 
   // ---------- encaixes ----------
@@ -219,7 +267,9 @@ export class TemplateStore {
   addPhoto(slotId: string, photo: Omit<PhotoLayer, 'id' | 'z' | 'slotId'>): string {
     const id = uuid();
     const z = this.photos().reduce((max, p) => Math.max(max, p.z), 0) + 1;
-    this.photos.update((list) => [...list, { ...photo, id, slotId, z }]);
+    // Molde de PNG: a moldura fica por cima, então a foto vai atrás dela.
+    const depth = this.photosBehind() ? 'atras' : photo.depth;
+    this.photos.update((list) => [...list, { ...photo, depth, id, slotId, z }]);
     this.selectedPhotoId.set(id);
     return id;
   }
@@ -267,6 +317,9 @@ export class TemplateStore {
       widthMm: this.widthMm(),
       slots: this.slots(),
       photos: this.photos(),
+      textEdits: this.textEdits(),
+      addedTexts: this.addedTexts(),
+      photosBehind: this.photosBehind(),
     };
   }
 
@@ -281,6 +334,9 @@ export class TemplateStore {
       oldPrefix && elId.startsWith(oldPrefix) ? parsed.idPrefix + elId.slice(oldPrefix.length) : elId;
     this.slots.set((data.slots ?? []).map((s) => ({ ...s, transform: s.transform ?? '', elId: remap(s.elId) })));
     this.photos.set(data.photos ?? []);
+    this.textEdits.set(data.textEdits ?? {});
+    this.addedTexts.set(data.addedTexts ?? []);
+    this.photosBehind.set(!!data.photosBehind);
     this.selectedPhotoId.set(null);
   }
 }

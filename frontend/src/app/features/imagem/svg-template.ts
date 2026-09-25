@@ -519,6 +519,115 @@ function cssEscape(id: string): string {
   return id.replace(/([^\w-])/g, '\\$1');
 }
 
+// ---------- textos ----------
+
+/** Um texto que já vem no molde. `index` é a ordem entre os `<text>` do
+ * arquivo — estável entre um parse e outro, então serve de chave no projeto. */
+export interface TemplateTextInfo {
+  index: number;
+  /** Linhas (uma por `<tspan>` de linha, ou o texto inteiro). */
+  lines: string[];
+  fill: string | null;
+}
+
+export interface TextEdit {
+  text?: string;
+  color?: string;
+}
+
+/** Texto acrescentado no editor, por cima do molde. Posição e corpo em
+ * frações do molde, pra continuar no lugar se a largura mudar. */
+export interface AddedText {
+  id: string;
+  text: string;
+  /** Centro, de 0 a 1 do viewBox. */
+  x: number;
+  y: number;
+  /** Corpo em fração da altura do molde. */
+  size: number;
+  color: string;
+  fontId: string;
+  bold: boolean;
+}
+
+function moldTexts(root: SVGSVGElement): SVGTextElement[] {
+  return Array.from(root.querySelectorAll<SVGTextElement>('text')).filter((t) => !t.closest(`[${EDITOR_ATTR}]`) && !t.closest('[data-slot-id]'));
+}
+
+function lineSpans(t: SVGTextElement): SVGTSpanElement[] {
+  return Array.from(t.children).filter((c): c is SVGTSpanElement => c.localName === 'tspan');
+}
+
+export function listTemplateTexts(root: SVGSVGElement): TemplateTextInfo[] {
+  return moldTexts(root).map((t, index) => {
+    const spans = lineSpans(t);
+    const lines = spans.length > 1 ? spans.map((sp) => sp.textContent ?? '') : [t.textContent ?? ''];
+    return { index, lines, fill: t.getAttribute('fill') ?? t.style.fill ?? null };
+  });
+}
+
+/** Aplica as edições sobre os textos originais (`originals` vem de
+ * `listTemplateTexts` antes de qualquer edição, pra desfazer voltar ao original). */
+export function applyTextEdits(root: SVGSVGElement, originals: TemplateTextInfo[], edits: Record<number, TextEdit>): void {
+  moldTexts(root).forEach((t, i) => {
+    const orig = originals[i];
+    if (!orig) return;
+    const e = edits[i] ?? {};
+    const lines = e.text !== undefined ? e.text.split('\n') : orig.lines;
+    const spans = lineSpans(t);
+    if (spans.length > 1) {
+      spans.forEach((sp, k) => { sp.textContent = lines[k] ?? ''; });
+      // linhas a mais que os tspans do molde vão na última
+      if (lines.length > spans.length) spans[spans.length - 1].textContent = lines.slice(spans.length - 1).join(' ');
+    } else if (spans.length === 1) {
+      spans[0].textContent = lines.join(' ');
+    } else {
+      t.textContent = lines.join(' ');
+    }
+    const color = e.color ?? orig.fill;
+    if (color) {
+      t.setAttribute('fill', color);
+      t.style.fill = e.color ? color : t.style.fill;
+      for (const sp of spans) if (e.color) sp.setAttribute('fill', color);
+    }
+  });
+}
+
+/** Textos acrescentados, numa gaveta própria por cima de tudo. As fontes vão
+ * embutidas num `<style>` (`fontCss`), então o SVG exportado e o PNG saem com
+ * a mesma letra da tela. */
+export function renderAddedTexts(root: SVGSVGElement, texts: AddedText[], vb: ViewBox, families: Record<string, string>, fontCss: string): void {
+  const doc = root.ownerDocument!;
+  const g = editorGroup(root, 'textos', 'end');
+  if (fontCss) {
+    const style = doc.createElementNS(SVG_NS, 'style');
+    style.textContent = fontCss;
+    g.appendChild(style);
+  }
+  for (const t of texts) {
+    const size = t.size * vb.h;
+    const el = doc.createElementNS(SVG_NS, 'text');
+    el.setAttribute('x', String(r2(vb.x + t.x * vb.w)));
+    el.setAttribute('y', String(r2(vb.y + t.y * vb.h)));
+    el.setAttribute('font-size', String(r2(size)));
+    el.setAttribute('font-family', `'${families[t.fontId] ?? 'Poppins'}', sans-serif`);
+    el.setAttribute('font-weight', t.bold ? '700' : '400');
+    el.setAttribute('text-anchor', 'middle');
+    el.setAttribute('dominant-baseline', 'middle');
+    el.setAttribute('fill', t.color);
+    el.setAttribute('data-added-text', t.id);
+    const lines = t.text.split('\n');
+    lines.forEach((line, i) => {
+      const sp = doc.createElementNS(SVG_NS, 'tspan');
+      sp.setAttribute('x', String(r2(vb.x + t.x * vb.w)));
+      sp.setAttribute('dy', i === 0 ? String(r2((-(lines.length - 1) / 2) * size * 1.2)) : String(r2(size * 1.2)));
+      sp.textContent = line || ' ';
+      el.appendChild(sp);
+    });
+    g.appendChild(el);
+  }
+}
+
 // ---------- exportação ----------
 
 /** SVG final: sem nada do editor, com o tamanho físico de volta nos atributos. */
