@@ -377,6 +377,12 @@ SQLite próprio que sobrevive às republicações.
   disco somente leitura (exceto `/data`) e uma rede separada do resto do notas.
 - **Acesso**: só os e-mails em `PUBLICADORES` (no `.env`) veem a ferramenta.
 
+Para adaptar um sistema existente, o botão **Preparar um app** na própria tela gera um prompt
+para um assistente de código (Claude Code, Cursor, Copilot…), já personalizado com a URL e o
+banco do site. O assistente ajusta o projeto ao contrato, cria os scripts que geram o ZIP e
+valida rodando o app com as mesmas restrições da plataforma. O texto fica em
+`frontend/src/app/features/publicar/prompt-preparo.ts`.
+
 O contrato do app e um exemplo completo (Recados) estão em
 [`exemplos/publicar/recados`](exemplos/publicar/recados/README.md). A operação na VPS
 está no [DEPLOY.md](DEPLOY.md).

@@ -27,11 +27,12 @@
       <!-- ------------------------------------------------ lista de sites -->
       <aside class="lateral">
         <button class="botao primario largo" (click)="abrirCriacao()"><app-icon name="plus" [size]="14" /> Novo site</button>
+        <button class="botao largo" [class.ativo]="promptAberto()" (click)="abrirPrompt()"><app-icon name="help" [size]="14" /> Preparar um app</button>
         <ul class="lista-sites">
           @for (s of sites(); track s.id) {
             @let st = statusDoSite(s);
             <li>
-              <button class="item-site" [class.ativo]="detalhe()?.id === s.id && !criandoAberto()" (click)="criandoAberto.set(false); selecionar(s.id)">
+              <button class="item-site" [class.ativo]="detalhe()?.id === s.id && !criandoAberto() && !promptAberto()" (click)="criandoAberto.set(false); selecionar(s.id)">
                 <span class="item-nome">{{ s.nome }}</span>
                 <span class="item-slug">{{ s.slug }}</span>
                 <span class="selo" [class]="'selo ' + st.classe">{{ st.texto }}</span>
@@ -45,8 +46,38 @@
         @if (erro(); as e) { <p class="alerta erro" role="alert">{{ e }}</p> }
         @if (aviso(); as a) { <p class="alerta ok" role="status">{{ a }}</p> }
 
-        <!-- ---------------------------------------------- criar site -->
-        @if (criandoAberto()) {
+        <!-- ---------------------------------------------- prompt de preparo -->
+        @if (promptAberto()) {
+          <div class="card">
+            <div class="secao-topo">
+              <div>
+                <h2>Prompt para preparar um app</h2>
+                <p class="ajuda">
+                  Cole num assistente de código (Claude Code, Cursor, Copilot…) aberto no repositório do sistema que você quer
+                  publicar. Ele analisa o projeto, adapta ao que esta plataforma exige (porta, <code>/api</code>, banco, disco
+                  só leitura, HTTP), cria os scripts que geram o ZIP e valida rodando o app como aqui, com Docker.
+                </p>
+              </div>
+              <button class="botao icone" (click)="promptAberto.set(false)" title="Fechar"><app-icon name="x" [size]="14" /></button>
+            </div>
+            <div class="prompt-barra">
+              <label class="campo inline">
+                <span>Personalizar para</span>
+                <select [ngModel]="promptSiteId()" (ngModelChange)="escolherSitePrompt($event)" name="promptSite">
+                  <option [ngValue]="null">Nenhum site (genérico)</option>
+                  @for (s of sites(); track s.id) {
+                    <option [ngValue]="s.id">{{ s.nome }} ({{ s.slug }})</option>
+                  }
+                </select>
+              </label>
+              <div class="acoes sem-topo">
+                <button class="botao" (click)="baixarPrompt()"><app-icon name="download" [size]="13" /> Baixar .md</button>
+                <button class="botao primario" (click)="copiarPrompt()"><app-icon name="copy" [size]="13" /> Copiar prompt</button>
+              </div>
+            </div>
+            <pre class="log prompt">{{ promptTexto() }}</pre>
+          </div>
+        } @else if (criandoAberto()) {
           <form class="card" (ngSubmit)="criar()">
             <h2>Novo site</h2>
             <p class="ajuda">O endereço vira a URL pública e não pode ser trocado depois.</p>
@@ -89,7 +120,10 @@
                 }
               </p>
             </div>
-            <button class="botao icone" (click)="copiar(site.url)" title="Copiar endereço"><app-icon name="copy" [size]="15" /></button>
+            <div class="acoes sem-topo">
+              <button class="botao pequeno" (click)="abrirPrompt(site.id)" title="Prompt para adaptar um sistema a este site"><app-icon name="help" [size]="12" /> Prompt de preparo</button>
+              <button class="botao icone" (click)="copiar(site.url, 'Endereço copiado.')" title="Copiar endereço"><app-icon name="copy" [size]="15" /></button>
+            </div>
           </div>
 
           <!-- ---------------------------------------------- envio -->
@@ -197,12 +231,12 @@
                     <dd class="linha-senha">
                       <code>{{ mostrarSenhaPg() ? pg.senha : '••••••••••••••••' }}</code>
                       <button class="botao icone" (click)="mostrarSenhaPg.set(!mostrarSenhaPg())" [title]="mostrarSenhaPg() ? 'Esconder' : 'Mostrar'"><app-icon name="eye" [size]="13" /></button>
-                      <button class="botao icone" (click)="copiar(pg.senha!)" title="Copiar senha"><app-icon name="copy" [size]="13" /></button>
+                      <button class="botao icone" (click)="copiar(pg.senha!, 'Senha copiada.')" title="Copiar senha"><app-icon name="copy" [size]="13" /></button>
                     </dd>
                   </dl>
                   <p class="ajuda sem-margem">O host <code>{{ pg.host }}</code> só é acessível de dentro dos apps publicados. Para abrir no DBeaver, use um túnel SSH (ver DEPLOY.md).</p>
                   <div class="acoes esquerda">
-                    <button class="botao" (click)="copiar(pg.connectionString!)"><app-icon name="copy" [size]="13" /> Copiar connection string</button>
+                    <button class="botao" (click)="copiar(pg.connectionString!, 'Connection string copiada.')"><app-icon name="copy" [size]="13" /> Copiar connection string</button>
                     <button class="botao" (click)="operarPostgres('senha')" [disabled]="!!operandoPg()">
                       <app-icon name="refresh" [size]="13" /> {{ operandoPg() === 'senha' ? 'Trocando…' : 'Trocar senha' }}
                     </button>

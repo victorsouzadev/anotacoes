@@ -17,6 +17,10 @@ Em alguns segundos o site está em `http://<endereço>.191-252-177-244.sslip.io:
 
 ## O contrato (o que seu app precisa seguir)
 
+Para adaptar um sistema que já existe, use o botão **Preparar um app** na tela Publicar: ele
+gera um prompt para o seu assistente de código, com estas regras e as armadilhas comuns
+(HTTPS, chaves do Data Protection, logs em arquivo, URLs absolutas no front).
+
 | # | Regra | Como o Recados faz |
 |---|---|---|
 | 1 | `api/` é a saída de `dotnet publish`, **framework-dependent** (.NET 8, 9 ou 10) | `dotnet publish -c Release -r linux-x64 --self-contained false -o out/api` |

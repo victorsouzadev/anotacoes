@@ -7,6 +7,8 @@ import { AuthService } from '../../core/auth.service';
 import { mensagemDeErro } from '../../core/erro-http';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
+import { baixarBlob } from '../../shared/download';
+import { gerarPromptPreparo } from './prompt-preparo';
 import { ArquivoDoPacote, compactar, daSelecaoDePasta, doArrastar, slugDoNome, tamanhoLegivel } from './pacote';
 import { PostgresInfo, PublicarService, SiteDetalhe, SiteResumo, StatusVersao, Variavel, Versao } from './publicar.service';
 
@@ -70,6 +72,15 @@ export class PublicarPageComponent {
   readonly operando = signal<string | null>(null);
   confirmacaoExclusao = '';
 
+  // Prompt para preparar um app (para colar num assistente de código).
+  readonly promptAberto = signal(false);
+  readonly promptSiteId = signal<string | null>(null);
+  private readonly promptSite = signal<{ nome: string; slug: string; url: string; temPostgres: boolean } | null>(null);
+  readonly promptTexto = computed(() =>
+    gerarPromptPreparo({ site: this.promptSite(), postgresNoServidor: this.postgresNoServidor(), urlModelo: this.urlModeloSinal() }),
+  );
+  private readonly urlModeloSinal = signal('');
+
   // Postgres.
   readonly postgresNoServidor = signal(false);
   readonly postgres = signal<PostgresInfo | null>(null);
@@ -99,6 +110,7 @@ export class PublicarPageComponent {
   private async iniciar(): Promise<void> {
     const r = await this.api.permissao();
     this.urlModelo = r.urlModelo;
+    this.urlModeloSinal.set(r.urlModelo);
     this.postgresNoServidor.set(r.postgres);
     this.permitido.set(r.podePublicar);
     if (r.podePublicar) await this.recarregarLista(true);
@@ -116,6 +128,7 @@ export class PublicarPageComponent {
   }
 
   async selecionar(id: string): Promise<void> {
+    this.promptAberto.set(false);
     if (this.detalhe()?.id === id) return;
     this.pendente.set(null);
     this.logAberto.set(null);
@@ -168,6 +181,7 @@ export class PublicarPageComponent {
   // ---------------------------------------------------------------- novo site
 
   abrirCriacao(): void {
+    this.promptAberto.set(false);
     this.criandoAberto.set(true);
     this.novoNome = '';
     this.novoSlug = '';
@@ -376,13 +390,46 @@ export class PublicarPageComponent {
     }
   }
 
-  async copiar(url: string): Promise<void> {
+  async copiar(texto: string, mensagem = 'Copiado.'): Promise<void> {
     try {
-      await navigator.clipboard.writeText(url);
-      this.aviso.set('Endereço copiado.');
+      await navigator.clipboard.writeText(texto);
+      this.aviso.set(mensagem);
     } catch {
-      this.aviso.set(url);
+      this.erro.set('O navegador não deixou copiar. Selecione o texto e copie manualmente.');
     }
+  }
+
+  // ---------------------------------------------------------------- prompt de preparo
+
+  /** Abre o painel do prompt, já personalizado para o site (ou genérico). */
+  async abrirPrompt(siteId: string | null = this.detalhe()?.id ?? null): Promise<void> {
+    this.criandoAberto.set(false);
+    this.promptAberto.set(true);
+    await this.escolherSitePrompt(siteId);
+  }
+
+  async escolherSitePrompt(id: string | null): Promise<void> {
+    this.promptSiteId.set(id);
+    if (!id) {
+      this.promptSite.set(null);
+      return;
+    }
+    try {
+      const d = this.detalhe()?.id === id ? this.detalhe()! : await this.api.detalhe(id);
+      if (this.promptSiteId() === id)
+        this.promptSite.set({ nome: d.nome, slug: d.slug, url: d.url, temPostgres: !!d.postgresBanco });
+    } catch (e) {
+      this.falha(e, 'Não foi possível ler o site');
+    }
+  }
+
+  copiarPrompt(): void {
+    void this.copiar(this.promptTexto(), 'Prompt copiado. Cole no assistente de código aberto no repositório do sistema.');
+  }
+
+  baixarPrompt(): void {
+    const nome = `preparar-${this.promptSite()?.slug ?? 'app'}-para-publicar.md`;
+    baixarBlob(nome, new Blob([this.promptTexto()], { type: 'text/markdown;charset=utf-8' }));
   }
 
   // ---------------------------------------------------------------- Postgres

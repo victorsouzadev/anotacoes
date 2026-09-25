@@ -163,6 +163,22 @@ input.ng-invalid.ng-touched { border-color: var(--danger); }
 .opcao input { margin-top: 2px; }
 .opcao small { color: var(--text-muted); }
 
+/* ------------------------------------------------------------- prompt */
+
+.botao.ativo { border-color: var(--accent); background: var(--accent-soft); }
+.acoes.sem-topo { margin-top: 0; }
+.prompt-barra { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.campo.inline { margin-bottom: 0; min-width: 240px; }
+select {
+  font: inherit; font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+.log.prompt { max-height: 60vh; margin-top: 14px; font-size: 12px; }
+
 /* ------------------------------------------------------------- postgres */
 
 .credenciais {
