@@ -184,7 +184,9 @@ public class NomeadorDeElementos : INomeadorDeElementos
         if (string.IsNullOrWhiteSpace(bruto)) return "";
 
         var semAcento = new StringBuilder();
-        foreach (var c in bruto.Normalize(NormalizationForm.FormD))
+        // Sem ICU (container em modo globalization-invariant) o Normalize não
+        // decompõe "ç" em "c" + cedilha: os acentos do português vão por tabela.
+        foreach (var c in TrocarAcentos(bruto).Normalize(NormalizationForm.FormD))
         {
             var categoria = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
             if (categoria != System.Globalization.UnicodeCategory.NonSpacingMark) semAcento.Append(c);
@@ -198,5 +200,19 @@ public class NomeadorDeElementos : INomeadorDeElementos
         }
 
         return saida.ToString().Trim('-');
+    }
+
+    private const string ComAcento = "áàâãäåçéèêëíìîïñóòôõöúùûüýÿÁÀÂÃÄÅÇÉÈÊËÍÌÎÏÑÓÒÔÕÖÚÙÛÜÝ";
+    private const string SemAcento = "aaaaaaceeeeiiiinooooouuuuyyAAAAAACEEEEIIIINOOOOOUUUUY";
+
+    private static string TrocarAcentos(string texto)
+    {
+        var chars = texto.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var k = ComAcento.IndexOf(chars[i]);
+            if (k >= 0) chars[i] = SemAcento[k];
+        }
+        return new string(chars);
     }
 }
