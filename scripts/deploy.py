@@ -21,7 +21,7 @@ REMOTE_DIR = "/opt/notas-vps"
 
 EXCLUDE_DIRS = {"node_modules", "dist", ".angular", "bin", "obj", "backups"}
 EXCLUDE_FILES = {".env"}
-EXCLUDE_PREFIXES = ("data/db/",)
+EXCLUDE_PREFIXES = ("data/db/", "data/sites/")
 
 
 def read_env(path):

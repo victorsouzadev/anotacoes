@@ -78,7 +78,8 @@ jobs:
           tar -czf deploy.tar.gz \
             --exclude=backend/bin --exclude=backend/obj \
             --exclude=frontend/node_modules --exclude=frontend/dist --exclude=frontend/.angular \
-            backend frontend docker-compose.yml docker-compose.vps.yml caddy
+            --exclude=deployer/*/bin --exclude=deployer/*/obj \
+            backend frontend deployer docker-compose.yml docker-compose.vps.yml caddy
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -103,13 +104,17 @@ jobs:
             # sobrevive no disco e volta pro contexto de build do Docker (foi assim que
             # kanban/tasks-kanban.page.ts órfão quebrou o build do frontend depois do
             # rename pra projects/project-board.page.ts). Limpa antes de extrair.
-            rm -rf backend frontend caddy
+            rm -rf backend frontend caddy deployer
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
-            mkdir -p data/db
+            mkdir -p data/db data/sites
             docker stop hermes || true
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build api
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build caddy
+            # Ferramenta "Publicar": só builda o deployer onde ele está ligado (.env).
+            if grep -q '^COMPOSE_PROFILES=.*publicar' .env 2>/dev/null; then
+              docker compose -f docker-compose.yml -f docker-compose.vps.yml build deployer
+            fi
             export APP_VERSAO=${{ github.sha }}
             docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
             docker start hermes || true

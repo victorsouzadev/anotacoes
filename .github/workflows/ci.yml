@@ -42,6 +42,20 @@ jobs:
         env:
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
 
+  # Ferramenta "Publicar": o serviço que cria os containers dos apps.
+  deployer-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deployer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - run: dotnet build Notas.Deployer.sln --configuration Release
+      - run: dotnet test Notas.Deployer.sln --no-build --configuration Release
+
   # O programa desktop é WPF (só roda no Windows), mas compila no Linux: pega
   # erro de código aqui, sem esperar o instalador (workflow Desktop).
   desktop-build:

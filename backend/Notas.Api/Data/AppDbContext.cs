@@ -65,6 +65,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
     public DbSet<ImageLibraryItem> ImageLibrary => Set<ImageLibraryItem>();
     public DbSet<ImagePreferences> ImagePreferences => Set<ImagePreferences>();
+    public DbSet<Site> Sites => Set<Site>();
+    public DbSet<Deployment> Deployments => Set<Deployment>();
+    public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -108,6 +111,36 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(n => new { n.UserId, n.FolderId });
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(n => n.FolderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<Site>(e =>
+        {
+            e.ToTable("sites");
+            e.Property(x => x.Slug).IsRequired().HasMaxLength(30);
+            e.Property(x => x.Nome).IsRequired().HasMaxLength(100);
+            e.HasIndex(x => x.Slug).IsUnique();
+            e.HasIndex(x => x.OwnerUserId);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Deployment>(e =>
+        {
+            e.ToTable("sites_deployments");
+            e.Property(x => x.Tipo).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.RuntimeVersao).HasMaxLength(10);
+            e.Property(x => x.Entrada).HasMaxLength(200);
+            e.Property(x => x.Health).HasMaxLength(200);
+            e.HasIndex(x => new { x.SiteId, x.Versao }).IsUnique();
+            e.HasOne<Site>().WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<SiteVariavel>(e =>
+        {
+            e.ToTable("sites_variaveis");
+            e.Property(x => x.Chave).IsRequired().HasMaxLength(128);
+            e.HasIndex(x => new { x.SiteId, x.Chave }).IsUnique();
+            e.HasOne<Site>().WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ImageProject>(e =>

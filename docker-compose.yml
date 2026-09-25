@@ -19,8 +19,16 @@ services:
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde
       # não prova, por si só, que o container foi substituído.
       - App__Versao=${APP_VERSAO:-desconhecida}
+      # Ferramenta "Publicar" (docs/poc-multi-app/DISCOVERY.md). Sem PUBLICADORES
+      # ninguém publica; sem DEPLOYER_TOKEN só sites estáticos funcionam.
+      - Sites__Raiz=/data/sites
+      - Sites__Publicadores=${PUBLICADORES:-}
+      - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
+      - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}
+      - Sites__Porta=${SITES_PORTA:-8090}
     volumes:
       - ./data/db:/data/db
+      - ./data/sites:/data/sites
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
@@ -37,8 +45,36 @@ services:
       - caddy_config:/config
       # instalador do Editor de Imagens pra Windows (fora da imagem; ver Caddyfile)
       - ./downloads:/srv-downloads/downloads:ro
+      # sites publicados (só leitura: quem escreve é a API)
+      - ./data/sites:/srv-sites:ro
+    environment:
+      - SITES_DOMINIO=${SITES_DOMINIO:-191-252-177-244.sslip.io}
+    # "sites" é a rede dos containers dos apps publicados: o Caddy entra nela para
+    # alcançar site-<slug>:8080; a API e o deployer não.
+    networks:
+      - default
+      - sites
     depends_on:
       - api
+
+  # Único serviço com acesso ao Docker: cria/remove os containers site-<slug> a pedido
+  # da API (token compartilhado). Fica atrás do profile "publicar" para não subir em
+  # quem não usa a ferramenta — ligue com COMPOSE_PROFILES=publicar no .env.
+  deployer:
+    build: ./deployer
+    profiles: ["publicar"]
+    restart: unless-stopped
+    environment:
+      - DEPLOYER_TOKEN=${DEPLOYER_TOKEN:-}
+      # Caminho de data/sites NO HOST: é o que o daemon do Docker monta nos apps.
+      - SITES_HOST_DIR=${SITES_HOST_DIR:-/opt/notas-vps/data/sites}
+      - DEPLOYER_REDE=notas-sites
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  sites:
+    name: notas-sites
 
 volumes:
   caddy_data:

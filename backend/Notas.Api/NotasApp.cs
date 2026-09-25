@@ -11,6 +11,7 @@ using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Seguranca;
+using Notas.Api.Services.Sites;
 
 namespace Notas.Api;
 
@@ -104,6 +105,16 @@ public static class NotasApp
         builder.Services.AddHttpClient(nameof(NomeadorDeElementos), c =>
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+
+        // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
+        // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
+        builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
+        builder.Services.AddSingleton<SitesArmazenamento>();
+        builder.Services.AddSingleton<FilaSites>();
+        builder.Services.AddScoped<ExecutorSites>();
+        builder.Services.AddHostedService<PublicacaoWorker>();
+        builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
+        builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
@@ -220,6 +231,7 @@ public static class NotasApp
         app.MapConfiguracaoIaEndpoints();
         app.MapTasksEndpoints();
         app.MapImagemEndpoints();
+        app.MapSitesEndpoints();
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

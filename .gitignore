@@ -8,3 +8,4 @@ data/db/*.db-*
 .env
 backups/
 downloads/
+data/sites/

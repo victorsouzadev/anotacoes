@@ -16,6 +16,7 @@ services:
       - "8090:8080"
     networks:
       - default
+      - sites
       - proxy
 
 networks:

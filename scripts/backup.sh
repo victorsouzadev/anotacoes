@@ -11,6 +11,13 @@ DATE=$(date +%Y%m%d-%H%M)
 mkdir -p "$BACKUPS"
 sqlite3 "$BASE/data/db/notas.db" ".backup '$BACKUPS/notas-$DATE.db'"
 
+# Bancos dos apps publicados pela ferramenta "Publicar" (um SQLite por site).
+for db in "$BASE"/data/sites/*/data/app.db; do
+  [ -f "$db" ] || continue
+  slug=$(basename "$(dirname "$(dirname "$db")")")
+  sqlite3 "$db" ".backup '$BACKUPS/site-$slug-$DATE.db'"
+done
+
 # retenção: 14 dias
 find "$BACKUPS" -type f -mtime +14 -delete
 

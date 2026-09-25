@@ -1,4 +1,8 @@
 # Versão para teste local do compose (sem TLS): http://localhost:8080
+#
+# Dois sites no mesmo Caddy:
+#   - <slug>.<SITES_DOMINIO>  → os sistemas publicados pela ferramenta "Publicar"
+#   - qualquer outro host     → o notas (hub + /api), como sempre foi
 :8080 {
     encode zstd gzip
 
@@ -25,5 +29,59 @@
         root * /srv
         try_files {path} /index.html
         file_server
+    }
+}
+
+# Ferramenta "Publicar": cada site enviado responde em <slug>.<SITES_DOMINIO>. O sslip.io
+# resolve qualquer "<nome>.191-252-177-244.sslip.io" para o IP da VPS, então não há
+# DNS para configurar. Este bloco é fixo: site novo não exige recarregar o Caddy.
+#
+# O disco (montado em /srv-sites) é mantido pela API: /srv-sites/<slug>/current aponta
+# para a versão no ar, com web/ (front) e api/ (a DLL, que roda no container site-<slug>).
+# Ver docs/poc-multi-app/DISCOVERY.md.
+http://*.{$SITES_DOMINIO:191-252-177-244.sslip.io}:8080 {
+    encode zstd gzip
+
+    # O slug é o primeiro rótulo do host.
+    map {host} {site} {
+        ~^([a-z0-9-]+)\. "${1}"
+        default "-"
+    }
+
+    # 1) /api/* é sempre do app C#.
+    @api path /api /api/*
+    handle @api {
+        reverse_proxy site-{site}:8080
+    }
+
+    # 2) Arquivo que existe no front publicado.
+    @arquivo file {
+        root /srv-sites/{site}/current/web
+        try_files {path}
+    }
+    handle @arquivo {
+        root * /srv-sites/{site}/current/web
+        file_server
+    }
+
+    # 3) Rota de SPA (Angular/React): cai no index.html do front.
+    @spa file {
+        root /srv-sites/{site}/current/web
+        try_files /index.html
+    }
+    handle @spa {
+        root * /srv-sites/{site}/current/web
+        rewrite * /index.html
+        file_server
+    }
+
+    # 4) Sem front publicado: o app C# atende tudo (ele pode servir o próprio wwwroot).
+    handle {
+        reverse_proxy site-{site}:8080
+    }
+
+    handle_errors 502 503 504 {
+        header Content-Type "text/plain; charset=utf-8"
+        respond "Este app não está no ar agora." {err.status_code}
     }
 }
