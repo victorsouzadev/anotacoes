@@ -18,6 +18,13 @@ for db in "$BASE"/data/sites/*/data/app.db; do
   sqlite3 "$db" ".backup '$BACKUPS/site-$slug-$DATE.db'"
 done
 
+# Bancos Postgres dos sites (um por site, site_<slug>), se o serviço estiver de pé.
+if docker ps --format '{{.Names}}' | grep -qx notas-postgres; then
+  for banco in $(docker exec notas-postgres psql -U postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'site\_%'"); do
+    docker exec notas-postgres pg_dump -U postgres -Fc "$banco" > "$BACKUPS/pg-$banco-$DATE.dump"
+  done
+fi
+
 # retenção: 14 dias
 find "$BACKUPS" -type f -mtime +14 -delete
 

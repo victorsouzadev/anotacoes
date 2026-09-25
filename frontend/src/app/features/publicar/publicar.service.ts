@@ -39,6 +39,18 @@ export interface SiteDetalhe {
   criadoEm: string;
   currentDeploymentId: string | null;
   versoes: Versao[];
+  postgresBanco: string | null;
+}
+
+export interface PostgresInfo {
+  habilitado: boolean;
+  criado: boolean;
+  host: string | null;
+  porta: number | null;
+  banco: string | null;
+  usuario: string | null;
+  senha: string | null;
+  connectionString: string | null;
 }
 
 export interface Variavel {
@@ -51,12 +63,17 @@ export interface Variavel {
 export class PublicarService {
   private readonly http = inject(HttpClient);
 
-  /** urlModelo: "http://{slug}.<domínio>:<porta>" — para mostrar o endereço antes de criar. */
-  async permissao(): Promise<{ podePublicar: boolean; urlModelo: string }> {
+  /**
+   * urlModelo: "http://{slug}.<domínio>:<porta>" — para mostrar o endereço antes de criar.
+   * postgres: o servidor tem o Postgres compartilhado configurado.
+   */
+  async permissao(): Promise<{ podePublicar: boolean; urlModelo: string; postgres: boolean }> {
     try {
-      return await firstValueFrom(this.http.get<{ podePublicar: boolean; urlModelo: string }>('/api/sites/permissao'));
+      return await firstValueFrom(
+        this.http.get<{ podePublicar: boolean; urlModelo: string; postgres: boolean }>('/api/sites/permissao'),
+      );
     } catch {
-      return { podePublicar: false, urlModelo: '' };
+      return { podePublicar: false, urlModelo: '', postgres: false };
     }
   }
 
@@ -68,8 +85,24 @@ export class PublicarService {
     return firstValueFrom(this.http.get<SiteDetalhe>(`/api/sites/${id}`));
   }
 
-  criar(nome: string, slug: string): Promise<SiteDetalhe> {
-    return firstValueFrom(this.http.post<SiteDetalhe>('/api/sites', { nome, slug }));
+  criar(nome: string, slug: string, criarPostgres: boolean): Promise<SiteDetalhe> {
+    return firstValueFrom(this.http.post<SiteDetalhe>('/api/sites', { nome, slug, criarPostgres }));
+  }
+
+  postgres(id: string): Promise<PostgresInfo> {
+    return firstValueFrom(this.http.get<PostgresInfo>(`/api/sites/${id}/postgres`));
+  }
+
+  criarPostgres(id: string): Promise<PostgresInfo> {
+    return firstValueFrom(this.http.post<PostgresInfo>(`/api/sites/${id}/postgres`, null));
+  }
+
+  trocarSenhaPostgres(id: string): Promise<PostgresInfo> {
+    return firstValueFrom(this.http.post<PostgresInfo>(`/api/sites/${id}/postgres/senha`, null));
+  }
+
+  apagarPostgres(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/sites/${id}/postgres`));
   }
 
   /** Envia o ZIP cru (sem multipart), com eventos de progresso do upload. */

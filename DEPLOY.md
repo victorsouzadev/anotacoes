@@ -191,6 +191,7 @@ cd /opt/notas-vps
 echo "PUBLICADORES=seu-email@exemplo.com" >> .env
 echo "DEPLOYER_TOKEN=$(openssl rand -hex 32)" >> .env
 echo "COMPOSE_PROFILES=publicar" >> .env
+echo "POSTGRES_SENHA=$(openssl rand -hex 32)" >> .env   # Postgres dos sites (opcional)
 mkdir -p data/sites
 # baixa a imagem do runtime antes, para o primeiro deploy não esperar o download
 docker pull mcr.microsoft.com/dotnet/aspnet:9.0
@@ -198,8 +199,30 @@ docker compose -f docker-compose.yml -f docker-compose.vps.yml build deployer
 docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
 ```
 
-O `COMPOSE_PROFILES=publicar` faz o `up -d` (e o deploy automático) subir o deployer.
-Sem ele, a ferramenta ainda publica sites **só estáticos**.
+O `COMPOSE_PROFILES=publicar` faz o `up -d` (e o deploy automático) subir o deployer e o
+Postgres. Sem ele, a ferramenta ainda publica sites **só estáticos**. O Postgres **exige**
+`POSTGRES_SENHA`: sem ela, o container não inicializa e a opção de banco some da tela.
+
+### Postgres dos sites
+
+Um Postgres 17 compartilhado (`notas-postgres`, dados em `data/postgres/`, limite de
+256 MB, ~54 MiB ocioso). Para cada site com banco, a API cria um banco e um usuário
+`site_<slug>` com senha aleatória. Esse usuário é dono só do próprio banco: não conecta
+nos bancos dos outros sites nem no `postgres`, e não é superusuário. O app recebe
+`ConnectionStrings__Postgres` e `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD`.
+Trocar a senha pela tela reinicia o app com a nova.
+
+- **Abrir num cliente** (DBeaver etc.): a porta fica só no loopback da VPS.
+  ```bash
+  ssh -L 5433:127.0.0.1:5433 root@191.252.177.244
+  # conecte em localhost:5433 com o usuário/senha que a tela mostra (ou "postgres" + POSTGRES_SENHA)
+  ```
+- **psql rápido**: `docker exec -it notas-postgres psql -U postgres -d site_<slug>`
+- **Backup**: o `scripts/backup.sh` faz `pg_dump` de cada `site_*` todo dia em `backups/pg-*.dump`.
+  Restaurar: `docker exec -i notas-postgres pg_restore -U postgres -d site_<slug> --clean < arquivo.dump`.
+- **Limite**: voltar versão "com banco" e a restauração automática de uma versão que falhou só valem
+  para o SQLite. Com Postgres, as migrations da versão nova ficam, então elas precisam ser
+  compatíveis com a versão anterior (ou restaure o dump do backup).
 
 A porta continua a 8090: o sslip.io resolve `<qualquer-coisa>.191-252-177-244.sslip.io`
 para o IP da VPS, e o Caddy separa os sites pelo nome. Não há DNS para configurar.

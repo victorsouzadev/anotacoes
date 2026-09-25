@@ -369,6 +369,8 @@ SQLite próprio que sobrevive às republicações.
 - **Versões**: cada envio vira uma versão. Uma versão que não responde ao health check volta
   sozinha para a anterior (junto com o banco), e dá para voltar a qualquer versão guardada,
   com ou sem restaurar o banco.
+- **Banco**: SQLite em `/data` por padrão. Opcionalmente, um banco próprio no **Postgres** compartilhado,
+  com usuário e senha só dele, criados pela tela e entregues ao app como `ConnectionStrings__Postgres` e `PG*`.
 - **Controle do app**: variáveis de ambiente cifradas, logs do container, parar/iniciar e excluir.
 - **Isolamento**: cada app C# roda num container `aspnet` próprio, com limite de memória e CPU,
   disco somente leitura (exceto `/data`) e uma rede separada do resto do notas.

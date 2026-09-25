@@ -1,6 +1,6 @@
 namespace Notas.Api.Dtos;
 
-public record CriarSiteRequest(string? Nome, string? Slug);
+public record CriarSiteRequest(string? Nome, string? Slug, bool? CriarPostgres = null);
 
 public record AtivarVersaoRequest(bool RestaurarBanco);
 
@@ -38,4 +38,15 @@ public record SiteDetalheDto(
     bool Parado,
     DateTime CriadoEm,
     string? CurrentDeploymentId,
-    List<DeploymentDto> Versoes);
+    List<DeploymentDto> Versoes,
+    string? PostgresBanco);
+
+public record PostgresInfoDto(
+    bool Habilitado,
+    bool Criado,
+    string? Host,
+    int? Porta,
+    string? Banco,
+    string? Usuario,
+    string? Senha,
+    string? ConnectionString);

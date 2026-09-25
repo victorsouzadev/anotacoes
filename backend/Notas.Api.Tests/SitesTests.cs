@@ -42,6 +42,17 @@ public class DeployerFalso : IDeployer
     }
 }
 
+/// <summary>Postgres de mentira: guarda os bancos criados e as senhas.</summary>
+public class PostgresFalso : IPostgresProvisionador
+{
+    public readonly Dictionary<string, string> Bancos = [];
+    public readonly List<string> Removidos = [];
+
+    public Task CriarAsync(string nome, string senha, CancellationToken ct) { lock (this) Bancos[nome] = senha; return Task.CompletedTask; }
+    public Task TrocarSenhaAsync(string nome, string senha, CancellationToken ct) { lock (this) Bancos[nome] = senha; return Task.CompletedTask; }
+    public Task RemoverAsync(string nome, CancellationToken ct) { lock (this) { Bancos.Remove(nome); Removidos.Add(nome); } return Task.CompletedTask; }
+}
+
 /// <summary>Responde "saudável" a não ser que a DLL em teste esteja marcada para falhar.</summary>
 public class SaudeFalsa(DeployerFalso deployer) : IVerificadorSaude
 {
@@ -59,6 +70,7 @@ public class SitesApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public string RaizSites { get; } = Path.Combine(Path.GetTempPath(), $"notas-sites-{Guid.NewGuid():N}");
     public string EmailDono { get; } = $"dono_{Guid.NewGuid():N}@example.com";
     public DeployerFalso Deployer { get; } = new();
+    public PostgresFalso Postgres { get; } = new();
     /// <summary>Um login por e-mail: o limitador de /api/auth derruba a suíte se cada teste registrar de novo.</summary>
     public Dictionary<string, string> Tokens { get; } = [];
 
@@ -71,10 +83,12 @@ public class SitesApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Sites:HealthTimeoutSegundos", "1");
         builder.UseSetting("Sites:MaxDescompactadoBytes", (2 * 1024 * 1024).ToString());
         builder.UseSetting("Sites:MaxAppsRodando", "1000");
+        builder.UseSetting("Sites:PostgresAdmin", "Host=falso;Username=postgres;Password=x");
         builder.ConfigureTestServices(s =>
         {
             s.AddSingleton<IDeployer>(Deployer);
             s.AddSingleton<IVerificadorSaude>(new SaudeFalsa(Deployer));
+            s.AddSingleton<IPostgresProvisionador>(Postgres);
         });
     }
 
@@ -491,6 +505,78 @@ public class SitesTests(SitesApiFactory factory) : IClassFixture<SitesApiFactory
         using var outro = await Cliente("outro@example.com");
         Assert.Equal(HttpStatusCode.NotFound, (await outro.GetAsync($"/api/sites/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await outro.DeleteAsync($"/api/sites/{id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Postgres_cria_banco_usuario_e_senha_e_entrega_ao_app()
+    {
+        var slug = NovoSlug();
+        var res = await _dono.PostAsJsonAsync("/api/sites", new { nome = "Com PG", slug, criarPostgres = true });
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        var id = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
+
+        var pg = await _dono.GetFromJsonAsync<JsonElement>($"/api/sites/{id}/postgres");
+        Assert.True(pg.GetProperty("criado").GetBoolean());
+        var nome = "site_" + slug;
+        Assert.Equal(nome, pg.GetProperty("banco").GetString());
+        Assert.Equal(nome, pg.GetProperty("usuario").GetString());
+        Assert.Equal("postgres", pg.GetProperty("host").GetString());
+        var senha = pg.GetProperty("senha").GetString()!;
+        Assert.Matches("^[a-f0-9]{64}$", senha);
+        Assert.Equal(senha, factory.Postgres.Bancos[nome]);
+        Assert.Contains($"Password={senha}", pg.GetProperty("connectionString").GetString());
+
+        // O app recebe a connection string e as variáveis do libpq.
+        await Enviar(id, Zip(AppDotNet()));
+        await EsperarFila(id);
+        var vars = factory.Deployer.Iniciados.Last(x => x.Slug == slug).App.Variaveis;
+        Assert.Equal(senha, vars["PGPASSWORD"]);
+        Assert.Equal(nome, vars["PGDATABASE"]);
+        Assert.Contains($"Database={nome}", vars["ConnectionStrings__Postgres"]);
+
+        // O usuário não consegue sobrescrever as credenciais pelas variáveis.
+        var sobrescrever = await _dono.PutAsJsonAsync($"/api/sites/{id}/variaveis", new[] { new { chave = "PGPASSWORD", valor = "x" } });
+        Assert.Equal(HttpStatusCode.BadRequest, sobrescrever.StatusCode);
+    }
+
+    [Fact]
+    public async Task Postgres_troca_senha_reinicia_o_app_e_pode_ser_apagado()
+    {
+        var site = await CriarSite();
+        var id = site.GetProperty("id").GetString()!;
+        var slug = site.GetProperty("slug").GetString()!;
+        await Enviar(id, Zip(AppDotNet()));
+        await EsperarFila(id);
+
+        var criado = await _dono.PostAsync($"/api/sites/{id}/postgres", null);
+        Assert.Equal(HttpStatusCode.OK, criado.StatusCode);
+        var senha1 = (await criado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("senha").GetString();
+        // Criar de novo é idempotente: mesma senha.
+        var denovo = await (await _dono.PostAsync($"/api/sites/{id}/postgres", null)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(senha1, denovo.GetProperty("senha").GetString());
+        Assert.Equal(senha1, factory.Deployer.Iniciados.Last(x => x.Slug == slug).App.Variaveis["PGPASSWORD"]);
+
+        var trocada = await (await _dono.PostAsync($"/api/sites/{id}/postgres/senha", null)).Content.ReadFromJsonAsync<JsonElement>();
+        var senha2 = trocada.GetProperty("senha").GetString();
+        Assert.NotEqual(senha1, senha2);
+        Assert.Equal(senha2, factory.Postgres.Bancos["site_" + slug]);
+        Assert.Equal(senha2, factory.Deployer.Iniciados.Last(x => x.Slug == slug).App.Variaveis["PGPASSWORD"]);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await _dono.DeleteAsync($"/api/sites/{id}/postgres")).StatusCode);
+        Assert.Contains("site_" + slug, factory.Postgres.Removidos);
+        Assert.False(factory.Deployer.Iniciados.Last(x => x.Slug == slug).App.Variaveis.ContainsKey("PGPASSWORD"));
+        Assert.False((await _dono.GetFromJsonAsync<JsonElement>($"/api/sites/{id}/postgres")).GetProperty("criado").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Excluir_site_apaga_o_banco_postgres()
+    {
+        var slug = NovoSlug();
+        var res = await _dono.PostAsJsonAsync("/api/sites", new { nome = "x", slug, criarPostgres = true });
+        var id = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
+        Assert.Equal(HttpStatusCode.NoContent, (await _dono.DeleteAsync($"/api/sites/{id}")).StatusCode);
+        Assert.Contains("site_" + slug, factory.Postgres.Removidos);
+        Assert.False(factory.Postgres.Bancos.ContainsKey("site_" + slug));
     }
 
     private static void Executar(string banco, string sql)

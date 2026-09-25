@@ -26,6 +26,35 @@ public class SitesOptions
     /// <summary>Caddy visto de dentro da rede: o health check passa pelo mesmo caminho do usuário.</summary>
     public string GatewayUrl { get; set; } = "http://caddy:8080";
 
+    /// <summary>
+    /// Senha do superusuário "postgres" do Postgres compartilhado (a mesma POSTGRES_SENHA
+    /// do compose). Vazia = recurso desligado. PostgresAdmin, se definido, substitui a
+    /// conexão montada a partir dela.
+    /// </summary>
+    public string PostgresSenha { get; set; } = "";
+    public string PostgresAdmin { get; set; } = "";
+
+    /// <summary>Conexão de administrador (quem cria bancos e usuários).</summary>
+    public string ConexaoAdmin =>
+        !string.IsNullOrWhiteSpace(PostgresAdmin) ? PostgresAdmin
+        : string.IsNullOrEmpty(PostgresSenha) ? ""
+        : new Npgsql.NpgsqlConnectionStringBuilder
+        {
+            Host = PostgresHost,
+            Port = PostgresPorta,
+            Username = "postgres",
+            Password = PostgresSenha,
+            Database = "postgres",
+            Pooling = false,
+        }.ConnectionString;
+    /// <summary>Host e porta do Postgres como os apps o enxergam (na rede notas-sites).</summary>
+    public string PostgresHost { get; set; } = "postgres";
+    public int PostgresPorta { get; set; } = 5432;
+    /// <summary>Conexões simultâneas por app — o Postgres da VPS tem poucas para dividir.</summary>
+    public int PostgresLimiteConexoes { get; set; } = 10;
+
+    public bool PostgresHabilitado => !string.IsNullOrWhiteSpace(ConexaoAdmin);
+
     public long MaxZipBytes { get; set; } = 100L * 1024 * 1024;
     public long MaxDescompactadoBytes { get; set; } = 300L * 1024 * 1024;
     public int MaxArquivos { get; set; } = 10_000;

@@ -29,6 +29,6 @@ document.getElementById('form').addEventListener('submit', async (ev) => {
 });
 
 fetch('/api/health').then((r) => r.json()).then((s) => {
-  document.getElementById('saude').textContent = `API ${s.status} · versão ${s.versao}`;
+  document.getElementById('saude').textContent = `API ${s.status} · versão ${s.versao} · banco ${s.banco}`;
 });
 carregar();

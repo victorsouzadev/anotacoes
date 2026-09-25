@@ -15,6 +15,11 @@ public class Site
     /// <summary>Parado pelo usuário: o container foi removido e só volta com "iniciar" ou novo deploy.</summary>
     public bool Parado { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+
+    // Banco Postgres próprio (opcional). Banco e usuário têm o mesmo nome (site_<slug>);
+    // a senha fica cifrada — o SQLite do notas vai para backup.
+    public string? PostgresBanco { get; set; }
+    public string? PostgresSenhaCifrada { get; set; }
 }
 
 public enum DeploymentStatus

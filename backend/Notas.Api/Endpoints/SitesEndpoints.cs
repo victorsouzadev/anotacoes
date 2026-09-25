@@ -24,6 +24,7 @@ public static partial class SitesEndpoints
     private static readonly HashSet<string> VariaveisReservadas = new(StringComparer.OrdinalIgnoreCase)
     {
         "ASPNETCORE_URLS", "ASPNETCORE_HTTP_PORTS", "HOME", "PATH", "DOTNET_gcServer", "DOTNET_RUNNING_IN_CONTAINER",
+        "ConnectionStrings__Default", "ConnectionStrings__Postgres", "PGHOST", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
     };
 
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
@@ -32,7 +33,12 @@ public static partial class SitesEndpoints
     public static void MapSitesEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/sites/permissao", async (ClaimsPrincipal user, AppDbContext db, IOptions<SitesOptions> opt) =>
-            Results.Ok(new { podePublicar = await PodePublicar(user, db, opt.Value), urlModelo = opt.Value.Url("{slug}") }))
+            Results.Ok(new
+            {
+                podePublicar = await PodePublicar(user, db, opt.Value),
+                urlModelo = opt.Value.Url("{slug}"),
+                postgres = opt.Value.PostgresHabilitado,
+            }))
             .RequireAuthorization();
 
         var group = app.MapGroup("/api/sites").RequireAuthorization()
@@ -65,7 +71,7 @@ public static partial class SitesEndpoints
             }));
         });
 
-        group.MapPost("/", async (CriarSiteRequest req, ClaimsPrincipal user, AppDbContext db, IOptions<SitesOptions> opt) =>
+        group.MapPost("/", async (CriarSiteRequest req, ClaimsPrincipal user, AppDbContext db, HttpContext http, IOptions<SitesOptions> opt) =>
         {
             var slug = req.Slug?.Trim().ToLowerInvariant() ?? "";
             var nome = req.Nome?.Trim() ?? "";
@@ -79,7 +85,70 @@ public static partial class SitesEndpoints
             var site = new Site { OwnerUserId = user.UserId(), Slug = slug, Nome = nome };
             db.Sites.Add(site);
             await db.SaveChangesAsync();
+
+            if (req.CriarPostgres == true)
+            {
+                var erroPg = await CriarPostgres(site, db, http.RequestServices);
+                if (erroPg is not null)
+                    return Results.Json(new { error = "Site criado, mas o banco Postgres não: " + erroPg, id = site.Id }, statusCode: 502);
+            }
             return Results.Created($"/api/sites/{site.Id}", await Detalhe(site, db, opt.Value));
+        });
+
+        // ---------------------------------------------------------------- Postgres
+        // Cada site pode ter um banco próprio no Postgres compartilhado, com usuário e senha
+        // só dele. As credenciais chegam ao app como ConnectionStrings__Postgres e PG*.
+
+        group.MapGet("/{id}/postgres", async (string id, ClaimsPrincipal user, AppDbContext db,
+            IProtetorDeSegredos protetor, IOptions<SitesOptions> opt) =>
+        {
+            var site = await DoUsuario(id, user, db);
+            if (site is null) return Results.NotFound();
+            return Results.Ok(InfoPostgres(site, protetor, opt.Value));
+        });
+
+        group.MapPost("/{id}/postgres", async (string id, ClaimsPrincipal user, AppDbContext db, HttpContext http,
+            IProtetorDeSegredos protetor, FilaSites fila, IOptions<SitesOptions> opt) =>
+        {
+            var site = await DoUsuarioRastreado(id, user, db);
+            if (site is null) return Results.NotFound();
+            if (await CriarPostgres(site, db, http.RequestServices) is { } erro)
+                return Results.Json(new { error = erro }, statusCode: 502);
+            return await ReiniciarSeRodando(site, db, fila) is { } erroApp
+                ? Results.Json(new { error = "Banco criado, mas o app não subiu de novo: " + erroApp }, statusCode: 502)
+                : Results.Ok(InfoPostgres(site, protetor, opt.Value));
+        });
+
+        group.MapPost("/{id}/postgres/senha", async (string id, ClaimsPrincipal user, AppDbContext db,
+            IProtetorDeSegredos protetor, IPostgresProvisionador postgres, FilaSites fila, IOptions<SitesOptions> opt) =>
+        {
+            var site = await DoUsuarioRastreado(id, user, db);
+            if (site is null) return Results.NotFound();
+            if (site.PostgresBanco is null) return Results.Conflict(new { error = "Este site não tem banco Postgres." });
+            var senha = PostgresNomes.NovaSenha();
+            try { await postgres.TrocarSenhaAsync(site.PostgresBanco, senha, CancellationToken.None); }
+            catch (ProvisionamentoPostgresException e) { return Results.Json(new { error = e.Message }, statusCode: 502); }
+            site.PostgresSenhaCifrada = protetor.Proteger(senha);
+            await db.SaveChangesAsync();
+            // A senha velha deixou de valer: o app precisa subir de novo com a nova.
+            return await ReiniciarSeRodando(site, db, fila) is { } erroApp
+                ? Results.Json(new { error = "Senha trocada, mas o app não subiu de novo: " + erroApp }, statusCode: 502)
+                : Results.Ok(InfoPostgres(site, protetor, opt.Value));
+        });
+
+        group.MapDelete("/{id}/postgres", async (string id, ClaimsPrincipal user, AppDbContext db,
+            IPostgresProvisionador postgres, FilaSites fila) =>
+        {
+            var site = await DoUsuarioRastreado(id, user, db);
+            if (site is null) return Results.NotFound();
+            if (site.PostgresBanco is null) return Results.NoContent();
+            try { await postgres.RemoverAsync(site.PostgresBanco, CancellationToken.None); }
+            catch (ProvisionamentoPostgresException e) { return Results.Json(new { error = e.Message }, statusCode: 502); }
+            site.PostgresBanco = null;
+            site.PostgresSenhaCifrada = null;
+            await db.SaveChangesAsync();
+            await ReiniciarSeRodando(site, db, fila);
+            return Results.NoContent();
         });
 
         group.MapGet("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, IOptions<SitesOptions> opt) =>
@@ -205,13 +274,8 @@ public static partial class SitesEndpoints
             await db.SaveChangesAsync();
 
             // Variável nova só vale num container novo.
-            var atual = site.CurrentDeploymentId is null ? null
-                : await db.Deployments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == site.CurrentDeploymentId);
-            if (atual is { Tipo: DeploymentTipo.DotNet } && !site.Parado)
-            {
-                var erro = await Esperar(fila.Enfileirar(new TarefaSite(AcaoSite.Reiniciar, site.Id)));
-                if (erro is not null) return Results.Json(new { error = "Variáveis salvas, mas o app não subiu: " + erro }, statusCode: 502);
-            }
+            if (await ReiniciarSeRodando(site, db, fila) is { } erro)
+                return Results.Json(new { error = "Variáveis salvas, mas o app não subiu: " + erro }, statusCode: 502);
             return Results.NoContent();
         });
 
@@ -232,6 +296,43 @@ public static partial class SitesEndpoints
         var erro = await Esperar(fila.Enfileirar(new TarefaSite(acao, site.Id)));
         return erro is null ? Results.NoContent() : Results.Json(new { error = erro }, statusCode: 502);
     }
+
+    /// <summary>Recria o container (se há uma API no ar) para ele pegar variáveis ou credenciais novas.</summary>
+    private static async Task<string?> ReiniciarSeRodando(Site site, AppDbContext db, FilaSites fila)
+    {
+        if (site.Parado || site.CurrentDeploymentId is null) return null;
+        var atual = await db.Deployments.AsNoTracking().FirstOrDefaultAsync(d => d.Id == site.CurrentDeploymentId);
+        if (atual is not { Tipo: DeploymentTipo.DotNet }) return null;
+        return await Esperar(fila.Enfileirar(new TarefaSite(AcaoSite.Reiniciar, site.Id)));
+    }
+
+    /// <summary>Cria banco + usuário (idempotente: se já existe, só garante que está lá com a mesma senha).</summary>
+    private static async Task<string?> CriarPostgres(Site site, AppDbContext db, IServiceProvider sp)
+    {
+        var opt = sp.GetRequiredService<IOptions<SitesOptions>>().Value;
+        if (!opt.PostgresHabilitado) return "o Postgres não está configurado no servidor (POSTGRES_SENHA).";
+        var protetor = sp.GetRequiredService<IProtetorDeSegredos>();
+        var nome = site.PostgresBanco ?? PostgresNomes.DoSlug(site.Slug);
+        var senha = site.PostgresSenhaCifrada is { } c && protetor.Desproteger(c) is { } atual ? atual : PostgresNomes.NovaSenha();
+        try { await sp.GetRequiredService<IPostgresProvisionador>().CriarAsync(nome, senha, CancellationToken.None); }
+        catch (ProvisionamentoPostgresException e) { return e.Message; }
+        site.PostgresBanco = nome;
+        site.PostgresSenhaCifrada = protetor.Proteger(senha);
+        await db.SaveChangesAsync();
+        return null;
+    }
+
+    private static PostgresInfoDto InfoPostgres(Site site, IProtetorDeSegredos protetor, SitesOptions opt)
+    {
+        if (site.PostgresBanco is null || site.PostgresSenhaCifrada is null)
+            return new PostgresInfoDto(opt.PostgresHabilitado, false, null, null, null, null, null, null);
+        var senha = protetor.Desproteger(site.PostgresSenhaCifrada) ?? "";
+        return new PostgresInfoDto(opt.PostgresHabilitado, true, opt.PostgresHost, opt.PostgresPorta,
+            site.PostgresBanco, site.PostgresBanco, senha, PostgresNomes.ConnectionString(opt, site.PostgresBanco, senha));
+    }
+
+    private static Task<Site?> DoUsuarioRastreado(string id, ClaimsPrincipal user, AppDbContext db) =>
+        db.Sites.FirstOrDefaultAsync(s => s.Id == id && s.OwnerUserId == user.UserId());
 
     private static async Task<string?> Esperar(TarefaSite tarefa)
     {
@@ -257,7 +358,7 @@ public static partial class SitesEndpoints
             .OrderByDescending(d => d.Versao)
             .ToListAsync();
         return new SiteDetalheDto(site.Id, site.Slug, site.Nome, opt.Url(site.Slug), site.Parado, site.CriadoEm,
-            site.CurrentDeploymentId, versoes.Select(d => ToDto(d, comLog: true)).ToList());
+            site.CurrentDeploymentId, versoes.Select(d => ToDto(d, comLog: true)).ToList(), site.PostgresBanco);
     }
 
     private static DeploymentDto ToDto(Deployment d, bool comLog) => new(

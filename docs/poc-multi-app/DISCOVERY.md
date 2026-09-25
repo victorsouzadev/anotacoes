@@ -295,3 +295,37 @@ Postgres gerenciado, vários usuários publicando (exigiria cotas, sandbox mais 
 - [x] RAM do Recados ocioso: **~21 MiB** (limite 128 MB).
 - [x] Tamanho do pacote: com `-r linux-x64` o Recados tem 773 KB. Sem ele, 14,7 MB (bibliotecas
       nativas do SQLite para todas as plataformas).
+
+## 13. Postgres por site
+
+Pedido depois da POC: um Postgres em Docker em que **cada app tem o próprio banco**, com
+usuário e senha criados pela plataforma e entregues ao sistema publicado.
+
+| Decisão | Por quê |
+|---|---|
+| **Um Postgres 17 compartilhado** (`postgres`, profile `publicar`), não um por app | Um por app custaria ~50 MiB cada. Compartilhado, são ~54 MiB no total, com `shared_buffers=32MB`, `max_connections=60` e `mem_limit` de 256 MB |
+| **Banco e usuário `site_<slug>`**, senha de 64 hex gerada pela API | O nome é previsível e válido sem aspas. A senha é forte e sem nada que precise de escape |
+| Usuário `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`, dono só do próprio banco, `CONNECTION LIMIT 10` | `REVOKE CONNECT ... FROM PUBLIC` no banco dele, no `postgres` e no `template1`: um app não entra no banco de outro |
+| Postgres nas redes `default` (a API cria bancos) e `notas-sites` (os apps conectam em `postgres:5432`) | A API continua fora da rede dos apps. Os apps não alcançam a API |
+| Senha **cifrada** no SQLite do notas (`IProtetorDeSegredos`) | Mesmo cuidado das variáveis |
+| Entregue ao app como `ConnectionStrings__Postgres` + `PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD` | Serve para EF Core/Npgsql e para qualquer ferramenta libpq. São reservadas: o usuário não sobrescreve pelas variáveis |
+| Opcional por site (caixa ao criar o site ou botão "Criar banco"), idempotente | Site estático não precisa de banco |
+| "Trocar senha" faz `ALTER ROLE` e reinicia o app com a nova; "Apagar banco" e excluir o site fazem `DROP DATABASE ... WITH (FORCE)` + `DROP ROLE` | Senha vazada se resolve em um clique |
+| Porta só em `127.0.0.1:5433` na VPS | Acesso por túnel SSH para DBeaver; nada exposto |
+| Backup diário por banco (`pg_dump -Fc`) no `backup.sh` | Mesmo cron do SQLite |
+
+**Limite conhecido:** a restauração de banco no rollback (automática ou "+ banco") cobre só o
+SQLite. No Postgres, as migrations precisam ser compatíveis com a versão anterior, ou é preciso
+restaurar o dump. Próximo passo possível: `pg_dump` pelo Deployer antes de cada deploy.
+
+**Testes:**
+- `PostgresRealTests` rodam contra um Postgres real (no CI, via `services:`): isolamento entre
+  sites, sem acesso ao `postgres`, sem superusuário, troca de senha invalida a antiga, remoção limpa tudo.
+- Em `SitesTests`: criação, entrega das variáveis, troca de senha com reinício, remoção e exclusão do site.
+
+**Teste de ponta a ponta local:**
+- O Recados publicado num site com Postgres gravou em `site_recados`.
+- Com a senha do `site_outro`, de dentro da rede dos apps, a conexão ao `site_recados` e ao
+  `postgres` deu "User does not have CONNECT privilege".
+- A troca de senha manteve o app no ar com os dados.
+- Excluir o site `outro` removeu o banco e o usuário.

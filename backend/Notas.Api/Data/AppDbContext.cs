@@ -118,6 +118,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.ToTable("sites");
             e.Property(x => x.Slug).IsRequired().HasMaxLength(30);
             e.Property(x => x.Nome).IsRequired().HasMaxLength(100);
+            e.Property(x => x.PostgresBanco).HasMaxLength(63);
             e.HasIndex(x => x.Slug).IsUnique();
             e.HasIndex(x => x.OwnerUserId);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);

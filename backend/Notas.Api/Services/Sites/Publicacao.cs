@@ -65,6 +65,7 @@ public class ExecutorSites(
     IDeployer deployer,
     IVerificadorSaude saude,
     IProtetorDeSegredos protetor,
+    IPostgresProvisionador postgres,
     IOptions<SitesOptions> options,
     ILogger<ExecutorSites> logger)
 {
@@ -194,7 +195,7 @@ public class ExecutorSites(
 
         disco.PrepararDados(site.Slug);
         disco.Ativar(site.Slug, dep.Id);
-        var variaveis = await VariaveisAsync(site.Id, ct);
+        var variaveis = await VariaveisAsync(site, ct);
         log.Add($"Subindo container .NET {dep.RuntimeVersao} ({dep.Entrada}, {dep.MemoriaMb} MB).");
         await deployer.IniciarAsync(site.Slug, new IniciarApp(dep.Id, dep.Entrada!, dep.RuntimeVersao!, dep.MemoriaMb, variaveis), ct);
 
@@ -248,6 +249,11 @@ public class ExecutorSites(
     {
         var erro = await TentarAsync(async () => { await deployer.RemoverAsync(site.Slug, ct); return null; });
         if (erro is not null) return erro;
+        if (site.PostgresBanco is { } banco)
+        {
+            try { await postgres.RemoverAsync(banco, ct); }
+            catch (ProvisionamentoPostgresException e) { return "Não consegui apagar o banco Postgres: " + e.Message; }
+        }
         disco.ApagarSite(site.Slug);
         db.Sites.Remove(site);
         await db.SaveChangesAsync(ct);
@@ -270,12 +276,15 @@ public class ExecutorSites(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<Dictionary<string, string>> VariaveisAsync(string siteId, CancellationToken ct)
+    private async Task<Dictionary<string, string>> VariaveisAsync(Site site, CancellationToken ct)
     {
-        var lista = await db.SiteVariaveis.AsNoTracking().Where(v => v.SiteId == siteId).ToListAsync(ct);
+        var lista = await db.SiteVariaveis.AsNoTracking().Where(v => v.SiteId == site.Id).ToListAsync(ct);
         var r = new Dictionary<string, string>();
         foreach (var v in lista)
             if (protetor.Desproteger(v.ValorCifrado) is { } valor) r[v.Chave] = valor;
+        // As do Postgres por último: vencem qualquer variável do usuário com o mesmo nome.
+        if (site.PostgresBanco is { } banco && site.PostgresSenhaCifrada is { } cifrada && protetor.Desproteger(cifrada) is { } senha)
+            foreach (var (k, v) in PostgresNomes.Variaveis(_opt, banco, senha)) r[k] = v;
         return r;
     }
 

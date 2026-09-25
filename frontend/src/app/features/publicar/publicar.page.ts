@@ -8,7 +8,7 @@ import { mensagemDeErro } from '../../core/erro-http';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { ArquivoDoPacote, compactar, daSelecaoDePasta, doArrastar, slugDoNome, tamanhoLegivel } from './pacote';
-import { PublicarService, SiteDetalhe, SiteResumo, StatusVersao, Variavel, Versao } from './publicar.service';
+import { PostgresInfo, PublicarService, SiteDetalhe, SiteResumo, StatusVersao, Variavel, Versao } from './publicar.service';
 
 type Fase = 'parado' | 'compactando' | 'enviando';
 
@@ -51,6 +51,7 @@ export class PublicarPageComponent {
   readonly criandoAberto = signal(false);
   novoNome = '';
   novoSlug = '';
+  novoComPostgres = true;
   private slugEditado = false;
   readonly criando = signal(false);
 
@@ -68,6 +69,12 @@ export class PublicarPageComponent {
   readonly salvandoVariaveis = signal(false);
   readonly operando = signal<string | null>(null);
   confirmacaoExclusao = '';
+
+  // Postgres.
+  readonly postgresNoServidor = signal(false);
+  readonly postgres = signal<PostgresInfo | null>(null);
+  readonly mostrarSenhaPg = signal(false);
+  readonly operandoPg = signal<string | null>(null);
 
   readonly rotuloStatus = ROTULO_STATUS;
   readonly tamanho = tamanhoLegivel;
@@ -92,6 +99,7 @@ export class PublicarPageComponent {
   private async iniciar(): Promise<void> {
     const r = await this.api.permissao();
     this.urlModelo = r.urlModelo;
+    this.postgresNoServidor.set(r.postgres);
     this.permitido.set(r.podePublicar);
     if (r.podePublicar) await this.recarregarLista(true);
   }
@@ -113,10 +121,13 @@ export class PublicarPageComponent {
     this.logAberto.set(null);
     this.logsApp.set(null);
     this.variaveis.set(null);
+    this.postgres.set(null);
+    this.mostrarSenhaPg.set(false);
     this.confirmacaoExclusao = '';
     this.erro.set(null);
     this.aviso.set(null);
     await this.atualizarDetalhe(id);
+    if (this.postgresNoServidor()) void this.carregarPostgres(id);
   }
 
   private async atualizarDetalhe(id = this.detalhe()?.id): Promise<void> {
@@ -180,7 +191,7 @@ export class PublicarPageComponent {
     this.criando.set(true);
     this.erro.set(null);
     try {
-      const site = await this.api.criar(this.novoNome.trim(), this.novoSlug.trim());
+      const site = await this.api.criar(this.novoNome.trim(), this.novoSlug.trim(), this.postgresNoServidor() && this.novoComPostgres);
       this.criandoAberto.set(false);
       await this.recarregarLista();
       this.detalhe.set(null);
@@ -371,6 +382,43 @@ export class PublicarPageComponent {
       this.aviso.set('Endereço copiado.');
     } catch {
       this.aviso.set(url);
+    }
+  }
+
+  // ---------------------------------------------------------------- Postgres
+
+  private async carregarPostgres(id: string): Promise<void> {
+    try {
+      const info = await this.api.postgres(id);
+      if (this.detalhe()?.id === id) this.postgres.set(info);
+    } catch (e) {
+      this.falha(e, 'Não foi possível ler o banco Postgres');
+    }
+  }
+
+  async operarPostgres(acao: 'criar' | 'senha' | 'apagar'): Promise<void> {
+    const site = this.detalhe();
+    if (!site) return;
+    if (acao === 'senha' && !confirm('Gerar uma senha nova? A atual deixa de funcionar e o app é reiniciado com a nova.')) return;
+    if (acao === 'apagar' && !confirm(`Apagar o banco ${this.postgres()?.banco} e TODOS os dados dele? Não dá para desfazer.`)) return;
+    this.operandoPg.set(acao);
+    this.erro.set(null);
+    this.aviso.set(null);
+    try {
+      if (acao === 'apagar') {
+        await this.api.apagarPostgres(site.id);
+        this.aviso.set('Banco Postgres apagado.');
+        await this.carregarPostgres(site.id);
+      } else {
+        this.postgres.set(acao === 'criar' ? await this.api.criarPostgres(site.id) : await this.api.trocarSenhaPostgres(site.id));
+        this.aviso.set(acao === 'criar' ? 'Banco Postgres criado.' : 'Senha trocada.');
+      }
+      if (this.temApi() && !site.parado) this.aviso.update((a) => `${a} O app foi reiniciado com as credenciais.`);
+    } catch (e) {
+      this.falha(e, acao === 'criar' ? 'Não foi possível criar o banco' : acao === 'senha' ? 'Não foi possível trocar a senha' : 'Não foi possível apagar o banco');
+      await this.carregarPostgres(site.id);
+    } finally {
+      this.operandoPg.set(null);
     }
   }
 

@@ -60,6 +60,12 @@
                      pattern="[a-z0-9][a-z0-9-]{1,28}[a-z0-9]" placeholder="recados" autocapitalize="off" spellcheck="false" />
             </label>
             <p class="previa"><app-icon name="globe" [size]="13" /> {{ urlPrevia() }}</p>
+            @if (postgresNoServidor()) {
+              <label class="opcao">
+                <input type="checkbox" name="pg" [(ngModel)]="novoComPostgres" />
+                <span>Criar um banco Postgres para este site <small>(usuário e senha próprios, entregues ao app)</small></span>
+              </label>
+            }
             <div class="acoes">
               @if (sites().length > 0) {
                 <button type="button" class="botao" (click)="criandoAberto.set(false)">Cancelar</button>
@@ -92,7 +98,7 @@
             <p class="ajuda">
               Um ZIP ou uma pasta com <code>api/</code> (saída de <code>dotnet publish -c Release -o api</code>) e/ou
               <code>web/</code> (HTML/CSS/JS ou o <code>dist/</code> do Angular/React). O app C# escuta na porta que vier em
-              <code>ASPNETCORE_URLS</code>, usa <code>ConnectionStrings:Default</code> (SQLite em <code>/data</code>) e responde em <code>/api</code>.
+              <code>ASPNETCORE_URLS</code>, usa <code>ConnectionStrings:Postgres</code> (se o site tiver banco Postgres) ou <code>ConnectionStrings:Default</code> (SQLite em <code>/data</code>) e responde em <code>/api</code>.
             </p>
             <div class="zona" [class.arrastando]="arrastando()"
                  (dragover)="aoArrastarSobre($event)" (dragleave)="arrastando.set(false)" (drop)="aoSoltar($event)">
@@ -161,6 +167,56 @@
             }
           </div>
 
+          <!-- ---------------------------------------------- Postgres -->
+          @if (postgresNoServidor()) {
+            <div class="card">
+              <div class="secao-topo">
+                <div>
+                  <h2>Banco Postgres</h2>
+                  <p class="ajuda sem-margem">
+                    Banco e usuário só deste site no Postgres do servidor. O app recebe
+                    <code>ConnectionStrings:Postgres</code> e as variáveis <code>PGHOST</code>, <code>PGDATABASE</code>,
+                    <code>PGUSER</code> e <code>PGPASSWORD</code>.
+                  </p>
+                </div>
+                @if (postgres(); as pg) {
+                  @if (!pg.criado) {
+                    <button class="botao primario pequeno" (click)="operarPostgres('criar')" [disabled]="!!operandoPg()">
+                      {{ operandoPg() === 'criar' ? 'Criando…' : 'Criar banco' }}
+                    </button>
+                  }
+                }
+              </div>
+              @if (postgres(); as pg) {
+                @if (pg.criado) {
+                  <dl class="credenciais">
+                    <dt>Host</dt><dd><code>{{ pg.host }}:{{ pg.porta }}</code></dd>
+                    <dt>Banco</dt><dd><code>{{ pg.banco }}</code></dd>
+                    <dt>Usuário</dt><dd><code>{{ pg.usuario }}</code></dd>
+                    <dt>Senha</dt>
+                    <dd class="linha-senha">
+                      <code>{{ mostrarSenhaPg() ? pg.senha : '••••••••••••••••' }}</code>
+                      <button class="botao icone" (click)="mostrarSenhaPg.set(!mostrarSenhaPg())" [title]="mostrarSenhaPg() ? 'Esconder' : 'Mostrar'"><app-icon name="eye" [size]="13" /></button>
+                      <button class="botao icone" (click)="copiar(pg.senha!)" title="Copiar senha"><app-icon name="copy" [size]="13" /></button>
+                    </dd>
+                  </dl>
+                  <p class="ajuda sem-margem">O host <code>{{ pg.host }}</code> só é acessível de dentro dos apps publicados. Para abrir no DBeaver, use um túnel SSH (ver DEPLOY.md).</p>
+                  <div class="acoes esquerda">
+                    <button class="botao" (click)="copiar(pg.connectionString!)"><app-icon name="copy" [size]="13" /> Copiar connection string</button>
+                    <button class="botao" (click)="operarPostgres('senha')" [disabled]="!!operandoPg()">
+                      <app-icon name="refresh" [size]="13" /> {{ operandoPg() === 'senha' ? 'Trocando…' : 'Trocar senha' }}
+                    </button>
+                    <button class="botao perigoso" (click)="operarPostgres('apagar')" [disabled]="!!operandoPg()">
+                      <app-icon name="delete" [size]="13" /> {{ operandoPg() === 'apagar' ? 'Apagando…' : 'Apagar banco' }}
+                    </button>
+                  </div>
+                }
+              } @else {
+                <p class="ajuda sem-margem">Carregando…</p>
+              }
+            </div>
+          }
+
           <!-- ---------------------------------------------- app C# -->
           @if (temApi()) {
             <div class="card">
@@ -220,7 +276,7 @@
               @if (operando(); as o) { <span class="ajuda sem-margem">{{ o === 'reiniciar' ? 'Subindo…' : o === 'parar' ? 'Parando…' : 'Excluindo…' }}</span> }
             </div>
             <div class="perigo">
-              <p class="ajuda sem-margem">Excluir apaga todas as versões e <strong>o banco do app</strong>. Digite <code>{{ site.slug }}</code> para confirmar.</p>
+              <p class="ajuda sem-margem">Excluir apaga todas as versões, <strong>o banco SQLite</strong> e <strong>o banco Postgres</strong> do app. Digite <code>{{ site.slug }}</code> para confirmar.</p>
               <div class="acoes esquerda">
                 <input class="confirmacao" [(ngModel)]="confirmacaoExclusao" name="confirmacao" [placeholder]="site.slug" autocapitalize="off" spellcheck="false" />
                 <button class="botao perigoso" (click)="operar('excluir')" [disabled]="confirmacaoExclusao !== site.slug || !!operando()">

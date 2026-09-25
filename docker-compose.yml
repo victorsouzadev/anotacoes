@@ -26,6 +26,8 @@ services:
       - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
       - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}
       - Sites__Porta=${SITES_PORTA:-8090}
+      # Banco Postgres por site (serviço "postgres" abaixo). Sem senha, o recurso fica desligado.
+      - Sites__PostgresSenha=${POSTGRES_SENHA:-}
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites
@@ -71,6 +73,40 @@ services:
       - DEPLOYER_REDE=notas-sites
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+  # Postgres compartilhado dos sites publicados: cada site ganha um banco e um usuário
+  # próprios (site_<slug>), criados pela API. Os apps o acessam como postgres:5432 pela
+  # rede "sites"; a API, pela rede padrão. Não publica porta no host.
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["publicar"]
+    restart: unless-stopped
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_SENHA:-}
+    # Enxuto para a VPS de 1.9 GiB: poucos buffers e conexões (cada app tem teto de 10).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=60
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - effective_cache_size=128MB
+    mem_limit: 256m
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - default
+      - sites
 
 networks:
   sites:

@@ -9,3 +9,4 @@ data/db/*.db-*
 backups/
 downloads/
 data/sites/
+data/postgres/
