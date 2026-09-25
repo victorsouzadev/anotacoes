@@ -29,6 +29,11 @@
     <ProjectReference Include="../EditorImagens.Ia/EditorImagens.Ia.csproj" />
   </ItemGroup>
 
+  <!-- De onde o programa instalado busca atualização (o CI passa o endereço do site). -->
+  <ItemGroup Condition="'$(UpdateUrl)' != ''">
+    <AssemblyMetadata Include="UpdateUrl" Value="$(UpdateUrl)" />
+  </ItemGroup>
+
   <ItemGroup>
     <Resource Include="icone.ico" />
     <!-- O Angular compilado e os modelos de IA entram no pacote pelo CI (ver

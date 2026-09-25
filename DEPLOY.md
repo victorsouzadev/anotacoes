@@ -176,3 +176,12 @@ adicionada ao `authorized_keys` da VPS. Refaça os passos 1–4 acima.
 2. Remover a publicação de porta `8090:8080` do `docker-compose.vps.yml` (o container já está na rede `proxy`).
 3. Criar um Proxy Host no NPM apontando para `notas-caddy:8080` e solicitar certificado Let's Encrypt.
 4. `ufw delete allow 8090/tcp`.
+
+## Instalador do Editor de Imagens pra Windows
+
+Não faz parte do deploy da main: é o workflow **Desktop (Windows)** (Actions ›
+Run workflow). Ele grava o `Setup.exe` e o pacote de atualização em
+`/opt/notas-vps/downloads/windows`, que o Caddy serve em `/downloads/windows/`
+(volume `./downloads` no `docker-compose.yml`). O site mostra o botão "Baixar
+para Windows" assim que existe um `versao.json` lá. Usa os mesmos segredos
+`VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY` do deploy. Detalhes em `desktop/README.md`.

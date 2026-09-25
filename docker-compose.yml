@@ -35,6 +35,8 @@ services:
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      # instalador do Editor de Imagens pra Windows (fora da imagem; ver Caddyfile)
+      - ./downloads:/srv-downloads/downloads:ro
     depends_on:
       - api
 

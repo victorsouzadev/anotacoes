@@ -2,8 +2,9 @@ name: Desktop (Windows)
 
 # Monta o instalador do Editor de Imagens pra Windows: o Angular compilado, os
 # modelos de IA e a API rodando dentro do programa, num Setup.exe do Velopack.
-# Tag desktop-v1.2.3 publica uma Release (o programa instalado se atualiza por
-# ela); "Run workflow" só gera o instalador como artefato.
+# Depois grava na VPS, em /downloads/windows: é de lá que o botão "Baixar para
+# Windows" do site baixa e de onde o programa instalado se atualiza. A tag
+# desktop-v1.2.3 também publica uma Release no GitHub.
 
 on:
   push:
@@ -25,6 +26,8 @@ env:
 jobs:
   instalador:
     runs-on: windows-latest
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
     defaults:
       run:
         shell: bash
@@ -77,7 +80,7 @@ jobs:
         env:
           EDITOR_MODELOS: ${{ github.workspace }}/desktop/src/EditorImagens.Desktop/modelos
       - name: Publicar
-        run: dotnet publish desktop/src/EditorImagens.Desktop -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.versao }} -o publish
+        run: dotnet publish desktop/src/EditorImagens.Desktop -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.versao }} -p:UpdateUrl=http://${{ secrets.VPS_HOST }}:8090/downloads/windows -o publish
       - name: Instalador (Velopack)
         run: |
           dotnet tool install -g vpk --version 1.2.158
@@ -95,3 +98,60 @@ jobs:
         with:
           name: Editor de Imagens ${{ steps.v.outputs.versao }} (Windows)
           files: Releases/*
+
+  # Os actions de SSH/SCP rodam em container: só em runner Linux.
+  servidor:
+    needs: instalador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: EditorImagens-${{ needs.instalador.outputs.versao }}
+          path: Releases
+      - name: Monta a pasta do site
+        run: |
+          mkdir -p windows
+          cp Releases/*-Setup.exe windows/EditorImagens-Setup.exe
+          # feed de atualização do Velopack (o programa lê releases.win.json)
+          cp Releases/releases.win.json Releases/*-full.nupkg windows/
+          if [ -f Releases/RELEASES ]; then cp Releases/RELEASES windows/; fi
+          tamanho=$(stat -c %s windows/EditorImagens-Setup.exe)
+          printf '{"versao":"%s","arquivo":"EditorImagens-Setup.exe","tamanho":%s,"publicadoEm":"%s"}\n' \
+            "${{ needs.instalador.outputs.versao }}" "$tamanho" "$(date -u +%FT%TZ)" > windows/versao.json
+          ls -la windows
+      - name: Prepara a pasta na VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: rm -rf /opt/notas-vps/downloads/novo && mkdir -p /opt/notas-vps/downloads/novo
+      - name: Envia o instalador
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: windows
+          target: /opt/notas-vps/downloads/novo
+      - name: Troca a versão publicada
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # troca a pasta inteira de uma vez: ninguém baixa meio instalador; só a
+          # última versão fica no disco
+          script: |
+            set -e
+            cd /opt/notas-vps/downloads
+            rm -rf antigo
+            if [ -d windows ]; then mv windows antigo; fi
+            mv novo/windows windows
+            rm -rf novo antigo
+      - name: Confere o link
+        run: |
+          curl -sf http://${{ secrets.VPS_HOST }}:8090/downloads/windows/versao.json | grep -q '"versao":"${{ needs.instalador.outputs.versao }}"' || {
+            echo "::error::O site não está servindo /downloads/windows (o container do Caddy precisa do volume ./downloads — faça um deploy da main)."
+            exit 1
+          }

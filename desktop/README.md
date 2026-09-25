@@ -83,19 +83,26 @@ Para rodar no Windows a partir do código: compile o Angular
 | `src/EditorImagens.Ia` | Recorte e ampliação com ONNX Runtime (sem WPF; testável no Linux) |
 | `tests/EditorImagens.Ia.Tests` | Ladrilhos da ampliação, máscara do recorte, modelos reais, `.edimg`, hospedagem |
 
-## Instalador e atualizações
+## Instalador, download e atualizações
 
-O workflow **Desktop (Windows)** monta tudo num `Setup.exe` (Velopack, instala
-por usuário, sem pedir administrador, e instala o WebView2 se faltar):
+O workflow **Desktop (Windows)** (Actions › Run workflow, com a versão; ou a tag
+`desktop-v1.2.3`) monta tudo num `Setup.exe` (Velopack: instala por usuário,
+sem pedir administrador, e instala o WebView2 se faltar) e **publica no site**:
 
-- *Run workflow* com uma versão → o instalador sai como artefato do workflow;
-- tag `desktop-v1.2.3` → publica uma Release com o instalador.
+- grava em `/opt/notas-vps/downloads/windows` na VPS, que o Caddy serve em
+  `/downloads/windows/` (fora da imagem do site: o instalador tem centenas de MB
+  e muda sem novo deploy). Fica só a última versão;
+- o site mostra **Baixar para Windows** no card do Editor de Imagens (tela
+  inicial) e na barra do editor — só quando existe um `versao.json` publicado;
+- o programa instalado busca atualização nesse mesmo endereço ao abrir (com
+  internet), baixa em segundo plano e aplica ao fechar. Projetos e
+  configurações ficam em `%LocalAppData%\EditorImagens.Dados`, fora da pasta do
+  programa, e sobrevivem às atualizações;
+- com a tag, também sai uma Release no GitHub.
 
-Com internet, o programa procura versão nova nas Releases ao abrir, baixa em
-segundo plano e aplica ao fechar. Se o repositório for privado, a busca
-automática não enxerga as Releases — basta rodar o `Setup.exe` novo, que
-atualiza por cima mantendo projetos e configurações (ficam em
-`%LocalAppData%\EditorImagens.Dados`, fora da pasta do programa).
+A primeira vez exige um deploy da main antes (é ele que monta a pasta
+`downloads` no container do Caddy); o workflow confere o link no fim e avisa se
+faltar isso. Espaço na VPS: ~800 MB (instalador + pacote de atualização).
 
 Modelos: BiRefNet (licença MIT) e Real-ESRGAN (BSD-3), dentro do instalador.
 

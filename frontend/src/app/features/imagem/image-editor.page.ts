@@ -39,6 +39,7 @@ import { BridgePayload, BridgeTarget, ModeBridge, canvasToFile } from './mode-br
 import { ProjectDraft, clearDraft, loadDraft, saveDraft } from './project-draft';
 import { DesktopPrinter, DesktopRecent, DesktopService, blobToBase64, bytesToBase64 } from '../../core/desktop';
 import { mensagemDeErro } from '../../core/erro-http';
+import { WindowsDownloadService } from '../../core/windows-download';
 import { SnapshotHistory } from './snapshot-history';
 import { ImageUpscaleService } from './image-upscale.service';
 import { ImageLibraryService } from './image-library.service';
@@ -379,6 +380,9 @@ function loadPrefs(): Prefs {
           @if (projectStatus()) { <span class="ab-status" [title]="projectStatus()">{{ projectStatus() }}</span> }
         </div>
         <div class="ab-right">
+          @if (!desktop.enabled && windowsDownload.release(); as w) {
+            <a class="il-btn ab-win" [href]="w.url" download [title]="'Editor de Imagens pra Windows ' + w.versao + ' (' + w.tamanho + '): funciona sem internet, com a IA na placa de vídeo, projetos em arquivo e impressão direta'"><il-icon name="download" [size]="13" /> Baixar para Windows</a>
+          }
           <button type="button" class="il-ib" (click)="theme.cycle()" [title]="themeLabel()" [attr.aria-label]="themeLabel()"><app-icon [name]="themeIconName()" [size]="15" /></button>
           @if (!desktop.enabled) {
             <span class="ab-user">{{ auth.user()?.email }}</span>
@@ -849,6 +853,8 @@ function loadPrefs(): Prefs {
     .ab-p-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ab-p-date { flex-shrink: 0; font-size: 11px; color: var(--text-muted); }
     .ab-menu-empty { margin: 8px; font-size: 11px; color: var(--text-muted); }
+    .ab-win { text-decoration: none; white-space: nowrap; }
+    @media (max-width: 1100px) { .ab-win { display: none; } }
     .ab-menu-label { margin: 8px 8px 2px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
     .pc-print { border: 1px solid var(--il-line); border-radius: 6px; margin-bottom: 6px; }
     .pc-print .il-sec-body { display: flex; flex-direction: column; gap: 8px; }
@@ -980,6 +986,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   totalCopies = computed(() => this.images().reduce((sum, i) => sum + i.copies, 0));
 
   readonly desktop = inject(DesktopService);
+  readonly windowsDownload = inject(WindowsDownloadService);
   /** Desktop: o arquivo .edimg deste projeto (null = ainda não salvo em disco). */
   projectPath = signal<string | null>(null);
   recents = signal<DesktopRecent[]>([]);
@@ -1070,6 +1077,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       }).catch(() => undefined);
     } else {
       void this.refreshProjects();
+      this.windowsDownload.check();
     }
     void this.upscale.verificar();
     void this.materials.load();

@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
+import { WindowsDownloadService } from '../../core/windows-download';
 
 interface ToolCard {
   path: string;
@@ -12,6 +13,8 @@ interface ToolCard {
   downloadUrl?: string;
   downloadFileName?: string;
   downloadLabel?: string;
+  /** Mostra o link do instalador do Windows, quando houver um publicado. */
+  windows?: boolean;
 }
 
 const TOOLS: ToolCard[] = [
@@ -31,6 +34,7 @@ const TOOLS: ToolCard[] = [
     icon: 'image',
     title: 'Editor de Imagens',
     description: 'Print & cut pra ScanNCut (contorno, remoção de fundo, folha A4/A3) e moldes SVG: encaixe fotos nos buracos do molde, em camadas com ordem e transparência.',
+    windows: true,
   },
   {
     path: '/bolo-3d',
@@ -76,6 +80,11 @@ const TOOLS: ToolCard[] = [
               @if (tool.downloadUrl) {
                 <a class="tool-download" [href]="tool.downloadUrl" [attr.download]="tool.downloadFileName">
                   <app-icon name="download" [size]="13" /> {{ tool.downloadLabel }}
+                </a>
+              }
+              @if (tool.windows && windows.release(); as w) {
+                <a class="tool-download" [href]="w.url" download title="Funciona sem internet, com a IA na placa de vídeo">
+                  <app-icon name="download" [size]="13" /> Baixar para Windows ({{ w.tamanho }})
                 </a>
               }
             </div>
@@ -177,7 +186,9 @@ const TOOLS: ToolCard[] = [
 export class HubPageComponent {
   tools = TOOLS;
 
-  constructor(public auth: AuthService, public theme: ThemeService) {}
+  constructor(public auth: AuthService, public theme: ThemeService, public windows: WindowsDownloadService) {
+    windows.check();
+  }
 
   themeIconName(): IconName {
     switch (this.theme.pref()) {

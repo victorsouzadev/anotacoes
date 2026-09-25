@@ -8,6 +8,19 @@
         }
     }
 
+    # Instalador do programa Windows: fica fora da imagem (tem centenas de MB e
+    # muda sem novo deploy do site). O workflow "Desktop (Windows)" grava em
+    # /opt/notas-vps/downloads/windows, montado aqui (ver docker-compose.yml).
+    # É também de onde o programa instalado busca as atualizações.
+    handle /downloads/windows/* {
+        root * /srv-downloads
+        @json path *.json
+        header @json Cache-Control "no-cache"
+        @exe path *.exe
+        header @exe Content-Disposition "attachment"
+        file_server
+    }
+
     handle {
         root * /srv
         try_files {path} /index.html
