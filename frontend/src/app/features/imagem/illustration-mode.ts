@@ -69,6 +69,7 @@ type Drag =
   | { kind: 'shape'; start: Point; id: string }
   | { kind: 'pen'; index: number }
   | { kind: 'pencil'; points: Point[] }
+  | { kind: 'guide'; id: string; axis: 'x' | 'y' }
   | { kind: 'erase'; points: Point[] }
   | { kind: 'pan'; x: number; y: number; left: number; top: number };
 
@@ -93,7 +94,7 @@ const SHORTCUTS: { title: string; items: [string, string][] }[] = [
   ] },
   { title: 'Vista', items: [
     ['Ctrl + roda', 'Zoom no cursor'], ['Ctrl+0', 'Ajustar à janela'], ['Ctrl+1', 'Tamanho real (100%)'], ['Ctrl+ =  /  Ctrl+ −', 'Aproximar / afastar'],
-    ['Tab', 'Esconder / mostrar todos os painéis'], ['Shift+Tab', 'Esconder / mostrar o dock'],
+    ["Ctrl+'  /  Ctrl+Shift+'", 'Mostrar grade / atrair à grade'], ['Ctrl+;', 'Mostrar / esconder guias'], ['Tab', 'Esconder / mostrar todos os painéis'], ['Shift+Tab', 'Esconder / mostrar o dock'],
   ] },
   { title: 'Editar', items: [
     ['Ctrl+Z  /  Ctrl+Shift+Z', 'Desfazer / refazer'], ['Ctrl+C · X · V', 'Copiar · recortar · colar'], ['Ctrl+Shift+V', 'Colar no lugar'],
@@ -138,8 +139,8 @@ function fmt(v: number, d = 1): string {
     <il-toolbar (pick)="setTool($event)" />
 
     <div class="il-corner" title="Unidade: milímetros">mm</div>
-    <canvas #rulerX class="il-ruler il-ruler-x" aria-hidden="true"></canvas>
-    <canvas #rulerY class="il-ruler il-ruler-y" aria-hidden="true"></canvas>
+    <canvas #rulerX class="il-ruler il-ruler-x" aria-hidden="true" title="Arraste pra criar uma guia" (pointerdown)="startGuide($event, 'y')" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"></canvas>
+    <canvas #rulerY class="il-ruler il-ruler-y" aria-hidden="true" title="Arraste pra criar uma guia" (pointerdown)="startGuide($event, 'x')" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)"></canvas>
 
     <div
       #canvas
@@ -161,7 +162,7 @@ function fmt(v: number, d = 1): string {
         [attr.viewBox]="viewBox()"
         (pointerdown)="onPointerDown($event)"
         (pointermove)="onPointerMove($event)"
-        (pointerup)="onPointerUp()"
+        (pointerup)="onPointerUp($event)"
         (pointercancel)="onPointerUp()"
         (pointerover)="onHover($event)"
         (pointerleave)="hoverId.set(null); cursor.set(null)"
@@ -171,6 +172,9 @@ function fmt(v: number, d = 1): string {
         <text class="il-board-label" x="0" [attr.y]="-7 / ppm()" [attr.font-size]="11 / ppm()">Prancheta · {{ store.widthMm() }} × {{ store.heightMm() }} mm</text>
         <defs #defs></defs>
         <rect class="il-board" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" />
+        @if (store.grid().show) {
+          <rect class="il-grid" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" fill="url(#ils-grid)" />
+        }
         @for (item of rendered(); track item.id) {
           <g [attr.clip-path]="item.clip">
           @for (u of item.under; track $index) {
@@ -229,6 +233,17 @@ function fmt(v: number, d = 1): string {
               <circle class="il-handle il-rot" [attr.cx]="rotHandle(f)[0]" [attr.cy]="rotHandle(f)[1]" [attr.r]="hs() * 1.3" data-handle="rot" />
               @for (h of frameHandles(f); track h.id) {
                 <rect class="il-handle" [attr.data-cursor]="h.id" [attr.x]="h.p[0] - hs()" [attr.y]="h.p[1] - hs()" [attr.width]="hs() * 2" [attr.height]="hs() * 2" [attr.data-handle]="h.id" />
+              }
+            }
+          }
+          @if (store.showGuides()) {
+            @for (g of store.guides(); track g.id) {
+              @if (g.axis === 'x') {
+                <line class="il-uguide" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.heightMm() + padMm()" />
+                <line class="il-uguide-hit il-uguide-x" [attr.data-guide]="g.id" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.heightMm() + padMm()" />
+              } @else {
+                <line class="il-uguide" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.widthMm() + padMm()" [attr.y2]="g.pos" />
+                <line class="il-uguide-hit il-uguide-y" [attr.data-guide]="g.id" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.widthMm() + padMm()" [attr.y2]="g.pos" />
               }
             }
           }
@@ -370,6 +385,12 @@ function fmt(v: number, d = 1): string {
     .il-handle[data-cursor='e'], .il-handle[data-cursor='w'] { cursor: ew-resize; }
     .il-handle.il-rot { cursor: grab; }
     .il-guide { stroke: #ff2f92; stroke-width: 1; pointer-events: none; }
+    .il-overlay .il-uguide { stroke: #00b4d8; stroke-width: 1; pointer-events: none; }
+    .il-uguide-hit { stroke: transparent; stroke-width: 7; pointer-events: stroke; }
+    .il-uguide-x { cursor: col-resize; }
+    .il-uguide-y { cursor: row-resize; }
+    .il-grid { pointer-events: none; }
+    .il-ruler { cursor: copy; }
     .il-marquee { fill: color-mix(in srgb, var(--il-blue) 10%, transparent); stroke: var(--il-blue); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
     .il-node-outline { fill: none; stroke: var(--il-blue); stroke-width: 1; pointer-events: none; }
     .il-node { fill: #fff; stroke: var(--il-blue); stroke-width: 1; cursor: move; }
@@ -672,6 +693,13 @@ export class IllustrationModeComponent {
   private stageDefs = computed(() => {
     this.store.fonts.version();
     let out = '';
+    const grid = this.store.grid();
+    if (grid.show && grid.stepMm > 0) {
+      const st = grid.stepMm;
+      const w = 1 / this.ppm();
+      out += `<pattern id="ils-grid" patternUnits="userSpaceOnUse" width="${st}" height="${st}">` +
+        `<path d="M${st} 0H0V${st}" fill="none" stroke="rgba(80,120,200,.28)" stroke-width="${w}"/></pattern>`;
+    }
     for (const l of this.store.layers()) {
       if (!l.visible) continue;
       out += paintDef(STAGE_IDS, l, null);
@@ -879,6 +907,13 @@ export class IllustrationModeComponent {
     this.store.status.set('');
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 
+    const guideId = target.closest('[data-guide]')?.getAttribute('data-guide');
+    const guide = guideId ? this.store.guides().find((g) => g.id === guideId) : undefined;
+    if (guide && (tool === 'selecionar' || tool === 'nos')) {
+      this.drag = { kind: 'guide', id: guide.id, axis: guide.axis };
+      this.dragging.set(true);
+      return;
+    }
     if (tool === 'zoom') {
       this.zoomStep(event.altKey ? -1 : 1, { x: event.clientX, y: event.clientY });
       return;
@@ -886,6 +921,11 @@ export class IllustrationModeComponent {
     if (tool === 'contagotas') {
       void this.pickColor(p);
       return;
+    }
+    if (tool === 'texto' || tool === 'caneta' || tool === 'retangulo' || tool === 'elipse' || tool === 'estrela' || tool === 'poligono') {
+      const g = this.store.snapToGrid(p);
+      p[0] = g[0];
+      p[1] = g[1];
     }
     if (tool === 'texto') {
       const t = this.store.newText(p[0], p[1]);
@@ -998,7 +1038,13 @@ export class IllustrationModeComponent {
         this.freehand.set({ points: drag.points.map((q) => `${q[0]},${q[1]}`).join(' '), erase: drag.kind === 'erase' });
         return;
       }
-      case 'shape': return this.dragShape(drag, p, event.shiftKey);
+      case 'shape': return this.dragShape(drag, this.store.snapToGrid(p), event.shiftKey);
+      case 'guide': {
+        const v = this.store.snapToGrid(p)[drag.axis === 'x' ? 0 : 1];
+        this.store.moveGuide(drag.id, v);
+        this.store.status.set(`Guia em ${fmt(v)} mm · solte na régua pra apagar`);
+        return;
+      }
       case 'pen': {
         const anchors = [...this.pen()];
         const a = anchors[drag.index];
@@ -1010,11 +1056,33 @@ export class IllustrationModeComponent {
     }
   }
 
-  onPointerUp(): void {
+  /** Guia nova, puxada da régua (a de cima faz guia horizontal). */
+  startGuide(event: PointerEvent, axis: 'x' | 'y'): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+    const p = this.toDoc(event);
+    const id = this.store.addGuide(axis, axis === 'x' ? p[0] : p[1]);
+    this.drag = { kind: 'guide', id, axis };
+    this.dragging.set(true);
+  }
+
+  onPointerUp(event?: PointerEvent): void {
     const drag = this.drag;
     this.drag = null;
     this.dragging.set(false);
     this.guides.set([]);
+    if (drag?.kind === 'guide') {
+      // Solta de volta na régua (ou fora do palco): a guia some.
+      const rect = this.canvasEl()?.nativeElement.getBoundingClientRect();
+      if (event && rect && (drag.axis === 'x' ? event.clientX < rect.left : event.clientY < rect.top)) {
+        this.store.removeGuide(drag.id);
+        this.store.status.set('Guia apagada.');
+      } else {
+        this.store.status.set('');
+      }
+      return;
+    }
     if (!drag || drag.kind === 'pan' || drag.kind === 'pen') return;
     if (drag.kind === 'pencil' || drag.kind === 'erase') {
       this.freehand.set(null);
@@ -1098,8 +1166,8 @@ export class IllustrationModeComponent {
     if (drag.bounds && !noSnap) {
       const b = drag.bounds;
       const tol = SNAP_PX / this.ppm();
-      const xs = [0, this.store.widthMm() / 2, this.store.widthMm()];
-      const ys = [0, this.store.heightMm() / 2, this.store.heightMm()];
+      const xs = [0, this.store.widthMm() / 2, this.store.widthMm(), ...this.store.snapTargets('x')];
+      const ys = [0, this.store.heightMm() / 2, this.store.heightMm(), ...this.store.snapTargets('y')];
       for (const l of this.store.layers()) {
         if (!l.visible || drag.base.has(l.id)) continue;
         const lb = this.store.worldBounds(l);
@@ -1118,6 +1186,12 @@ export class IllustrationModeComponent {
       const sy = snap([b.minY + dy, (b.minY + b.maxY) / 2 + dy, b.maxY + dy], ys);
       if (sx) { dx += sx.d; guides.push({ x: sx.at }); }
       if (sy) { dy += sy.d; guides.push({ y: sy.at }); }
+      // Grade com atração: o canto da seleção cai sempre num cruzamento.
+      const g = this.store.grid();
+      if (g.snap && g.stepMm > 0) {
+        if (!sx) dx = Math.round((b.minX + dx) / g.stepMm) * g.stepMm - b.minX;
+        if (!sy) dy = Math.round((b.minY + dy) / g.stepMm) * g.stepMm - b.minY;
+      }
     }
     this.guides.set(guides);
     this.store.status.set(`Δ ${fmt(dx)} × ${fmt(dy)} mm`);
@@ -1428,6 +1502,12 @@ export class IllustrationModeComponent {
         return;
       }
       if (key === 'o' && event.shiftKey) { event.preventDefault(); s.convertToPath(sel); return; }
+      if (code === 'Quote') {
+        event.preventDefault();
+        s.grid.update((g) => (event.shiftKey ? { ...g, snap: !g.snap } : { ...g, show: !g.show }));
+        return;
+      }
+      if (code === 'Semicolon') { event.preventDefault(); s.showGuides.update((v) => !v); return; }
       if (code === 'Digit0' || code === 'Numpad0') { event.preventDefault(); this.fit(); return; }
       if (code === 'Digit1' || code === 'Numpad1') { event.preventDefault(); this.zoomTo(1); return; }
       if (code === 'Digit2') { event.preventDefault(); this.lockSelection(); return; }

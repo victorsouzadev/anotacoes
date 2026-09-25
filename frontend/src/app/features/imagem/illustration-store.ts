@@ -22,6 +22,21 @@ export interface IllustrationProjectData {
   heightMm: number;
   layers: Layer[];
   fonts: UploadedFont[];
+  guides?: Guide[];
+  grid?: GridSettings;
+}
+
+/** Guia arrastada da régua: `x` é uma linha vertical em x = pos. */
+export interface Guide {
+  id: string;
+  axis: 'x' | 'y';
+  pos: number;
+}
+
+export interface GridSettings {
+  show: boolean;
+  snap: boolean;
+  stepMm: number;
 }
 
 interface DocState {
@@ -101,6 +116,9 @@ export class IllustrationStore {
   snap = signal(true);
   /** Raio da borracha vetorial, em mm. */
   eraserMm = signal(3);
+  guides = signal<Guide[]>([]);
+  showGuides = signal(true);
+  grid = signal<GridSettings>({ show: false, snap: false, stepMm: 10 });
   /** Sobe quando o painel deve focar o campo de texto. */
   focusText = signal(0);
   canUndo = signal(false);
@@ -467,6 +485,7 @@ export class IllustrationStore {
 
   clear(): void {
     this.layers.set([]);
+    this.guides.set([]);
     this.selectedIds.set([]);
     this.nodeSel.set(null);
     this.past = [];
@@ -1064,7 +1083,38 @@ export class IllustrationStore {
       heightMm: this.heightMm(),
       layers: this.layers().map(compactLayer),
       fonts: this.fonts.uploads().filter((u) => used.has(this.fonts.uploadFontId(u.id))),
+      guides: this.guides(),
+      grid: this.grid(),
     };
+  }
+
+  // ---------- guias e grade ----------
+
+  addGuide(axis: 'x' | 'y', pos: number): string {
+    const id = uuid();
+    this.guides.update((g) => [...g, { id, axis, pos }]);
+    this.showGuides.set(true);
+    return id;
+  }
+
+  moveGuide(id: string, pos: number): void {
+    this.guides.update((g) => g.map((x) => (x.id === id ? { ...x, pos } : x)));
+  }
+
+  removeGuide(id: string): void {
+    this.guides.update((g) => g.filter((x) => x.id !== id));
+  }
+
+  /** Onde um valor gruda: guias e grade, dentro da tolerância (mm). */
+  snapTargets(axis: 'x' | 'y'): number[] {
+    return this.showGuides() ? this.guides().filter((g) => g.axis === axis).map((g) => g.pos) : [];
+  }
+
+  /** Ponto grudado na grade (quando a atração da grade está ligada). */
+  snapToGrid(p: Point): Point {
+    const g = this.grid();
+    if (!g.snap || g.stepMm <= 0) return p;
+    return [Math.round(p[0] / g.stepMm) * g.stepMm, Math.round(p[1] / g.stepMm) * g.stepMm];
   }
 
   hydrate(data: IllustrationProjectData): void {
@@ -1073,5 +1123,7 @@ export class IllustrationStore {
     this.widthMm.set(data.widthMm || 200);
     this.heightMm.set(data.heightMm || 200);
     this.layers.set(data.layers ?? []);
+    this.guides.set(data.guides ?? []);
+    if (data.grid) this.grid.set(data.grid);
   }
 }

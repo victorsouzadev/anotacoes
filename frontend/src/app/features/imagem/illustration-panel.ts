@@ -14,7 +14,7 @@ import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
 import { IlLayersComponent } from './illustration-layers';
 import { IlNumComponent, NumChange } from './illustration-num';
-import { CUT_COLOR, IllustrationStore, PaintTarget } from './illustration-store';
+import { CUT_COLOR, GridSettings, IllustrationStore, PaintTarget } from './illustration-store';
 import { IllustrationTracer } from './illustration-tracer';
 import { Layer, ShapeLayer, TextAlign, TextCurve, TextLayer, countNodes, normalizeHex } from './illustration-model';
 import { jpegToPdf } from './sheet';
@@ -86,6 +86,16 @@ function loadOpen(): Record<string, boolean> {
                   }
                 </div>
                 <label class="il-check"><input type="checkbox" [checked]="store.snap()" (change)="store.snap.set(!store.snap())" /> Guias inteligentes (atração)</label>
+                <div class="il-row">
+                  <label class="il-check il-grow"><input type="checkbox" [checked]="store.grid().show" (change)="patchGrid({ show: !store.grid().show })" /> <il-icon name="grid" [size]="13" /> Grade</label>
+                  <il-num label="" title="Espaço da grade" unit="mm" [value]="store.grid().stepMm" [step]="1" [min]="1" [max]="200" [decimals]="1" (valueChange)="patchGrid({ stepMm: $event.value })" />
+                </div>
+                <label class="il-check"><input type="checkbox" [checked]="store.grid().snap" (change)="patchGrid({ snap: !store.grid().snap })" /> Atrair à grade  <small>Ctrl+Shift+'</small></label>
+                <div class="il-row">
+                  <label class="il-check il-grow"><input type="checkbox" [checked]="store.showGuides()" (change)="store.showGuides.set(!store.showGuides())" /> <il-icon name="guides" [size]="13" /> Guias ({{ store.guides().length }})</label>
+                  <button type="button" class="il-btn" [disabled]="!store.guides().length" (click)="store.guides.set([])">Apagar guias</button>
+                </div>
+                <p class="il-note">Arraste de uma régua pra criar guia; solte de volta na régua pra apagar.</p>
                 <div class="il-row">
                   <button type="button" class="il-btn il-grow" [disabled]="!store.layers().length" (click)="fitBoard()"><il-icon name="artboard" [size]="13" /> Ajustar ao desenho</button>
                   <button type="button" class="il-btn il-danger" [disabled]="!store.layers().length" (click)="clearAll()" data-tip="Apagar tudo"><il-icon name="trash" [size]="13" /></button>
@@ -519,6 +529,10 @@ export class IllustrationPanelComponent {
     try {
       localStorage.setItem(OPEN_KEY, JSON.stringify(this.open()));
     } catch { /* preferência é só conveniência */ }
+  }
+
+  patchGrid(patch: Partial<GridSettings>): void {
+    this.store.grid.update((g) => ({ ...g, ...patch }));
   }
 
   round0(v: number): number {
