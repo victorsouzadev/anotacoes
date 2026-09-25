@@ -152,8 +152,8 @@
                         <button class="botao pequeno" (click)="alternarLog(v)">{{ logAberto() === v.id ? 'Fechar log' : 'Log' }}</button>
                         @if (v.id !== site.currentDeploymentId && (v.status === 'Substituido' || v.status === 'Falhou') && !emAndamento()) {
                           <button class="botao pequeno" (click)="ativar(v, false)">Voltar para esta</button>
-                          @if (atual()?.temBackupBanco && v.tipo === 'DotNet' && v.versao < (atual()?.versao ?? 0)) {
-                            <button class="botao pequeno" (click)="ativar(v, true)" title="Também devolve o banco ao estado de antes da versão atual">+ banco</button>
+                          @if ((atual()?.temBackupBanco || atual()?.temBackupPostgres) && v.tipo === 'DotNet' && v.versao < (atual()?.versao ?? 0)) {
+                            <button class="botao pequeno" (click)="ativar(v, true)" title="Também devolve o banco (SQLite e Postgres) ao estado de antes da versão atual">+ banco</button>
                           }
                         }
                       </span>

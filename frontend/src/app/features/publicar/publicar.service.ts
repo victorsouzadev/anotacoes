@@ -14,6 +14,8 @@ export interface Versao {
   entrada: string | null;
   tamanhoBytes: number;
   temBackupBanco: boolean;
+  /** Há pg_dump do Postgres do site de antes desta versão entrar no ar. */
+  temBackupPostgres: boolean;
   criadoEm: string;
   terminadoEm: string | null;
   log: string;

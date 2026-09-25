@@ -36,6 +36,28 @@ public class DeployerFalso : IDeployer
     public Task<string> LogsAsync(string slug, int linhas, CancellationToken ct) =>
         Task.FromResult("Unhandled exception. System.Exception: boom\n");
 
+    public readonly List<string> Dumps = [];
+    public readonly List<(string Banco, string Conteudo)> Restaurados = [];
+    public readonly HashSet<string> FalharDump = [];
+
+    public async Task DumpPostgresAsync(string banco, Stream destino, CancellationToken ct)
+    {
+        string conteudo;
+        lock (this)
+        {
+            if (FalharDump.Contains(banco)) throw new DeployerException("pg_dump: connection refused");
+            Dumps.Add(banco);
+            conteudo = $"DUMP-{banco}-{Dumps.Count(d => d == banco)}";
+        }
+        await destino.WriteAsync(System.Text.Encoding.UTF8.GetBytes(conteudo), ct);
+    }
+
+    public async Task RestaurarPostgresAsync(string banco, Stream dump, CancellationToken ct)
+    {
+        var conteudo = await new StreamReader(dump).ReadToEndAsync(ct);
+        lock (this) Restaurados.Add((banco, conteudo));
+    }
+
     public Task<IReadOnlyList<string>> RodandoAsync(CancellationToken ct)
     {
         lock (this) return Task.FromResult<IReadOnlyList<string>>(Rodando.ToList());
@@ -51,6 +73,8 @@ public class PostgresFalso : IPostgresProvisionador
     public Task CriarAsync(string nome, string senha, CancellationToken ct) { lock (this) Bancos[nome] = senha; return Task.CompletedTask; }
     public Task TrocarSenhaAsync(string nome, string senha, CancellationToken ct) { lock (this) Bancos[nome] = senha; return Task.CompletedTask; }
     public Task RemoverAsync(string nome, CancellationToken ct) { lock (this) { Bancos.Remove(nome); Removidos.Add(nome); } return Task.CompletedTask; }
+    public readonly List<string> Recriados = [];
+    public Task RecriarBancoAsync(string nome, CancellationToken ct) { lock (this) Recriados.Add(nome); return Task.CompletedTask; }
 }
 
 /// <summary>Responde "saudável" a não ser que a DLL em teste esteja marcada para falhar.</summary>
@@ -577,6 +601,95 @@ public class SitesTests(SitesApiFactory factory) : IClassFixture<SitesApiFactory
         Assert.Equal(HttpStatusCode.NoContent, (await _dono.DeleteAsync($"/api/sites/{id}")).StatusCode);
         Assert.Contains("site_" + slug, factory.Postgres.Removidos);
         Assert.False(factory.Postgres.Bancos.ContainsKey("site_" + slug));
+    }
+
+    private async Task<(string Id, string Slug, string Banco)> SiteComPostgres()
+    {
+        var slug = NovoSlug();
+        var res = await _dono.PostAsJsonAsync("/api/sites", new { nome = "PG", slug, criarPostgres = true });
+        var id = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!;
+        return (id, slug, "site_" + slug);
+    }
+
+    [Fact]
+    public async Task Cada_deploy_faz_pg_dump_antes_da_troca()
+    {
+        var (id, slug, banco) = await SiteComPostgres();
+        await Enviar(id, Zip(AppDotNet()));
+        var v1 = Versao(await EsperarFila(id), 1);
+        Assert.True(v1.GetProperty("temBackupPostgres").GetBoolean());
+        Assert.Contains("pg_dump de " + banco, v1.GetProperty("log").GetString());
+        var arquivo = Path.Combine(PastaSite(slug), "backups", v1.GetProperty("id").GetString() + ".pgdump");
+        Assert.Equal($"DUMP-{banco}-1", File.ReadAllText(arquivo));
+
+        // Site estático não tem app: nada de dump.
+        var estatico = (await CriarSite()).GetProperty("id").GetString()!;
+        await Enviar(estatico, Zip(("index.html", "x")));
+        Assert.False(Versao(await EsperarFila(estatico), 1).GetProperty("temBackupPostgres").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Versao_que_falha_devolve_o_postgres_ao_dump_de_antes()
+    {
+        var (id, slug, banco) = await SiteComPostgres();
+        await Enviar(id, Zip(AppDotNet()));
+        await EsperarFila(id);
+        await Enviar(id, Zip(AppDotNet("Quebrado")));
+        var v2 = Versao(await EsperarFila(id), 2);
+        Assert.Equal("Falhou", v2.GetProperty("status").GetString());
+        Assert.Contains("pg_restore", v2.GetProperty("log").GetString());
+
+        // Recriou o banco e restaurou o dump feito antes da v2 (o segundo dump deste banco).
+        Assert.Contains(banco, factory.Postgres.Recriados);
+        Assert.Equal((banco, $"DUMP-{banco}-2"), factory.Deployer.Restaurados.Last(r => r.Banco == banco));
+        Assert.Equal("App.dll", factory.Deployer.Iniciados.Last(x => x.Slug == slug).App.Entrada);
+    }
+
+    [Fact]
+    public async Task Voltar_versao_com_banco_restaura_o_postgres()
+    {
+        var (id, _, banco) = await SiteComPostgres();
+        await Enviar(id, Zip(AppDotNet()));
+        var v1Id = Versao(await EsperarFila(id), 1).GetProperty("id").GetString();
+        await Enviar(id, Zip(AppDotNet()));
+        await EsperarFila(id);
+
+        var res = await _dono.PostAsJsonAsync($"/api/sites/{id}/deployments/{v1Id}/ativar", new { restaurarBanco = true });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+        await Task.Delay(100);
+        var detalhe = await EsperarFila(id);
+        Assert.Equal(v1Id, detalhe.GetProperty("currentDeploymentId").GetString());
+        // O dump de antes da v2 (a versão que estava no ar).
+        Assert.Equal((banco, $"DUMP-{banco}-2"), factory.Deployer.Restaurados.Last(r => r.Banco == banco));
+        Assert.Contains("devolvido ao estado de antes da v2", Versao(detalhe, 1).GetProperty("log").GetString());
+    }
+
+    [Fact]
+    public async Task Pg_dump_que_falha_cancela_o_deploy_sem_tocar_na_versao_no_ar()
+    {
+        var (id, slug, banco) = await SiteComPostgres();
+        await Enviar(id, Zip(AppDotNet()));
+        var v1Id = Versao(await EsperarFila(id), 1).GetProperty("id").GetString();
+        var subidasAntes = factory.Deployer.Iniciados.Count(x => x.Slug == slug);
+
+        lock (factory.Deployer) factory.Deployer.FalharDump.Add(banco);
+        try
+        {
+            await Enviar(id, Zip(AppDotNet()));
+            var detalhe = await EsperarFila(id);
+            var v2 = Versao(detalhe, 2);
+            Assert.Equal("Falhou", v2.GetProperty("status").GetString());
+            Assert.Contains("nada foi trocado", v2.GetProperty("log").GetString());
+            Assert.Equal(v1Id, detalhe.GetProperty("currentDeploymentId").GetString());
+            Assert.Equal("NoAr", Versao(detalhe, 1).GetProperty("status").GetString());
+            // O container da v1 nem foi reiniciado.
+            Assert.Equal(subidasAntes, factory.Deployer.Iniciados.Count(x => x.Slug == slug));
+            Assert.Contains(slug, factory.Deployer.Rodando);
+        }
+        finally
+        {
+            lock (factory.Deployer) factory.Deployer.FalharDump.Remove(banco);
+        }
     }
 
     private static void Executar(string banco, string sql)

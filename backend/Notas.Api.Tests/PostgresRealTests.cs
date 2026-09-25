@@ -62,6 +62,11 @@ public class PostgresRealTests
             // Não é superusuário nem cria banco.
             Assert.Equal(false, await Escalar(connA, "SELECT rolsuper OR rolcreatedb OR rolcreaterole FROM pg_roles WHERE rolname = current_user"));
 
+            // Recriar deixa o banco vazio, mas o usuário e a senha continuam valendo.
+            await prov.RecriarBancoAsync(a, default);
+            Assert.Equal(0L, await Escalar(connA, "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"));
+            await Escalar(connA, "CREATE TABLE recados(id int); INSERT INTO recados VALUES (1);");
+
             // Trocar a senha invalida a antiga.
             var nova = PostgresNomes.NovaSenha();
             await prov.TrocarSenhaAsync(a, nova, default);

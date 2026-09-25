@@ -363,7 +363,7 @@ public static partial class SitesEndpoints
 
     private static DeploymentDto ToDto(Deployment d, bool comLog) => new(
         d.Id, d.Versao, d.Tipo.ToString(), d.Status.ToString(), d.TemWeb, d.RuntimeVersao, d.Entrada,
-        d.TamanhoBytes, d.TemBackupBanco, d.CriadoEm, d.TerminadoEm, comLog ? d.Log : "");
+        d.TamanhoBytes, d.TemBackupBanco, d.TemBackupPostgres, d.CriadoEm, d.TerminadoEm, comLog ? d.Log : "");
 
     private static string Descrever(Deployment d) => d.Tipo == DeploymentTipo.Estatico
         ? "site estático"

@@ -14,6 +14,7 @@ var cfg = new Configuracao
     RaizSitesNoHost = builder.Configuration["SITES_HOST_DIR"]
         ?? throw new InvalidOperationException("Defina SITES_HOST_DIR (caminho de data/sites no host)."),
     Rede = builder.Configuration["DEPLOYER_REDE"] ?? "notas-sites",
+    ContainerPostgres = builder.Configuration["DEPLOYER_POSTGRES"] ?? "notas-postgres",
 };
 var docker = builder.Configuration["DOCKER_BIN"] ?? "docker";
 
@@ -71,14 +72,54 @@ app.MapGet("/apps/{slug}/logs", async (string slug, int? linhas, CancellationTok
     return Results.Text(r.Saida + r.Erro, "text/plain; charset=utf-8");
 });
 
+// Backup do banco Postgres de um site, pedido pela API antes de cada deploy. O dump vai
+// primeiro para um arquivo: só dá para responder 200 depois de saber que o pg_dump terminou bem.
+app.MapPost("/postgres/{banco}/dump", async (string banco, HttpContext http, CancellationToken ct) =>
+{
+    if (ComandosDocker.ValidarBanco(banco) is { } invalido) return Results.BadRequest(invalido);
+    var arquivo = Path.Combine(Path.GetTempPath(), $"dump-{Guid.NewGuid():N}");
+    var r = await Docker(ComandosDocker.DumpPostgres(banco, cfg), TimeSpan.FromMinutes(5), ct, saida: arquivo);
+    if (r.Codigo != 0)
+    {
+        File.Delete(arquivo);
+        return Erro(r);
+    }
+    http.Response.RegisterForDispose(new ApagarAoFim(arquivo));
+    return Results.File(arquivo, "application/octet-stream");
+});
+
+// Restaura um dump (corpo da requisição) no banco — que a API acabou de recriar vazio.
+app.MapPost("/postgres/{banco}/restaurar", async (string banco, HttpContext http, CancellationToken ct) =>
+{
+    if (ComandosDocker.ValidarBanco(banco) is { } invalido) return Results.BadRequest(invalido);
+    // O teto padrão do Kestrel (30 MB) é pequeno para um dump.
+    if (http.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } f)
+        f.MaxRequestBodySize = 2L * 1024 * 1024 * 1024;
+    var arquivo = Path.Combine(Path.GetTempPath(), $"restore-{Guid.NewGuid():N}");
+    try
+    {
+        await using (var destino = File.Create(arquivo)) await http.Request.Body.CopyToAsync(destino, ct);
+        if (new FileInfo(arquivo).Length == 0) return Results.BadRequest("dump vazio");
+        var r = await Docker(ComandosDocker.RestaurarPostgres(banco, cfg), TimeSpan.FromMinutes(10), ct, entrada: arquivo);
+        return r.Codigo == 0 ? Results.Ok() : Erro(r);
+    }
+    finally
+    {
+        File.Delete(arquivo);
+    }
+});
+
 app.Run();
 
 IResult Erro(Resultado r) => Results.Text($"docker saiu com {r.Codigo}: {r.Erro.Trim()}", statusCode: 500);
 
-async Task<Resultado> Docker(List<string> argumentos, TimeSpan limite, CancellationToken ct)
+// entrada: arquivo mandado para o stdin do docker; saida: arquivo que recebe o stdout
+// (binário, sem passar por string) — usados no dump/restore do Postgres.
+async Task<Resultado> Docker(List<string> argumentos, TimeSpan limite, CancellationToken ct, string? entrada = null, string? saida = null)
 {
     var psi = new ProcessStartInfo(docker)
     {
+        RedirectStandardInput = entrada is not null,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
         UseShellExecute = false,
@@ -88,12 +129,36 @@ async Task<Resultado> Docker(List<string> argumentos, TimeSpan limite, Cancellat
     using var p = Process.Start(psi)!;
     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
     timeout.CancelAfter(limite);
-    var saida = p.StandardOutput.ReadToEndAsync(timeout.Token);
+    Task<string> textoSaida;
+    if (saida is null)
+    {
+        textoSaida = p.StandardOutput.ReadToEndAsync(timeout.Token);
+    }
+    else
+    {
+        textoSaida = Task.Run(async () =>
+        {
+            await using var f = File.Create(saida);
+            await p.StandardOutput.BaseStream.CopyToAsync(f, timeout.Token);
+            return "";
+        });
+    }
     var erro = p.StandardError.ReadToEndAsync(timeout.Token);
     try
     {
+        if (entrada is not null)
+        {
+            await using (var f = File.OpenRead(entrada)) await f.CopyToAsync(p.StandardInput.BaseStream, timeout.Token);
+            p.StandardInput.Close();
+        }
         await p.WaitForExitAsync(timeout.Token);
-        return new Resultado(p.ExitCode, await saida, await erro);
+        return new Resultado(p.ExitCode, await textoSaida, await erro);
+    }
+    catch (IOException) when (!p.HasExited || p.ExitCode != 0)
+    {
+        // O processo morreu antes de ler o stdin inteiro: o erro real está no stderr.
+        await p.WaitForExitAsync(CancellationToken.None);
+        return new Resultado(p.ExitCode == 0 ? -1 : p.ExitCode, "", await erro);
     }
     catch (OperationCanceledException)
     {
@@ -103,5 +168,10 @@ async Task<Resultado> Docker(List<string> argumentos, TimeSpan limite, Cancellat
 }
 
 record Resultado(int Codigo, string Saida, string Erro);
+
+sealed class ApagarAoFim(string arquivo) : IDisposable
+{
+    public void Dispose() { try { File.Delete(arquivo); } catch (IOException) { } }
+}
 
 public partial class Program;

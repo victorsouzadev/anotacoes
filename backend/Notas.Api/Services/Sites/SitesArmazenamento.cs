@@ -30,6 +30,7 @@ public class SitesArmazenamento(IOptions<SitesOptions> options)
     public string PastaDados(string slug) => Path.Combine(PastaSite(slug), "data");
     public string ArquivoBanco(string slug) => Path.Combine(PastaDados(slug), "app.db");
     public string ArquivoBackup(string slug, string deployId) => Path.Combine(PastaSite(slug), "backups", deployId + ".db");
+    public string ArquivoBackupPostgres(string slug, string deployId) => Path.Combine(PastaSite(slug), "backups", deployId + ".pgdump");
     private string LinkAtual(string slug) => Path.Combine(PastaSite(slug), "current");
 
     /// <summary>Cria a pasta de dados com permissão para o usuário do container (uid 1000).</summary>
@@ -105,8 +106,8 @@ public class SitesArmazenamento(IOptions<SitesOptions> options)
     {
         var pasta = PastaDeploy(slug, deployId);
         if (Directory.Exists(pasta)) Directory.Delete(pasta, recursive: true);
-        var backup = ArquivoBackup(slug, deployId);
-        if (File.Exists(backup)) File.Delete(backup);
+        foreach (var backup in new[] { ArquivoBackup(slug, deployId), ArquivoBackupPostgres(slug, deployId) })
+            if (File.Exists(backup)) File.Delete(backup);
     }
 
     public void ApagarSite(string slug)

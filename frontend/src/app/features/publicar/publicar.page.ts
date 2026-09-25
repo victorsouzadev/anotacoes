@@ -289,7 +289,7 @@ export class PublicarPageComponent {
   async ativar(v: Versao, restaurarBanco: boolean): Promise<void> {
     const site = this.detalhe();
     if (!site) return;
-    if (restaurarBanco && !confirm(`Voltar para a v${v.versao} e devolver o banco ao estado de antes da versão atual? O que foi gravado desde então se perde.`)) return;
+    if (restaurarBanco && !confirm(`Voltar para a v${v.versao} e devolver o banco (SQLite e Postgres) ao estado de antes da versão atual? O que foi gravado desde então se perde.`)) return;
     this.erro.set(null);
     try {
       await this.api.ativar(site.id, v.id, restaurarBanco);

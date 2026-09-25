@@ -103,27 +103,42 @@ public class ExecutorSites(
         dep.Log = log.Texto;
         await db.SaveChangesAsync(ct);
 
+        // Antes de mexer em qualquer coisa: cópia do SQLite e pg_dump do Postgres. Se o
+        // backup falha, o deploy para aqui — a versão no ar nem é tocada.
+        if (dep.Tipo == DeploymentTipo.DotNet && !restaurarBanco)
+        {
+            var erroBackup = await FazerBackupsAsync(site, dep, log, ct);
+            if (erroBackup is not null)
+            {
+                erroBackup = "backup do banco falhou, nada foi trocado: " + erroBackup;
+                dep.Status = DeploymentStatus.Falhou;
+                log.Add("Falhou: " + erroBackup);
+                dep.TerminadoEm = DateTime.UtcNow;
+                dep.Log = log.Texto;
+                await db.SaveChangesAsync(ct);
+                return erroBackup;
+            }
+        }
+
         string? erro;
         try
         {
-            if (dep.Tipo == DeploymentTipo.DotNet)
+            if (dep.Tipo == DeploymentTipo.DotNet && restaurarBanco)
             {
-                if (restaurarBanco && atual is { TemBackupBanco: true })
+                if (atual is { TemBackupBanco: true } or { TemBackupPostgres: true })
                 {
                     await deployer.RemoverAsync(site.Slug, ct);
-                    disco.RestaurarBanco(site.Slug, atual.Id);
-                    log.Add($"Banco restaurado para o estado de antes da v{atual.Versao}.");
+                    await RestaurarBancosAsync(site, atual, log, ct);
                 }
                 else
                 {
-                    disco.PrepararDados(site.Slug);
-                    dep.TemBackupBanco = disco.CopiarBanco(site.Slug, dep.Id);
-                    if (dep.TemBackupBanco) log.Add("Cópia do banco feita antes da troca.");
+                    log.Add("Não há cópia do banco de antes da versão atual: o banco fica como está.");
                 }
             }
             erro = await SubirAsync(site, dep, log, ct);
         }
-        catch (Exception e) when (e is DeployerException or IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        catch (Exception e) when (e is DeployerException or IOException or UnauthorizedAccessException
+            or Microsoft.Data.Sqlite.SqliteException or ProvisionamentoPostgresException)
         {
             erro = e.Message;
         }
@@ -145,15 +160,15 @@ public class ExecutorSites(
             log.Add("Falhou: " + erro);
             // A versão nova pode ter rodado migrations antes de cair: o banco volta junto,
             // senão a versão anterior sobe contra um schema que não conhece.
-            if (dep.TemBackupBanco && !restaurarBanco)
+            if (!restaurarBanco && (dep.TemBackupBanco || dep.TemBackupPostgres))
             {
                 var erroBanco = await TentarAsync(async () =>
                 {
                     await deployer.RemoverAsync(site.Slug, ct);
-                    disco.RestaurarBanco(site.Slug, dep.Id);
+                    await RestaurarBancosAsync(site, dep, log, ct);
                     return null;
                 });
-                log.Add(erroBanco is null ? "Banco devolvido ao estado de antes da tentativa." : "Não consegui restaurar o banco: " + erroBanco);
+                if (erroBanco is not null) log.Add("Não consegui restaurar o banco: " + erroBanco);
             }
             if (atual is not null && !site.Parado)
             {
@@ -173,6 +188,55 @@ public class ExecutorSites(
         await db.SaveChangesAsync(ct);
         if (erro is null) await LimparVersoesAntigasAsync(site, ct);
         return erro;
+    }
+
+    /// <summary>Cópia do SQLite e pg_dump do Postgres, guardados com o id da versão que vai entrar.</summary>
+    private async Task<string?> FazerBackupsAsync(Site site, Deployment dep, Linha log, CancellationToken ct)
+    {
+        dep.TemBackupBanco = false;
+        dep.TemBackupPostgres = false;
+        try
+        {
+            disco.PrepararDados(site.Slug);
+            dep.TemBackupBanco = disco.CopiarBanco(site.Slug, dep.Id);
+            if (dep.TemBackupBanco) log.Add("Cópia do banco SQLite feita antes da troca.");
+
+            if (site.PostgresBanco is { } banco)
+            {
+                var destino = disco.ArquivoBackupPostgres(site.Slug, dep.Id);
+                Directory.CreateDirectory(Path.GetDirectoryName(destino)!);
+                var temporario = destino + ".tmp";
+                await using (var arquivo = File.Create(temporario))
+                    await deployer.DumpPostgresAsync(banco, arquivo, ct);
+                File.Move(temporario, destino, overwrite: true);
+                dep.TemBackupPostgres = true;
+                log.Add($"pg_dump de {banco} feito antes da troca ({new FileInfo(destino).Length / 1024.0:0.#} KB).");
+            }
+            return null;
+        }
+        catch (Exception e) when (e is DeployerException or IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            return e.Message;
+        }
+    }
+
+    /// <summary>
+    /// Devolve os bancos ao estado guardado antes de "origem" entrar no ar. O container já
+    /// precisa estar parado: um app de pé recriaria as tabelas no banco vazio antes do restore.
+    /// </summary>
+    private async Task RestaurarBancosAsync(Site site, Deployment origem, Linha log, CancellationToken ct)
+    {
+        if (origem.TemBackupBanco && disco.RestaurarBanco(site.Slug, origem.Id))
+            log.Add($"Banco SQLite devolvido ao estado de antes da v{origem.Versao}.");
+
+        var dump = disco.ArquivoBackupPostgres(site.Slug, origem.Id);
+        if (origem.TemBackupPostgres && site.PostgresBanco is { } banco && File.Exists(dump))
+        {
+            await postgres.RecriarBancoAsync(banco, ct);
+            await using var arquivo = File.OpenRead(dump);
+            await deployer.RestaurarPostgresAsync(banco, arquivo, ct);
+            log.Add($"Banco Postgres {banco} devolvido ao estado de antes da v{origem.Versao} (pg_restore).");
+        }
     }
 
     /// <summary>Coloca a versão no ar: troca o link e, se tiver API, (re)cria o container e espera ele responder.</summary>
@@ -291,7 +355,8 @@ public class ExecutorSites(
     private static async Task<string?> TentarAsync(Func<Task<string?>> acao)
     {
         try { return await acao(); }
-        catch (Exception e) when (e is DeployerException or IOException or UnauthorizedAccessException) { return e.Message; }
+        catch (Exception e) when (e is DeployerException or IOException or UnauthorizedAccessException
+            or ProvisionamentoPostgresException or Microsoft.Data.Sqlite.SqliteException) { return e.Message; }
     }
 
     private static async Task<string> TentarTextoAsync(Func<Task<string>> acao)

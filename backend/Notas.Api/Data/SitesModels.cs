@@ -58,6 +58,8 @@ public class Deployment
     public string Log { get; set; } = "";
     /// <summary>Existe cópia do banco do app feita logo antes desta versão entrar no ar.</summary>
     public bool TemBackupBanco { get; set; }
+    /// <summary>Existe pg_dump do banco Postgres do site feito logo antes desta versão entrar no ar.</summary>
+    public bool TemBackupPostgres { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
     public DateTime? TerminadoEm { get; set; }
 }

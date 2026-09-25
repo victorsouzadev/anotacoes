@@ -16,6 +16,7 @@ public record DeploymentDto(
     string? Entrada,
     long TamanhoBytes,
     bool TemBackupBanco,
+    bool TemBackupPostgres,
     DateTime CriadoEm,
     DateTime? TerminadoEm,
     string Log);

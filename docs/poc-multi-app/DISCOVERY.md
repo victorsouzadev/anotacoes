@@ -314,9 +314,21 @@ usuário e senha criados pela plataforma e entregues ao sistema publicado.
 | Porta só em `127.0.0.1:5433` na VPS | Acesso por túnel SSH para DBeaver; nada exposto |
 | Backup diário por banco (`pg_dump -Fc`) no `backup.sh` | Mesmo cron do SQLite |
 
-**Limite conhecido:** a restauração de banco no rollback (automática ou "+ banco") cobre só o
-SQLite. No Postgres, as migrations precisam ser compatíveis com a versão anterior, ou é preciso
-restaurar o dump. Próximo passo possível: `pg_dump` pelo Deployer antes de cada deploy.
+**Backup antes de cada deploy (implementado depois):**
+- **Quem faz o dump:** o Deployer faz o `pg_dump --format=custom` com `docker exec notas-postgres`.
+  A versão do `pg_dump` é sempre a do servidor e a API não precisa do cliente do Postgres. A API
+  guarda o dump como `backups/<versão>.pgdump`, junto da cópia do SQLite.
+- **Dump que falha** cancela o deploy antes de qualquer troca: a versão no ar nem reinicia.
+- **Restauração:** acontece quando uma versão falha ou quando você volta versão "+ banco". O app é
+  parado, a API faz `DROP DATABASE ... WITH (FORCE)` e recria o banco vazio com o mesmo dono. O
+  Deployer faz o `pg_restore --single-transaction --exit-on-error`.
+- **Por que recriar em vez de `pg_restore --clean`:** o `--clean` não apaga o que a versão nova
+  criou e que não está no dump.
+- **Teste real:**
+  - uma v2 que criou tabela e coluna, voltando para a v1 "+ banco", ficou sem as duas, com os dados
+    de antes e com o dono `site_recados`;
+  - uma v3 quebrada, com uma tabela de "migration pela metade", falhou, teve o banco restaurado
+    e a v1 voltou.
 
 **Testes:**
 - `PostgresRealTests` rodam contra um Postgres real (no CI, via `services:`): isolamento entre

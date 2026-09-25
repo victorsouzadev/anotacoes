@@ -17,6 +17,8 @@ public class Configuracao
     public string Rede { get; init; } = "notas-sites";
     public string Imagem { get; init; } = "mcr.microsoft.com/dotnet/aspnet";
     public double Cpus { get; init; } = 0.5;
+    /// <summary>Container do Postgres compartilhado (pg_dump/pg_restore rodam dentro dele).</summary>
+    public string ContainerPostgres { get; init; } = "notas-postgres";
 }
 
 /// <summary>
@@ -40,7 +42,22 @@ public static partial class ComandosDocker
     [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
     private static partial Regex Chave();
 
+    [GeneratedRegex("^site_[a-z0-9_]{3,40}$")]
+    private static partial Regex BancoPostgres();
+
     public static string NomeContainer(string slug) => "site-" + slug;
+
+    public static string? ValidarBanco(string banco) => BancoPostgres().IsMatch(banco) ? null : "banco inválido";
+
+    // Dentro do container do Postgres o socket local é "trust" para o superusuário (imagem
+    // oficial): nenhuma senha passa por aqui. E pg_dump/pg_restore têm sempre a versão do
+    // servidor.
+    public static List<string> DumpPostgres(string banco, Configuracao cfg) =>
+        ["exec", cfg.ContainerPostgres, "pg_dump", "-U", "postgres", "--format=custom", "--dbname", banco];
+
+    /// <summary>Restaura num banco recém-recriado (vazio): o dono dos objetos volta a ser o usuário do site.</summary>
+    public static List<string> RestaurarPostgres(string banco, Configuracao cfg) =>
+        ["exec", "-i", cfg.ContainerPostgres, "pg_restore", "-U", "postgres", "--exit-on-error", "--single-transaction", "--dbname", banco];
 
     public static string? ValidarSlug(string slug) =>
         Slug().IsMatch(slug) && !slug.Contains("--") ? null : "slug inválido";

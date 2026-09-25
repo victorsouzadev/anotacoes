@@ -220,9 +220,12 @@ Trocar a senha pela tela reinicia o app com a nova.
 - **psql rápido**: `docker exec -it notas-postgres psql -U postgres -d site_<slug>`
 - **Backup**: o `scripts/backup.sh` faz `pg_dump` de cada `site_*` todo dia em `backups/pg-*.dump`.
   Restaurar: `docker exec -i notas-postgres pg_restore -U postgres -d site_<slug> --clean < arquivo.dump`.
-- **Limite**: voltar versão "com banco" e a restauração automática de uma versão que falhou só valem
-  para o SQLite. Com Postgres, as migrations da versão nova ficam, então elas precisam ser
-  compatíveis com a versão anterior (ou restaure o dump do backup).
+- **Antes de cada deploy** de um app com Postgres, o deployer faz `pg_dump` (via `docker exec` no
+  `notas-postgres`) e a API guarda o dump em `data/sites/<slug>/backups/<versão>.pgdump`. Se o dump
+  falha, o deploy é cancelado sem tocar na versão no ar. Se a versão nova não sobe, o banco é
+  recriado vazio e recebe o `pg_restore` desse dump (some até tabela criada por migration pela
+  metade) antes da versão anterior voltar. O mesmo vale para **voltar versão + banco** na tela.
+  Guarda os dumps das últimas 5 versões.
 
 A porta continua a 8090: o sslip.io resolve `<qualquer-coisa>.191-252-177-244.sslip.io`
 para o IP da VPS, e o Caddy separa os sites pelo nome. Não há DNS para configurar.

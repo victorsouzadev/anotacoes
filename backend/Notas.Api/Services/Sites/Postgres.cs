@@ -18,6 +18,8 @@ public interface IPostgresProvisionador
     Task TrocarSenhaAsync(string nome, string senha, CancellationToken ct);
     /// <summary>Apaga o banco (derrubando as conexões abertas) e o usuário.</summary>
     Task RemoverAsync(string nome, CancellationToken ct);
+    /// <summary>Apaga e recria o banco vazio (o usuário fica), para receber um pg_restore.</summary>
+    Task RecriarBancoAsync(string nome, CancellationToken ct);
 }
 
 public static class PostgresNomes
@@ -122,6 +124,22 @@ public class PostgresProvisionador(IOptions<SitesOptions> options) : IPostgresPr
         Validar(nome, senha);
         await using var c = await AbrirAsync(ct);
         try { await Executar(c, $"ALTER ROLE {nome} WITH PASSWORD '{senha}'", ct); }
+        catch (NpgsqlException e) { throw new ProvisionamentoPostgresException($"Postgres recusou: {e.Message}"); }
+    }
+
+    public async Task RecriarBancoAsync(string nome, CancellationToken ct)
+    {
+        Validar(nome);
+        await using var c = await AbrirAsync(ct);
+        try
+        {
+            // Recriar em vez de pg_restore --clean: tabelas que a versão nova criou (e que
+            // não estão no dump) também somem.
+            await Executar(c, $"DROP DATABASE IF EXISTS {nome} WITH (FORCE)", ct);
+            await Executar(c, $"CREATE DATABASE {nome} OWNER {nome} ENCODING 'UTF8' TEMPLATE template0", ct);
+            await Executar(c, $"REVOKE ALL ON DATABASE {nome} FROM PUBLIC", ct);
+            await Executar(c, $"GRANT ALL ON DATABASE {nome} TO {nome}", ct);
+        }
         catch (NpgsqlException e) { throw new ProvisionamentoPostgresException($"Postgres recusou: {e.Message}"); }
     }
 

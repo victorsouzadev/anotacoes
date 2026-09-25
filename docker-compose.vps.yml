@@ -20,7 +20,6 @@ services:
       - proxy
 
   postgres:
-    container_name: notas-postgres
     # Só no loopback da VPS: nada de fora alcança. Para abrir num cliente (DBeaver etc.):
     #   ssh -L 5433:127.0.0.1:5433 root@191.252.177.244   → conecte em localhost:5433
     ports:

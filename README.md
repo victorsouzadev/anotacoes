@@ -366,9 +366,10 @@ Hospeda outros sistemas no mesmo servidor. Você envia um ZIP ou uma pasta com `
 sistema fica no ar em `http://<endereço>.191-252-177-244.sslip.io:8090`, com um banco
 SQLite próprio que sobrevive às republicações.
 
-- **Versões**: cada envio vira uma versão. Uma versão que não responde ao health check volta
-  sozinha para a anterior (junto com o banco), e dá para voltar a qualquer versão guardada,
-  com ou sem restaurar o banco.
+- **Versões**: cada envio vira uma versão. Antes da troca, a plataforma copia o SQLite e faz
+  `pg_dump` do Postgres. Uma versão que não responde ao health check volta sozinha para a
+  anterior, junto com os bancos, e dá para voltar a qualquer versão guardada, com ou sem
+  restaurar os bancos.
 - **Banco**: SQLite em `/data` por padrão. Opcionalmente, um banco próprio no **Postgres** compartilhado,
   com usuário e senha só dele, criados pela tela e entregues ao app como `ConnectionStrings__Postgres` e `PG*`.
 - **Controle do app**: variáveis de ambiente cifradas, logs do container, parar/iniciar e excluir.

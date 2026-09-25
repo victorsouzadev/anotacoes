@@ -23,6 +23,10 @@ public interface IDeployer
     Task<string> LogsAsync(string slug, int linhas, CancellationToken ct);
     /// <summary>Slugs com container rodando.</summary>
     Task<IReadOnlyList<string>> RodandoAsync(CancellationToken ct);
+    /// <summary>pg_dump (formato custom) do banco do site, gravado em destino.</summary>
+    Task DumpPostgresAsync(string banco, Stream destino, CancellationToken ct);
+    /// <summary>pg_restore do dump num banco vazio (recém-recriado).</summary>
+    Task RestaurarPostgresAsync(string banco, Stream dump, CancellationToken ct);
 }
 
 public class DeployerException(string message) : Exception(message);
@@ -72,6 +76,20 @@ public class DeployerHttp(HttpClient http, IOptions<SitesOptions> options) : IDe
     {
         using var res = await Enviar(Req(HttpMethod.Get, $"/apps/{slug}/logs?linhas={linhas}"), ct);
         return await res.Content.ReadAsStringAsync(ct);
+    }
+
+    public async Task DumpPostgresAsync(string banco, Stream destino, CancellationToken ct)
+    {
+        using var res = await Enviar(Req(HttpMethod.Post, $"/postgres/{banco}/dump"), ct);
+        await res.Content.CopyToAsync(destino, ct);
+    }
+
+    public async Task RestaurarPostgresAsync(string banco, Stream dump, CancellationToken ct)
+    {
+        var req = Req(HttpMethod.Post, $"/postgres/{banco}/restaurar");
+        req.Content = new StreamContent(dump);
+        req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        (await Enviar(req, ct)).Dispose();
     }
 
     public async Task<IReadOnlyList<string>> RodandoAsync(CancellationToken ct)

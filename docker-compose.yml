@@ -71,6 +71,8 @@ services:
       # Caminho de data/sites NO HOST: é o que o daemon do Docker monta nos apps.
       - SITES_HOST_DIR=${SITES_HOST_DIR:-/opt/notas-vps/data/sites}
       - DEPLOYER_REDE=notas-sites
+      # pg_dump/pg_restore antes de cada deploy rodam dentro deste container (docker exec).
+      - DEPLOYER_POSTGRES=notas-postgres
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -79,6 +81,8 @@ services:
   # rede "sites"; a API, pela rede padrão. Não publica porta no host.
   postgres:
     image: postgres:17-alpine
+    # Nome fixo: é por ele que o deployer faz o docker exec do pg_dump.
+    container_name: notas-postgres
     profiles: ["publicar"]
     restart: unless-stopped
     environment:

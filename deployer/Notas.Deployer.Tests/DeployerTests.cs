@@ -71,6 +71,7 @@ public class DeployerApiTests : IClassFixture<DeployerApiTests.Fabrica>
     public class Fabrica : WebApplicationFactory<Program>
     {
         public string Registro { get; } = Path.Combine(Path.GetTempPath(), $"docker-falso-{Guid.NewGuid():N}.log");
+        public string Restaurado { get; } = Path.Combine(Path.GetTempPath(), $"docker-falso-{Guid.NewGuid():N}.restore");
         private readonly string _script = Path.Combine(Path.GetTempPath(), $"docker-falso-{Guid.NewGuid():N}.sh");
 
         public Fabrica()
@@ -81,6 +82,11 @@ public class DeployerApiTests : IClassFixture<DeployerApiTests.Fabrica>
                 if [ "$1" = "ps" ]; then echo recados; echo outro; fi
                 if [ "$1" = "logs" ]; then echo "linha do app"; echo "erro do app" >&2; fi
                 if [ "$1" = "rm" ]; then echo "Error: No such container: $3" >&2; exit 1; fi
+                if [ "$1" = "exec" ] && [ "$3" = "pg_dump" ]; then
+                  if [ "$8" = "site_falha" ]; then echo "pg_dump: error: connection failed" >&2; exit 1; fi
+                  printf 'PGDMP-binario-de-%s' "$8"; exit 0
+                fi
+                if [ "$1" = "exec" ] && [ "$4" = "pg_restore" ]; then cat > "{Restaurado}"; exit 0; fi
                 exit 0
                 """);
             if (!OperatingSystem.IsWindows())
@@ -92,6 +98,7 @@ public class DeployerApiTests : IClassFixture<DeployerApiTests.Fabrica>
             builder.UseSetting("DEPLOYER_TOKEN", Token);
             builder.UseSetting("SITES_HOST_DIR", "/host/sites");
             builder.UseSetting("DOCKER_BIN", _script);
+            builder.UseSetting("DEPLOYER_POSTGRES", "pg-teste");
         }
 
         protected override void Dispose(bool disposing)
@@ -99,6 +106,7 @@ public class DeployerApiTests : IClassFixture<DeployerApiTests.Fabrica>
             base.Dispose(disposing);
             File.Delete(_script);
             if (File.Exists(Registro)) File.Delete(Registro);
+            if (File.Exists(Restaurado)) File.Delete(Restaurado);
         }
     }
 
@@ -140,6 +148,39 @@ public class DeployerApiTests : IClassFixture<DeployerApiTests.Fabrica>
             new { deployId = "x", entrada = "Recados.dll", runtime = "9.0", memoriaMb = 128 });
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
+
+    [Fact]
+    public async Task Dump_devolve_o_arquivo_do_pg_dump()
+    {
+        var res = await _c.PostAsync("/postgres/site_recados/dump", null);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal("PGDMP-binario-de-site_recados", await res.Content.ReadAsStringAsync());
+        Assert.Contains("exec pg-teste pg_dump -U postgres --format=custom --dbname site_recados", File.ReadAllLines(_f.Registro));
+    }
+
+    [Fact]
+    public async Task Dump_que_falha_nao_devolve_200()
+    {
+        var res = await _c.PostAsync("/postgres/site_falha/dump", null);
+        Assert.Equal(HttpStatusCode.InternalServerError, res.StatusCode);
+        Assert.Contains("connection failed", await res.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Restaurar_manda_o_corpo_para_o_stdin_do_pg_restore()
+    {
+        var res = await _c.PostAsync("/postgres/site_recados/restaurar", new ByteArrayContent("PGDMP-conteudo"u8.ToArray()));
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal("PGDMP-conteudo", File.ReadAllText(_f.Restaurado));
+        Assert.Contains(File.ReadAllLines(_f.Registro), l => l.StartsWith("exec -i pg-teste pg_restore -U postgres --exit-on-error"));
+    }
+
+    [Theory]
+    [InlineData("/postgres/postgres/dump")]
+    [InlineData("/postgres/site_x;rm/dump")]
+    [InlineData("/postgres/template1/restaurar")]
+    public async Task Banco_fora_do_padrao_site_e_recusado(string caminho) =>
+        Assert.Equal(HttpStatusCode.BadRequest, (await _c.PostAsync(caminho, new ByteArrayContent([1]))).StatusCode);
 
     [Fact]
     public async Task Listar_logs_e_remover()
