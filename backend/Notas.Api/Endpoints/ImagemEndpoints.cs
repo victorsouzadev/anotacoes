@@ -24,6 +24,7 @@ public static class ImagemEndpoints
     {
         MapUpscale(app);
         MapNomes(app);
+        MapBiblioteca(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -55,6 +56,77 @@ public static class ImagemEndpoints
             project.DeletedAt = DateTime.UtcNow;
             project.UpdatedAt = DateTime.UtcNow;
             project.Data = "{}"; // libera o espaço das artes já na exclusão
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+    }
+
+    // Uma arte (PNG em data URL) e a miniatura dela.
+    private const int MaxBibliotecaBytes = 8 * 1024 * 1024;
+    private const int MaxThumbBytes = 200 * 1024;
+    private const int MaxItensBiblioteca = 300;
+
+    /// <summary>
+    /// Biblioteca: artes guardadas pra reusar em qualquer projeto. A lista
+    /// devolve só as miniaturas; a arte inteira vem item a item.
+    /// </summary>
+    private static void MapBiblioteca(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/imagens/biblioteca").RequireAuthorization();
+
+        group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var itens = await db.ImageLibrary.AsNoTracking()
+                .Where(i => i.UserId == user.UserId())
+                .OrderByDescending(i => i.UpdatedAt)
+                .Select(i => new ImageLibraryMetaDto(i.Id, i.Name, i.Origin, i.Thumb, i.WidthMm, i.CreatedAt))
+                .ToListAsync();
+            return Results.Ok(itens);
+        });
+
+        group.MapGet("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var item = await db.ImageLibrary.AsNoTracking().FirstOrDefaultAsync(i => i.Id == id && i.UserId == user.UserId());
+            return item is null
+                ? Results.NotFound()
+                : Results.Ok(new ImageLibraryItemDto(item.Id, item.Name, item.Origin, item.Data, item.WidthMm, item.CreatedAt));
+        });
+
+        group.MapPut("/{id}", async (string id, ImageLibraryUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 64) return Results.BadRequest(new { error = "Id inválido." });
+            var name = (req.Name ?? "").Trim();
+            if (name.Length is 0 or > 200) return Results.BadRequest(new { error = "Dê um nome de até 200 caracteres." });
+            if (!TentarLerDataUrl(req.Data, out _, out _)) return Results.BadRequest(new { error = "A arte precisa ser uma imagem PNG, JPEG ou WebP." });
+            if ((req.Data?.Length ?? 0) > MaxBibliotecaBytes) return Results.Json(new { error = "Arte grande demais pra biblioteca." }, statusCode: 413);
+            if (!TentarLerDataUrl(req.Thumb, out _, out _) || req.Thumb!.Length > MaxThumbBytes)
+                return Results.BadRequest(new { error = "Miniatura inválida." });
+
+            var userId = user.UserId();
+            var item = await db.ImageLibrary.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId);
+            if (item is null)
+            {
+                if (await db.ImageLibrary.AnyAsync(i => i.Id == id)) return Results.Conflict(new { error = "Id em uso." });
+                if (await db.ImageLibrary.CountAsync(i => i.UserId == userId) >= MaxItensBiblioteca)
+                    return Results.BadRequest(new { error = $"A biblioteca chegou a {MaxItensBiblioteca} artes — apague algumas antes." });
+                item = new ImageLibraryItem { Id = id, UserId = userId, CreatedAt = DateTime.UtcNow };
+                db.ImageLibrary.Add(item);
+            }
+            item.Name = name;
+            item.Origin = (req.Origin ?? "").Length <= 20 ? req.Origin ?? "" : "";
+            item.Data = req.Data!;
+            item.Thumb = req.Thumb!;
+            item.WidthMm = double.IsFinite(req.WidthMm) && req.WidthMm > 0 ? Math.Min(req.WidthMm, 5000) : 0;
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new ImageLibraryMetaDto(item.Id, item.Name, item.Origin, item.Thumb, item.WidthMm, item.CreatedAt));
+        });
+
+        group.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var item = await db.ImageLibrary.FirstOrDefaultAsync(i => i.Id == id && i.UserId == user.UserId());
+            if (item is null) return Results.NotFound();
+            db.ImageLibrary.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });

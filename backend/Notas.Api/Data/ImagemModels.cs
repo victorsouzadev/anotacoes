@@ -17,3 +17,23 @@ public class ImageProject
     public DateTime UpdatedAt { get; set; }
     public DateTime? DeletedAt { get; set; }
 }
+
+/// <summary>
+/// Item da biblioteca do Editor de Imagens: arte que o usuário guardou pra
+/// reusar em outros projetos (um adesivo pronto, uma logo sem fundo, um
+/// recorte). A imagem vem em data URL, junto com uma miniatura pra lista não
+/// precisar baixar tudo.
+/// </summary>
+public class ImageLibraryItem
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>De onde veio (corte, molde, social, ilustracao) — só pra exibir.</summary>
+    public string Origin { get; set; } = "";
+    public string Data { get; set; } = "";
+    public string Thumb { get; set; } = "";
+    public double WidthMm { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}

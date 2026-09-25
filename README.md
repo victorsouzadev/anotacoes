@@ -165,6 +165,24 @@ vêm do tema do app (claro ou escuro); os estilos comuns moram em
 `studio-styles.ts`. No Print & Cut as ferramentas também têm tecla: V visualizar,
 W remover fundo, E borracha de contorno, C remover linha de corte, D dividir.
 
+Comum aos quatro modos:
+
+- **Rascunho automático**: o projeto inteiro é gravado no navegador (IndexedDB)
+  alguns segundos depois de cada mudança; ao voltar, uma faixa oferece
+  **Recuperar** o trabalho não salvo (`project-draft.ts`).
+- **Desfazer/refazer** em todos os modos (no Print & Cut e no Molde por fotografias
+  do estado, `snapshot-history.ts`).
+- **Enviar para…**: qualquer modo manda a arte pra qualquer outro — ou pra
+  **Biblioteca da conta** (`mode-bridge.ts`).
+- **Biblioteca** (barra do app): artes guardadas na conta
+  (`/api/imagens/biblioteca`), com miniatura; clicar numa manda pro modo aberto.
+- **Pacote** (barra do app): um ZIP com tudo o que o projeto produz — folha em PDF
+  impressão+corte e SVG, cada peça, o molde, o post (ou os posts do carrossel) e
+  cada prancheta da ilustração — com um LEIAME (`client-package.ts`).
+- **Remover fundo com IA** (Replicate, mesma chave da ampliação; modelo
+  configurável em `RemoveBg`): no Print & Cut, no Redes sociais e antes de
+  vetorizar (`ai-cutout.ts`).
+
 **Print & Cut** — o fluxo original, pra recortadora ScanNCut:
 
 - Importa PNG/JPG, remove fundo por clique (flood fill com tolerância), borracha e
@@ -179,9 +197,18 @@ W remover fundo, E borracha de contorno, C remover linha de corte, D dividir.
   e cantos propositais (bico de estrela, quina de quadrado) são detectados e
   preservados, com chave pra desligar. Lógica em `contour.ts`, testada em
   `contour.spec.ts`.
-- Folha de montagem A4/A3 (shelf packing) com cópias por peça.
-- Exporta PNG 300 DPI (com DPI gravado no arquivo), PDF no tamanho físico e SVG só
-  com as linhas de corte — as posições batem entre impressão e corte.
+- Folha de montagem A4/A3 com cópias por peça, **em linhas** ou com **encaixe por
+  silhueta** (`sheet-nest.ts`: grade de 1 mm, cada peça entra no primeiro lugar
+  livre pelo formato de verdade, testando giros de 90°) — numa A4 cabe o dobro de
+  estrelas que em linhas. **Encher a folha** calcula quantas cópias cabem.
+- Borda **lisa, dupla ou tracejada** e **sombra da arte** sobre a borda, sem mudar
+  a linha de corte.
+- **Marcas de registro** (Silhouette/Cricut) com a área delas reservada.
+- **Simular corte**: a lâmina percorre as linhas na peça ou na folha, com o
+  comprimento de corte e o tempo estimado (`cut-sim.ts`).
+- Exporta PNG 300 DPI (com DPI gravado no arquivo), PDF no tamanho físico, **PDF
+  impressão + corte** (página 1 imprime, página 2 é o corte em vetor) e SVG só com
+  as linhas de corte — as posições batem entre impressão e corte.
 
 **Molde SVG** — encaixar fotos num molde pronto:
 
@@ -200,8 +227,19 @@ W remover fundo, E borracha de contorno, C remover linha de corte, D dividir.
   há `z-index`: a ordem no documento é reescrita a cada mudança), **opacidade** e
   escolha de ficar **na frente ou atrás** do desenho do molde — as camadas de trás
   entram antes do conteúdo do molde, as da frente depois.
+- **Moldes prontos** (coração, polaroid, colagem, caneca, chaveiro, topo de bolo
+  com foto — `template-gallery.ts`) e **molde a partir de PNG transparente**: cada
+  janela fechada vira encaixe e a moldura fica por cima (`png-template.ts`).
+- **Textos**: edita o texto e a cor dos `<text>` do molde e acrescenta textos
+  novos com fonte embutida no SVG.
 - Exporta **SVG** (fotos embutidas, tamanho em mm, editável no Inkscape/Illustrator),
   **PNG** 300 DPI e **PDF** no tamanho físico.
+
+**Redes sociais** — foto pronta pra post: formatos, 34 filtros, cor e luz,
+ampliação e luz por IA, **Automático**, e ainda **textos** (fonte, cor e estilo
+simples/fundo/contorno/sombra) e **figurinhas** (selos e emojis) arrastáveis no
+palco (`social-overlays.ts`), **carrossel** (a foto se espalha por 2 a 10 posts,
+exportados num ZIP) e **lote** (o mesmo look em várias fotos, num ZIP).
 
 **Ilustração** — um editor vetorial pequeno, feito pra arte de corte e impressão.
 O palco é um SVG de verdade em mm, então o que se vê é o que sai no arquivo.
@@ -271,6 +309,20 @@ A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela intei
   **conta-gotas** (lê a arte e a referência) e **paleta do documento** que troca uma
   cor em tudo. Desfazer/refazer e atalhos (V, A, P, T, R, E, S, G, I, Delete,
   setas, Ctrl+D/G/Z).
+- **Pintura e efeitos** (`illustration-paint.ts`): degradê linear/radial, padrões
+  (bolinhas, listras, xadrez, quadriculado, corações), contorno, **contorno duplo**
+  e sombra por camada, e **máscara de recorte** (a camada de cima recorta as de
+  baixo; no SVG de corte a linha sai já intersectada). Texto em **círculo
+  completo** com um clique; texto usa a regra não-zero das fontes (letra cursiva
+  sobreposta não vira furo).
+- **Lápis** (N, mão livre alisada e ajustada em curvas) e **borracha vetorial**
+  (Shift+E, tira a faixa varrida dos vetores).
+- **Guias** arrastadas das réguas (solte na régua pra apagar) e **grade** com
+  atração (Ctrl+' e Ctrl+Shift+').
+- **Modelos prontos** (topo de bolo, tag, etiqueta redonda, convite, adesivo de
+  nome), com camadas editáveis e contorno de corte gerado.
+- **Várias pranchetas**: exporta uma, todas num ZIP, ou um PDF com uma página por
+  prancheta.
 - Exporta **SVG completo** (em mm, com texto em curvas ou texto reto editável com a
   fonte embutida), **SVG só de corte**, **PNG 300 DPI** e **PDF**; **envia a arte pro
   Print & Cut** (recortada no desenho, na largura física) ou **pro Molde SVG**. No
@@ -397,6 +449,8 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `POST /api/folders` | Cria pasta |
 | `PUT /api/folders/{id}` | Renomeia pasta |
 | `DELETE /api/folders/{id}` | Exclui pasta (notas voltam a "sem pasta") |
+| `GET/PUT/DELETE /api/imagens/biblioteca[/{id}]` | Biblioteca de artes do Editor de Imagens (a lista traz só miniaturas) |
+| `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |
 | `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
 | `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |
 | `POST /api/configuracoes/ia/testar` | Faz uma extração real com a configuração informada, antes de salvar |

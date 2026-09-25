@@ -15,10 +15,11 @@ import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
 import { IlLayersComponent } from './illustration-layers';
 import { IlNumComponent, NumChange } from './illustration-num';
-import { CUT_COLOR, GridSettings, IllustrationStore, PaintTarget } from './illustration-store';
+import { CUT_COLOR, GridSettings, IllustrationStore, MAIN_BOARD, PaintTarget } from './illustration-store';
+import { ZipEntry, uniqueNames, zipStore } from './zip';
 import { IllustrationTracer } from './illustration-tracer';
-import { Layer, ShapeLayer, TextAlign, TextCurve, TextLayer, countNodes, normalizeHex } from './illustration-model';
-import { jpegToPdf } from './sheet';
+import { Bounds, Layer, ShapeLayer, TextAlign, TextCurve, TextLayer, countNodes, normalizeHex } from './illustration-model';
+import { PdfPage, buildPdf } from './sheet';
 import { downloadBlob } from './svg-template';
 import { PRESET_LABELS, PresetId, VectorizeParams } from './vectorize';
 
@@ -97,6 +98,16 @@ function loadOpen(): Record<string, boolean> {
                   <button type="button" class="il-btn" [disabled]="!store.guides().length" (click)="store.guides.set([])">Apagar guias</button>
                 </div>
                 <p class="il-note">Arraste de uma régua pra criar guia; solte de volta na régua pra apagar.</p>
+                <span class="il-mini-title">Pranchetas</span>
+                @for (bd of store.boards(); track bd.id) {
+                  <div class="il-row il-row-tight">
+                    <input class="il-hex il-grow" [value]="bd.name" aria-label="Nome da prancheta" (change)="store.patchBoard(bd.id, { name: $any($event.target).value })" />
+                    <il-num label="L" unit="mm" [value]="bd.w" [min]="10" [max]="3000" [decimals]="0" (valueChange)="store.patchBoard(bd.id, { w: round0($event.value) })" />
+                    <il-num label="A" unit="mm" [value]="bd.h" [min]="10" [max]="3000" [decimals]="0" (valueChange)="store.patchBoard(bd.id, { h: round0($event.value) })" />
+                    <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Apagar prancheta (o desenho fica)" aria-label="Apagar prancheta" (click)="store.removeBoard(bd.id)"><il-icon name="trash" [size]="12" /></button>
+                  </div>
+                }
+                <button type="button" class="il-btn il-wide" (click)="addBoard()"><il-icon name="plus" [size]="13" /> Nova prancheta</button>
                 <div class="il-row">
                   <button type="button" class="il-btn il-grow" [disabled]="!store.layers().length" (click)="fitBoard()"><il-icon name="artboard" [size]="13" /> Ajustar ao desenho</button>
                   <button type="button" class="il-btn il-danger" [disabled]="!store.layers().length" (click)="clearAll()" data-tip="Apagar tudo"><il-icon name="trash" [size]="13" /></button>
@@ -407,14 +418,23 @@ function loadOpen(): Record<string, boolean> {
             <div class="il-sec-body il-sec-body-top">
               <label class="il-field"><span>Nome do arquivo</span><input [value]="fileName()" (input)="fileName.set($any($event.target).value)" /></label>
               <label class="il-check"><input type="checkbox" [checked]="textAsText()" (change)="textAsText.set(!textAsText())" /> Texto reto editável (fonte embutida)</label>
+              @if (store.boards().length) {
+                <label class="il-field"><span>Prancheta (SVG e PNG)</span>
+                  <select class="il-select" [value]="exportBoard()" (change)="exportBoard.set($any($event.target).value)">
+                    @for (bd of store.allBoards(); track bd.id) { <option [value]="bd.id">{{ bd.name }}</option> }
+                  </select>
+                </label>
+              }
             </div>
           </section>
           <div class="il-export-list">
             @for (e of exports; track e.id) {
+              @if (e.id !== 'todas' || store.boards().length) {
               <button type="button" class="il-export" [disabled]="busy() || !store.layers().length" (click)="runExport(e.id)">
                 <il-icon [name]="e.icon" [size]="20" />
                 <span><strong>{{ e.label }}</strong><small>{{ e.help }}</small></span>
               </button>
+              }
             }
           </div>
           @if (exportStatus()) { <p class="il-trace-status">{{ exportStatus() }}</p> }
@@ -473,7 +493,8 @@ export class IllustrationPanelComponent {
     { id: 'arco', icon: 'text-arc', label: 'Texto em arco' },
     { id: 'caminho', icon: 'text-path', label: 'Texto em caminho' },
   ];
-  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde' | 'social'; icon: IlIconName; label: string; help: string }[] = [
+  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde' | 'social' | 'biblioteca' | 'todas'; icon: IlIconName; label: string; help: string }[] = [
+    { id: 'todas', icon: 'artboard', label: 'Todas as pranchetas (ZIP)', help: 'SVG e PNG de cada prancheta, num arquivo só' },
     { id: 'svg', icon: 'export', label: 'SVG', help: 'Vetor em mm, abre no Inkscape, Illustrator e CanvasWorkspace' },
     { id: 'corte', icon: 'cut', label: 'SVG de corte', help: 'Só as linhas de corte, em vermelho — pra ScanNCut' },
     { id: 'png', icon: 'image', label: `PNG ${EXPORT_DPI} DPI`, help: 'Imagem transparente no tamanho físico, sem as linhas de corte' },
@@ -481,6 +502,7 @@ export class IllustrationPanelComponent {
     { id: 'printcut', icon: 'offset', label: 'Enviar pro Print & Cut', help: 'A arte entra como imagem nova, na largura do desenho' },
     { id: 'molde', icon: 'properties', label: 'Usar como Molde SVG', help: 'Abre a ilustração no modo de molde, pra encaixar fotos' },
     { id: 'social', icon: 'photo-add', label: 'Enviar pro Redes sociais', help: 'A prancheta vira a foto do post, com filtros e formatos' },
+    { id: 'biblioteca', icon: 'templates', label: 'Guardar na biblioteca', help: 'A arte (sem as linhas de corte) fica na sua conta pra reusar' },
   ];
 
   readonly sendToCut = output<{ canvas: HTMLCanvasElement; name: string; widthMm: number }>();
@@ -531,6 +553,24 @@ export class IllustrationPanelComponent {
     try {
       localStorage.setItem(OPEN_KEY, JSON.stringify(this.open()));
     } catch { /* preferência é só conveniência */ }
+  }
+
+  exportBoard = signal<string>(MAIN_BOARD);
+
+  addBoard(): void {
+    const b = this.store.addBoard();
+    this.exportBoard.set(b.id);
+    this.store.status.set(`${b.name} criada à direita — role a vista (Ctrl+0 enquadra tudo).`);
+  }
+
+  private boardBounds(): Bounds {
+    return this.store.boardBounds(this.exportBoard());
+  }
+
+  private boardSuffix(): string {
+    const id = this.exportBoard();
+    if (id === MAIN_BOARD || !this.store.boards().some((b) => b.id === id)) return '';
+    return `-${(this.store.allBoards().find((b) => b.id === id)?.name ?? '').replace(/[^\w-]+/g, '-').toLowerCase()}`;
   }
 
   patchGrid(patch: Partial<GridSettings>): void {
@@ -747,22 +787,44 @@ export class IllustrationPanelComponent {
         case 'svg':
         case 'corte': {
           const cutOnly = id === 'corte';
-          const svg = await buildSvg(this.store, { cutOnly, textAsText: this.textAsText() });
-          downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${this.baseName()}${cutOnly ? '-corte' : ''}.svg`);
+          const svg = await buildSvg(this.store, { cutOnly, textAsText: this.textAsText(), bounds: this.boardBounds() });
+          downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${this.baseName()}${this.boardSuffix()}${cutOnly ? '-corte' : ''}.svg`);
           this.exportStatus.set(cutOnly ? 'SVG de corte salvo.' : 'SVG salvo.');
           break;
         }
         case 'png': {
-          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, null);
-          downloadBlob(await pngBlobWithDpi(await canvasToBlob(canvas, 'image/png'), EXPORT_DPI), `${this.baseName()}.png`);
+          const b = this.boardBounds();
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds: b }), b.maxX - b.minX, b.maxY - b.minY, EXPORT_DPI, null);
+          downloadBlob(await pngBlobWithDpi(await canvasToBlob(canvas, 'image/png'), EXPORT_DPI), `${this.baseName()}${this.boardSuffix()}.png`);
           this.exportStatus.set(`PNG ${canvas.width}×${canvas.height} px salvo.`);
           break;
         }
         case 'pdf': {
-          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, '#ffffff');
-          const jpeg = new Uint8Array(await (await canvasToBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
-          downloadBlob(jpegToPdf(jpeg, this.store.widthMm(), this.store.heightMm(), canvas.width, canvas.height), `${this.baseName()}.pdf`);
-          this.exportStatus.set('PDF salvo no tamanho da prancheta.');
+          const boards = this.store.boards().length ? this.store.allBoards() : [this.store.allBoards()[0]];
+          // Uma página por prancheta, cada uma no tamanho dela.
+          const pages: PdfPage[] = [];
+          for (const bd of boards) {
+            const bounds = { minX: bd.x, minY: bd.y, maxX: bd.x + bd.w, maxY: bd.y + bd.h };
+            const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds }), bd.w, bd.h, EXPORT_DPI, '#ffffff', 40_000_000);
+            const jpeg = new Uint8Array(await (await canvasToBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
+            pages.push({ wMm: bd.w, hMm: bd.h, content: '', image: { jpeg, pxW: canvas.width, pxH: canvas.height } });
+          }
+          downloadBlob(buildPdf(pages), `${this.baseName()}.pdf`);
+          this.exportStatus.set(pages.length > 1 ? `PDF com ${pages.length} páginas, uma por prancheta.` : 'PDF salvo no tamanho da prancheta.');
+          break;
+        }
+        case 'todas': {
+          const files: ZipEntry[] = [];
+          const names = uniqueNames(this.store.allBoards().map((bd) => bd.name.replace(/[^\w\u00C0-\u017F -]+/g, '').trim() || 'prancheta'));
+          for (const [i, bd] of this.store.allBoards().entries()) {
+            const bounds = { minX: bd.x, minY: bd.y, maxX: bd.x + bd.w, maxY: bd.y + bd.h };
+            const svg = await buildSvg(this.store, { skipCut: false, textAsText: this.textAsText(), bounds });
+            files.push({ name: `${names[i]}.svg`, content: svg });
+            const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds }), bd.w, bd.h, EXPORT_DPI, null, 40_000_000);
+            files.push({ name: `${names[i]}.png`, content: new Uint8Array(await (await pngBlobWithDpi(await canvasToBlob(canvas, 'image/png'), EXPORT_DPI)).arrayBuffer()) });
+          }
+          downloadBlob(zipStore(files), `${this.baseName()}-pranchetas.zip`);
+          this.exportStatus.set(`ZIP com ${this.store.allBoards().length} pranchetas (SVG + PNG).`);
           break;
         }
         case 'printcut': {
@@ -782,6 +844,18 @@ export class IllustrationPanelComponent {
           const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true }), this.store.widthMm(), this.store.heightMm(), EXPORT_DPI, '#ffffff', 9_000_000);
           this.bridge?.send('social', { canvas, name: this.baseName(), widthMm: this.store.widthMm() });
           this.exportStatus.set('');
+          break;
+        }
+        case 'biblioteca': {
+          const b = contentBounds(this.store, true);
+          if (!b) {
+            this.exportStatus.set('Nada pra guardar.');
+            break;
+          }
+          const w = b.maxX - b.minX;
+          const canvas = await rasterizeSvg(await buildSvg(this.store, { skipCut: true, bounds: b }), w, b.maxY - b.minY, EXPORT_DPI, null, 9_000_000);
+          this.bridge?.send('biblioteca', { canvas, name: this.baseName(), widthMm: Math.round(w * 10) / 10 });
+          this.exportStatus.set('Enviado pra biblioteca.');
           break;
         }
         case 'molde': {

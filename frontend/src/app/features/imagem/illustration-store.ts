@@ -25,7 +25,22 @@ export interface IllustrationProjectData {
   fonts: UploadedFont[];
   guides?: Guide[];
   grid?: GridSettings;
+  boards?: Artboard[];
 }
+
+/** Prancheta a mais (a primeira é a do documento, em 0,0). Ficam sempre em
+ * coordenadas positivas, à direita da primeira. */
+export interface Artboard {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const MAIN_BOARD = 'principal';
+const BOARD_GAP_MM = 20;
 
 /** Guia arrastada da régua: `x` é uma linha vertical em x = pos. */
 export interface Guide {
@@ -118,6 +133,14 @@ export class IllustrationStore {
   /** Raio da borracha vetorial, em mm. */
   eraserMm = signal(3);
   guides = signal<Guide[]>([]);
+  boards = signal<Artboard[]>([]);
+  /** Todas as pranchetas, a do documento primeiro. */
+  allBoards = computed<Artboard[]>(() => [
+    { id: MAIN_BOARD, name: 'Prancheta 1', x: 0, y: 0, w: this.widthMm(), h: this.heightMm() },
+    ...this.boards(),
+  ]);
+  /** Até onde vão as pranchetas (a área de trabalho cresce junto). */
+  extent = computed(() => this.allBoards().reduce((e, b) => ({ w: Math.max(e.w, b.x + b.w), h: Math.max(e.h, b.y + b.h) }), { w: 0, h: 0 }));
   showGuides = signal(true);
   grid = signal<GridSettings>({ show: false, snap: false, stepMm: 10 });
   /** Sobe quando o painel deve focar o campo de texto. */
@@ -487,6 +510,7 @@ export class IllustrationStore {
   clear(): void {
     this.layers.set([]);
     this.guides.set([]);
+    this.boards.set([]);
     this.selectedIds.set([]);
     this.nodeSel.set(null);
     this.past = [];
@@ -1090,7 +1114,31 @@ export class IllustrationStore {
       fonts: this.fonts.uploads().filter((u) => used.has(this.fonts.uploadFontId(u.id))),
       guides: this.guides(),
       grid: this.grid(),
+      boards: this.boards(),
     };
+  }
+
+  // ---------- pranchetas ----------
+
+  addBoard(): Artboard {
+    const e = this.extent();
+    const n = this.allBoards().length + 1;
+    const b: Artboard = { id: uuid(), name: `Prancheta ${n}`, x: Math.round(e.w + BOARD_GAP_MM), y: 0, w: this.widthMm(), h: this.heightMm() };
+    this.boards.update((l) => [...l, b]);
+    return b;
+  }
+
+  patchBoard(id: string, patch: Partial<Artboard>): void {
+    this.boards.update((l) => l.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  }
+
+  removeBoard(id: string): void {
+    this.boards.update((l) => l.filter((b) => b.id !== id));
+  }
+
+  boardBounds(id: string): Bounds {
+    const b = this.allBoards().find((x) => x.id === id) ?? this.allBoards()[0];
+    return { minX: b.x, minY: b.y, maxX: b.x + b.w, maxY: b.y + b.h };
   }
 
   // ---------- guias e grade ----------
@@ -1129,6 +1177,7 @@ export class IllustrationStore {
     this.heightMm.set(data.heightMm || 200);
     this.layers.set(data.layers ?? []);
     this.guides.set(data.guides ?? []);
+    this.boards.set(data.boards ?? []);
     if (data.grid) this.grid.set(data.grid);
   }
 }

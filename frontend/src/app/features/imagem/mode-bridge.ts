@@ -5,7 +5,7 @@
 
 import { Injectable } from '@angular/core';
 
-export type BridgeTarget = 'corte' | 'molde' | 'social' | 'ilustracao';
+export type BridgeTarget = 'corte' | 'molde' | 'social' | 'ilustracao' | 'biblioteca';
 
 export interface BridgePayload {
   canvas: HTMLCanvasElement;
@@ -19,6 +19,7 @@ export const BRIDGE_TARGETS: { id: BridgeTarget; label: string; help: string }[]
   { id: 'molde', label: 'Molde SVG', help: 'Entra como foto no encaixe ativo do molde' },
   { id: 'social', label: 'Redes sociais', help: 'Vira a foto do post, com filtros e formatos' },
   { id: 'ilustracao', label: 'Ilustração', help: 'Vetoriza em curvas, cores ou linha central' },
+  { id: 'biblioteca', label: 'Biblioteca da conta', help: 'Guarda a arte pra reusar em qualquer projeto' },
 ];
 
 @Injectable()

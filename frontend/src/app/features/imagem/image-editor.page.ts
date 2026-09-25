@@ -36,9 +36,12 @@ import { BridgePayload, BridgeTarget, ModeBridge, canvasToFile } from './mode-br
 import { ProjectDraft, clearDraft, loadDraft, saveDraft } from './project-draft';
 import { SnapshotHistory } from './snapshot-history';
 import { ImageUpscaleService } from './image-upscale.service';
+import { ImageLibraryService } from './image-library.service';
+import { PackageSection, illustrationSection, readme, socialSection, templateSection } from './client-package';
+import { ImageLibraryMenuComponent } from './image-library-menu';
 import { aiCutout } from './ai-cutout';
 import { VectorizeService } from './vectorize.service';
-import { uniqueNames, zipStore } from './zip';
+import { ZipEntry, uniqueNames, zipStore } from './zip';
 import { TemplateProjectData, TemplateStore } from './template-store';
 import { uuid } from '../../core/uuid';
 
@@ -297,7 +300,7 @@ function loadPrefs(): Prefs {
   standalone: true,
   imports: [
     RouterLink, IconComponent, DatePipe, TemplateModeComponent, SocialModeComponent, IllustrationModeComponent,
-    IlIconComponent, IlNumComponent, IlStudioBaseStylesComponent, IlStudioChromeStylesComponent,
+    IlIconComponent, IlNumComponent, IlStudioBaseStylesComponent, IlStudioChromeStylesComponent, ImageLibraryMenuComponent,
   ],
   providers: [TemplateStore, SocialStore, IllustrationStore, FontLibrary, VectorizeService, IllustrationTracer, ModeBridge],
   template: `
@@ -334,6 +337,8 @@ function loadPrefs(): Prefs {
               </div>
             }
           </div>
+          <il-library-menu (pick)="useFromLibrary($event)" />
+          <button type="button" class="il-btn" [disabled]="packaging()" data-tip="Tudo do projeto num ZIP, pra gráfica ou pro cliente" (click)="exportClientPackage()"><il-icon name="download" [size]="13" /> {{ packaging() ? 'Montando…' : 'Pacote' }}</button>
           @if (projectStatus()) { <span class="ab-status" [title]="projectStatus()">{{ projectStatus() }}</span> }
         </div>
         <div class="ab-right">
@@ -860,6 +865,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public illustration: IllustrationStore,
     public bridge: ModeBridge,
     public upscale: ImageUpscaleService,
+    private library: ImageLibraryService,
+    private fonts: FontLibrary,
   ) {
     this.bridge.register((target, payload) => void this.receive(target, payload));
     effect(() => {
@@ -1247,6 +1254,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Recebe a arte que outro modo mandou pelo "Enviar para…". */
   async receive(target: BridgeTarget, p: BridgePayload): Promise<void> {
     try {
+      if (target === 'biblioteca') {
+        this.projectStatus.set('Guardando na biblioteca…');
+        await this.library.save(p.canvas, p.name, this.modo(), p.widthMm ?? 0);
+        this.projectStatus.set(`"${p.name}" guardada na biblioteca.`);
+        return;
+      }
       if (target === 'corte') {
         const item = this.addArt(p.name, p.canvas, p.widthMm ? { widthMm: p.widthMm } : {});
         this.selectedId.set(item.id);
@@ -1264,8 +1277,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         this.setModo('ilustracao');
       }
     } catch {
-      this.projectStatus.set('Não consegui enviar a arte para o outro modo.');
+      this.projectStatus.set(target === 'biblioteca' ? 'Não consegui guardar na biblioteca.' : 'Não consegui enviar a arte para o outro modo.');
     }
+  }
+
+  /** Arte escolhida na biblioteca: entra no modo aberto. */
+  useFromLibrary(e: { canvas: HTMLCanvasElement; name: string; widthMm: number }): void {
+    void this.receive(this.modo(), { canvas: e.canvas, name: e.name, widthMm: e.widthMm || undefined });
   }
 
   /** A arte selecionada do Print & Cut (com o fundo já tirado, se foi). */
@@ -2271,33 +2289,106 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   exportSheetSvg(): void {
-    const { placed, wMm, hMm } = this.packCurrent();
-    if (!placed.length) return;
-    const d = cubicPathsToData(this.sheetCutsMm(placed, 'full'));
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${wMm}mm" height="${hMm}mm" viewBox="0 0 ${wMm} ${hMm}">\n` +
-      `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n` +
-      `</svg>\n`;
+    const svg = this.sheetSvgText();
+    if (!svg) return;
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `folha-${this.sheetSize()}-corte.svg`);
   }
 
   /** Um PDF só: página 1 pra imprimir (com as marcas, se ligadas), página 2
    * com as linhas de corte em vetor, nas mesmas posições. */
-  exportPrintCutPdf(): void {
+  private async printCutPdf(): Promise<Blob | null> {
     const sheet = this.renderSheetHiRes();
-    if (!sheet) return;
+    if (!sheet) return null;
     const cuts = this.sheetCutsMm(sheet.placed, 'full');
-    sheet.canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const jpeg = new Uint8Array(await blob.arrayBuffer());
-      const marks = this.regMarks() ? `0 g\n${pdfRectOps(registrationMarks(sheet.wMm, sheet.hMm), sheet.hMm)}` : '';
-      const cutPage = `1 0 0 RG 0.57 w 1 J 1 j\n${pdfPathOps(cuts, sheet.hMm)}S\n${marks}`;
-      const pdf = buildPdf([
-        { wMm: sheet.wMm, hMm: sheet.hMm, content: '', image: { jpeg, pxW: sheet.canvas.width, pxH: sheet.canvas.height } },
-        { wMm: sheet.wMm, hMm: sheet.hMm, content: cutPage },
-      ]);
-      this.downloadBlob(pdf, `folha-${this.sheetSize()}-impressao-e-corte.pdf`);
-    }, 'image/jpeg', 0.92);
+    const blob = await new Promise<Blob | null>((r) => sheet.canvas.toBlob(r, 'image/jpeg', 0.92));
+    if (!blob) return null;
+    const jpeg = new Uint8Array(await blob.arrayBuffer());
+    const marks = this.regMarks() ? `0 g\n${pdfRectOps(registrationMarks(sheet.wMm, sheet.hMm), sheet.hMm)}` : '';
+    const cutPage = `1 0 0 RG 0.57 w 1 J 1 j\n${pdfPathOps(cuts, sheet.hMm)}S\n${marks}`;
+    return buildPdf([
+      { wMm: sheet.wMm, hMm: sheet.hMm, content: '', image: { jpeg, pxW: sheet.canvas.width, pxH: sheet.canvas.height } },
+      { wMm: sheet.wMm, hMm: sheet.hMm, content: cutPage },
+    ]);
+  }
+
+  async exportPrintCutPdf(): Promise<void> {
+    const pdf = await this.printCutPdf();
+    if (pdf) this.downloadBlob(pdf, `folha-${this.sheetSize()}-impressao-e-corte.pdf`);
+  }
+
+  private sheetSvgText(): string | null {
+    const { placed, wMm, hMm } = this.packCurrent();
+    if (!placed.length) return null;
+    const d = cubicPathsToData(this.sheetCutsMm(placed, 'full'));
+    return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${wMm}mm" height="${hMm}mm" viewBox="0 0 ${wMm} ${hMm}">\n` +
+      `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n` +
+      `</svg>\n`;
+  }
+
+  // ---------- pacote do cliente ----------
+
+  packaging = signal(false);
+
+  /** Tudo do projeto num ZIP: folha e peças do Print & Cut, molde, post e
+   * ilustração, com um LEIAME. */
+  async exportClientPackage(): Promise<void> {
+    if (this.packaging()) return;
+    this.packaging.set(true);
+    this.projectStatus.set('Montando o pacote…');
+    try {
+      const sections: PackageSection[] = [];
+      const cut = await this.printCutSection();
+      if (cut) sections.push(cut);
+      for (const make of [
+        () => templateSection(this.templates, this.fonts),
+        () => socialSection(this.social, this.fonts),
+        () => illustrationSection(this.illustration),
+      ]) {
+        try {
+          const sec = await make();
+          if (sec) sections.push(sec);
+        } catch { /* um modo que falhe não derruba o pacote */ }
+      }
+      if (!sections.length) {
+        this.projectStatus.set('Nada pra empacotar ainda.');
+        return;
+      }
+      const name = this.projectName().trim() || 'projeto';
+      const files: ZipEntry[] = [{ name: 'LEIAME.txt', content: readme(name, sections) }, ...sections.flatMap((sec) => sec.files)];
+      const safe = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'projeto';
+      this.downloadBlob(zipStore(files), `${safe}-pacote.zip`);
+      this.projectStatus.set(`Pacote com ${files.length} arquivo(s).`);
+    } finally {
+      this.packaging.set(false);
+    }
+  }
+
+  private async printCutSection(): Promise<PackageSection | null> {
+    const items = this.images();
+    if (!items.length) return null;
+    const files: ZipEntry[] = [];
+    const pdf = await this.printCutPdf();
+    if (pdf) files.push({ name: 'print-and-cut/folha-impressao-e-corte.pdf', content: new Uint8Array(await pdf.arrayBuffer()) });
+    const svg = this.sheetSvgText();
+    if (svg) files.push({ name: 'print-and-cut/folha-corte.svg', content: svg });
+    const names = uniqueNames(items.map((i) => this.baseName(i)));
+    for (const [k, item] of items.entries()) {
+      const piece = this.pieceFor(item, 'full');
+      files.push({ name: `print-and-cut/pecas/${names[k]}-corte.svg`, content: this.pieceSvg(piece, null) });
+      const png = await new Promise<Blob | null>((r) => piece.canvas.toBlob(r, 'image/png'));
+      if (png) files.push({ name: `print-and-cut/pecas/${names[k]}.png`, content: new Uint8Array(await (await pngBlobWithDpi(png, Math.round(piece.ppm * 25.4))).arrayBuffer()) });
+    }
+    const { placed, overflow } = this.packCurrent();
+    return {
+      folder: 'print-and-cut',
+      files,
+      notes: [
+        `Print & Cut — folha ${this.sheetSize()} ${this.orientation()}, ${placed.length} peça(s)${overflow.length ? ` (${overflow.length} não couberam)` : ''}${this.regMarks() ? ', com marcas de registro' : ''}.`,
+        '  folha-impressao-e-corte.pdf: página 1 imprime, página 2 é o corte. folha-corte.svg: o mesmo corte pra máquina.',
+        '  pecas/: cada arte com a borda (PNG) e a linha de corte (SVG).',
+      ],
+    };
   }
 
   /** Quantas cópias da selecionada cabem na folha junto com o resto. */

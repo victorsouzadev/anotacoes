@@ -170,9 +170,13 @@ function fmt(v: number, d = 1): string {
         (dblclick)="onDoubleClick($event)"
         (contextmenu)="onContextMenu($event)"
       >
-        <text class="il-board-label" x="0" [attr.y]="-7 / ppm()" [attr.font-size]="11 / ppm()">Prancheta · {{ store.widthMm() }} × {{ store.heightMm() }} mm</text>
+        <text class="il-board-label" x="0" [attr.y]="-7 / ppm()" [attr.font-size]="11 / ppm()">{{ store.boards().length ? 'Prancheta 1' : 'Prancheta' }} · {{ store.widthMm() }} × {{ store.heightMm() }} mm</text>
         <defs #defs></defs>
         <rect class="il-board" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" />
+        @for (b of store.boards(); track b.id) {
+          <text class="il-board-label" [attr.x]="b.x" [attr.y]="b.y - 7 / ppm()" [attr.font-size]="11 / ppm()">{{ b.name }} · {{ b.w }} × {{ b.h }} mm</text>
+          <rect class="il-board" [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" />
+        }
         @if (store.grid().show) {
           <rect class="il-grid" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" fill="url(#ils-grid)" />
         }
@@ -215,6 +219,9 @@ function fmt(v: number, d = 1): string {
           </g>
         }
         <rect class="il-board-line" x="0" y="0" [attr.width]="store.widthMm()" [attr.height]="store.heightMm()" />
+        @for (b of store.boards(); track b.id) {
+          <rect class="il-board-line" [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" />
+        }
 
         <g class="il-overlay">
           @if (hover(); as h) {
@@ -240,19 +247,19 @@ function fmt(v: number, d = 1): string {
           @if (store.showGuides()) {
             @for (g of store.guides(); track g.id) {
               @if (g.axis === 'x') {
-                <line class="il-uguide" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.heightMm() + padMm()" />
-                <line class="il-uguide-hit il-uguide-x" [attr.data-guide]="g.id" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.heightMm() + padMm()" />
+                <line class="il-uguide" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.extent().h + padMm()" />
+                <line class="il-uguide-hit il-uguide-x" [attr.data-guide]="g.id" [attr.x1]="g.pos" [attr.y1]="-padMm()" [attr.x2]="g.pos" [attr.y2]="store.extent().h + padMm()" />
               } @else {
-                <line class="il-uguide" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.widthMm() + padMm()" [attr.y2]="g.pos" />
-                <line class="il-uguide-hit il-uguide-y" [attr.data-guide]="g.id" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.widthMm() + padMm()" [attr.y2]="g.pos" />
+                <line class="il-uguide" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.extent().w + padMm()" [attr.y2]="g.pos" />
+                <line class="il-uguide-hit il-uguide-y" [attr.data-guide]="g.id" [attr.x1]="-padMm()" [attr.y1]="g.pos" [attr.x2]="store.extent().w + padMm()" [attr.y2]="g.pos" />
               }
             }
           }
           @for (g of guides(); track $index) {
             @if (g.x !== undefined) {
-              <line class="il-guide" [attr.x1]="g.x" [attr.y1]="-padMm()" [attr.x2]="g.x" [attr.y2]="store.heightMm() + padMm()" />
+              <line class="il-guide" [attr.x1]="g.x" [attr.y1]="-padMm()" [attr.x2]="g.x" [attr.y2]="store.extent().h + padMm()" />
             } @else {
-              <line class="il-guide" [attr.x1]="-padMm()" [attr.y1]="g.y" [attr.x2]="store.widthMm() + padMm()" [attr.y2]="g.y" />
+              <line class="il-guide" [attr.x1]="-padMm()" [attr.y1]="g.y" [attr.x2]="store.extent().w + padMm()" [attr.y2]="g.y" />
             }
           }
           @if (marquee(); as m) {
@@ -525,8 +532,8 @@ export class IllustrationModeComponent {
   private padPx = computed(() => Math.round(Math.max(this.viewport().w, this.viewport().h) * 0.8 + 40));
   padMm = computed(() => this.padPx() / this.ppm());
   svgSize = computed(() => ({
-    w: Math.round(this.store.widthMm() * this.ppm() + this.padPx() * 2),
-    h: Math.round(this.store.heightMm() * this.ppm() + this.padPx() * 2),
+    w: Math.round(this.store.extent().w * this.ppm() + this.padPx() * 2),
+    h: Math.round(this.store.extent().h * this.ppm() + this.padPx() * 2),
   }));
   viewBox = computed(() => {
     const p = this.padMm();
@@ -538,12 +545,14 @@ export class IllustrationModeComponent {
 
   fit(): void {
     const { w, h } = this.viewport();
-    const z = Math.min((w - 64) / this.store.widthMm(), (h - 64) / this.store.heightMm()) / PX_PER_MM;
+    // Enquadra todas as pranchetas juntas.
+    const ext = this.store.extent();
+    const z = Math.min((w - 64) / ext.w, (h - 64) / ext.h) / PX_PER_MM;
     this.zoom.set(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z)));
     const ppm = this.ppm();
     this.pendingScroll = {
-      left: this.padPx() + (this.store.widthMm() * ppm) / 2 - w / 2,
-      top: this.padPx() + (this.store.heightMm() * ppm) / 2 - h / 2,
+      left: this.padPx() + (ext.w * ppm) / 2 - w / 2,
+      top: this.padPx() + (ext.h * ppm) / 2 - h / 2,
     };
   }
 
@@ -1168,8 +1177,12 @@ export class IllustrationModeComponent {
     if (drag.bounds && !noSnap) {
       const b = drag.bounds;
       const tol = SNAP_PX / this.ppm();
-      const xs = [0, this.store.widthMm() / 2, this.store.widthMm(), ...this.store.snapTargets('x')];
-      const ys = [0, this.store.heightMm() / 2, this.store.heightMm(), ...this.store.snapTargets('y')];
+      const xs = [...this.store.snapTargets('x')];
+      const ys = [...this.store.snapTargets('y')];
+      for (const bd of this.store.allBoards()) {
+        xs.push(bd.x, bd.x + bd.w / 2, bd.x + bd.w);
+        ys.push(bd.y, bd.y + bd.h / 2, bd.y + bd.h);
+      }
       for (const l of this.store.layers()) {
         if (!l.visible || drag.base.has(l.id)) continue;
         const lb = this.store.worldBounds(l);
