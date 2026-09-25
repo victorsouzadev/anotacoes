@@ -33,3 +33,5 @@ public record ImageLibraryMetaDto(string Id, string Name, string Origin, string 
 public record ImageLibraryItemDto(string Id, string Name, string Origin, string Data, double WidthMm, DateTime CreatedAt);
 
 public record ImageLibraryUpsertRequest(string? Name, string? Origin, string? Data, string? Thumb, double WidthMm);
+
+public record ImagePreferencesRequest(string? Data);

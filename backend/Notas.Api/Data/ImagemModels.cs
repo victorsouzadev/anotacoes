@@ -37,3 +37,15 @@ public class ImageLibraryItem
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
+
+/// <summary>
+/// Preferências do Editor de Imagens que valem pra conta inteira (não pra um
+/// projeto), como as anotações de material da máquina de corte. JSON opaco,
+/// um registro por usuário.
+/// </summary>
+public class ImagePreferences
+{
+    public string UserId { get; set; } = "";
+    public string Data { get; set; } = "{}";
+    public DateTime UpdatedAt { get; set; }
+}

@@ -37,7 +37,7 @@ export async function illustrationSection(store: IllustrationStore): Promise<Pac
   const files: ZipEntry[] = [];
   const boards = store.allBoards();
   const many = boards.length > 1;
-  const hasCut = store.layers().some((l) => l.cut && l.visible);
+  const hasCut = store.layers().some((l) => (l.cut || l.pen) && l.visible);
   const notes: string[] = [];
   for (const [i, bd] of boards.entries()) {
     const bounds = { minX: bd.x, minY: bd.y, maxX: bd.x + bd.w, maxY: bd.y + bd.h };

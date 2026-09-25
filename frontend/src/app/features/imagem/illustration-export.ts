@@ -132,11 +132,15 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
       const d = pathsToD(paths);
       if (d) body += `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
     }
+    for (const l of penLayers(store)) {
+      const d = pathsToD(store.worldPaths(l));
+      if (d) body += `  <path id="caneta-${l.id.slice(0, 4)}" d="${d}" fill="none" stroke="#00a000" stroke-width="0.2" />\n`;
+    }
   } else {
     const texts: TextLayer[] = [];
     for (const m of masks.values()) defs += clipDef(IDS, m.id, pathsToD(store.worldPaths(m)), fillRuleOf(m));
     for (const l of layers) {
-      if (options.skipCut && l.cut) continue;
+      if (options.skipCut && (l.cut || l.pen)) continue;
       if (l.mask) continue;
       const clip = l.clipBy && masks.has(l.clipBy) ? ` clip-path="url(#${clipId(IDS, l.clipBy)})"` : '';
       if (clip) body += `  <g${clip}>\n`;
@@ -182,8 +186,8 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
 export function cutPaths(store: IllustrationStore): VPath[][] {
   const layers = store.layers().filter((l) => l.visible);
   const masks = new Map(layers.filter((l) => l.mask).map((l) => [l.id, l]));
-  const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem' && !l.mask);
-  const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem' && !l.mask);
+  const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem' && !l.mask && !l.pen);
+  const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem' && !l.mask && !l.pen);
   return cut.map((l) => {
     const mask = l.clipBy ? masks.get(l.clipBy) : undefined;
     return mask
@@ -193,6 +197,11 @@ export function cutPaths(store: IllustrationStore): VPath[][] {
       ])
       : store.worldPaths(l);
   });
+}
+
+/** Camadas desenhadas pela caneta da máquina (Sketch). */
+export function penLayers(store: IllustrationStore): Layer[] {
+  return store.layers().filter((l) => l.visible && l.pen && l.kind !== 'imagem');
 }
 
 /** DXF das linhas de corte de uma prancheta (pro Silhouette Studio Basic). */
@@ -205,7 +214,15 @@ export function cutDxf(store: IllustrationStore, b: Bounds): string {
       lines.push({ layer: 'CORTE', closed: p.closed, points: pts });
     }
   }
-  return buildDxf(lines, [{ name: 'CORTE', color: 1 }, { name: 'PAGINA', color: 8 }], h);
+  // Caneta numa camada própria (verde): no Studio, "Linha" por cor dá a ela a
+  // ferramenta Sketch e ao vermelho a lâmina.
+  for (const l of penLayers(store)) {
+    for (const p of store.worldPaths(l)) {
+      const pts = flattenPath(p, 0.1).map(([x, y]) => [x - b.minX, y - b.minY] as [number, number]);
+      lines.push({ layer: 'CANETA', closed: p.closed, points: pts });
+    }
+  }
+  return buildDxf(lines, [{ name: 'CORTE', color: 1 }, { name: 'CANETA', color: 3 }, { name: 'PAGINA', color: 8 }], h);
 }
 
 /** Caixa do que vai ser impresso (sem as linhas de corte). */
@@ -213,7 +230,7 @@ export function contentBounds(store: IllustrationStore, skipCut: boolean): Bound
   let b: Bounds | null = null;
   const layers = store.layers();
   for (const l of layers) {
-    if (!l.visible || (skipCut && l.cut) || l.mask) continue;
+    if (!l.visible || (skipCut && (l.cut || l.pen)) || l.mask) continue;
     let lb = store.worldBounds(l);
     const pad = Math.max(l.stroke && l.kind !== 'imagem' ? l.strokeWidth / 2 : 0, effectsPad(l));
     const mask = l.clipBy ? layers.find((m) => m.id === l.clipBy && m.mask) : undefined;

@@ -64,6 +64,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskProjectMembership> TaskProjectMemberships => Set<TaskProjectMembership>();
     public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
     public DbSet<ImageLibraryItem> ImageLibrary => Set<ImageLibraryItem>();
+    public DbSet<ImagePreferences> ImagePreferences => Set<ImagePreferences>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -116,6 +117,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.Data).IsRequired();
             e.HasIndex(p => new { p.UserId, p.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ImagePreferences>(e =>
+        {
+            e.ToTable("imagem_preferencias");
+            e.HasKey(p => p.UserId);
+            e.Property(p => p.Data).IsRequired();
+            e.HasOne<User>().WithOne().HasForeignKey<ImagePreferences>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ImageLibraryItem>(e =>

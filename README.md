@@ -208,6 +208,11 @@ Comum aos quatro modos:
   (hachurada na prévia) e o **Pacote pro Silhouette Studio** traz o PNG da página
   a 300 DPI, o **DXF** do corte (R12, em mm, com a moldura da página pra alinhar,
   `dxf.ts`) e o passo a passo. DXF também na peça solta, na Ilustração e no Pacote.
+  **Folha de adesivos**: meio-corte nas peças (vermelho) e corte total em volta da
+  folha (azul), em camadas separadas e também em dois DXF, pra cortar em duas
+  passadas. **Folha de teste de alinhamento** (quadrados com corte 1 mm maior) e
+  **anotações de material** (lâmina, velocidade, força, passadas) guardadas na conta
+  (`/api/imagens/preferencias`) e repetidas no passo a passo.
 - **Marcas de registro** impressas pelo editor (fluxo sem o Studio), com a área
   delas reservada.
 - **Simular corte**: a lâmina percorre as linhas na peça ou na folha, com o
@@ -321,6 +326,8 @@ A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela intei
   baixo; no SVG de corte a linha sai já intersectada). Texto em **círculo
   completo** com um clique; texto usa a regra não-zero das fontes (letra cursiva
   sobreposta não vira furo).
+- **Caneta da máquina (Sketch)**: camadas marcadas não imprimem nem cortam e saem
+  numa camada verde CANETA no DXF/SVG de corte.
 - **Lápis** (N, mão livre alisada e ajustada em curvas) e **borracha vetorial**
   (Shift+E, tira a faixa varrida dos vetores).
 - **Guias** arrastadas das réguas (solte na régua pra apagar) e **grade** com
@@ -456,6 +463,7 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `PUT /api/folders/{id}` | Renomeia pasta |
 | `DELETE /api/folders/{id}` | Exclui pasta (notas voltam a "sem pasta") |
 | `GET/PUT/DELETE /api/imagens/biblioteca[/{id}]` | Biblioteca de artes do Editor de Imagens (a lista traz só miniaturas) |
+| `GET/PUT /api/imagens/preferencias` | Preferências da conta no Editor de Imagens (anotações de material) |
 | `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |
 | `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
 | `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |

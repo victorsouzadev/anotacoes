@@ -25,6 +25,7 @@ public static class ImagemEndpoints
         MapUpscale(app);
         MapNomes(app);
         MapBiblioteca(app);
+        MapPreferencias(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -58,6 +59,47 @@ public static class ImagemEndpoints
             project.Data = "{}"; // libera o espaço das artes já na exclusão
             await db.SaveChangesAsync();
             return Results.NoContent();
+        });
+    }
+
+    private const int MaxPreferenciasBytes = 64 * 1024;
+
+    /// <summary>Preferências da conta no editor (anotações de material etc.).</summary>
+    private static void MapPreferencias(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/imagens/preferencias").RequireAuthorization();
+
+        group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var pref = await db.ImagePreferences.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == user.UserId());
+            return Results.Ok(new { data = pref?.Data ?? "{}" });
+        });
+
+        group.MapPut("/", async (ImagePreferencesRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var data = req.Data ?? "{}";
+            if (data.Length > MaxPreferenciasBytes) return Results.Json(new { error = "Preferências grandes demais." }, statusCode: 413);
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(data);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                    return Results.BadRequest(new { error = "Preferências precisam ser um objeto JSON." });
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return Results.BadRequest(new { error = "JSON inválido." });
+            }
+            var userId = user.UserId();
+            var pref = await db.ImagePreferences.FirstOrDefaultAsync(p => p.UserId == userId);
+            if (pref is null)
+            {
+                pref = new ImagePreferences { UserId = userId };
+                db.ImagePreferences.Add(pref);
+            }
+            pref.Data = data;
+            pref.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new { data = pref.Data });
         });
     }
 

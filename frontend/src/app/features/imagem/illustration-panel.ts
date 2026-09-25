@@ -162,6 +162,7 @@ function loadOpen(): Record<string, boolean> {
                 </div>
                 @if (store.primary(); as l) {
                   <label class="il-check"><input type="checkbox" [checked]="l.cut" (change)="toggleCut(l)" /> <il-icon name="cut" [size]="13" /> Linha de corte (vai pro SVG de corte)</label>
+                  <label class="il-check"><input type="checkbox" [checked]="!!l.pen" (change)="togglePen(l)" /> <il-icon name="pencil" [size]="13" /> Caneta da máquina (Sketch) — não imprime nem corta</label>
                 }
                 <span class="il-mini-title">Amostras <small>(clique aplica em {{ store.paintTarget() === 'fill' ? 'preenchimento' : 'traço' }})</small></span>
                 <div class="il-swatches">
@@ -682,9 +683,15 @@ export class IllustrationPanelComponent {
     }
   }
 
+  togglePen(l: Layer): void {
+    const pen = !l.pen;
+    // Caneta desenha o traço: sem traço não haveria o que desenhar.
+    this.store.patchSelection(pen ? { pen, cut: false, stroke: l.stroke ?? '#2a9d8f', strokeWidth: l.stroke ? l.strokeWidth : 0.3 } : { pen });
+  }
+
   toggleCut(l: Layer): void {
     const cut = !l.cut;
-    this.store.patchSelection(cut ? { cut, stroke: l.stroke ?? CUT_COLOR, strokeWidth: l.stroke ? l.strokeWidth : 0.3 } : { cut });
+    this.store.patchSelection(cut ? { cut, pen: false, stroke: l.stroke ?? CUT_COLOR, strokeWidth: l.stroke ? l.strokeWidth : 0.3 } : { cut });
   }
 
   replaceColor(from: string, to: string): void {

@@ -926,9 +926,9 @@ export class IllustrationStore {
     this.layers.update((list) => list.map((l) => {
       if (!set.has(l.id) || (l.kind !== 'texto' && l.kind !== 'forma')) return l;
       const paths = this.localPaths(l);
-      const { id, name, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask } = l;
+      const { id, name, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, pen } = l;
       const label = l.kind === 'texto' ? `“${l.text.split('\n')[0].slice(0, 24)}”` : name;
-      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, fillRule: fillRuleOf(l), kind: 'caminho', paths } as PathLayer;
+      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, pen, fillRule: fillRuleOf(l), kind: 'caminho', paths } as PathLayer;
     }));
   }
 

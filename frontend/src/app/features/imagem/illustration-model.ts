@@ -57,6 +57,8 @@ interface LayerBase {
   /** Contornos de texto convertidos guardam a regra das fontes (não-zero):
    * letras cursivas se sobrepõem e, par-ímpar, a sobreposição viraria furo. */
   fillRule?: 'nonzero' | 'evenodd';
+  /** Desenhada pela caneta da máquina (Sketch): não imprime nem corta. */
+  pen?: boolean;
 }
 
 export function fillRuleOf(l: Pick<LayerBase, 'fillRule'> & { kind: LayerKind }): 'nonzero' | 'evenodd' {
