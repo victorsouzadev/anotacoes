@@ -142,6 +142,8 @@ export function buildContourLayer(
   gapPx: number,
   color: string,
   outerOnly = false,
+  /** 'dupla': um filete branco no meio da borda, como duas bordas. */
+  style: 'solida' | 'dupla' = 'solida',
 ): HTMLCanvasElement {
   const m = Math.max(0, Math.round(marginPx));
   const g = Math.max(0, Math.round(gapPx));
@@ -167,7 +169,8 @@ export function buildContourLayer(
     const d = Math.sqrt(dist2[i]);
     if (d > limite) continue;
     const o = i * 4;
-    if (g > 0 && d <= limiteGap) {
+    const filete = style === 'dupla' && m >= 3 && d > g + m * 0.4 && d <= g + m * 0.6;
+    if ((g > 0 && d <= limiteGap) || filete) {
       dados[o] = 255; dados[o + 1] = 255; dados[o + 2] = 255;
     } else {
       dados[o] = r; dados[o + 1] = gCor; dados[o + 2] = b;

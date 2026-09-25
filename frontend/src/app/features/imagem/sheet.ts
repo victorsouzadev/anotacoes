@@ -24,6 +24,7 @@ export interface PackInput {
 export interface PlacedPiece extends PackInput {
   xMm: number;
   yMm: number;
+  rot?: Rotation;
 }
 
 export interface PackResult {
@@ -73,54 +74,123 @@ export function packShelves(
 
 const MM_TO_PT = 72 / 25.4;
 
-/** Monta um PDF de página única com o JPEG ocupando a página inteira, no
- * tamanho físico em mm. Estrutura mínima: catálogo, página, conteúdo e o
- * XObject de imagem com DCTDecode (JPEG cru, sem recomprimir). */
-export function jpegToPdf(jpeg: Uint8Array, wMm: number, hMm: number, pxW: number, pxH: number): Blob {
-  const wPt = wMm * MM_TO_PT;
-  const hPt = hMm * MM_TO_PT;
+/** Peça posta na folha. `wMm`/`hMm` são da caixa já girada; `rot` é o giro
+ * da peça em volta do próprio centro. */
+export type Rotation = 0 | 90 | 180 | 270;
+
+// ---------- marcas de registro ----------
+
+/** Área reservada às marcas nas bordas da folha (a peça não entra ali). */
+export const REG_MARGIN_MM = 20;
+const REG_INSET_MM = 10;
+const REG_SQUARE_MM = 5;
+const REG_ARM_MM = 20;
+const REG_LINE_MM = 0.5;
+
+export interface MarkRect { x: number; y: number; w: number; h: number }
+
+/** Marcas no padrão das plotters de impressão-e-corte (quadrado cheio no canto
+ * de cima à esquerda, cantoneiras nos outros dois): o leitor óptico acha a
+ * folha por elas. Em mm, como retângulos cheios. */
+export function registrationMarks(wMm: number, hMm: number): MarkRect[] {
+  const i = REG_INSET_MM, a = REG_ARM_MM, t = REG_LINE_MM;
+  return [
+    { x: i, y: i, w: REG_SQUARE_MM, h: REG_SQUARE_MM },
+    // cima à direita
+    { x: wMm - i - a, y: i, w: a, h: t },
+    { x: wMm - i - t, y: i, w: t, h: a },
+    // baixo à esquerda
+    { x: i, y: hMm - i - t, w: a, h: t },
+    { x: i, y: hMm - i - a, w: t, h: a },
+  ];
+}
+
+// ---------- PDF ----------
+
+export interface PdfPage {
+  wMm: number;
+  hMm: number;
+  /** Operadores de desenho, já em pontos (origem embaixo à esquerda). */
+  content: string;
+  /** Imagem que cobre a página inteira, desenhada antes do conteúdo. */
+  image?: { jpeg: Uint8Array; pxW: number; pxH: number };
+}
+
+/** PDF mínimo de várias páginas: catálogo, páginas, conteúdos e imagens JPEG
+ * (DCTDecode, sem recomprimir). */
+export function buildPdf(pages: PdfPage[]): Blob {
   const enc = new TextEncoder();
-
-  const content = `q\n${wPt.toFixed(2)} 0 0 ${hPt.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
-  const contentBytes = enc.encode(content);
-
-  const objects: Uint8Array[] = [];
-  const push = (s: string): void => { objects.push(enc.encode(s)); };
-
-  push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
-  push('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
-  push(
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${wPt.toFixed(2)} ${hPt.toFixed(2)}] ` +
-    `/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>\nendobj\n`,
-  );
-  push(`4 0 obj\n<< /Length ${contentBytes.length} >>\nstream\n`);
-  objects.push(contentBytes);
-  push('endstream\nendobj\n');
-  push(
-    `5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${pxW} /Height ${pxH} ` +
-    `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
-  );
-  objects.push(jpeg);
-  push('\nendstream\nendobj\n');
-
-  const header = enc.encode('%PDF-1.4\n%âãÏÓ\n');
-  // offsets em bytes de cada objeto numerado (1..5)
+  const chunks: Uint8Array[] = [];
   const offsets: number[] = [];
-  let pos = header.length;
-  const objStarts = [0, 1, 2, 3, 6]; // índice em `objects` onde cada obj (1..5) começa
-  for (let i = 0; i < objects.length; i++) {
-    if (objStarts.includes(i)) offsets.push(pos);
-    pos += objects[i].length;
-  }
+  let pos = 0;
+  const add = (b: Uint8Array): void => { chunks.push(b); pos += b.length; };
+  const header = enc.encode('%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n');
+  add(header);
 
-  let xref = `xref\n0 6\n0000000000 65535 f \n`;
-  for (const off of offsets) xref += `${String(off).padStart(10, '0')} 00000 n \n`;
-  const trailer = `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${pos}\n%%EOF\n`;
-
-  const parts: Uint8Array[] = [header, ...objects, enc.encode(xref + trailer)];
-  const totalLen = parts.reduce((s, p) => s + p.length, 0);
-  const out = new Uint8Array(totalLen);
+  // numeração: 1 catálogo, 2 páginas, depois 3 objetos por página (página, conteúdo, imagem)
+  const pageIds = pages.map((_, k) => 3 + k * 3);
+  const obj = (id: number, body: Uint8Array[]): void => {
+    offsets[id] = pos;
+    add(enc.encode(`${id} 0 obj\n`));
+    for (const b of body) add(b);
+    add(enc.encode('\nendobj\n'));
+  };
+  obj(1, [enc.encode('<< /Type /Catalog /Pages 2 0 R >>')]);
+  obj(2, [enc.encode(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`)]);
+  pages.forEach((pg, k) => {
+    const id = pageIds[k];
+    const wPt = pg.wMm * MM_TO_PT, hPt = pg.hMm * MM_TO_PT;
+    const img = pg.image ? `q\n${wPt.toFixed(2)} 0 0 ${hPt.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n` : '';
+    const content = enc.encode(img + pg.content);
+    const res = pg.image ? `/Resources << /XObject << /Im0 ${id + 2} 0 R >> >> ` : '/Resources << >> ';
+    obj(id, [enc.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${wPt.toFixed(2)} ${hPt.toFixed(2)}] ${res}/Contents ${id + 1} 0 R >>`)]);
+    obj(id + 1, [enc.encode(`<< /Length ${content.length} >>\nstream\n`), content, enc.encode('\nendstream')]);
+    if (pg.image) {
+      obj(id + 2, [
+        enc.encode(`<< /Type /XObject /Subtype /Image /Width ${pg.image.pxW} /Height ${pg.image.pxH} ` +
+          `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${pg.image.jpeg.length} >>\nstream\n`),
+        pg.image.jpeg,
+        enc.encode('\nendstream'),
+      ]);
+    } else {
+      obj(id + 2, [enc.encode('null')]);
+    }
+  });
+  const size = 3 + pages.length * 3;
+  let xref = `xref\n0 ${size}\n0000000000 65535 f \n`;
+  for (let id = 1; id < size; id++) xref += `${String(offsets[id] ?? 0).padStart(10, '0')} 00000 n \n`;
+  const startxref = pos;
+  add(enc.encode(xref + `trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`));
+  const out = new Uint8Array(pos);
   let o = 0;
-  for (const p of parts) { out.set(p, o); o += p.length; }
+  for (const c of chunks) { out.set(c, o); o += c.length; }
   return new Blob([out], { type: 'application/pdf' });
+}
+
+/** Monta um PDF de página única com o JPEG ocupando a página inteira, no
+ * tamanho físico em mm. */
+export function jpegToPdf(jpeg: Uint8Array, wMm: number, hMm: number, pxW: number, pxH: number): Blob {
+  return buildPdf([{ wMm, hMm, content: '', image: { jpeg, pxW, pxH } }]);
+}
+
+type Pt = [number, number];
+interface CubicSeg { c1: Pt | null; c2: Pt | null; to: Pt }
+
+/** Caminhos em mm (origem em cima) como operadores de PDF em pontos. */
+export function pdfPathOps(paths: { start: Pt; segments: CubicSeg[] }[], hMm: number): string {
+  const k = MM_TO_PT;
+  const p = ([x, y]: Pt): string => `${(x * k).toFixed(2)} ${((hMm - y) * k).toFixed(2)}`;
+  let out = '';
+  for (const path of paths) {
+    if (!path.segments.length) continue;
+    out += `${p(path.start)} m\n`;
+    for (const s of path.segments) out += s.c1 && s.c2 ? `${p(s.c1)} ${p(s.c2)} ${p(s.to)} c\n` : `${p(s.to)} l\n`;
+    out += 'h\n';
+  }
+  return out;
+}
+
+export function pdfRectOps(rects: MarkRect[], hMm: number): string {
+  const k = MM_TO_PT;
+  return rects.map((r) => `${(r.x * k).toFixed(2)} ${((hMm - r.y - r.h) * k).toFixed(2)} ${(r.w * k).toFixed(2)} ${(r.h * k).toFixed(2)} re f\n`).join('');
 }

@@ -9,7 +9,12 @@ import {
   polygonToCubics, smallestPathContaining, traceCutPaths,
 } from './contour';
 import { CutShape, fillPolygon, shapeCanvasSize, shapePolygon } from './shapes';
-import { PackInput, PlacedPiece, SheetOrientation, SheetSize, jpegToPdf, packShelves, sheetDimensionsMm } from './sheet';
+import {
+  PackInput, PlacedPiece, REG_MARGIN_MM, SheetOrientation, SheetSize, buildPdf, jpegToPdf, packShelves, pdfPathOps, pdfRectOps,
+  registrationMarks, sheetDimensionsMm,
+} from './sheet';
+import { NestShape, nestShapes } from './sheet-nest';
+import { SimLine, animateCut, flattenCubic, lineLength } from './cut-sim';
 import {
   Erasure, applyErasures, buildContourLayer, encodeCanvas, flipHorizontal, floodRemoveBackground,
   downscale, makeThumb,
@@ -43,7 +48,7 @@ import { uuid } from '../../core/uuid';
 /** O JSON de um projeto salvo (ou do rascunho), de qualquer versão. */
 interface ProjectData {
   smoothing?: number; keepCorners?: boolean; fillHoles?: boolean; sheetSize?: SheetSize;
-  orientation?: SheetOrientation; spacingMm?: number;
+  orientation?: SheetOrientation; spacingMm?: number; packMode?: PackMode; rotate?: boolean; regMarks?: boolean;
   images?: (Partial<ImportedImage> & { original: string })[];
   molde?: TemplateProjectData | null;
   social?: SocialProjectData | null;
@@ -99,7 +104,19 @@ interface ImportedImage {
   /** A foto de antes do recorte por IA (o recorte vira o original). Só na
    * sessão: salvar as duas dobraria o projeto. */
   preAi?: { canvas: HTMLCanvasElement; dataUrl: string };
+  /** Acabamento da borda impressa (não muda a linha de corte). */
+  borderStyle: BorderStyle;
+  /** Sombra suave da arte sobre a borda. */
+  artShadow: boolean;
 }
+
+type BorderStyle = 'solida' | 'dupla' | 'tracejada';
+
+const BORDER_STYLES: { id: BorderStyle; label: string }[] = [
+  { id: 'solida', label: 'Lisa' },
+  { id: 'dupla', label: 'Dupla' },
+  { id: 'tracejada', label: 'Tracejada' },
+];
 
 interface Piece {
   canvas: HTMLCanvasElement;
@@ -134,7 +151,16 @@ interface Prefs {
   sheetSize: SheetSize;
   orientation: SheetOrientation;
   spacingMm: number;
+  packMode: PackMode;
+  rotate: boolean;
+  regMarks: boolean;
 }
+
+/** Linhas: caixas em prateleiras (previsível). Silhueta: pelo formato, com giro. */
+type PackMode = 'linhas' | 'silhueta';
+
+/** Velocidade média de corte pra estimativa de tempo, em mm/s. */
+const CUT_SPEED_MM_S = 60;
 
 const MAX_MARGIN_MM = 20;
 const MAX_GAP_MM = 10;
@@ -182,6 +208,7 @@ const DEFAULT_PREFS: Prefs = {
   smoothing: 4, keepCorners: true, fillHoles: true, outerOnly: false, brushMm: 4,
   openSections: { imagens: true, contorno: true },
   sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
+  packMode: 'silhueta', rotate: true, regMarks: false,
 };
 
 /** Passos do painel, na ordem do fluxo de trabalho. */
@@ -404,6 +431,7 @@ function loadPrefs(): Prefs {
                 </select>
                 <il-num label="Espaço" title="Espaço entre peças" unit="mm" [value]="spacingMm()" [min]="0" [max]="10" [decimals]="0" (valueChange)="onSpacingInput(ev($event.value))" />
               </div>
+              <button type="button" class="il-btn" [class.il-on]="simulating()" [disabled]="!images().length" data-tip="A lâmina percorre as linhas de corte" (click)="simulateCut()"><il-icon name="cut" [size]="13" /> {{ simulating() ? 'Parar' : 'Simular corte' }}</button>
               <button type="button" class="il-btn il-primary" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="download" [size]="13" /> PDF da folha</button>
             }
           </div>
@@ -503,6 +531,12 @@ function loadPrefs(): Prefs {
                         <label class="il-range"><span>Borda</span><input type="range" min="0" [max]="maxMarginMm" step="0.1" [value]="sel.marginMm" (input)="onMarginInput($event)" /><b>{{ sel.marginMm.toFixed(1) }}</b></label>
                         <label class="il-range"><span>Respiro</span><input type="range" min="0" [max]="maxGapMm" step="0.1" [value]="sel.gapMm" (input)="onGapInput($event)" /><b>{{ sel.gapMm.toFixed(1) }}</b></label>
                         <p class="il-note">Borda e respiro em mm. O respiro é a faixa branca entre o desenho e a borda colorida.</p>
+                        <div class="il-seg pc-seg pc-seg-full">
+                          @for (b of borderStyles; track b.id) {
+                            <button type="button" [class.il-on]="sel.borderStyle === b.id" (click)="updateSelected({ borderStyle: b.id })">{{ b.label }}</button>
+                          }
+                        </div>
+                        <label class="il-check"><input type="checkbox" [checked]="sel.artShadow" (change)="updateSelected({ artShadow: !sel.artShadow })" /> Sombra da arte sobre a borda</label>
                         <div class="il-row">
                           <input type="color" class="il-color-input" [value]="sel.color" (input)="onColorInput($event)" aria-label="Cor da borda" />
                           @for (sw of swatches; track sw) {
@@ -555,6 +589,7 @@ function loadPrefs(): Prefs {
                         @if (sel.erasures.length) {
                           <div class="il-row"><button type="button" class="il-btn il-grow" (click)="undoErase()">Desfazer</button><button type="button" class="il-btn il-grow" (click)="clearErasures()">Limpar borrachadas</button></div>
                         }
+                        <button type="button" class="il-btn il-wide" [class.il-on]="simulating()" (click)="simulateCut()"><il-icon name="cut" [size]="14" /> {{ simulating() ? 'Parar simulação' : 'Simular o corte desta peça' }}</button>
                         <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'corte'" (click)="setTool('corte')"><il-icon name="cut" [size]="14" /> {{ tool() === 'corte' ? 'Clique na linha a remover…' : 'Remover linha de corte' }}</button>
                         @if (sel.cutRemovals.length) {
                           <div class="il-row"><button type="button" class="il-btn il-grow" (click)="undoCutRemoval()">Desfazer</button><button type="button" class="il-btn il-grow" (click)="restoreCuts()">Restaurar linhas</button></div>
@@ -578,9 +613,24 @@ function loadPrefs(): Prefs {
                       </select>
                     </div>
                     <label class="il-range"><span>Espaço</span><input type="range" min="0" max="10" step="1" [value]="spacingMm()" (input)="onSpacingInput($event)" /><b>{{ spacingMm().toFixed(0) }} mm</b></label>
+                    <div class="il-seg pc-seg pc-seg-full">
+                      <button type="button" [class.il-on]="packMode() === 'silhueta'" data-help="Pelo formato das peças: uma entra no vão da outra" (click)="setSheetOpt('packMode', 'silhueta')">Encaixe por silhueta</button>
+                      <button type="button" [class.il-on]="packMode() === 'linhas'" data-help="Em fileiras, pelas caixas das peças" (click)="setSheetOpt('packMode', 'linhas')">Em linhas</button>
+                    </div>
+                    @if (packMode() === 'silhueta') {
+                      <label class="il-check"><input type="checkbox" [checked]="allowRotate()" (change)="setSheetOpt('rotate', !allowRotate())" /> Girar peças pra caber mais</label>
+                    }
+                    <label class="il-check"><input type="checkbox" [checked]="regMarks()" (change)="setSheetOpt('regMarks', !regMarks())" /> Marcas de registro (Silhouette, Cricut)</label>
+                    <div class="il-row">
+                      <button type="button" class="il-btn il-grow" [disabled]="!selected()" data-help="Põe o máximo de cópias da imagem selecionada que cabe" (click)="fillSheet()"><il-icon name="sheet" [size]="13" /> Encher a folha</button>
+                      <button type="button" class="il-btn il-grow" [class.il-on]="simulating()" [disabled]="!images().length" (click)="simulateCut()"><il-icon name="cut" [size]="13" /> {{ simulating() ? 'Parar' : 'Simular corte' }}</button>
+                    </div>
+                    @if (fillStatus()) { <p class="il-note">{{ fillStatus() }}</p> }
+                    @if (cutLengthLabel()) { <p class="il-note">{{ cutLengthLabel() }}</p> }
                     <p class="il-note">Junta todas as peças (e as cópias) numa folha pra imprimir de uma vez. Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem.</p>
                   </div></section>
                   <div class="il-export-list">
+                    <button type="button" class="il-export" [disabled]="!images().length" (click)="exportPrintCutPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF impressão + corte</strong><small>Página 1 pra imprimir, página 2 com o corte em vetor</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF da folha</strong><small>No tamanho físico, pronto pra imprimir</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPng()"><il-icon name="image" [size]="20" /><span><strong>PNG da folha ({{ dpi }} DPI)</strong><small>Imagem pra imprimir em outro programa</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetSvg()"><il-icon name="cut" [size]="20" /><span><strong>SVG de corte da folha</strong><small>Só as linhas de corte, em mm, nas mesmas posições</small></span></button>
@@ -725,6 +775,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   readonly modes = MODES;
   readonly pcTools = PC_TOOLS;
   readonly pcTabs = PC_TABS;
+  readonly borderStyles = BORDER_STYLES;
 
   private prefs = loadPrefs();
 
@@ -750,6 +801,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   sheetSize = signal<SheetSize>(this.prefs.sheetSize);
   orientation = signal<SheetOrientation>(this.prefs.orientation);
   spacingMm = signal(this.prefs.spacingMm);
+  packMode = signal<PackMode>(this.prefs.packMode ?? 'silhueta');
+  allowRotate = signal(this.prefs.rotate ?? true);
+  regMarks = signal(this.prefs.regMarks ?? false);
+  simulating = signal(false);
+  cutLengthMm = signal(0);
+  fillStatus = signal('');
+  private stopSim: (() => void) | null = null;
+  private nestCache: { key: string; placed: PlacedPiece[]; overflow: PackInput[] } | null = null;
+  private maskCache = new WeakMap<HTMLCanvasElement, NestShape & { key: number }>();
+  private maskSeq = 0;
   tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir'>('nenhuma');
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
@@ -809,6 +870,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     // como sujo e agenda uma gravação no navegador.
     effect(() => {
       this.images(); this.sheetSize(); this.orientation(); this.spacingMm(); this.projectName();
+      this.packMode(); this.allowRotate(); this.regMarks();
       this.templates.svgText(); this.templates.slots(); this.templates.photos(); this.templates.widthMm();
       this.social.image(); this.social.canUndo(); this.social.canRedo(); this.social.exportW();
       this.illustration.layers(); this.illustration.widthMm(); this.illustration.heightMm();
@@ -920,6 +982,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       color: this.prefs.color, shape: this.prefs.shape, mirrored: false, copies: 1,
       outerOnly: this.prefs.outerOnly, erasures: [], cutRemovals: [], editVersion: 0,
       smoothing: this.prefs.smoothing, keepCorners: this.prefs.keepCorners, fillHoles: this.prefs.fillHoles,
+      borderStyle: 'solida', artShadow: false,
       ...overrides,
     };
     // projeto salvo por uma versão anterior pode não trazer todas as listas —
@@ -931,6 +994,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     item.smoothing ??= this.prefs.smoothing;
     item.keepCorners ??= this.prefs.keepCorners;
     item.fillHoles ??= this.prefs.fillHoles;
+    item.borderStyle ??= 'solida';
+    item.artShadow ??= false;
     // remoções de fundo salvas são reaplicadas sobre a arte original
     for (const r of item.bgRemovals) floodRemoveBackground(item.source, r.x, r.y, r.tolerance);
     if (item.bgRemovals.length) {
@@ -1068,7 +1133,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- edição da imagem selecionada ----------
 
-  private updateSelected(patch: Partial<ImportedImage>): void {
+  updateSelected(patch: Partial<ImportedImage>): void {
     const id = this.selectedId();
     if (!id) return;
     this.images.update((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -1628,6 +1693,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  setSheetOpt(key: 'packMode' | 'rotate' | 'regMarks', value: PackMode | boolean): void {
+    if (key === 'packMode') this.packMode.set(value as PackMode);
+    else if (key === 'rotate') this.allowRotate.set(value as boolean);
+    else this.regMarks.set(value as boolean);
+    this.prefs.packMode = this.packMode();
+    this.prefs.rotate = this.allowRotate();
+    this.prefs.regMarks = this.regMarks();
+    this.savePrefs();
+    this.scheduleRender();
+  }
+
   onSpacingInput(event: Event): void {
     this.markInteracting();
     this.spacingMm.set(Number((event.target as HTMLInputElement).value));
@@ -1662,7 +1738,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sig = JSON.stringify([
       item.widthMm, item.marginMm, item.gapMm, item.color, item.shape, item.mirrored,
       item.srcVersion, item.outerOnly, item.editVersion, item.cutRemovals.length,
-      item.smoothing, item.keepCorners, item.fillHoles, largura,
+      item.smoothing, item.keepCorners, item.fillHoles, item.borderStyle, item.artShadow, largura,
     ]);
     if (quality === 'full') return this.buildPiece(item, largura);
     const cached = this.pieceCache.get(item.id);
@@ -1708,7 +1784,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const total = marginPx + gapPx;
 
     if (item.shape === 'silhueta') {
-      const contour = buildContourLayer(source, marginPx, gapPx, item.color, item.outerOnly);
+      const contour = buildContourLayer(source, marginPx, gapPx, item.color, item.outerOnly, item.borderStyle === 'dupla' ? 'dupla' : 'solida');
+      if (item.borderStyle === 'tracejada' && marginPx >= 4) this.dashBorder(contour, source, marginPx, gapPx, item.outerOnly);
       applyErasures(contour, scaleErasures(item.erasures, escala), total, total, item.mirrored, source.width);
 
       const canvas = document.createElement('canvas');
@@ -1716,6 +1793,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       canvas.height = contour.height;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(contour, 0, 0);
+      if (item.artShadow) this.shadowOnBorder(ctx, source, total, total, ppm);
       ctx.drawImage(source, total, total);
 
       // tudo em mm vezes o ppm DESTA peça, pra a prévia (que trabalha numa
@@ -1748,6 +1826,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (total > 0) {
       const cctx = contour.getContext('2d')!;
       fillPolygon(cctx, outer, item.color);
+      if (item.borderStyle === 'dupla' && marginPx >= 3) {
+        fillPolygon(cctx, shapePolygon(item.shape, W, H, marginPx * 0.4, cornerRadius), '#ffffff');
+        fillPolygon(cctx, shapePolygon(item.shape, W, H, marginPx * 0.6, cornerRadius), item.color);
+      }
+      if (item.borderStyle === 'tracejada' && marginPx >= 4) {
+        this.dashPolygon(cctx, shapePolygon(item.shape, W, H, marginPx / 2, cornerRadius), marginPx);
+      }
       if (gapPx > 0) fillPolygon(cctx, shapePolygon(item.shape, W, H, marginPx, cornerRadius), '#ffffff');
       applyErasures(contour, scaleErasures(item.erasures, escala), artX, artY, item.mirrored, source.width);
     }
@@ -1757,12 +1842,57 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     canvas.height = H;
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(contour, 0, 0);
+    if (item.artShadow) this.shadowOnBorder(ctx, source, artX, artY, ppm);
     ctx.drawImage(source, artX, artY);
     const mantidos = this.dropRemovedCuts([outer], item, artX, artY, escala, source.width);
     return {
       canvas, paths: mantidos, cuts: this.fitCuts(mantidos, ppm),
       ppm, artX, artY, scale: escala,
     };
+  }
+
+  /** Linha tracejada branca no meio da borda: o contorno do meio da faixa é
+   * traçado de novo e pintado por cima. */
+  private dashBorder(contour: HTMLCanvasElement, source: HTMLCanvasElement, marginPx: number, gapPx: number, outerOnly: boolean): void {
+    const half = Math.round(marginPx / 2);
+    const mid = buildContourLayer(source, half, gapPx, '#000000', outerOnly);
+    const polys = traceCutPaths(mid, { smoothSigma: Math.max(1, marginPx / 6), simplifyEpsilon: 0.5, minArea: 16 });
+    const ctx = contour.getContext('2d')!;
+    const off = marginPx - half;
+    ctx.save();
+    ctx.translate(off, off);
+    ctx.globalCompositeOperation = 'source-atop';
+    for (const poly of polys) this.dashPolygon(ctx, poly, marginPx);
+    ctx.restore();
+  }
+
+  private dashPolygon(ctx: CanvasRenderingContext2D, poly: Polygon, marginPx: number): void {
+    if (poly.length < 3) return;
+    const w = Math.max(1, marginPx * 0.16);
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([w * 2.6, w * 2.2]);
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Sombra da arte caindo na borda. Fica só onde já há borda
+   * (source-atop): não aumenta a peça nem muda a linha de corte. */
+  private shadowOnBorder(ctx: CanvasRenderingContext2D, source: HTMLCanvasElement, x: number, y: number, ppm: number): void {
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
+    ctx.shadowBlur = Math.max(1, 0.8 * ppm);
+    ctx.shadowOffsetX = 0.5 * ppm;
+    ctx.shadowOffsetY = 0.7 * ppm;
+    ctx.drawImage(source, x, y);
+    ctx.restore();
   }
 
   // ---------- render ----------
@@ -1858,10 +1988,12 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     ctx.setLineDash([]);
   }
 
-  private packCurrent(): { placed: PlacedPiece[]; overflow: PackInput[]; wMm: number; hMm: number } {
+  private packCurrent(items: ImportedImage[] = this.images()): { placed: PlacedPiece[]; overflow: PackInput[]; wMm: number; hMm: number } {
     const { wMm, hMm } = sheetDimensionsMm(this.sheetSize(), this.orientation());
+    const margin = this.regMarks() ? REG_MARGIN_MM : SHEET_MARGIN_MM;
+    if (this.packMode() === 'silhueta') return { ...this.nestPieces(items, wMm, hMm, margin), wMm, hMm };
     const inputs: PackInput[] = [];
-    for (const item of this.images()) {
+    for (const item of items) {
       const piece = this.pieceFor(item);
       const pw = piece.canvas.width / piece.ppm;
       const ph = piece.canvas.height / piece.ppm;
@@ -1869,8 +2001,113 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         inputs.push({ id: `${item.id}#${c}`, wMm: pw, hMm: ph });
       }
     }
-    const { placed, overflow } = packShelves(inputs, wMm, hMm, SHEET_MARGIN_MM, this.spacingMm());
+    const { placed, overflow } = packShelves(inputs, wMm, hMm, margin, this.spacingMm());
     return { placed, overflow, wMm, hMm };
+  }
+
+  /** Máscara da peça numa grade de 1 mm (o que a peça ocupa, borda inclusa). */
+  private maskOf(piece: Piece): NestShape & { key: number } {
+    const hit = this.maskCache.get(piece.canvas);
+    if (hit) return hit;
+    const w = Math.max(1, Math.ceil(piece.canvas.width / piece.ppm));
+    const h = Math.max(1, Math.ceil(piece.canvas.height / piece.ppm));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(piece.canvas, 0, 0, (piece.canvas.width / piece.ppm), (piece.canvas.height / piece.ppm));
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) mask[i] = data[i * 4 + 3] > 16 ? 1 : 0;
+    const shape = { id: '', w, h, mask, key: ++this.maskSeq };
+    this.maskCache.set(piece.canvas, shape);
+    return shape;
+  }
+
+  private nestPieces(items: ImportedImage[], wMm: number, hMm: number, margin: number): { placed: PlacedPiece[]; overflow: PackInput[] } {
+    const shapes: NestShape[] = [];
+    const dims = new Map<string, { pw: number; ph: number }>();
+    for (const item of items) {
+      const piece = this.pieceFor(item);
+      const m = this.maskOf(piece);
+      const pw = piece.canvas.width / piece.ppm, ph = piece.canvas.height / piece.ppm;
+      for (let c = 0; c < item.copies; c++) {
+        const id = `${item.id}#${c}`;
+        shapes.push({ id, w: m.w, h: m.h, mask: m.mask });
+        dims.set(id, { pw, ph });
+      }
+    }
+    const key = JSON.stringify([
+      shapes.map((sh) => `${sh.id}:${this.maskOf(this.pieceFor(this.itemOf(sh.id)!)).key}`),
+      wMm, hMm, margin, this.spacingMm(), this.allowRotate(),
+    ]);
+    if (this.nestCache?.key === key) return this.nestCache;
+    const r = nestShapes(shapes, {
+      sheetW: Math.floor(wMm), sheetH: Math.floor(hMm), margin: Math.ceil(margin),
+      spacing: Math.round(this.spacingMm()), rotate: this.allowRotate(),
+    });
+    const placed: PlacedPiece[] = r.placed.map((p) => {
+      const { pw, ph } = dims.get(p.id)!;
+      const turned = p.rot === 90 || p.rot === 270;
+      return { id: p.id, xMm: p.x, yMm: p.y, wMm: turned ? ph : pw, hMm: turned ? pw : ph, rot: p.rot };
+    });
+    const overflow = r.overflow.map((id) => ({ id, wMm: dims.get(id)!.pw, hMm: dims.get(id)!.ph }));
+    this.nestCache = { key, placed, overflow };
+    return this.nestCache;
+  }
+
+  /** Onde a peça vai na folha: centro, giro e tamanho sem giro (mm). */
+  private frameOf(p: PlacedPiece, piece: Piece): { cx: number; cy: number; angle: number; pw: number; ph: number } {
+    return {
+      cx: p.xMm + p.wMm / 2, cy: p.yMm + p.hMm / 2,
+      angle: ((p.rot ?? 0) * Math.PI) / 180,
+      pw: piece.canvas.width / piece.ppm, ph: piece.canvas.height / piece.ppm,
+    };
+  }
+
+  /** Desenha a peça posta (com o giro) num canvas de `scale` px/mm. */
+  private drawPlaced(ctx: CanvasRenderingContext2D, p: PlacedPiece, piece: Piece, scale: number, cuts: boolean): void {
+    const f = this.frameOf(p, piece);
+    ctx.save();
+    ctx.translate(f.cx * scale, f.cy * scale);
+    ctx.rotate(f.angle);
+    ctx.translate((-f.pw / 2) * scale, (-f.ph / 2) * scale);
+    ctx.drawImage(piece.canvas, 0, 0, f.pw * scale, f.ph * scale);
+    if (cuts) {
+      const k = scale / piece.ppm;
+      ctx.scale(k, k);
+      this.strokeCutPaths(ctx, piece.cuts, Math.max(1.2, 1.2 / k));
+    }
+    ctx.restore();
+  }
+
+  /** Ponto da peça (px da peça) → mm na folha, com o giro. */
+  private toSheetMm(p: PlacedPiece, piece: Piece): (pt: Point) => Point {
+    const f = this.frameOf(p, piece);
+    const cos = Math.cos(f.angle), sin = Math.sin(f.angle);
+    return ([x, y]) => {
+      const u = x / piece.ppm - f.pw / 2, v = y / piece.ppm - f.ph / 2;
+      return [f.cx + u * cos - v * sin, f.cy + u * sin + v * cos];
+    };
+  }
+
+  private drawMarks(ctx: CanvasRenderingContext2D, wMm: number, hMm: number, scale: number): void {
+    if (!this.regMarks()) return;
+    ctx.fillStyle = '#000000';
+    for (const r of registrationMarks(wMm, hMm)) ctx.fillRect(r.x * scale, r.y * scale, r.w * scale, r.h * scale);
+  }
+
+  /** Todas as linhas de corte da folha, em mm. */
+  private sheetCutsMm(placed: PlacedPiece[], quality: PieceQuality): CubicPath[] {
+    const out: CubicPath[] = [];
+    for (const p of placed) {
+      const item = this.itemOf(p.id);
+      if (!item) continue;
+      const piece = this.pieceFor(item, quality);
+      const map = this.toSheetMm(p, piece);
+      out.push(...piece.cuts.map((c) => mapCubicPath(c, map)));
+    }
+    return out;
   }
 
   private itemOf(placedId: string): ImportedImage | undefined {
@@ -1897,19 +2134,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     for (const p of placed) {
       const item = this.itemOf(p.id);
       if (!item) continue;
-      const piece = this.pieceFor(item);
-      const x = p.xMm * scale;
-      const y = p.yMm * scale;
-      const w = p.wMm * scale;
-      const h = p.hMm * scale;
-      ctx.drawImage(piece.canvas, x, y, w, h);
-      const f = scale / piece.ppm; // px da peça → px do preview
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.scale(f, f);
-      this.strokeCutPaths(ctx, piece.cuts, Math.max(1.2, 1.2 / f));
-      ctx.restore();
+      this.drawPlaced(ctx, p, this.pieceFor(item), scale, true);
     }
+    this.drawMarks(ctx, wMm, hMm, scale);
+    this.cutLengthMm.set(this.sheetCutsMm(placed, 'preview').reduce((sum, c) => sum + lineLength(flattenCubic(c, (q) => q, 6)), 0));
     this.applyZoom(canvas, this.sheetStage?.nativeElement);
   }
 
@@ -2001,7 +2229,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- exportação da folha ----------
 
-  private renderSheetHiRes(): { canvas: HTMLCanvasElement; wMm: number; hMm: number } | null {
+  private renderSheetHiRes(): { canvas: HTMLCanvasElement; wMm: number; hMm: number; placed: PlacedPiece[] } | null {
     const { placed, wMm, hMm } = this.packCurrent();
     if (!placed.length) return null;
     const scale = EXPORT_DPI / 25.4; // px por mm
@@ -2015,10 +2243,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     for (const p of placed) {
       const item = this.itemOf(p.id);
       if (!item) continue;
-      const piece = this.pieceFor(item, 'full');
-      ctx.drawImage(piece.canvas, p.xMm * scale, p.yMm * scale, p.wMm * scale, p.hMm * scale);
+      this.drawPlaced(ctx, p, this.pieceFor(item, 'full'), scale, false);
     }
-    return { canvas, wMm, hMm };
+    this.drawMarks(ctx, wMm, hMm, scale);
+    return { canvas, wMm, hMm, placed };
   }
 
   exportSheetPng(): void {
@@ -2045,21 +2273,95 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   exportSheetSvg(): void {
     const { placed, wMm, hMm } = this.packCurrent();
     if (!placed.length) return;
-    // viewBox em mm: os polígonos das peças (em px) são convertidos por ppm
-    let paths = '';
-    for (const p of placed) {
-      const item = this.itemOf(p.id);
-      if (!item) continue;
-      const piece = this.pieceFor(item, 'full');
-      const paraMm = ([x, y]: Point): Point => [p.xMm + x / piece.ppm, p.yMm + y / piece.ppm];
-      const mm = piece.cuts.map((c) => mapCubicPath(c, paraMm));
-      paths += `  <path d="${cubicPathsToData(mm)}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
-    }
+    const d = cubicPathsToData(this.sheetCutsMm(placed, 'full'));
     const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
       `<svg xmlns="http://www.w3.org/2000/svg" width="${wMm}mm" height="${hMm}mm" viewBox="0 0 ${wMm} ${hMm}">\n` +
-      paths +
+      `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n` +
       `</svg>\n`;
     this.downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `folha-${this.sheetSize()}-corte.svg`);
+  }
+
+  /** Um PDF só: página 1 pra imprimir (com as marcas, se ligadas), página 2
+   * com as linhas de corte em vetor, nas mesmas posições. */
+  exportPrintCutPdf(): void {
+    const sheet = this.renderSheetHiRes();
+    if (!sheet) return;
+    const cuts = this.sheetCutsMm(sheet.placed, 'full');
+    sheet.canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const jpeg = new Uint8Array(await blob.arrayBuffer());
+      const marks = this.regMarks() ? `0 g\n${pdfRectOps(registrationMarks(sheet.wMm, sheet.hMm), sheet.hMm)}` : '';
+      const cutPage = `1 0 0 RG 0.57 w 1 J 1 j\n${pdfPathOps(cuts, sheet.hMm)}S\n${marks}`;
+      const pdf = buildPdf([
+        { wMm: sheet.wMm, hMm: sheet.hMm, content: '', image: { jpeg, pxW: sheet.canvas.width, pxH: sheet.canvas.height } },
+        { wMm: sheet.wMm, hMm: sheet.hMm, content: cutPage },
+      ]);
+      this.downloadBlob(pdf, `folha-${this.sheetSize()}-impressao-e-corte.pdf`);
+    }, 'image/jpeg', 0.92);
+  }
+
+  /** Quantas cópias da selecionada cabem na folha junto com o resto. */
+  async fillSheet(): Promise<void> {
+    const sel = this.selected();
+    if (!sel) return;
+    this.fillStatus.set('Calculando quantas cabem…');
+    await new Promise((r) => setTimeout(r, 0));
+    const fits = (n: number): boolean => {
+      const items = this.images().map((i) => (i.id === sel.id ? { ...i, copies: n } : i));
+      return this.packCurrent(items).overflow.length === 0;
+    };
+    if (!fits(1)) {
+      this.fillStatus.set('Nem uma cópia cabe junto com as outras peças.');
+      return;
+    }
+    let lo = 1, hi = 2;
+    while (hi <= 512 && fits(hi)) { lo = hi; hi *= 2; }
+    hi = Math.min(hi, 513);
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (fits(mid)) lo = mid; else hi = mid;
+    }
+    this.updateSelected({ copies: lo });
+    this.fillStatus.set(`${lo} cópia(s) de "${sel.name}" na folha.`);
+    this.setView('folha');
+  }
+
+  cutLengthLabel(): string {
+    const mm = this.cutLengthMm();
+    if (!mm) return '';
+    const s = Math.round(mm / CUT_SPEED_MM_S);
+    const tempo = s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`;
+    return `${(mm / 1000).toFixed(2).replace('.', ',')} m de corte · ~${tempo} na máquina`;
+  }
+
+  /** Anima a lâmina percorrendo as linhas de corte da vista atual. */
+  simulateCut(): void {
+    if (this.simulating()) {
+      this.stopSim?.();
+      this.stopSim = null;
+      this.simulating.set(false);
+      this.scheduleRender();
+      return;
+    }
+    let canvas: HTMLCanvasElement | undefined;
+    let lines: SimLine[] = [];
+    if (this.view() === 'folha') {
+      canvas = this.sheetCanvas?.nativeElement;
+      const { placed } = this.packCurrent();
+      const scale = canvas ? canvas.width / sheetDimensionsMm(this.sheetSize(), this.orientation()).wMm : 1;
+      lines = this.sheetCutsMm(placed, 'preview').map((c) => flattenCubic(c, ([x, y]) => [x * scale, y * scale]));
+    } else {
+      const sel = this.selected();
+      canvas = this.previewCanvas?.nativeElement;
+      if (sel) lines = this.pieceFor(sel).cuts.map((c) => flattenCubic(c, (q) => q));
+    }
+    if (!canvas || !lines.length) return;
+    const lenPx = lines.reduce((s2, l) => s2 + lineLength(l), 0);
+    this.simulating.set(true);
+    this.stopSim = animateCut(canvas, lines, Math.min(12000, Math.max(2500, lenPx * 4)), Math.max(2, canvas.width / 300), () => {
+      this.simulating.set(false);
+      this.stopSim = null;
+    });
   }
 
   // ---------- projetos no backend ----------
@@ -2076,6 +2378,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     return JSON.stringify({
       version: 3,
       sheetSize: this.sheetSize(),
+      packMode: this.packMode(),
+      rotate: this.allowRotate(),
+      regMarks: this.regMarks(),
       orientation: this.orientation(),
       spacingMm: this.spacingMm(),
       images: this.images().map((i) => ({
@@ -2095,6 +2400,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         smoothing: i.smoothing,
         keepCorners: i.keepCorners,
         fillHoles: i.fillHoles,
+        borderStyle: i.borderStyle,
+        artShadow: i.artShadow,
       })),
       // O molde entra no mesmo projeto: um documento do Editor de Imagens tem todos os modos.
       molde: this.templates.serialize(),
@@ -2164,6 +2471,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       if (data.sheetSize) this.sheetSize.set(data.sheetSize);
       if (data.orientation) this.orientation.set(data.orientation);
       if (data.spacingMm !== undefined) this.spacingMm.set(data.spacingMm);
+      if (data.packMode) this.packMode.set(data.packMode);
+      if (data.rotate !== undefined) this.allowRotate.set(data.rotate);
+      if (data.regMarks !== undefined) this.regMarks.set(data.regMarks);
 
       for (const stored of data.images ?? []) {
         const { name, original, ...rest } = stored;
