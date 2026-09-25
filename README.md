@@ -197,13 +197,19 @@ Comum aos quatro modos:
   e cantos propositais (bico de estrela, quina de quadrado) são detectados e
   preservados, com chave pra desligar. Lógica em `contour.ts`, testada em
   `contour.spec.ts`.
-- Folha de montagem A4/A3 com cópias por peça, **em linhas** ou com **encaixe por
+- Folha de montagem A4/A3/Carta com cópias por peça, **em linhas** ou com **encaixe por
   silhueta** (`sheet-nest.ts`: grade de 1 mm, cada peça entra no primeiro lugar
   livre pelo formato de verdade, testando giros de 90°) — numa A4 cabe o dobro de
   estrelas que em linhas. **Encher a folha** calcula quantas cópias cabem.
 - Borda **lisa, dupla ou tracejada** e **sombra da arte** sobre a borda, sem mudar
   a linha de corte.
-- **Marcas de registro** (Silhouette/Cricut) com a área delas reservada.
+- **Máquina Silhouette ou ScanNCut**. Na Silhouette (Studio Basic, que não abre
+  SVG nem PDF), a folha reserva a faixa das marcas de registro do Studio
+  (hachurada na prévia) e o **Pacote pro Silhouette Studio** traz o PNG da página
+  a 300 DPI, o **DXF** do corte (R12, em mm, com a moldura da página pra alinhar,
+  `dxf.ts`) e o passo a passo. DXF também na peça solta, na Ilustração e no Pacote.
+- **Marcas de registro** impressas pelo editor (fluxo sem o Studio), com a área
+  delas reservada.
 - **Simular corte**: a lâmina percorre as linhas na peça ou na folha, com o
   comprimento de corte e o tempo estimado (`cut-sim.ts`).
 - Exporta PNG 300 DPI (com DPI gravado no arquivo), PDF no tamanho físico, **PDF

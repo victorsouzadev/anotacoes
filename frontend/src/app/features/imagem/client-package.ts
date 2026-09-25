@@ -4,7 +4,7 @@
  * o pacote sai completo mesmo com um modo nunca aberto nesta sessão. */
 
 import { FontLibrary } from './fonts';
-import { buildSvg, canvasToBlob, rasterizeSvg } from './illustration-export';
+import { buildSvg, canvasToBlob, cutDxf, rasterizeSvg } from './illustration-export';
 import { IllustrationStore } from './illustration-store';
 import { drawOverlays, ensureOverlayFonts } from './social-overlays';
 import { paintFrame, sourceOf } from './social-render';
@@ -48,7 +48,10 @@ export async function illustrationSection(store: IllustrationStore): Promise<Pac
     files.push({ name: `${base}.png`, content: await bytes(await canvasToBlob(png, 'image/png')) });
     // Só quando alguma camada é linha de corte: sem isso o "corte" seria o
     // contorno de tudo, que não é o que se manda pra máquina.
-    if (hasCut) files.push({ name: `${base}-corte.svg`, content: await buildSvg(store, { cutOnly: true, bounds }) });
+    if (hasCut) {
+      files.push({ name: `${base}-corte.svg`, content: await buildSvg(store, { cutOnly: true, bounds }) });
+      files.push({ name: `${base}-corte.dxf`, content: cutDxf(store, bounds) });
+    }
     notes.push(`Ilustração — ${bd.name}: ${mm(bd.w)} × ${mm(bd.h)}.`);
   }
   notes.push(`  SVG (vetor, em mm) e PNG (300 DPI, fundo transparente)${hasCut ? ', mais o SVG só das linhas de corte' : ''}.`);
@@ -118,7 +121,7 @@ export function readme(projectName: string, sections: PackageSection[]): string 
     '',
     ...sections.flatMap((s) => [...s.notes, '']),
     'Impressão: use sempre "tamanho real" (100%), sem "ajustar à página".',
-    'Corte: os SVG estão em milímetros; abra no CanvasWorkspace, Silhouette Studio ou Inkscape.',
+    'Corte: SVG e DXF em milímetros. Silhouette Studio Basic: use o .dxf. ScanNCut, Inkscape e Studio Designer: o .svg.',
     '',
   ].join('\r\n');
 }

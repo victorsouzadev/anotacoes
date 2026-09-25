@@ -15,6 +15,7 @@ import {
 } from './sheet';
 import { NestShape, nestShapes } from './sheet-nest';
 import { SimLine, animateCut, flattenCubic, lineLength } from './cut-sim';
+import { DxfLayer, buildDxf, cubicToPolyline, pageFrame } from './dxf';
 import {
   Erasure, applyErasures, buildContourLayer, encodeCanvas, flipHorizontal, floodRemoveBackground,
   downscale, makeThumb,
@@ -52,6 +53,7 @@ import { uuid } from '../../core/uuid';
 interface ProjectData {
   smoothing?: number; keepCorners?: boolean; fillHoles?: boolean; sheetSize?: SheetSize;
   orientation?: SheetOrientation; spacingMm?: number; packMode?: PackMode; rotate?: boolean; regMarks?: boolean;
+  machine?: Machine; markZoneMm?: number;
   images?: (Partial<ImportedImage> & { original: string })[];
   molde?: TemplateProjectData | null;
   social?: SocialProjectData | null;
@@ -157,7 +159,13 @@ interface Prefs {
   packMode: PackMode;
   rotate: boolean;
   regMarks: boolean;
+  machine: Machine;
+  markZoneMm: number;
 }
+
+/** Pra qual máquina a folha é montada. Silhouette: impressão e corte pelo
+ * Silhouette Studio (edição Basic abre DXF, não SVG), com as marcas dele. */
+type Machine = 'silhouette' | 'scanncut';
 
 /** Linhas: caixas em prateleiras (previsível). Silhueta: pelo formato, com giro. */
 type PackMode = 'linhas' | 'silhueta';
@@ -211,7 +219,7 @@ const DEFAULT_PREFS: Prefs = {
   smoothing: 4, keepCorners: true, fillHoles: true, outerOnly: false, brushMm: 4,
   openSections: { imagens: true, contorno: true },
   sheetSize: 'A4', orientation: 'retrato', spacingMm: 4,
-  packMode: 'silhueta', rotate: true, regMarks: false,
+  packMode: 'silhueta', rotate: true, regMarks: false, machine: 'silhouette', markZoneMm: 20,
 };
 
 /** Passos do painel, na ordem do fluxo de trabalho. */
@@ -428,7 +436,7 @@ function loadPrefs(): Prefs {
                 <span class="il-cb-label">Folha</span>
                 <select class="il-select" [value]="sheetSize()" (change)="onSheetSizeChange($event)" aria-label="Tamanho da folha">
                   <option value="A4">A4</option>
-                  <option value="A3">A3</option>
+                  <option value="A3">A3</option><option value="Carta">Carta</option>
                 </select>
                 <select class="il-select" [value]="orientation()" (change)="onOrientationChange($event)" aria-label="Orientação">
                   <option value="retrato">Retrato</option>
@@ -610,7 +618,7 @@ function loadPrefs(): Prefs {
                     <div class="il-grid2">
                       <select class="il-select" [value]="sheetSize()" (change)="onSheetSizeChange($event)" aria-label="Tamanho da folha">
                         <option value="A4">A4</option>
-                        <option value="A3">A3</option>
+                        <option value="A3">A3</option><option value="Carta">Carta</option>
                       </select>
                       <select class="il-select" [value]="orientation()" (change)="onOrientationChange($event)" aria-label="Orientação">
                         <option value="retrato">Retrato</option>
@@ -625,16 +633,29 @@ function loadPrefs(): Prefs {
                     @if (packMode() === 'silhueta') {
                       <label class="il-check"><input type="checkbox" [checked]="allowRotate()" (change)="setSheetOpt('rotate', !allowRotate())" /> Girar peças pra caber mais</label>
                     }
-                    <label class="il-check"><input type="checkbox" [checked]="regMarks()" (change)="setSheetOpt('regMarks', !regMarks())" /> Marcas de registro (Silhouette, Cricut)</label>
+                    <div class="il-seg pc-seg pc-seg-full">
+                      <button type="button" [class.il-on]="machine() === 'silhouette'" (click)="setMachine('silhouette')">Silhouette</button>
+                      <button type="button" [class.il-on]="machine() === 'scanncut'" (click)="setMachine('scanncut')">ScanNCut</button>
+                    </div>
+                    @if (machine() === 'silhouette') {
+                      <il-num label="Área das marcas" title="Faixa livre nas bordas pras marcas de registro do Studio" unit="mm" [value]="markZoneMm()" [min]="10" [max]="40" [decimals]="0" (valueChange)="setMarkZone($event.value)" />
+                      <p class="il-note">A faixa hachurada fica livre pras marcas que o Silhouette Studio imprime. Imprima e corte pelo Studio com o pacote abaixo.</p>
+                    } @else {
+                      <label class="il-check"><input type="checkbox" [checked]="regMarks()" (change)="setSheetOpt('regMarks', !regMarks())" /> Imprimir marcas de registro</label>
+                    }
                     <div class="il-row">
                       <button type="button" class="il-btn il-grow" [disabled]="!selected()" data-help="Põe o máximo de cópias da imagem selecionada que cabe" (click)="fillSheet()"><il-icon name="sheet" [size]="13" /> Encher a folha</button>
                       <button type="button" class="il-btn il-grow" [class.il-on]="simulating()" [disabled]="!images().length" (click)="simulateCut()"><il-icon name="cut" [size]="13" /> {{ simulating() ? 'Parar' : 'Simular corte' }}</button>
                     </div>
                     @if (fillStatus()) { <p class="il-note">{{ fillStatus() }}</p> }
                     @if (cutLengthLabel()) { <p class="il-note">{{ cutLengthLabel() }}</p> }
-                    <p class="il-note">Junta todas as peças (e as cópias) numa folha pra imprimir de uma vez. Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem.</p>
+                    @if (machine() !== 'silhouette') { <p class="il-note">Junta todas as peças (e as cópias) numa folha pra imprimir de uma vez. Imprima o PNG ou o PDF e leve o SVG pra máquina: as posições batem.</p> }
                   </div></section>
                   <div class="il-export-list">
+                    @if (machine() === 'silhouette') {
+                      <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSilhouettePackage()"><il-icon name="cut" [size]="20" /><span><strong>Pacote pro Silhouette Studio</strong><small>PNG da impressão + DXF do corte, alinhados, com o passo a passo</small></span></button>
+                      <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetDxf()"><il-icon name="cut" [size]="20" /><span><strong>DXF de corte da folha</strong><small>Só as linhas de corte, em mm, pro Studio Basic</small></span></button>
+                    }
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportPrintCutPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF impressão + corte</strong><small>Página 1 pra imprimir, página 2 com o corte em vetor</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPdf()"><il-icon name="artboard" [size]="20" /><span><strong>PDF da folha</strong><small>No tamanho físico, pronto pra imprimir</small></span></button>
                     <button type="button" class="il-export" [disabled]="!images().length" (click)="exportSheetPng()"><il-icon name="image" [size]="20" /><span><strong>PNG da folha ({{ dpi }} DPI)</strong><small>Imagem pra imprimir em outro programa</small></span></button>
@@ -644,7 +665,8 @@ function loadPrefs(): Prefs {
                 @case ('exportar') {
                   <div class="il-export-list">
                     <button type="button" class="il-export" [disabled]="!selected()" (click)="exportPrintPng()"><il-icon name="image" [size]="20" /><span><strong>PNG {{ dpi }} DPI</strong><small>A peça selecionada, pra imprimir</small></span></button>
-                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportCutSvg()"><il-icon name="cut" [size]="20" /><span><strong>SVG da linha de corte</strong><small>Pra ScanNCut / CanvasWorkspace, em mm</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportCutSvg()"><il-icon name="cut" [size]="20" /><span><strong>SVG da linha de corte</strong><small>Pra ScanNCut, Inkscape ou Studio Designer, em mm</small></span></button>
+                    <button type="button" class="il-export" [disabled]="!selected()" (click)="exportCutDxf()"><il-icon name="cut" [size]="20" /><span><strong>DXF da linha de corte</strong><small>Pro Silhouette Studio Basic, em mm</small></span></button>
                     <button type="button" class="il-export" [disabled]="!selected()" (click)="exportFullSvg()"><il-icon name="export" [size]="20" /><span><strong>SVG arte + corte</strong><small>A arte embutida com a linha de corte por cima</small></span></button>
                     <button type="button" class="il-export" [disabled]="images().length < 2 || zipping()" (click)="exportCutSvgZip()"><il-icon name="split" [size]="20" /><span><strong>{{ zipping() ? 'Nomeando com IA…' : 'ZIP com um SVG por imagem' }}</strong><small>Cada arquivo nomeado por IA pelo que o desenho é</small></span></button>
                   </div>
@@ -655,7 +677,7 @@ function loadPrefs(): Prefs {
                       <button type="button" class="il-export" [disabled]="!selected()" (click)="sendSelectedTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
                     }
                   </div>
-                  <p class="il-note pc-pad">Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.</p>
+                  <p class="il-note pc-pad">{{ machine() === 'silhouette' ? 'Silhouette Studio Basic abre o DXF (SVG e PDF só na Designer Edition). As medidas vão em mm.' : 'Importe o SVG no CanvasWorkspace (ou direto no pendrive nos modelos SDX) — as medidas já vão em mm.' }}</p>
                 }
               }
             </div>
@@ -809,6 +831,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   packMode = signal<PackMode>(this.prefs.packMode ?? 'silhueta');
   allowRotate = signal(this.prefs.rotate ?? true);
   regMarks = signal(this.prefs.regMarks ?? false);
+  machine = signal<Machine>(this.prefs.machine ?? 'silhouette');
+  /** Faixa livre nas bordas pras marcas de registro do Silhouette Studio. */
+  markZoneMm = signal(this.prefs.markZoneMm ?? 20);
   simulating = signal(false);
   cutLengthMm = signal(0);
   fillStatus = signal('');
@@ -877,7 +902,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     // como sujo e agenda uma gravação no navegador.
     effect(() => {
       this.images(); this.sheetSize(); this.orientation(); this.spacingMm(); this.projectName();
-      this.packMode(); this.allowRotate(); this.regMarks();
+      this.packMode(); this.allowRotate(); this.regMarks(); this.machine(); this.markZoneMm();
       this.templates.svgText(); this.templates.slots(); this.templates.photos(); this.templates.widthMm();
       this.social.image(); this.social.canUndo(); this.social.canRedo(); this.social.exportW();
       this.illustration.layers(); this.illustration.widthMm(); this.illustration.heightMm();
@@ -1711,6 +1736,20 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.scheduleRender();
   }
 
+  setMachine(m: Machine): void {
+    this.machine.set(m);
+    this.prefs.machine = m;
+    this.savePrefs();
+    this.scheduleRender();
+  }
+
+  setMarkZone(mm: number): void {
+    this.markZoneMm.set(Math.round(Math.min(40, Math.max(10, mm))));
+    this.prefs.markZoneMm = this.markZoneMm();
+    this.savePrefs();
+    this.scheduleRender();
+  }
+
   setSheetOpt(key: 'packMode' | 'rotate' | 'regMarks', value: PackMode | boolean): void {
     if (key === 'packMode') this.packMode.set(value as PackMode);
     else if (key === 'rotate') this.allowRotate.set(value as boolean);
@@ -2008,7 +2047,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private packCurrent(items: ImportedImage[] = this.images()): { placed: PlacedPiece[]; overflow: PackInput[]; wMm: number; hMm: number } {
     const { wMm, hMm } = sheetDimensionsMm(this.sheetSize(), this.orientation());
-    const margin = this.regMarks() ? REG_MARGIN_MM : SHEET_MARGIN_MM;
+    const margin = this.sheetMargin();
     if (this.packMode() === 'silhueta') return { ...this.nestPieces(items, wMm, hMm, margin), wMm, hMm };
     const inputs: PackInput[] = [];
     for (const item of items) {
@@ -2021,6 +2060,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     }
     const { placed, overflow } = packShelves(inputs, wMm, hMm, margin, this.spacingMm());
     return { placed, overflow, wMm, hMm };
+  }
+
+  /** Borda livre da folha: a das marcas do Studio (Silhouette), a das marcas
+   * impressas pelo editor, ou a margem comum da impressora. */
+  sheetMargin(): number {
+    if (this.machine() === 'silhouette') return Math.max(SHEET_MARGIN_MM, this.markZoneMm());
+    return this.regMarks() ? REG_MARGIN_MM : SHEET_MARGIN_MM;
   }
 
   /** Máscara da peça numa grade de 1 mm (o que a peça ocupa, borda inclusa). */
@@ -2109,6 +2155,30 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     };
   }
 
+  /** Hachura a faixa das marcas do Studio na prévia (não vai pra impressão). */
+  private hatchMarkZone(ctx: CanvasRenderingContext2D, wMm: number, hMm: number, scale: number): void {
+    const m = this.sheetMargin() * scale;
+    const W = wMm * scale, H = hMm * scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.rect(m, m, W - 2 * m, H - 2 * m);
+    ctx.clip('evenodd');
+    ctx.strokeStyle = 'rgba(120, 120, 140, 0.35)';
+    ctx.lineWidth = 1;
+    for (let x = -H; x < W; x += 8) {
+      ctx.beginPath();
+      ctx.moveTo(x, H);
+      ctx.lineTo(x + H, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(120, 120, 140, 0.6)';
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(m + 0.5, m + 0.5, W - 2 * m - 1, H - 2 * m - 1);
+    ctx.setLineDash([]);
+  }
+
   private drawMarks(ctx: CanvasRenderingContext2D, wMm: number, hMm: number, scale: number): void {
     if (!this.regMarks()) return;
     ctx.fillStyle = '#000000';
@@ -2149,6 +2219,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
 
+    if (this.machine() === 'silhouette') this.hatchMarkZone(ctx, wMm, hMm, scale);
     for (const p of placed) {
       const item = this.itemOf(p.id);
       if (!item) continue;
@@ -2179,6 +2250,72 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       const withDpi = await pngBlobWithDpi(blob, EXPORT_DPI);
       this.downloadBlob(withDpi, this.baseName(sel) + '-impressao.png');
     }, 'image/png');
+  }
+
+  // ---------- Silhouette (DXF) ----------
+
+  private static readonly DXF_LAYERS: DxfLayer[] = [{ name: 'CORTE', color: 1 }, { name: 'PAGINA', color: 8 }];
+
+  exportCutDxf(): void {
+    const sel = this.selected();
+    if (!sel) return;
+    const piece = this.pieceFor(sel, 'full');
+    const hMm = piece.canvas.height / piece.ppm;
+    const lines = piece.cuts.map((c) => ({ layer: 'CORTE', closed: true, points: cubicToPolyline(c, 1 / piece.ppm) }));
+    const dxf = buildDxf(lines, ImageEditorPageComponent.DXF_LAYERS, hMm);
+    this.downloadBlob(new Blob([dxf], { type: 'application/dxf' }), this.baseName(sel) + '-corte.dxf');
+  }
+
+  private sheetDxfText(): string | null {
+    const { placed, wMm, hMm } = this.packCurrent();
+    if (!placed.length) return null;
+    const lines = this.sheetCutsMm(placed, 'full').map((c) => ({ layer: 'CORTE', closed: true, points: cubicToPolyline(c) }));
+    return buildDxf([pageFrame(wMm, hMm), ...lines], ImageEditorPageComponent.DXF_LAYERS, hMm);
+  }
+
+  exportSheetDxf(): void {
+    const dxf = this.sheetDxfText();
+    if (dxf) this.downloadBlob(new Blob([dxf], { type: 'application/dxf' }), `folha-${this.sheetSize()}-corte.dxf`);
+  }
+
+  /** Impressão (PNG da página inteira, sem marcas: quem imprime as marcas é o
+   * Studio) + corte (DXF com a moldura da página) + o passo a passo. */
+  async exportSilhouettePackage(): Promise<void> {
+    const sheet = this.renderSheetHiRes(false);
+    const dxf = this.sheetDxfText();
+    if (!sheet || !dxf) return;
+    const png = await new Promise<Blob | null>((r) => sheet.canvas.toBlob(r, 'image/png'));
+    if (!png) return;
+    const size = `${this.fmtMm(sheet.wMm)} × ${this.fmtMm(sheet.hMm)} mm`;
+    const guide = [
+      `Folha ${this.sheetSize()} ${this.orientation()} (${size}) — Silhouette Studio`,
+      '',
+      `1. Design da página: tamanho ${this.sheetSize()}, orientação ${this.orientation()}.`,
+      `   Marcas de registro: ligadas, estilo Tipo 1. A área hachurada do Studio`,
+      `   não pode cobrir desenho — o editor deixou ${this.sheetMargin()} mm livres em cada borda.`,
+      '2. Arquivo > Mesclar: folha-impressao.png.',
+      `   Selecione a imagem e, no painel Transformar, ponha L ${this.fmtMm(sheet.wMm)} mm,`,
+      `   A ${this.fmtMm(sheet.hMm)} mm, X 0 e Y 0 (ela cobre a página inteira).`,
+      '3. Arquivo > Mesclar: folha-corte.dxf.',
+      '   Selecione tudo o que veio do DXF, agrupe e ponha X 0 e Y 0.',
+      `   Confira a largura do grupo: tem de ser ${this.fmtMm(sheet.wMm)} mm (é o retângulo`,
+      '   cinza da página). Se entrou em outra escala, ajuste proporcional até dar essa medida.',
+      '   Desagrupe e apague o retângulo cinza da página — ele não é pra cortar.',
+      '4. Imprima pelo Studio em tamanho real (100%).',
+      '5. Enviar: escolha o material, confira que só as linhas vermelhas vão cortar',
+      '   e mande cortar — a máquina lê as marcas antes de começar.',
+      '',
+    ].join('\r\n');
+    const files: ZipEntry[] = [
+      { name: 'COMO-USAR.txt', content: guide },
+      { name: 'folha-impressao.png', content: new Uint8Array(await (await pngBlobWithDpi(png, EXPORT_DPI)).arrayBuffer()) },
+      { name: 'folha-corte.dxf', content: dxf },
+    ];
+    this.downloadBlob(zipStore(files), `folha-${this.sheetSize()}-silhouette.zip`);
+  }
+
+  private fmtMm(v: number): string {
+    return (Math.round(v * 10) / 10).toString().replace('.', ',');
   }
 
   exportCutSvg(): void {
@@ -2247,7 +2384,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- exportação da folha ----------
 
-  private renderSheetHiRes(): { canvas: HTMLCanvasElement; wMm: number; hMm: number; placed: PlacedPiece[] } | null {
+  private renderSheetHiRes(marks = true): { canvas: HTMLCanvasElement; wMm: number; hMm: number; placed: PlacedPiece[] } | null {
     const { placed, wMm, hMm } = this.packCurrent();
     if (!placed.length) return null;
     const scale = EXPORT_DPI / 25.4; // px por mm
@@ -2263,7 +2400,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       if (!item) continue;
       this.drawPlaced(ctx, p, this.pieceFor(item, 'full'), scale, false);
     }
-    this.drawMarks(ctx, wMm, hMm, scale);
+    if (marks && this.machine() !== 'silhouette') this.drawMarks(ctx, wMm, hMm, scale);
     return { canvas, wMm, hMm, placed };
   }
 
@@ -2372,6 +2509,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     if (pdf) files.push({ name: 'print-and-cut/folha-impressao-e-corte.pdf', content: new Uint8Array(await pdf.arrayBuffer()) });
     const svg = this.sheetSvgText();
     if (svg) files.push({ name: 'print-and-cut/folha-corte.svg', content: svg });
+    const dxf = this.sheetDxfText();
+    if (dxf) files.push({ name: 'print-and-cut/folha-corte.dxf', content: dxf });
     const names = uniqueNames(items.map((i) => this.baseName(i)));
     for (const [k, item] of items.entries()) {
       const piece = this.pieceFor(item, 'full');
@@ -2385,7 +2524,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       files,
       notes: [
         `Print & Cut — folha ${this.sheetSize()} ${this.orientation()}, ${placed.length} peça(s)${overflow.length ? ` (${overflow.length} não couberam)` : ''}${this.regMarks() ? ', com marcas de registro' : ''}.`,
-        '  folha-impressao-e-corte.pdf: página 1 imprime, página 2 é o corte. folha-corte.svg: o mesmo corte pra máquina.',
+        '  folha-impressao-e-corte.pdf: página 1 imprime, página 2 é o corte. folha-corte.svg/.dxf: o mesmo corte pra máquina.',
         '  pecas/: cada arte com a borda (PNG) e a linha de corte (SVG).',
       ],
     };
@@ -2472,6 +2611,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       packMode: this.packMode(),
       rotate: this.allowRotate(),
       regMarks: this.regMarks(),
+      machine: this.machine(),
+      markZoneMm: this.markZoneMm(),
       orientation: this.orientation(),
       spacingMm: this.spacingMm(),
       images: this.images().map((i) => ({
@@ -2565,6 +2706,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       if (data.packMode) this.packMode.set(data.packMode);
       if (data.rotate !== undefined) this.allowRotate.set(data.rotate);
       if (data.regMarks !== undefined) this.regMarks.set(data.regMarks);
+      if (data.machine) this.machine.set(data.machine);
+      if (data.markZoneMm) this.markZoneMm.set(data.markZoneMm);
 
       for (const stored of data.images ?? []) {
         const { name, original, ...rest } = stored;

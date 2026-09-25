@@ -2,12 +2,13 @@
  * gerador de PDF mínimo (uma página com a folha como JPEG embutido), pra
  * imprimir no tamanho físico exato sem depender de biblioteca externa. */
 
-export type SheetSize = 'A4' | 'A3';
+export type SheetSize = 'A4' | 'A3' | 'Carta';
 export type SheetOrientation = 'retrato' | 'paisagem';
 
 const SHEET_MM: Record<SheetSize, [number, number]> = {
   A4: [210, 297],
   A3: [297, 420],
+  Carta: [215.9, 279.4],
 };
 
 export function sheetDimensionsMm(size: SheetSize, orientation: SheetOrientation): { wMm: number; hMm: number } {

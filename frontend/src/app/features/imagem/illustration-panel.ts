@@ -10,7 +10,7 @@ import { ALIGN_BUTTONS, PATHFINDER } from './illustration-controlbar';
 import { ModeBridge } from './mode-bridge';
 import { IlEffectsComponent } from './illustration-effects';
 import { IlTemplateGalleryComponent } from './illustration-template-gallery';
-import { buildSvg, canvasToBlob, contentBounds, rasterizeSvg } from './illustration-export';
+import { buildSvg, canvasToBlob, contentBounds, cutDxf, rasterizeSvg } from './illustration-export';
 import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
 import { IlLayersComponent } from './illustration-layers';
@@ -493,10 +493,11 @@ export class IllustrationPanelComponent {
     { id: 'arco', icon: 'text-arc', label: 'Texto em arco' },
     { id: 'caminho', icon: 'text-path', label: 'Texto em caminho' },
   ];
-  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde' | 'social' | 'biblioteca' | 'todas'; icon: IlIconName; label: string; help: string }[] = [
+  readonly exports: { id: 'svg' | 'corte' | 'png' | 'pdf' | 'printcut' | 'molde' | 'social' | 'biblioteca' | 'todas' | 'dxf'; icon: IlIconName; label: string; help: string }[] = [
     { id: 'todas', icon: 'artboard', label: 'Todas as pranchetas (ZIP)', help: 'SVG e PNG de cada prancheta, num arquivo só' },
     { id: 'svg', icon: 'export', label: 'SVG', help: 'Vetor em mm, abre no Inkscape, Illustrator e CanvasWorkspace' },
-    { id: 'corte', icon: 'cut', label: 'SVG de corte', help: 'Só as linhas de corte, em vermelho — pra ScanNCut' },
+    { id: 'corte', icon: 'cut', label: 'SVG de corte', help: 'Só as linhas de corte, em vermelho — pra ScanNCut ou Studio Designer' },
+    { id: 'dxf', icon: 'cut', label: 'DXF de corte (Silhouette)', help: 'As mesmas linhas, pro Silhouette Studio Basic' },
     { id: 'png', icon: 'image', label: `PNG ${EXPORT_DPI} DPI`, help: 'Imagem transparente no tamanho físico, sem as linhas de corte' },
     { id: 'pdf', icon: 'artboard', label: 'PDF', help: 'Página no tamanho da prancheta, pronta pra imprimir' },
     { id: 'printcut', icon: 'offset', label: 'Enviar pro Print & Cut', help: 'A arte entra como imagem nova, na largura do desenho' },
@@ -790,6 +791,11 @@ export class IllustrationPanelComponent {
           const svg = await buildSvg(this.store, { cutOnly, textAsText: this.textAsText(), bounds: this.boardBounds() });
           downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${this.baseName()}${this.boardSuffix()}${cutOnly ? '-corte' : ''}.svg`);
           this.exportStatus.set(cutOnly ? 'SVG de corte salvo.' : 'SVG salvo.');
+          break;
+        }
+        case 'dxf': {
+          downloadBlob(new Blob([cutDxf(this.store, this.boardBounds())], { type: 'application/dxf' }), `${this.baseName()}${this.boardSuffix()}-corte.dxf`);
+          this.exportStatus.set('DXF de corte salvo (em mm). No Studio, alinhe o retângulo cinza à página e apague-o.');
           break;
         }
         case 'png': {

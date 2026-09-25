@@ -1,10 +1,12 @@
 /** Saídas do modo Ilustração. O SVG sai com as coordenadas já na prancheta
  * (sem transform nos caminhos) e em mm — é o que abre igual no Inkscape, no
- * Illustrator e no CanvasWorkspace da ScanNCut. */
+ * Illustrator, no CanvasWorkspace da ScanNCut e no Silhouette Studio
+ * Designer; o Studio Basic abre o DXF de corte. */
 
 import { FontLibrary, nearestWeight } from './fonts';
 import { IllustrationStore } from './illustration-store';
-import { Bounds, Layer, TextLayer, fillRuleOf, growBounds, layerMatrix, matrixAttr, pathsToD, round } from './illustration-model';
+import { DxfPolyline, buildDxf, pageFrame } from './dxf';
+import { Bounds, Layer, TextLayer, VPath, fillRuleOf, flattenPath, growBounds, layerMatrix, matrixAttr, pathsToD, round } from './illustration-model';
 import { clipDef, clipId, effectsPad, fillRef, paintDef, underlays } from './illustration-paint';
 import { booleanPaths } from './vector-ops';
 
@@ -126,17 +128,7 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
   let defs = '';
 
   if (options.cutOnly) {
-    const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem' && !l.mask);
-    const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem' && !l.mask);
-    for (const l of cut) {
-      // Recortada por máscara: a lâmina corta só a parte que aparece.
-      const mask = l.clipBy ? masks.get(l.clipBy) : undefined;
-      const paths = mask
-        ? booleanPaths('intersecao', [
-          { paths: store.worldPaths(l), pad: l.stroke && l.strokeWidth > 0 ? l.strokeWidth / 2 : 0, strokeOnly: !l.fill && !l.paint },
-          { paths: store.worldPaths(mask), pad: 0, strokeOnly: false },
-        ])
-        : store.worldPaths(l);
+    for (const paths of cutPaths(store)) {
       const d = pathsToD(paths);
       if (d) body += `  <path d="${d}" fill="none" stroke="#ff0000" stroke-width="0.2" />\n`;
     }
@@ -182,6 +174,38 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
   return `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(W)}mm" height="${n(H)}mm" viewBox="${n(b.minX)} ${n(b.minY)} ${n(W)} ${n(H)}">\n` +
     fontCss + (defs ? `<defs>${defs}</defs>\n` : '') + body + `</svg>\n`;
+}
+
+/** As linhas que a lâmina corta, na prancheta: as camadas marcadas como
+ * corte, ou todo vetor se nenhuma for. Recortada por máscara, só a parte que
+ * aparece. */
+export function cutPaths(store: IllustrationStore): VPath[][] {
+  const layers = store.layers().filter((l) => l.visible);
+  const masks = new Map(layers.filter((l) => l.mask).map((l) => [l.id, l]));
+  const flagged = layers.filter((l) => l.cut && l.kind !== 'imagem' && !l.mask);
+  const cut = flagged.length ? flagged : layers.filter((l) => l.kind !== 'imagem' && !l.mask);
+  return cut.map((l) => {
+    const mask = l.clipBy ? masks.get(l.clipBy) : undefined;
+    return mask
+      ? booleanPaths('intersecao', [
+        { paths: store.worldPaths(l), pad: l.stroke && l.strokeWidth > 0 ? l.strokeWidth / 2 : 0, strokeOnly: !l.fill && !l.paint },
+        { paths: store.worldPaths(mask), pad: 0, strokeOnly: false },
+      ])
+      : store.worldPaths(l);
+  });
+}
+
+/** DXF das linhas de corte de uma prancheta (pro Silhouette Studio Basic). */
+export function cutDxf(store: IllustrationStore, b: Bounds): string {
+  const w = b.maxX - b.minX, h = b.maxY - b.minY;
+  const lines: DxfPolyline[] = [pageFrame(w, h)];
+  for (const paths of cutPaths(store)) {
+    for (const p of paths) {
+      const pts = flattenPath(p, 0.1).map(([x, y]) => [x - b.minX, y - b.minY] as [number, number]);
+      lines.push({ layer: 'CORTE', closed: p.closed, points: pts });
+    }
+  }
+  return buildDxf(lines, [{ name: 'CORTE', color: 1 }, { name: 'PAGINA', color: 8 }], h);
 }
 
 /** Caixa do que vai ser impresso (sem as linhas de corte). */
