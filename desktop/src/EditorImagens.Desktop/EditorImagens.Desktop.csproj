@@ -25,7 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../backend/Notas.Api/Notas.Api.csproj" />
+    <!-- A API é uma biblioteca aqui: compila sem RID, igual à referência que vem
+         pelo EditorImagens.Ia. Senão ela sai duas vezes no publish (com e sem
+         win-x64) e o SDK recusa os arquivos repetidos (NETSDK1152). -->
+    <ProjectReference Include="../../../backend/Notas.Api/Notas.Api.csproj" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained" />
     <ProjectReference Include="../EditorImagens.Ia/EditorImagens.Ia.csproj" />
   </ItemGroup>
 
@@ -41,5 +44,13 @@
     <None Include="wwwroot/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="modelos/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Fora do instalador: símbolos de bibliotecas de terceiros (o do Skia tem
+       80 MB), a camada de debug do DirectML, o .lib de link, o executável
+       próprio da API (aqui ela é biblioteca) e a config de desenvolvimento
+       dela (que tem um segredo de dev). -->
+  <Target Name="EnxugarPublish" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)libSkiaSharp.pdb;$(PublishDir)DirectML.pdb;$(PublishDir)DirectML.Debug.dll;$(PublishDir)DirectML.Debug.pdb;$(PublishDir)onnxruntime.lib;$(PublishDir)Notas.Api.exe;$(PublishDir)Notas.Api;$(PublishDir)appsettings.Development.json" />
+  </Target>
 
 </Project>
