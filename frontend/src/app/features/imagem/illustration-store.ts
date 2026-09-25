@@ -6,11 +6,12 @@ import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { DEFAULT_FONT_ID, FontLibrary, UploadedFont } from './fonts';
 import {
-  Bounds, FillPaint, ImageLayer, Layer, LayerEffects, PathLayer, Point, ShapeLayer, ShapeType, TextLayer, VPath,
+  Bounds, FillPaint, fillRuleOf, ImageLayer, Layer, LayerEffects, PathLayer, Point, ShapeLayer, ShapeType, TextLayer, VPath,
   applyMatrix, boundsCenter, boundsCorners, centerPaths, growBounds, layerBase, layerMatrix, normalizeHex,
   pathsBounds, pathsToD, reversePath, round, shapePaths, topFraction, transformPaths, unionBounds,
 } from './illustration-model';
 import { TextLayout, layoutText } from './svg-text';
+import { effectsPad } from './illustration-paint';
 import {
   AreaSource, BoolOp, addNodeAfter, booleanPaths, cornerNode, deleteNode, eraseArea, offsetOutline, smoothNode, splitIslands,
 } from './vector-ops';
@@ -744,7 +745,7 @@ export class IllustrationStore {
 
   private areaSource(l: Layer): AreaSource {
     const stroke = l.stroke && l.strokeWidth > 0 ? l.strokeWidth / 2 : 0;
-    return { paths: this.worldPaths(l), pad: stroke, strokeOnly: !l.fill };
+    return { paths: this.worldPaths(l), pad: stroke, strokeOnly: !l.fill && !l.paint, nonzero: fillRuleOf(l) === 'nonzero' };
   }
 
   private vectorSelection(): Layer[] {
@@ -775,7 +776,11 @@ export class IllustrationStore {
   outline(marginMm: number, outerOnly: boolean): boolean {
     const sources = this.vectorSelection().length ? this.vectorSelection() : this.layers().filter((l) => l.visible && l.kind !== 'imagem' && !l.cut);
     if (!sources.length) return false;
-    const paths = offsetOutline(sources.map((l) => this.areaSource(l)), marginMm, { outerOnly });
+    // Contorno e sombra de efeito também são impressos: a margem conta a partir deles.
+    const paths = offsetOutline(sources.map((l) => {
+      const src = this.areaSource(l);
+      return { ...src, pad: Math.max(src.pad, effectsPad(l)) };
+    }), marginMm, { outerOnly });
     if (!paths.length) return false;
     const layer = this.newPathLayer(`Contorno ${marginMm.toFixed(1).replace('.', ',')} mm`, paths, {
       fill: null, stroke: CUT_COLOR, strokeWidth: 0.3, cut: true,
@@ -899,7 +904,7 @@ export class IllustrationStore {
       const paths = this.localPaths(l);
       const { id, name, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask } = l;
       const label = l.kind === 'texto' ? `“${l.text.split('\n')[0].slice(0, 24)}”` : name;
-      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, kind: 'caminho', paths } as PathLayer;
+      return { id, name: label, x, y, rotation, scaleX, scaleY, opacity, visible, locked, fill, stroke, strokeWidth, groupId, cut, paint, effects, clipBy, mask, fillRule: fillRuleOf(l), kind: 'caminho', paths } as PathLayer;
     }));
   }
 

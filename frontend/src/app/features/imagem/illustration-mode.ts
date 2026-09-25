@@ -21,7 +21,7 @@ import { IllustrationTracer } from './illustration-tracer';
 import { IlToolbarComponent, TOOL_GROUPS } from './illustration-toolbar';
 import {
   Bounds, Layer, PathLayer, Point, VPath, applyMatrix, boundsCorners, dist, invertMatrix, layerMatrix,
-  localStrokeWidth, matrixAttr, pathsToD, rgbToHex, unionBounds,
+  fillRuleOf, localStrokeWidth, matrixAttr, pathsToD, rgbToHex, unionBounds,
 } from './illustration-model';
 import { fitFreehand, moveHandle, moveNode, nodeCount, nodeInfo } from './vector-ops';
 import { clipDef, clipId, fillRef, paintDef, underlays } from './illustration-paint';
@@ -52,6 +52,7 @@ interface RenderItem {
   transform: string;
   strokeWidth: number;
   fill: string;
+  rule: 'nonzero' | 'evenodd';
   /** Contornos de efeito e sombra, atrás da camada. */
   under: { color: string; width: number; transform: string; opacity: number }[];
   /** `url(#…)` da máscara que recorta a camada. */
@@ -179,7 +180,7 @@ function fmt(v: number, d = 1): string {
           <g [attr.clip-path]="item.clip">
           @for (u of item.under; track $index) {
             <path
-              [attr.d]="item.d" [attr.transform]="u.transform" fill-rule="evenodd"
+              [attr.d]="item.d" [attr.transform]="u.transform" [attr.fill-rule]="item.rule"
               [attr.fill]="u.color" [attr.stroke]="u.width > 0 ? u.color : null" [attr.stroke-width]="u.width"
               stroke-linejoin="round" stroke-linecap="round" [attr.opacity]="u.opacity"
               [attr.data-id]="item.id" [attr.pointer-events]="item.layer.locked ? 'none' : 'visible'"
@@ -200,7 +201,7 @@ function fmt(v: number, d = 1): string {
             <path
               [attr.d]="item.d"
               [attr.transform]="item.transform"
-              fill-rule="evenodd"
+              [attr.fill-rule]="item.rule"
               [attr.fill]="item.fill"
               [attr.stroke]="item.layer.stroke && item.layer.strokeWidth > 0 && !item.layer.mask ? item.layer.stroke : null"
               [attr.stroke-width]="item.strokeWidth"
@@ -676,6 +677,7 @@ export class IllustrationModeComponent {
         transform: matrixAttr(m),
         strokeWidth: localStrokeWidth(l),
         fill: fillRef(STAGE_IDS, l),
+        rule: fillRuleOf(l),
         under: underlays(l).map((u) => ({
           color: u.color,
           width: u.widthMm / scale,
@@ -703,7 +705,7 @@ export class IllustrationModeComponent {
     for (const l of this.store.layers()) {
       if (!l.visible) continue;
       out += paintDef(STAGE_IDS, l, null);
-      if (l.mask) out += clipDef(STAGE_IDS, l.id, pathsToD(this.store.worldPaths(l)));
+      if (l.mask) out += clipDef(STAGE_IDS, l.id, pathsToD(this.store.worldPaths(l)), fillRuleOf(l));
     }
     return out;
   });

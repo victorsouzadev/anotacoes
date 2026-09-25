@@ -4,7 +4,7 @@
 
 import { FontLibrary, nearestWeight } from './fonts';
 import { IllustrationStore } from './illustration-store';
-import { Bounds, Layer, TextLayer, growBounds, layerMatrix, matrixAttr, pathsToD, round } from './illustration-model';
+import { Bounds, Layer, TextLayer, fillRuleOf, growBounds, layerMatrix, matrixAttr, pathsToD, round } from './illustration-model';
 import { clipDef, clipId, effectsPad, fillRef, paintDef, underlays } from './illustration-paint';
 import { booleanPaths } from './vector-ops';
 
@@ -142,7 +142,7 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
     }
   } else {
     const texts: TextLayer[] = [];
-    for (const m of masks.values()) defs += clipDef(IDS, m.id, pathsToD(store.worldPaths(m)));
+    for (const m of masks.values()) defs += clipDef(IDS, m.id, pathsToD(store.worldPaths(m)), fillRuleOf(m));
     for (const l of layers) {
       if (options.skipCut && l.cut) continue;
       if (l.mask) continue;
@@ -160,7 +160,7 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
         if (!d) break;
         const shift = u.dx || u.dy ? ` transform="translate(${n(u.dx)} ${n(u.dy)})"` : '';
         const op = u.opacity * l.opacity;
-        body += `  <path d="${d}" fill-rule="evenodd" fill="${u.color}"` +
+        body += `  <path d="${d}" fill-rule="${fillRuleOf(l)}" fill="${u.color}"` +
           (u.widthMm > 0 ? ` stroke="${u.color}" stroke-width="${n(u.widthMm)}" stroke-linejoin="round" stroke-linecap="round"` : '') +
           `${op < 1 ? ` opacity="${n(op)}"` : ''}${shift} />\n`;
       }
@@ -173,7 +173,7 @@ export async function buildSvg(store: IllustrationStore, options: SvgOptions = {
           continue;
         }
       }
-      if (d) body += `  <path id="${esc(l.name.replace(/[^\w-]+/g, '-'))}-${l.id.slice(0, 4)}" d="${d}" fill-rule="evenodd" ${paintAttrs(l)} />\n`;
+      if (d) body += `  <path id="${esc(l.name.replace(/[^\w-]+/g, '-'))}-${l.id.slice(0, 4)}" d="${d}" fill-rule="${fillRuleOf(l)}" ${paintAttrs(l)} />\n`;
       if (clip) body += `  </g>\n`;
     }
     if (texts.length) fontCss = await fontFaceCss(store.fonts, texts);

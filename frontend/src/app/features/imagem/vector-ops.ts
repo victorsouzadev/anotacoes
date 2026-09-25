@@ -31,6 +31,8 @@ export interface AreaSource {
   pad: number;
   /** Só traço, sem preenchimento: a área é a do traço. */
   strokeOnly: boolean;
+  /** Regra de preenchimento não-zero (texto): sobreposição continua cheia. */
+  nonzero?: boolean;
 }
 
 // ---------- Clipper ----------
@@ -60,7 +62,7 @@ export function regionOf(src: AreaSource): ClipperLib.Paths {
   const open = src.paths.filter((p) => !p.closed).map((p) => toInt(flattenPath(p, FLATTEN_STEP))).filter((p) => p.length >= 2);
   const parts: ClipperLib.Paths = [];
   if (!src.strokeOnly && closed.length) {
-    let fill = execute(ClipperLib.ClipType.ctUnion, closed, [], ClipperLib.PolyFillType.pftEvenOdd);
+    let fill = execute(ClipperLib.ClipType.ctUnion, closed, [], src.nonzero ? ClipperLib.PolyFillType.pftNonZero : ClipperLib.PolyFillType.pftEvenOdd);
     if (src.pad > 0) fill = offsetInt(fill, src.pad, ClipperLib.EndType.etClosedPolygon);
     parts.push(...fill);
   }

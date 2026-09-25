@@ -9,6 +9,7 @@ import { nearestWeight } from './fonts';
 import { ALIGN_BUTTONS, PATHFINDER } from './illustration-controlbar';
 import { ModeBridge } from './mode-bridge';
 import { IlEffectsComponent } from './illustration-effects';
+import { IlTemplateGalleryComponent } from './illustration-template-gallery';
 import { buildSvg, canvasToBlob, contentBounds, rasterizeSvg } from './illustration-export';
 import { IlFontPickerComponent } from './illustration-font-picker';
 import { IlIconComponent, IlIconName } from './illustration-icons';
@@ -57,7 +58,7 @@ function loadOpen(): Record<string, boolean> {
 @Component({
   selector: 'app-illustration-panel',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent, IlLayersComponent, IlEffectsComponent],
+  imports: [IlIconComponent, IlNumComponent, IlFontPickerComponent, IlLayersComponent, IlEffectsComponent, IlTemplateGalleryComponent],
   encapsulation: ViewEncapsulation.None,
   host: { class: 'il-dock' },
   template: `
@@ -173,6 +174,7 @@ function loadOpen(): Record<string, boolean> {
             </section>
           }
 
+          @if (!store.selection().length) { <il-template-gallery /> }
           <il-effects />
 
           @if (text(); as t) {

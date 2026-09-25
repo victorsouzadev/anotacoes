@@ -54,6 +54,13 @@ interface LayerBase {
   clipBy?: string | null;
   /** É a forma de uma máscara de recorte: não pinta, só recorta. */
   mask?: boolean;
+  /** Contornos de texto convertidos guardam a regra das fontes (não-zero):
+   * letras cursivas se sobrepõem e, par-ímpar, a sobreposição viraria furo. */
+  fillRule?: 'nonzero' | 'evenodd';
+}
+
+export function fillRuleOf(l: Pick<LayerBase, 'fillRule'> & { kind: LayerKind }): 'nonzero' | 'evenodd' {
+  return l.kind === 'texto' || l.fillRule === 'nonzero' ? 'nonzero' : 'evenodd';
 }
 
 export interface GradientStop {

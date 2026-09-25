@@ -83,8 +83,8 @@ export function paintDef(prefix: string, l: Layer, world: Matrix | null): string
   return `<linearGradient id="${id}" gradientTransform="rotate(${n(p.angle)} 0.5 0.5)">${stops}</linearGradient>`;
 }
 
-export function clipDef(prefix: string, maskId: string, worldD: string): string {
-  return `<clipPath id="${clipId(prefix, maskId)}" clipPathUnits="userSpaceOnUse"><path d="${worldD}" clip-rule="evenodd"/></clipPath>`;
+export function clipDef(prefix: string, maskId: string, worldD: string, rule: 'nonzero' | 'evenodd' = 'evenodd'): string {
+  return `<clipPath id="${clipId(prefix, maskId)}" clipPathUnits="userSpaceOnUse"><path d="${worldD}" clip-rule="${rule}"/></clipPath>`;
 }
 
 /** Uma camada de efeito, atrás da arte: o mesmo contorno pintado com traço
