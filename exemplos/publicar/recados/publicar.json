@@ -1,0 +1,5 @@
+{
+  // Opcional. Com "health", o deploy só fica "No ar" quando este caminho responde 2xx.
+  "health": "/api/health",
+  "memoriaMb": 128
+}

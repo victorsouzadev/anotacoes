@@ -9,7 +9,8 @@ export type IconName =
   | 'folder' | 'search' | 'edit' | 'grid-view' | 'list-view'
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
   | 'grid' | 'wallet' | 'check' | 'x'
-  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake' | 'image' | 'chevron' | 'calculator';
+  | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake' | 'image' | 'chevron' | 'calculator'
+  | 'globe' | 'upload' | 'refresh' | 'stop' | 'copy' | 'external';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -132,6 +133,15 @@ export type IconName =
           <path d="M6.2 9.3h.01M10 9.3h.01M13.8 9.3h.01M6.2 12.4h.01M10 12.4h.01M6.2 15.5h.01" stroke-width="2.2" />
           <path d="M13.8 11.8v4.2M11.9 13.9h3.8" />
         }
+        @case ('globe') {
+          <circle cx="10" cy="10" r="7.2" />
+          <path d="M2.8 10h14.4M10 2.8c2 2.1 2.9 4.5 2.9 7.2s-.9 5.1-2.9 7.2c-2-2.1-2.9-4.5-2.9-7.2s.9-5.1 2.9-7.2z" />
+        }
+        @case ('upload') { <path d="M10 13V3.6m0 0L6.4 7.2M10 3.6l3.6 3.6" /><path d="M4 12.5v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3" /> }
+        @case ('refresh') { <path d="M16 10a6 6 0 1 1-1.8-4.3" /><path d="M16 3.5v3.7h-3.7" /> }
+        @case ('stop') { <rect x="5" y="5" width="10" height="10" rx="1.6" /> }
+        @case ('copy') { <rect x="6.5" y="6.5" width="10" height="10" rx="1.6" /><path d="M13.5 6.5V4.6a1.1 1.1 0 0 0-1.1-1.1H4.6a1.1 1.1 0 0 0-1.1 1.1v7.8a1.1 1.1 0 0 0 1.1 1.1h1.9" /> }
+        @case ('external') { <path d="M11.5 3.5h5v5M16.5 3.5L9 11" /><path d="M14.5 11.5v3.8a1.2 1.2 0 0 1-1.2 1.2H4.7a1.2 1.2 0 0 1-1.2-1.2V6.7a1.2 1.2 0 0 1 1.2-1.2h3.8" /> }
       }
     </svg>
   `,

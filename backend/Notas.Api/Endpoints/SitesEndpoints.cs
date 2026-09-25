@@ -32,7 +32,7 @@ public static partial class SitesEndpoints
     public static void MapSitesEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/sites/permissao", async (ClaimsPrincipal user, AppDbContext db, IOptions<SitesOptions> opt) =>
-            Results.Ok(new { podePublicar = await PodePublicar(user, db, opt.Value) }))
+            Results.Ok(new { podePublicar = await PodePublicar(user, db, opt.Value), urlModelo = opt.Value.Url("{slug}") }))
             .RequireAuthorization();
 
         var group = app.MapGroup("/api/sites").RequireAuthorization()

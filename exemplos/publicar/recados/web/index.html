@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recados</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <h1>Recados</h1>
+    <p class="sub">App de exemplo publicado pela ferramenta <strong>Publicar</strong>: front estático + API C# + SQLite.</p>
+    <form id="form">
+      <input id="texto" maxlength="500" placeholder="Deixe um recado" autocomplete="off" required />
+      <button>Enviar</button>
+    </form>
+    <p id="erro" class="erro" hidden></p>
+    <ul id="lista"></ul>
+    <p class="rodape" id="saude"></p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

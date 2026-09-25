@@ -1,9 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { WindowsDownloadService } from '../../core/windows-download';
+import { PublicarService } from '../publicar/publicar.service';
 
 interface ToolCard {
   path: string;
@@ -16,6 +17,14 @@ interface ToolCard {
   /** Mostra o link do instalador do Windows, quando houver um publicado. */
   windows?: boolean;
 }
+
+/** Só aparece para quem está em PUBLICADORES no servidor. */
+const PUBLICAR: ToolCard = {
+  path: '/publicar',
+  icon: 'globe',
+  title: 'Publicar',
+  description: 'Envie um ZIP com front e API C# e ganhe uma URL própria, com banco SQLite, versões e volta para a anterior.',
+};
 
 const TOOLS: ToolCard[] = [
   { path: '/notes', icon: 'pen', title: 'Notas', description: 'Notas manuscritas, texto, desenho e checklists num canvas por página.' },
@@ -70,7 +79,7 @@ const TOOLS: ToolCard[] = [
 
       <main class="content">
         <div class="grid">
-          @for (tool of tools; track tool.path) {
+          @for (tool of tools(); track tool.path) {
             <div class="tool-card-wrapper">
               <a class="tool-card" [routerLink]="tool.path">
                 <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
@@ -184,10 +193,17 @@ const TOOLS: ToolCard[] = [
   `],
 })
 export class HubPageComponent {
-  tools = TOOLS;
+  private readonly podePublicar = signal(false);
+  readonly tools = computed(() => (this.podePublicar() ? [...TOOLS, PUBLICAR] : TOOLS));
 
-  constructor(public auth: AuthService, public theme: ThemeService, public windows: WindowsDownloadService) {
+  constructor(
+    public auth: AuthService,
+    public theme: ThemeService,
+    public windows: WindowsDownloadService,
+    publicar: PublicarService,
+  ) {
     windows.check();
+    void publicar.permissao().then((r) => this.podePublicar.set(r.podePublicar));
   }
 
   themeIconName(): IconName {

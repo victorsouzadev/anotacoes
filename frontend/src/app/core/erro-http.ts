@@ -45,12 +45,13 @@ export function mensagemDeErro(err: unknown, acao: string): string {
 function detalheDoServidor(err: unknown): string | null {
   if (!(err instanceof HttpErrorResponse)) return null;
 
-  const corpo = err.error as { erro?: string; detail?: string; title?: string } | string | null;
+  // O backend usa as duas chaves: { erro } nas ferramentas mais antigas, { error } nas demais.
+  const corpo = err.error as { erro?: string; error?: string; detail?: string; title?: string } | string | null;
   if (typeof corpo === 'string' && corpo.trim() && !corpo.trim().startsWith('<')) {
     return corpo.trim().slice(0, 200);
   }
   if (corpo && typeof corpo === 'object') {
-    return corpo.erro ?? corpo.detail ?? corpo.title ?? null;
+    return corpo.erro ?? corpo.error ?? corpo.detail ?? corpo.title ?? null;
   }
   return null;
 }

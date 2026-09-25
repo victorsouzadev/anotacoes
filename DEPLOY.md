@@ -170,6 +170,57 @@ mais prováveis: `VPS_SSH_KEY` nunca foi configurado (ou tem um valor
 errado/incompleto colado), ou a chave pública correspondente nunca foi
 adicionada ao `authorized_keys` da VPS. Refaça os passos 1–4 acima.
 
+## Ferramenta "Publicar" (sites em <slug>.191-252-177-244.sslip.io:8090)
+
+A ferramenta envia um ZIP (front estático e/ou API C# já publicada) e coloca o site
+no ar em `http://<slug>.191-252-177-244.sslip.io:8090`. O desenho está em
+[docs/poc-multi-app/DISCOVERY.md](docs/poc-multi-app/DISCOVERY.md) e o app de
+exemplo em [exemplos/publicar/recados](exemplos/publicar/recados/README.md).
+
+As peças:
+- **API**: guarda as versões em `data/sites/<slug>/`. Só publicam os e-mails em `PUBLICADORES`.
+- **deployer**: o único container com `/var/run/docker.sock`. Cria e remove os containers `site-<slug>`.
+- **Caddy**: atende `*.191-252-177-244.sslip.io`, manda `/api` para o container e serve o front do disco.
+- **Rede `notas-sites`**: os apps ficam isolados nela. O Caddy entra, a API e o deployer não.
+
+### Ligar pela primeira vez
+
+```bash
+ssh root@191.252.177.244
+cd /opt/notas-vps
+echo "PUBLICADORES=seu-email@exemplo.com" >> .env
+echo "DEPLOYER_TOKEN=$(openssl rand -hex 32)" >> .env
+echo "COMPOSE_PROFILES=publicar" >> .env
+mkdir -p data/sites
+# baixa a imagem do runtime antes, para o primeiro deploy não esperar o download
+docker pull mcr.microsoft.com/dotnet/aspnet:9.0
+docker compose -f docker-compose.yml -f docker-compose.vps.yml build deployer
+docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
+```
+
+O `COMPOSE_PROFILES=publicar` faz o `up -d` (e o deploy automático) subir o deployer.
+Sem ele, a ferramenta ainda publica sites **só estáticos**.
+
+A porta continua a 8090: o sslip.io resolve `<qualquer-coisa>.191-252-177-244.sslip.io`
+para o IP da VPS, e o Caddy separa os sites pelo nome. Não há DNS para configurar.
+
+### Operação
+
+```bash
+docker ps --filter label=notas.site                         # apps rodando
+docker stats --no-stream $(docker ps -q --filter label=notas.site)
+docker logs --tail 100 site-<slug>                           # o mesmo que "Logs do app" na tela
+```
+
+- **Limites**: cada app tem 192 MB por padrão (`memoriaMb` no `publicar.json`, até 512) e meia CPU,
+  com no máximo 5 apps .NET rodando ao mesmo tempo (`Sites__MaxAppsRodando`). No teste, o Recados
+  ocioso ficou em ~21 MiB.
+- **Banco**: `data/sites/<slug>/data/app.db`. O `scripts/backup.sh` já copia todos os bancos. Antes de
+  cada versão entrar no ar, a API também guarda uma cópia em `data/sites/<slug>/backups/`.
+- **Reboot**: os containers usam `--restart unless-stopped` e voltam sozinhos.
+- **Parar tudo** de emergência: `docker rm -f $(docker ps -q --filter label=notas.site)`. Os sites
+  voltam pelo botão "Iniciar" na tela.
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.

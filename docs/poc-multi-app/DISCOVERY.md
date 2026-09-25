@@ -1,6 +1,8 @@
 # Discovery — POC "Publicar": enviar arquivos e ganhar uma URL
 
-> Status: **escopo fechado, pronto para implementar**. Nada aqui está implementado ainda.
+> Status: **implementado** na branch `claude/poc-multi-app-hosting-bui7kl` e testado de ponta a ponta
+> com Docker local (seção 12). Falta validar na VPS (etapa 1 do plano). As diferenças entre o
+> desenho abaixo e o que foi feito estão na seção 12.
 
 ## 1. A ideia
 
@@ -13,7 +15,7 @@ Depois posso republicar, voltar para uma versão anterior, ver os logs e excluir
 
 | # | Pergunta | Decisão | Consequência no desenho |
 |---|---|---|---|
-| Q1 | Quem publica? | **Só eu** | A publicação exige um usuário marcado como dono (`User.PodePublicar`). Os limites servem para proteger a VPS de **bugs**, não de um atacante. Não há cotas nem moderação |
+| Q1 | Quem publica? | **Só eu** | Só os e-mails em `PUBLICADORES` (`.env`) publicam. Os limites servem para proteger a VPS de **bugs**, não de um atacante. Não há cotas nem moderação |
 | Q2 | O que se envia? | **Back + front** | Um pacote com `api/` (C#) e `web/` (estático), opcional |
 | Q3 | Linguagem do back | **C#** (outras depois) | Runtime ASP.NET em container. Ver a seção 4 (sem build na VPS) |
 | Q4 | Banco? | **Sim** | **SQLite por app**, em volume persistente que sobrevive a republicações |
@@ -58,7 +60,6 @@ meu-app.zip
 // publicar.json (todas as chaves são opcionais)
 {
   "entrada": "MeuApp.dll",      // se houver mais de um runtimeconfig
-  "rotaApi": "/api",            // prefixo que vai para o C#; o resto vai para web/
   "health": "/api/health",      // o deploy só fica "No ar" quando isto responde 200
   "memoriaMb": 192
 }
@@ -70,7 +71,7 @@ meu-app.zip
 2. Ler a conexão de `ConnectionStrings__Default` (a plataforma injeta
    `Data Source=/data/app.db`) e **gravar só em `/data`**. O resto do disco é somente leitura.
 3. Aplicar as próprias migrations na subida (`db.Database.Migrate()`), como o notas já faz.
-4. Rotas da API com o prefixo `/api` (ou o `rotaApi` configurado).
+4. Rotas da API com o prefixo `/api` (fixo: é o que deixa o Caddy com uma regra só).
 
 Casos cobertos pela detecção:
 
@@ -180,7 +181,6 @@ Mudar uma variável reinicia o container, sem novo upload.
 ## 7. Modelo de dados e API (no notas)
 
 ```
-User        + PodePublicar: bool
 Site        { Id, OwnerUserId, Slug (único), Nome, CurrentDeploymentId, CriadoEm }
 Deployment  { Id, SiteId, Versao, Tipo: Estatico|DotNet, RuntimeVersao, Entrada,
               Status: Enviado|Iniciando|NoAr|Falhou|Substituido,
@@ -188,7 +188,7 @@ Deployment  { Id, SiteId, Versao, Tipo: Estatico|DotNet, RuntimeVersao, Entrada,
 SiteVariavel{ Id, SiteId, Chave, ValorCifrado }
 ```
 
-| Rota (`Endpoints/SitesEndpoints.cs`, exige `PodePublicar`) | O que faz |
+| Rota (`Endpoints/SitesEndpoints.cs`, exige e-mail em `PUBLICADORES`) | O que faz |
 |---|---|
 | `GET /api/sites` | Lista sites com URL, status e versão atual |
 | `POST /api/sites` `{nome, slug}` | Cria o site (slug `^[a-z0-9-]{3,30}$`, fora da lista de reservados) |
@@ -207,7 +207,7 @@ evita que uma falha na API exposta à internet vire acesso root à VPS.
 
 **Front**: `features/publicar/` com lista de sites, criação, dropzone (ZIP ou pasta
 via `webkitdirectory` + compactação no navegador), status por polling, versões, logs,
-variáveis e botão copiar URL. Mais um card no hub (visível só com `PodePublicar`).
+variáveis e botão copiar URL. Mais um card no hub (visível só para quem está em `PUBLICADORES`).
 
 ## 8. Segurança (escopo "só eu")
 
@@ -249,3 +249,49 @@ variáveis e botão copiar URL. Mais um card no hub (visível só com `PodePubli
 HTTPS e domínio próprio, deploy pelo GitHub (build no Actions), outras linguagens (Node,
 Python), `Dockerfile` do usuário, zero-downtime, desligar app ocioso,
 Postgres gerenciado, vários usuários publicando (exigiria cotas, sandbox mais forte e moderação).
+
+## 12. Resultado da implementação
+
+### Onde está cada peça
+
+| Peça | Arquivos |
+|---|---|
+| API | `backend/Notas.Api/Endpoints/SitesEndpoints.cs`, `Services/Sites/*` (extrator do ZIP, disco, fila/executor, cliente do Deployer), `Data/SitesModels.cs`, migration `AddSites` |
+| Deployer | `deployer/Notas.Deployer` (Minimal API que chama o `docker` CLI com `ArgumentList`, sem shell) |
+| Caddy | bloco `http://*.{$SITES_DOMINIO}:8080` em `caddy/Caddyfile.local` |
+| Compose | serviço `deployer` (profile `publicar`), rede `notas-sites`, volumes `data/sites` |
+| Front | `frontend/src/app/features/publicar/` + card no hub (só para publicadores) |
+| Exemplo | `exemplos/publicar/recados` (front + API C# + SQLite, com `empacotar.sh`/`.ps1`) |
+| Testes | `SitesTests.cs` (26: extração segura, versões, rollback, banco, variáveis, permissões), `deployer/Notas.Deployer.Tests` (10), `pacote.spec.ts` (front) |
+
+### Diferenças em relação ao desenho
+
+- **Quem publica**: em vez de uma coluna `User.PodePublicar` (sem tela para mudar), é uma lista de
+  e-mails em `PUBLICADORES`. Não precisa de migration nem de tela de admin.
+- **`rotaApi` removido**: o prefixo é sempre `/api`. Com prefixo por app, o Caddy precisaria de
+  configuração dinâmica. Fixo, um bloco estático atende todos os sites.
+- **Health sem `publicar.json`**: basta o app responder qualquer coisa que não seja 502/503/504 em
+  `/api/` (com front) ou `/` (só API). Com `health` configurado, exige 2xx.
+- **Falha no deploy também restaura o banco**: se a versão nova não sobe, o `app.db` volta à cópia
+  feita antes dela (ela pode ter rodado migrations), e só depois a versão anterior sobe de novo.
+- **Troca do link `current`** usa `rename(2)` direto. O `File.Move` do .NET recusa um link que aponta
+  para uma pasta.
+- **Sem Deployer configurado** (sem `DEPLOYER_TOKEN`), sites estáticos continuam funcionando.
+
+### Critérios de sucesso (teste local: Docker 29, `aspnet:9.0`, Caddy 2.10)
+
+- [x] App Recados (front + API C# + SQLite) publicado e respondendo pelo Caddy em **1.7 s** (meta: < 20 s).
+- [x] Os dados gravados continuaram lá depois de republicar (v2, v4) e depois de voltar para a v1.
+- [x] Uma v3 com DLL corrompida falhou no health check. O log do container (`BadImageFormatException`)
+      apareceu na versão, o banco voltou e a v2 subiu sozinha. O site não ficou fora do ar.
+- [x] Voltar para a v1 em um clique (`/ativar`).
+- [x] Site só estático publicado em ~1 s, sem container.
+- [x] Um app que tenta alocar 1 GB bate no limite: o .NET respeita o cgroup (192 MB), a requisição
+      dá 500, o container para em ~160 MiB e o hub segue no ar.
+- [x] Parar deixa o site com "Este app não está no ar agora" (502). Iniciar volta com os dados.
+- [x] Variável de ambiente salva, reinicia o container e chega ao app.
+- [x] Deployer em container (imagem do `deployer/Dockerfile`) falando com o daemon pelo socket.
+- [ ] Reiniciar a VPS e ver os apps voltarem (`--restart unless-stopped`): falta testar na VPS.
+- [x] RAM do Recados ocioso: **~21 MiB** (limite 128 MB).
+- [x] Tamanho do pacote: com `-r linux-x64` o Recados tem 773 KB. Sem ele, 14,7 MB (bibliotecas
+      nativas do SQLite para todas as plataformas).

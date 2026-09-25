@@ -102,5 +102,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/precificacao/precificacao.page').then((m) => m.PrecificacaoPageComponent),
   },
+  {
+    path: 'publicar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/publicar/publicar.page').then((m) => m.PublicarPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

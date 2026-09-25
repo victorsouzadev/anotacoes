@@ -51,6 +51,7 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 | Banco | SQLite (EF Core 9), modo WAL — uma tabela por entidade, compartilhando o mesmo arquivo/contexto |
 | Autenticação | JWT (access 15min + refresh 30d com rotação/detecção de reuso), senhas com BCrypt — login único vale para todas as ferramentas, web e Android |
 | Proxy/servidor estático | Caddy 2 (build do Angular embutido na imagem) |
+| Publicar (sites dos usuários) | ZIP → `data/sites/<slug>/`; Caddy serve `<slug>.<ip>.sslip.io`; API C# em container `aspnet` criado por um serviço `deployer` isolado — ver [docs/poc-multi-app/DISCOVERY.md](docs/poc-multi-app/DISCOVERY.md) |
 | Deploy | Docker Compose; GitHub Actions builda e envia pra VPS a cada push em `main` via SSH/SCP (ver [DEPLOY.md](DEPLOY.md)), com script Python (paramiko/SFTP) como alternativa manual |
 
 ## Ferramentas
@@ -358,6 +359,25 @@ acendem. Fotos entram por botão, arrastar-e-soltar ou `Ctrl+V` e são posiciona
 em cm, no topo ou na parede, com um minimapa 2D com régua. Não persiste nada — é
 uma brincadeira de sessão.
 
+### Publicar
+
+Hospeda outros sistemas no mesmo servidor. Você envia um ZIP ou uma pasta com `api/`
+(a saída de `dotnet publish`) e/ou `web/` (front estático), clica em **Publicar** e o
+sistema fica no ar em `http://<endereço>.191-252-177-244.sslip.io:8090`, com um banco
+SQLite próprio que sobrevive às republicações.
+
+- **Versões**: cada envio vira uma versão. Uma versão que não responde ao health check volta
+  sozinha para a anterior (junto com o banco), e dá para voltar a qualquer versão guardada,
+  com ou sem restaurar o banco.
+- **Controle do app**: variáveis de ambiente cifradas, logs do container, parar/iniciar e excluir.
+- **Isolamento**: cada app C# roda num container `aspnet` próprio, com limite de memória e CPU,
+  disco somente leitura (exceto `/data`) e uma rede separada do resto do notas.
+- **Acesso**: só os e-mails em `PUBLICADORES` (no `.env`) veem a ferramenta.
+
+O contrato do app e um exemplo completo (Recados) estão em
+[`exemplos/publicar/recados`](exemplos/publicar/recados/README.md). A operação na VPS
+está no [DEPLOY.md](DEPLOY.md).
+
 ## Modelo de dados (visão geral)
 
 Uma **nota** (`NoteRecord`) tem metadados (`título`, `pasta`, datas) e uma lista de
@@ -388,7 +408,8 @@ notas-vps/
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
 │   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
 │   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
-│   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks (Minimal APIs, um arquivo por ferramenta)
+│   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks, Sites (Minimal APIs, um arquivo por ferramenta)
+│   ├── Services/Sites/               # Publicar: extração do ZIP, disco (versões, link current, backup), fila de publicação
 │   ├── Services/Seguranca/           # cifra dos segredos guardados no banco (chaves de API)
 │   ├── Services/Financas/            # extração de lançamentos (OpenRouter/Anthropic + fallback
 │   │                                 # heurístico, com entrada de imagem/PDF/planilha), orçamento
@@ -422,6 +443,9 @@ notas-vps/
 │   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
 │   └── README.md
 ├── desktop/                          # Editor de Imagens pra Windows (WPF + WebView2, API e IA locais) — ver desktop/README.md
+├── deployer/                         # Publicar: único serviço com docker.sock; cria os containers site-<slug>
+├── exemplos/publicar/recados/        # app de exemplo (front + API C# + SQLite) e o contrato para publicar
+├── docs/poc-multi-app/DISCOVERY.md   # desenho da ferramenta Publicar
 ├── mcp/                               # servidor MCP (Node/TS) — expõe tarefas como tools pra um LLM
 │   ├── src/tasksApi.ts               # client REST contra /api/tasks/* (mesmo contrato do web/Android)
 │   ├── src/auth.ts                   # login/refresh contra /api/auth/*, token só em memória
