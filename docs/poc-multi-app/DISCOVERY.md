@@ -283,7 +283,7 @@ Postgres gerenciado, vários usuários publicando (exigiria cotas, sandbox mais 
 - [x] App Recados (front + API C# + SQLite) publicado e respondendo pelo Caddy em **1.7 s** (meta: < 20 s).
 - [x] Os dados gravados continuaram lá depois de republicar (v2, v4) e depois de voltar para a v1.
 - [x] Uma v3 com DLL corrompida falhou no health check. O log do container (`BadImageFormatException`)
-      apareceu na versão, o banco voltou e a v2 subiu sozinha. O site não ficou fora do ar.
+      apareceu na versão, o banco voltou e a v2 subiu sozinha. O site ficou fora do ar só durante a tentativa (~30 s, o tempo do health check): o container antigo é substituído antes da verificação.
 - [x] Voltar para a v1 em um clique (`/ativar`).
 - [x] Site só estático publicado em ~1 s, sem container.
 - [x] Um app que tenta alocar 1 GB bate no limite: o .NET respeita o cgroup (192 MB), a requisição
