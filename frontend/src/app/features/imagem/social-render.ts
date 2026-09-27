@@ -2,7 +2,8 @@
  * mesmo resultado: a prévia grande, a exportação e as miniaturas dos filtros.
  * Enquanto for um caminho só, o que aparece na tela é o que sai no arquivo. */
 
-import { Adjustments, BgMode, FitMode, frameRect } from './social-model';
+import { Adjustments, BgMode, FitMode, PhotoSlot, frameRect, slotRect } from './social-model';
+import { brandImage } from './brand-assets';
 import { applyLook, isNeutralLook } from './color';
 import { aplicarLuz } from './light';
 
@@ -14,6 +15,13 @@ export interface FrameOptions {
   dy: number;
   bgMode: BgMode;
   bgColor: string;
+  /** Padrão da marca por cima da cor de fundo (id de `BRAND_ASSETS`). */
+  bgPattern?: string;
+  /** Espaço reservado pra foto; sem ele, a foto ocupa o quadro. */
+  slot?: PhotoSlot | null;
+  /** Prévia: o espaço vazio da foto ganha o aviso "sua foto aqui". Na
+   * exportação ele sai só como um cartão branco. */
+  placeholder?: boolean;
 }
 
 /** Fonte de imagem com tamanho declarado — serve tanto pra `HTMLImageElement`
@@ -68,7 +76,11 @@ function drawInto(image: CanvasImageSource, w: number, h: number): HTMLCanvasEle
 
 /** Desenha fundo, foto com os ajustes de cor e as camadas de acabamento
  * (temperatura, desbotado, vinheta) no canvas, no tamanho que ele já tiver. */
-export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptions): void {
+export function paintFrame(canvas: HTMLCanvasElement, src: Source | null, o: FrameOptions): void {
+  if (o.slot) {
+    paintSlotted(canvas, src, o, o.slot);
+    return;
+  }
   // A leitura de volta dos pixels é parte do caminho agora (a cor é feita em
   // ponto flutuante), então o contexto já nasce avisado disso.
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -84,16 +96,9 @@ export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptio
   ctx.filter = 'none';
   ctx.clearRect(0, 0, w, h);
 
-  if (o.bgMode === 'desfoque') {
-    // Fundo borrado: a própria foto cobrindo o quadro, bem desfocada.
-    const cover = frameRect(src.width, src.height, w, h, 'cover', 1.18, 0, 0);
-    ctx.filter = `blur(${size * 0.04}px) brightness(0.92) saturate(120%)`;
-    ctx.drawImage(src.image, cover.x, cover.y, cover.w, cover.h);
-    ctx.filter = 'none';
-  } else {
-    ctx.fillStyle = o.bgColor;
-    ctx.fillRect(0, 0, w, h);
-  }
+  paintBackground(ctx, w, h, src, o);
+  // Modelo sem foto: o quadro é só o fundo, e as camadas vêm por cima.
+  if (!src) return;
 
   const r = frameRect(src.width, src.height, w, h, o.fit, o.scale, o.dx, o.dy);
   ctx.save();
@@ -119,5 +124,89 @@ export function paintFrame(canvas: HTMLCanvasElement, src: Source, o: FrameOptio
     aplicarLuz(data.data, w, h, a.shadows, a.highlights);
     applyLook(data.data, w, h, a);
     ctx.putImageData(data, 0, 0);
+  }
+}
+
+/** Fundo do quadro: a própria foto borrada, ou a cor com o padrão por cima. */
+function paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, src: Source | null, o: FrameOptions): void {
+  if (o.bgMode === 'desfoque' && src) {
+    // Fundo borrado: a própria foto cobrindo o quadro, bem desfocada.
+    const size = Math.max(w, h);
+    const cover = frameRect(src.width, src.height, w, h, 'cover', 1.18, 0, 0);
+    ctx.filter = `blur(${size * 0.04}px) brightness(0.92) saturate(120%)`;
+    ctx.drawImage(src.image, cover.x, cover.y, cover.w, cover.h);
+    ctx.filter = 'none';
+    return;
+  }
+  ctx.fillStyle = o.bgColor;
+  ctx.fillRect(0, 0, w, h);
+  const tile = o.bgPattern ? brandImage(o.bgPattern) : null;
+  const pattern = tile ? ctx.createPattern(tile, 'repeat') : null;
+  if (tile && pattern) {
+    // Quatro ladrilhos no lado menor: o desenho fica do mesmo tamanho na
+    // prévia e no arquivo, e em qualquer formato.
+    const k = Math.min(w, h) / 4 / (tile.naturalWidth || 200);
+    pattern.setTransform(new DOMMatrix().scale(k));
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, w, h);
+  }
+}
+
+/** Quadro de modelo com espaço pra foto: fundo no quadro inteiro e a foto
+ * (com o enquadramento e a cor dela) recortada dentro do espaço, de cantos
+ * arredondados. Cor e filtro valem só pra foto — o fundo é da marca. */
+function paintSlotted(canvas: HTMLCanvasElement, src: Source | null, o: FrameOptions, slot: PhotoSlot): void {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.filter = 'none';
+  ctx.clearRect(0, 0, w, h);
+  paintBackground(ctx, w, h, null, o);
+
+  const r = slotRect(slot, w, h);
+  const iw = Math.max(1, Math.round(r.w));
+  const ih = Math.max(1, Math.round(r.h));
+  ctx.save();
+  ctx.beginPath();
+  if (r.r > 0) ctx.roundRect(r.x, r.y, r.w, r.h, Math.min(r.r, r.w / 2, r.h / 2));
+  else ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  if (src) {
+    const inner = document.createElement('canvas');
+    inner.width = iw;
+    inner.height = ih;
+    paintFrame(inner, src, { ...o, slot: null, bgPattern: '' });
+    ctx.drawImage(inner, r.x, r.y, r.w, r.h);
+  } else {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+  ctx.restore();
+
+  if (!src && o.placeholder) {
+    const base = Math.min(w, h);
+    ctx.save();
+    ctx.strokeStyle = '#F28BAE';
+    ctx.lineWidth = Math.max(1.5, base * 0.004);
+    ctx.setLineDash([base * 0.014, base * 0.012]);
+    ctx.beginPath();
+    const inset = ctx.lineWidth / 2;
+    ctx.roundRect(r.x + inset, r.y + inset, r.w - inset * 2, r.h - inset * 2, Math.max(0, Math.min(r.r, r.w / 2, r.h / 2) - inset));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#E7548C';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fs = Math.max(10, Math.min(r.w, r.h) * 0.07, base * 0.022);
+    ctx.font = `600 ${fs}px Montserrat, system-ui, sans-serif`;
+    ctx.fillText('sua foto aqui', r.x + r.w / 2, r.y + r.h / 2 - fs * 0.7);
+    ctx.font = `400 ${fs * 0.7}px Montserrat, system-ui, sans-serif`;
+    ctx.fillStyle = '#4D4D4D';
+    ctx.fillText('solte, cole ou abra uma foto', r.x + r.w / 2, r.y + r.h / 2 + fs * 0.6);
+    ctx.restore();
   }
 }

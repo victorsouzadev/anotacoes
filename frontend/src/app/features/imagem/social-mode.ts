@@ -26,12 +26,16 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { OverlayBox, drawOverlays, ensureOverlayFonts, hitOverlay } from './social-overlays';
+import { OverlayBox, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
+import { SocialTemplateGalleryComponent } from './social-template-gallery';
+import { SocialTemplate } from './social-templates';
+import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
 import { ZipEntry, zipStore } from './zip';
 
 type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
+type TabId = 'modelos' | 'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar';
 
 export const PREFS_KEY = 'imagem-social-prefs';
 
@@ -176,7 +180,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
 @Component({
   selector: 'app-social-mode',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent],
+  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent, SocialTemplateGalleryComponent],
   host: { class: 'il-studio il-basic sm' },
   template: `
     <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
@@ -186,14 +190,14 @@ async function heicToJpeg(file: File): Promise<Blob> {
         <button type="button" class="il-ib" [disabled]="!canUndo()" data-tip="Desfazer  Ctrl+Z" aria-label="Desfazer" (click)="undo()"><il-icon name="undo" /></button>
         <button type="button" class="il-ib" [disabled]="!canRedo()" data-tip="Refazer  Ctrl+Shift+Z" aria-label="Refazer" (click)="redo()"><il-icon name="redo" /></button>
       </div>
-      <span class="il-cb-kind sm-kind" [title]="fileName()">{{ image() ? fileName() : 'Redes sociais' }}</span>
+      <span class="il-cb-kind sm-kind" [title]="fileName()">{{ image() ? fileName() : (store.templateId() ? 'Modelo Viih Mimos' : 'Redes sociais') }}</span>
       <div class="il-cb-group">
         <span class="il-cb-label">Formato</span>
         <select class="il-select" [value]="format().id" (change)="setFormatId($any($event.target).value)" aria-label="Formato do post">
           @for (f of formats; track f.id) { <option [value]="f.id">{{ f.label }} — {{ f.hint }}</option> }
         </select>
       </div>
-      @if (image()) {
+      @if (image() && store.photoVisible()) {
         <div class="il-cb-group">
           <il-num label="Escala" title="Tamanho da foto dentro do quadro (a roda do mouse também muda)" unit="%" [value]="scale() * 100" [step]="5" [min]="20" [max]="600" [decimals]="0" (valueChange)="setScalePct($event.value)" />
           <div class="il-seg">
@@ -208,11 +212,15 @@ async function heicToJpeg(file: File): Promise<Blob> {
             (pointerdown)="startCompare($event)" (pointerup)="stopCompare()" (pointerleave)="stopCompare()" (pointercancel)="stopCompare()"
           ><il-icon name="compare" [size]="14" /> Antes</button>
         </div>
+      } @else if (store.slot()) {
+        <button type="button" class="il-btn" (click)="pick(fileInput)"><il-icon name="photo-add" [size]="14" /> Pôr foto</button>
+      }
+      @if (store.hasContent()) {
         <span class="sm-spacer"></span>
-        <span class="il-cb-label">{{ exportW() }} × {{ exportH() }} px</span>
-        <button type="button" class="il-btn il-primary" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ type() === 'png' ? 'PNG' : 'JPEG' }}</button>
+        <span class="il-cb-label">{{ exportW() }} × {{ exportH() }} px{{ store.slides() > 1 ? ' × ' + store.slides() : '' }}</span>
+        <button type="button" class="il-btn il-primary" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ store.slides() > 1 ? 'carrossel' : (type() === 'png' ? 'PNG' : 'JPEG') }}</button>
       } @else {
-        <span class="il-cb-hint">Abra uma foto pra escolher o formato, aplicar um filtro e ajustar as cores.</span>
+        <span class="il-cb-hint">Abra uma foto ou comece por um modelo Viih Mimos.</span>
       }
     </div>
 
@@ -227,12 +235,13 @@ async function heicToJpeg(file: File): Promise<Blob> {
       </div>
       <div class="il-tb-group">
         <button type="button" class="il-tool" aria-label="Abrir foto" data-tip="Abrir foto" data-help="JPEG, PNG, WebP e HEIC do iPhone" (click)="pick(fileInput)"><il-icon name="folder" [size]="18" /></button>
+        <button type="button" class="il-tool" [class.il-on]="tab() === 'modelos'" aria-label="Modelos Viih Mimos" data-tip="Modelos Viih Mimos" data-help="Story, feed e carrossel na identidade da marca" (click)="tab.set('modelos')"><il-icon name="templates" [size]="18" /></button>
         <button type="button" class="il-tool" [disabled]="!image()" aria-label="Filtros" data-tip="Filtros prontos" (click)="tab.set('filtros')"><il-icon name="filter" [size]="18" /></button>
         <button type="button" class="il-tool" [disabled]="!image()" aria-label="Cor e luz" data-tip="Cor e luz" (click)="tab.set('ajustes')"><il-icon name="sun" [size]="18" /></button>
       </div>
     </nav>
 
-    @if (image()) {
+    @if (store.hasContent()) {
       <div
         class="il-stage sm-stage"
         [class.il-drag-over]="dragOver()"
@@ -257,6 +266,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
           @if (converting()) { <span>Convertendo HEIC…</span> }
           @if (error()) { <span class="il-error">{{ error() }}</span> }
         </button>
+        <button type="button" class="il-btn sm-start-template" (click)="tab.set('modelos')"><il-icon name="templates" [size]="14" /> Ou comece por um modelo Viih Mimos</button>
       </div>
     }
 
@@ -268,6 +278,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
       </div>
       <div class="il-tab-body">
         @switch (tab()) {
+          @case ('modelos') {
+            <sm-template-gallery (applied)="onTemplateApplied($event)" />
+          }
           @case ('filtros') {
             @for (g of groups; track g.name) {
               <section class="il-sec">
@@ -407,11 +420,34 @@ async function heicToJpeg(file: File): Promise<Blob> {
                     <button type="button" class="il-btn il-grow" [class.il-on]="bgMode() === 'desfoque'" (click)="setBgMode('desfoque')">Fundo borrado</button>
                     @if (bgMode() === 'cor') { <input type="color" class="il-color-input" [value]="bgColor()" (input)="onBgColor($event)" aria-label="Cor do fundo" /> }
                   </div>
-                } @else {
-                  <p class="il-note">A foto cobre o quadro inteiro — não há fundo à mostra. Use "Caber" ou diminua a escala pra escolher um.</p>
+                } @else if (image()) {
+                  <p class="il-note">A foto cobre {{ store.slot() ? 'o espaço dela' : 'o quadro inteiro' }} — não há fundo à mostra. Use "Caber" ou diminua a escala pra escolher um.</p>
                 }
               </div>
             </section>
+            @if (store.templateId()) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static">Fundo do modelo</div>
+                <div class="il-sec-body">
+                  <div class="sm-swatches" role="group" aria-label="Cor de fundo">
+                    @for (c of brandColors; track c.id) {
+                      <button type="button" class="sm-swatch" [class.il-on]="bgColor().toLowerCase() === c.hex.toLowerCase()" [style.background]="c.hex" [title]="c.label" [attr.aria-label]="'Fundo ' + c.label" (click)="setTemplateBg(c.hex)"></button>
+                    }
+                    <input type="color" class="il-color-input" [value]="bgColor()" (input)="onBgColor($event)" aria-label="Outra cor de fundo" />
+                  </div>
+                  <div class="il-seg sm-seg-full">
+                    <button type="button" [class.il-on]="!store.bgPattern()" (click)="setPattern('')">Liso</button>
+                    @for (pt of patterns; track pt.id) {
+                      <button type="button" [class.il-on]="store.bgPattern() === pt.id" (click)="setPattern(pt.id)">{{ pt.label }}</button>
+                    }
+                  </div>
+                  <button type="button" class="il-btn il-wide" (click)="removeTemplate()"><il-icon name="trash" [size]="13" /> Tirar o modelo</button>
+                  @if (store.slot()) {
+                    <p class="il-note">{{ image() ? 'Arraste a foto dentro do espaço pra reenquadrar; a roda do mouse muda a escala.' : 'Clique no espaço tracejado do palco (ou em "Pôr foto") pra escolher a foto.' }}</p>
+                  }
+                </div>
+              </section>
+            }
             @if (image() && upscale.disponivel()) {
               <section class="il-sec">
                 <div class="il-sec-head il-sec-static"><il-icon name="wand" [size]="13" /> Recortar com IA</div>
@@ -471,7 +507,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 @if (upscaling(); as falta) {
                   <p class="il-note il-warn">A foto tem pixel pra {{ falta }} px de largura neste corte — acima disso o arquivo sai interpolado, maior mas não mais definido.</p>
                 }
-                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="exportImage()"><il-icon name="download" [size]="13" /> {{ store.slides() > 1 ? 'Baixar carrossel (' + store.slides() + ' posts)' : 'Baixar ' + exportW() + ' × ' + exportH() }}</button>
+                <button type="button" class="il-btn il-primary il-wide" [disabled]="!store.hasContent()" (click)="exportImage()"><il-icon name="download" [size]="13" /> {{ store.slides() > 1 ? 'Baixar carrossel (' + store.slides() + ' posts)' : 'Baixar ' + exportW() + ' × ' + exportH() }}</button>
                 @if (status()) { <p class="il-note">{{ status() }}</p> }
               </div>
             </section>
@@ -495,7 +531,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
             <div class="il-sec-head il-sec-static">Enviar para outro modo</div>
             <div class="il-export-list">
               @for (t of bridge.targetsFrom('social'); track t.id) {
-                <button type="button" class="il-export" [disabled]="!image()" (click)="sendTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
+                <button type="button" class="il-export" [disabled]="!store.hasContent()" (click)="sendTo(t.id)"><il-icon name="export" [size]="20" /><span><strong>{{ t.label }}</strong><small>{{ t.help }}</small></span></button>
               }
             </div>
           }
@@ -504,11 +540,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
     </aside>
 
     <footer class="il-status">
-      @if (image()) {
-        <span class="il-status-info">{{ fileName() }}</span>
-        <span>{{ format().label }} · {{ exportW() }} × {{ exportH() }} px · escala {{ (scale() * 100).toFixed(0) }}%</span>
+      @if (store.hasContent()) {
+        <span class="il-status-info">{{ fileName() || (store.templateId() ? 'Modelo Viih Mimos' : '') }}</span>
+        <span>{{ format().label }} · {{ exportW() }} × {{ exportH() }} px{{ image() ? ' · escala ' + (scale() * 100).toFixed(0) + '%' : '' }}</span>
       }
-      <span class="il-status-msg">{{ status() || (image() ? 'Arraste a foto pra reenquadrar · roda do mouse muda a escala · segure C pra comparar' : 'Solte, cole ou abra uma foto') }}</span>
+      <span class="il-status-msg">{{ status() || (image() ? 'Arraste a foto pra reenquadrar · roda do mouse muda a escala · segure C pra comparar' : (store.templateId() ? 'Clique num texto pra editar · solte uma foto pra preencher o espaço do modelo' : 'Solte, cole ou abra uma foto')) }}</span>
     </footer>
   `,
   styles: [`
@@ -545,22 +581,35 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-link { margin: 0; justify-content: flex-start; }
     .sm-seg-full { display: flex; }
     .sm-seg-full button { flex: 1; width: auto; font-size: 11px; }
+    /* seis abas na largura do painel: menos respiro pra caberem todas */
+    .il-tab { padding: 0 4px; min-width: 0; }
+    .sm-start-template { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
+    .sm-swatches { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+    .sm-swatch { width: 24px; height: 24px; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; }
+    .sm-swatch.il-on { outline: 2px solid var(--il-blue); outline-offset: 1px; }
   `],
 })
 export class SocialModeComponent {
   private readonly previewRef = viewChild<ElementRef<HTMLCanvasElement>>('preview');
+  private readonly fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
 
   private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
 
   readonly formats = SOCIAL_FORMATS;
-  readonly tabs: { id: 'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar'; label: string }[] = [
+  readonly tabs: { id: TabId; label: string }[] = [
+    { id: 'modelos', label: 'Modelos' },
     { id: 'filtros', label: 'Filtros' },
     { id: 'ajustes', label: 'Cor e luz' },
     { id: 'foto', label: 'Foto' },
     { id: 'texto', label: 'Texto' },
     { id: 'exportar', label: 'Exportar' },
   ];
-  readonly tab = signal<'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar'>('filtros');
+  readonly store = inject(SocialStore);
+  /** Sem nada aberto, a primeira aba é a dos modelos: é por onde se começa
+   * quando não há foto. */
+  readonly tab = signal<TabId>(this.store.hasContent() ? 'filtros' : 'modelos');
+  readonly brandColors = BRAND_COLORS;
+  readonly patterns = BRAND_PATTERNS;
   readonly presets = FILTER_PRESETS;
   readonly groups = FILTER_GROUPS;
   /** Os quatro que resolvem a maior parte das fotos. */
@@ -586,7 +635,6 @@ export class SocialModeComponent {
   /** O estado mora no store porque o componente morre ao trocar de modo e a
    * page precisa dele pra salvar o projeto. Os apelidos abaixo existem só pra
    * o template não repetir `store.` em toda linha. */
-  readonly store = inject(SocialStore);
   readonly image = this.store.image;
   readonly fileName = this.store.fileName;
   readonly format = this.store.format;
@@ -681,9 +729,9 @@ export class SocialModeComponent {
     const photo = this.image();
     if (!photo) return 0;
     const source = this.photoSize();
-    const out = this.store.frameW();
+    const out = this.store.photoW();
     const r = frameRect(
-      source.width, source.height, out, this.exportH(),
+      source.width, source.height, out, this.store.photoH(),
       this.fit(), this.scale(), this.offsetX(), this.offsetY(),
     );
     if (r.w <= source.width * 1.02) return 0;
@@ -710,7 +758,7 @@ export class SocialModeComponent {
     if (this.recortada()) return true;
     const box = 1000;
     return !coversFrame(
-      this.photoSize().width, this.photoSize().height, box, Math.round(box / this.store.frameRatio()),
+      this.photoSize().width, this.photoSize().height, box, Math.round((box * this.store.photoH()) / this.store.photoW()),
       this.fit(), this.scale(), this.offsetX(), this.offsetY(),
     );
   });
@@ -747,6 +795,12 @@ export class SocialModeComponent {
     effect(() => {
       const overlays = this.store.overlays();
       void ensureOverlayFonts(overlays, this.fonts).then(() => this.fontTick.update((v) => v + 1));
+      void ensureOverlayAssets(overlays).then(() => this.fontTick.update((v) => v + 1));
+    });
+    // Padrão de fundo do modelo: mesmo esquema das fontes.
+    effect(() => {
+      const pattern = this.store.bgPattern();
+      if (pattern) void ensureBrandAssets([pattern]).then(() => this.fontTick.update((v) => v + 1));
     });
     // Foto mandada por outro modo ("Enviar para…").
     effect(() => {
@@ -763,9 +817,13 @@ export class SocialModeComponent {
       const img = this.image();
       // Comparando, o que aparece é a foto como ela entrou: mesmo enquadramento
       // e mesmo formato, sem ajuste de cor e sem a redução de ruído.
-      const source = compare ? (img ? sourceOf(img) : null) : this.currentSource();
+      const visible = this.store.photoVisible();
+      const source = !visible ? null : compare ? (img ? sourceOf(img) : null) : this.currentSource();
       const amount = this.sharpen();
-      if (!canvas || !source) return;
+      // Modelo sem foto ainda: desenha o fundo e as camadas, com o aviso no
+      // espaço da foto.
+      if (!canvas || (!source && !this.store.hasContent())) return;
+      this.fontTick();
       const dpr = Math.min(MAX_PREVIEW_DPR, globalThis.devicePixelRatio || 1);
       // Enquanto a mão está num controle a prévia desenha menor: a conta de cor
       // agora é por pixel, e resposta imediata vale mais que nitidez num quadro
@@ -773,8 +831,7 @@ export class SocialModeComponent {
       const w = Math.round(PREVIEW_CSS_WIDTH * dpr * (this.interacting() ? 0.55 : 1));
       canvas.width = w;
       canvas.height = Math.round(w / this.store.frameRatio());
-      paintFrame(canvas, source, this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()));
-      this.fontTick();
+      paintFrame(canvas, source, { ...this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()), placeholder: true });
       const overlays = this.store.overlays();
       const selectedOverlay = this.store.selectedOverlay();
       const ctx2 = canvas.getContext('2d')!;
@@ -858,7 +915,10 @@ export class SocialModeComponent {
     effect(() => {
       const refs = this.presetRefs();
       const source = this.currentSource();
-      const frame = { ...this.frameOptions(NEUTRAL), ratio: this.store.frameRatio() };
+      // As miniaturas mostram a foto, não o modelo em volta dela.
+      const slot = this.store.slot();
+      const ratio = slot ? (slot.w * this.store.frameRatio()) / slot.h : this.store.frameRatio();
+      const frame = { ...this.frameOptions(NEUTRAL), slot: null, bgPattern: '', ratio };
       if (!refs.length || !source) return;
       this.schedule(() => this.paintThumbs(refs, source, frame));
     });
@@ -941,7 +1001,7 @@ export class SocialModeComponent {
     // dela são usados, e ler esses sinais aqui refaria a redução a cada
     // movimento do ponteiro.
     const r = frameRect(
-      source.width, source.height, this.store.frameW(), this.exportH(),
+      source.width, source.height, this.store.photoW(), this.store.photoH(),
       this.fit(), this.scale(), 0, 0,
     );
     const needed = Math.ceil((r.w * 1.15) / 200) * 200;
@@ -970,6 +1030,8 @@ export class SocialModeComponent {
       dy: this.offsetY(),
       bgMode: this.bgMode(),
       bgColor: this.bgColor(),
+      bgPattern: this.store.bgPattern(),
+      slot: this.store.slot(),
     };
   }
 
@@ -1027,7 +1089,7 @@ export class SocialModeComponent {
     // devolver, porque é a redução que come o micro-contraste.
     const source = sourceOf(photo);
     const r = frameRect(
-      source.width, source.height, this.store.frameW(), this.exportH(),
+      source.width, source.height, this.store.photoW(), this.store.photoH(),
       this.fit(), this.scale(), 0, 0,
     );
     const reducao = r.w > 0 ? source.width / r.w : 1;
@@ -1370,6 +1432,8 @@ export class SocialModeComponent {
         : raw;
       const mime = heic ? 'image/jpeg' : (file.type || 'image/jpeg');
       this.store.setImage(photo, original, heic ? file.name.replace(/\.hei[cf]$/i, '.jpg') : file.name, mime);
+      // O aviso "ponha a foto" do modelo já cumpriu o papel.
+      this.status.set(this.store.photoVisible() ? '' : 'Este modelo não tem espaço pra foto. Escolha um modelo com foto, ou tire o modelo na aba Foto.');
     } catch (e) {
       this.converting.set(false);
       this.status.set('');
@@ -1380,8 +1444,52 @@ export class SocialModeComponent {
   }
 
   removeImage(): void {
-    this.store.clear();
+    // Num modelo, tirar a foto devolve o espaço vazio; o modelo fica.
+    if (this.store.templateId()) this.store.removePhoto();
+    else this.store.clear();
     this.status.set('');
+  }
+
+  /** Modelo aplicado pela galeria: leva o usuário a onde ele vai mexer em
+   * seguida — a foto, se o modelo pede uma e ainda não há, ou os textos. */
+  onTemplateApplied(t: SocialTemplate): void {
+    this.recortada.set(false);
+    this.status.set(t.photo && !this.image()
+      ? `Modelo "${t.label}" aplicado. Clique no espaço tracejado pra pôr a foto.`
+      : `Modelo "${t.label}" aplicado. Clique num texto pra trocar. Ctrl+Z desfaz.`);
+  }
+
+  /** Volta a um post comum: sem espaço de foto, sem padrão e sem as camadas
+   * do modelo. Ctrl+Z traz tudo de volta. */
+  removeTemplate(): void {
+    this.store.templateId.set('');
+    this.store.slot.set(null);
+    this.store.bgPattern.set('');
+    this.store.overlays.set([]);
+    this.store.selectedOverlay.set(null);
+    this.store.resetFraming();
+    this.commit();
+    this.status.set('Modelo retirado. Ctrl+Z traz de volta.');
+  }
+
+  setTemplateBg(hex: string): void {
+    this.bgMode.set('cor');
+    this.bgColor.set(hex);
+    this.commit();
+  }
+
+  setPattern(id: string): void {
+    this.store.bgPattern.set(id);
+    this.commit();
+  }
+
+  /** O ponto (em px da prévia) cai no espaço da foto do modelo? */
+  private inSlot(pt: { x: number; y: number }): boolean {
+    const slot = this.store.slot();
+    const canvas = this.previewRef()?.nativeElement;
+    if (!slot || !canvas) return false;
+    const x = pt.x / canvas.width, y = pt.y / canvas.height;
+    return x >= slot.x && x <= slot.x + slot.w && y >= slot.y && y <= slot.y + slot.h;
   }
 
   setFit(fit: FitMode): void {
@@ -1406,7 +1514,10 @@ export class SocialModeComponent {
     if (sel && pt && hitOverlay(this.boxes, pt.x, pt.y) === sel) {
       event.preventDefault();
       const o = this.store.overlays().find((x) => x.id === sel)!;
-      this.store.patchOverlay(sel, { size: clamp(o.size * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 0.02, 0.8) });
+      // Forma pode passar do lado menor (uma faixa, um cartão); texto e
+      // figurinha não precisam.
+      const max = o.kind === 'forma' ? 2 : 0.8;
+      this.store.patchOverlay(sel, { size: clamp(o.size * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 0.02, max) });
       if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
       this.wheelTimer = setTimeout(() => this.commit(), 300);
       return;
@@ -1429,10 +1540,18 @@ export class SocialModeComponent {
   }
 
   onPointerDown(event: PointerEvent): void {
-    if (!this.image()) return;
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    if (!this.store.hasContent()) return;
     const pt = this.canvasPoint(event);
     const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
+    // Modelo ainda sem foto: clicar no espaço dela abre o seletor. Modelo
+    // sem espaço de foto: não há foto pra arrastar.
+    if (!hit && (!this.image() || !this.store.photoVisible())) {
+      if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
+      const input = this.fileInputRef()?.nativeElement;
+      if (pt && input && this.inSlot(pt)) this.pick(input);
+      return;
+    }
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
     if (hit) {
       const o = this.store.overlays().find((x) => x.id === hit)!;
       this.store.selectedOverlay.set(hit);
@@ -1488,9 +1607,12 @@ export class SocialModeComponent {
     const box = canvas.getBoundingClientRect();
     d.moved = true;
     this.touch();
-    // O deslocamento é guardado em fração do quadro pra sobreviver ao zoom da tela.
-    this.offsetX.set(clamp(d.dx + (event.clientX - d.x) / box.width, -1, 1));
-    this.offsetY.set(clamp(d.dy + (event.clientY - d.y) / box.height, -1, 1));
+    // O deslocamento é guardado em fração do quadro pra sobreviver ao zoom da
+    // tela — do espaço da foto, quando o modelo tem um.
+    const slot = this.store.slot();
+    const sw = slot?.w ?? 1, sh = slot?.h ?? 1;
+    this.offsetX.set(clamp(d.dx + (event.clientX - d.x) / (box.width * sw), -1, 1));
+    this.offsetY.set(clamp(d.dy + (event.clientY - d.y) / (box.height * sh), -1, 1));
   }
 
   onPointerUp(event: PointerEvent): void {
@@ -1628,7 +1750,8 @@ export class SocialModeComponent {
   /** A imagem final (formato, filtro, ajustes, nitidez, textos), no tamanho
    * de saída — no carrossel, a faixa inteira com todos os posts. */
   private renderFinal(source = this.currentSource(), framing?: Partial<FrameOptions>): HTMLCanvasElement | null {
-    if (!source) return null;
+    if (!source && !this.store.hasContent()) return null;
+    if (!this.store.photoVisible()) source = null;
     let w = this.store.frameW();
     let h = this.exportH();
     if (w * h > MAX_EXPORT_PIXELS) {
@@ -1668,10 +1791,28 @@ export class SocialModeComponent {
     this.commit();
   }
 
-  sendTo(target: BridgeTarget): void {
+  /** Fontes e arquivos da marca prontos antes de desenhar pra valer: o
+   * arquivo não pode sair sem o laço porque ele ainda estava a caminho. */
+  private async assetsReady(): Promise<void> {
+    const overlays = this.store.overlays();
+    const pattern = this.store.bgPattern();
+    await Promise.all([
+      ensureOverlayFonts(overlays, this.fonts),
+      ensureOverlayAssets(overlays),
+      ensureBrandAssets(pattern ? [pattern] : []),
+    ]);
+  }
+
+  /** Nome base dos arquivos: o da foto, ou o do modelo. */
+  private baseName(): string {
+    return (this.fileName() || this.store.templateId().replace(/^vm-/, 'viih-mimos-') || 'post').replace(/\.[^.]+$/, '');
+  }
+
+  async sendTo(target: BridgeTarget): Promise<void> {
+    await this.assetsReady();
     const canvas = this.renderFinal();
     if (!canvas) return;
-    const base = (this.fileName() || 'post').replace(/\.[^.]+$/, '');
+    const base = this.baseName();
     this.bridge.send(target, { canvas, name: `${base}-${this.format().id}` });
   }
 
@@ -1695,10 +1836,11 @@ export class SocialModeComponent {
   }
 
   async exportImage(): Promise<void> {
+    await this.assetsReady();
     const canvas = this.renderFinal();
     if (!canvas) return;
     const ext = this.type() === 'png' ? 'png' : 'jpg';
-    const base = (this.fileName() || 'post').replace(/\.[^.]+$/, '');
+    const base = this.baseName();
     const parts = this.slices(canvas);
     if (parts.length === 1) {
       const blob = await this.encode(canvas);
@@ -1726,6 +1868,7 @@ export class SocialModeComponent {
     const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/') || isHeicFile(f));
     input.value = '';
     if (!files.length) return;
+    await this.assetsReady();
     const out: ZipEntry[] = [];
     const names = new Set<string>();
     for (const [i, file] of files.entries()) {
@@ -1751,7 +1894,7 @@ export class SocialModeComponent {
     const blob0: Blob = isHeicFile(file) ? await heicToJpeg(file) : file;
     const img = await loadImageElement(await readAsDataUrl(blob0));
     const src = sourceOf(img);
-    const r = frameRect(src.width, src.height, this.store.frameW(), this.exportH(), this.fit(), 1, 0, 0);
+    const r = frameRect(src.width, src.height, this.store.photoW(), this.store.photoH(), this.fit(), 1, 0, 0);
     const source = r.w < src.width * 0.9
       ? sourceOf(stepDownscale(src, Math.ceil(r.w), Math.ceil((r.w * src.height) / src.width)))
       : src;

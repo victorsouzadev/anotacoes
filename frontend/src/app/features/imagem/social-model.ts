@@ -125,6 +125,22 @@ export const FILTER_GROUPS: { name: string; presets: FilterPreset[] }[] =
 export type FitMode = 'cover' | 'contain';
 export type BgMode = 'cor' | 'desfoque';
 
+/** Onde a foto entra no quadro, nos modelos que reservam um espaço pra ela.
+ * Tudo em fração do quadro (o raio, do lado menor), pra valer em qualquer
+ * tamanho de saída. Sem espaço (`null`), a foto ocupa o quadro inteiro. */
+export interface PhotoSlot {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  radius: number;
+}
+
+/** O retângulo do espaço da foto, em px de um quadro w × h. */
+export function slotRect(slot: PhotoSlot, w: number, h: number): { x: number; y: number; w: number; h: number; r: number } {
+  return { x: slot.x * w, y: slot.y * h, w: slot.w * w, h: slot.h * h, r: slot.radius * Math.min(w, h) };
+}
+
 /** Monta a string de `filter` do canvas a partir dos ajustes. O desfoque escala
  * com o tamanho do destino pra prévia e exportação ficarem iguais. */
 export function filterString(a: Adjustments, sizePx: number): string {

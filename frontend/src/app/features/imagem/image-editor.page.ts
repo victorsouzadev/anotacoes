@@ -1045,7 +1045,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       this.images(); this.sheetSize(); this.orientation(); this.spacingMm(); this.projectName();
       this.packMode(); this.allowRotate(); this.regMarks(); this.machine(); this.markZoneMm(); this.kissCut();
       this.templates.svgText(); this.templates.slots(); this.templates.photos(); this.templates.widthMm();
-      this.social.image(); this.social.canUndo(); this.social.canRedo(); this.social.exportW();
+      this.social.image(); this.social.templateId(); this.social.canUndo(); this.social.canRedo(); this.social.exportW();
       this.illustration.layers(); this.illustration.widthMm(); this.illustration.heightMm();
       untracked(() => this.markDirty());
     });
@@ -1534,7 +1534,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   // ---------- rascunho automático ----------
 
   private hasContent(): boolean {
-    return !!this.images().length || this.templates.hasTemplate() || this.social.hasImage() || this.illustration.hasContent();
+    return !!this.images().length || this.templates.hasTemplate() || this.social.hasContent() || this.illustration.hasContent();
   }
 
   private markDirty(): void {
@@ -3217,7 +3217,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       }
 
       // Projetos salvos antes do modo redes sociais simplesmente não têm a seção.
-      if (data.social?.src) {
+      const temSocial = !!(data.social?.src || data.social?.templateId);
+      if (temSocial && data.social) {
         await this.social.hydrate(data.social, loadImage);
         if (!data.images?.length && !data.molde?.svg) this.setModo('social');
       } else {
@@ -3227,7 +3228,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       // Projetos salvos antes do modo ilustração simplesmente não têm a seção.
       if (data.ilustracao?.layers?.length) {
         this.illustration.hydrate(data.ilustracao);
-        if (!data.images?.length && !data.molde?.svg && !data.social?.src) this.setModo('ilustracao');
+        if (!data.images?.length && !data.molde?.svg && !temSocial) this.setModo('ilustracao');
       } else {
         this.illustration.clear();
       }

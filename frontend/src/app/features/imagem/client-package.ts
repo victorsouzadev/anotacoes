@@ -6,7 +6,8 @@
 import { FontLibrary } from './fonts';
 import { buildSvg, canvasToBlob, cutDxf, rasterizeSvg } from './illustration-export';
 import { IllustrationStore } from './illustration-store';
-import { drawOverlays, ensureOverlayFonts } from './social-overlays';
+import { drawOverlays, ensureOverlayAssets, ensureOverlayFonts } from './social-overlays';
+import { ensureBrandAssets } from './brand-assets';
 import { paintFrame, sourceOf } from './social-render';
 import { SocialStore } from './social-store';
 import {
@@ -83,17 +84,19 @@ export async function templateSection(store: TemplateStore, fonts: FontLibrary):
 }
 
 export async function socialSection(store: SocialStore, fonts: FontLibrary): Promise<PackageSection | null> {
-  const photo = store.image();
-  if (!photo) return null;
+  const photo = store.photoVisible() ? store.image() : null;
+  if (!store.hasContent()) return null;
   const w = store.frameW(), h = store.exportH();
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  paintFrame(canvas, sourceOf(photo), {
+  await ensureBrandAssets(store.bgPattern() ? [store.bgPattern()] : []);
+  paintFrame(canvas, photo ? sourceOf(photo) : null, {
     adjust: store.adjust(), fit: store.fit(), scale: store.scale(), dx: store.offsetX(), dy: store.offsetY(),
-    bgMode: store.bgMode(), bgColor: store.bgColor(),
+    bgMode: store.bgMode(), bgColor: store.bgColor(), bgPattern: store.bgPattern(), slot: store.slot(),
   });
   await ensureOverlayFonts(store.overlays(), fonts);
+  await ensureOverlayAssets(store.overlays());
   drawOverlays(canvas.getContext('2d')!, w, h, store.overlays(), fonts, null);
   const n = store.slides();
   const files: ZipEntry[] = [];

@@ -1,0 +1,12 @@
+<svg width="220" height="150" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 150" role="img" aria-label="Viih Mimos">
+  <title>Viih Mimos</title>
+<g transform="translate(10.00 8.00) scale(1.0000)">
+    <path d="M100 64 C 80 22, 34 14, 22 40 C 11 65, 56 82, 100 64 Z" fill="#E7548C"/>
+    <path d="M100 64 C 120 22, 166 14, 178 40 C 189 65, 144 82, 100 64 Z" fill="#E7548C"/>
+    <path d="M99 62 C 84 32, 48 26, 38 44 C 29 61, 64 72, 99 62 Z" fill="#F7B6C7"/>
+    <path d="M101 62 C 116 32, 152 26, 162 44 C 171 61, 136 72, 101 62 Z" fill="#F7B6C7"/>
+    <path d="M93 70 C 88 94, 76 112, 55 123 L 67 104 L 49 106 C 67 95, 80 83, 86 66 Z" fill="#E7548C"/>
+    <path d="M107 70 C 112 94, 124 112, 145 123 L 133 104 L 151 106 C 133 95, 120 83, 114 66 Z" fill="#E7548C"/>
+    <path d="M100 50 C 90 56, 89 72, 100 78 C 111 72, 110 56, 100 50 Z" fill="#E7548C"/>
+  </g>
+</svg>

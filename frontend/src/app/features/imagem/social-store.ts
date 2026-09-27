@@ -4,14 +4,15 @@
 
 import { Injectable, computed, signal } from '@angular/core';
 import {
-  Adjustments, BgMode, FitMode, NEUTRAL, SOCIAL_FORMATS, SocialFormat,
+  Adjustments, BgMode, FitMode, NEUTRAL, PhotoSlot, SOCIAL_FORMATS, SocialFormat,
 } from './social-model';
 import { PhotoSource, sourceOf, stepDownscale } from './social-render';
 import { Overlay } from './social-overlays';
 
 export interface SocialProjectData {
   version: number;
-  /** Data URL da foto já reduzida — é o que vai pro backend. */
+  /** Data URL da foto já reduzida — é o que vai pro backend. Vazio num modelo
+   * que ainda não recebeu foto. */
   src: string;
   fileName: string;
   formatId: string;
@@ -36,6 +37,21 @@ export interface SocialProjectData {
   overlays?: Overlay[];
   /** Carrossel: quantos posts lado a lado (1 = post comum). */
   slides?: number;
+  /** Modelo de onde o post partiu (vazio = foto solta). */
+  templateId?: string;
+  slot?: PhotoSlot | null;
+  bgPattern?: string;
+}
+
+/** O que um modelo pronto escreve no post. */
+export interface TemplateLook {
+  templateId: string;
+  formatId: string;
+  slides: number;
+  bgColor: string;
+  bgPattern: string;
+  slot: PhotoSlot | null;
+  overlays: Overlay[];
 }
 
 /** A foto vai embutida no projeto salvo (teto de 9 MB no backend) — 2000 px já
@@ -60,6 +76,9 @@ export interface LookSnapshot {
   luzForca: number;
   overlays: Overlay[];
   slides: number;
+  templateId: string;
+  slot: PhotoSlot | null;
+  bgPattern: string;
 }
 
 /** Teto do histórico. Cada passo é um punhado de números, mas guardar sem
@@ -71,6 +90,7 @@ function sameLook(a: LookSnapshot, b: LookSnapshot): boolean {
     && a.dx === b.dx && a.dy === b.dy && a.bgMode === b.bgMode && a.bgColor === b.bgColor
     && a.preset === b.preset && a.denoise === b.denoise && a.sharpen === b.sharpen
     && a.luzIa === b.luzIa && a.luzForca === b.luzForca && a.overlays === b.overlays && a.slides === b.slides
+    && a.templateId === b.templateId && a.slot === b.slot && a.bgPattern === b.bgPattern
     && (Object.keys(NEUTRAL) as (keyof Adjustments)[]).every((k) => a.adjust[k] === b.adjust[k]);
 }
 
@@ -119,6 +139,18 @@ export class SocialStore {
   readonly exportW = signal(SOCIAL_FORMATS[0].width);
 
   readonly hasImage = computed(() => this.image() !== null);
+  /** Modelo aplicado (vazio = post comum, a partir de uma foto). */
+  readonly templateId = signal('');
+  /** Espaço da foto no modelo; `null` = a foto ocupa o quadro inteiro. */
+  readonly slot = signal<PhotoSlot | null>(null);
+  /** Padrão da marca por cima da cor de fundo. */
+  readonly bgPattern = signal('');
+  /** A foto entra no desenho? Não num modelo sem espaço pra ela (o
+   * "obrigada", a apresentação): ali o post é só a arte da marca. A foto
+   * continua guardada — tirar o modelo ou desfazer traz ela de volta. */
+  readonly photoVisible = computed(() => !(this.templateId() !== '' && this.slot() === null));
+  /** Há o que desenhar: uma foto, ou um modelo (que funciona sem foto). */
+  readonly hasContent = computed(() => this.hasImage() || this.templateId() !== '');
   readonly exportH = computed(() => Math.round(this.exportW() / this.format().ratio));
   /** Textos e figurinhas por cima do post. */
   readonly overlays = signal<Overlay[]>([]);
@@ -154,6 +186,9 @@ export class SocialStore {
   /** O quadro inteiro: no carrossel, os posts lado a lado formam um só. */
   readonly frameRatio = computed(() => this.format().ratio * this.slides());
   readonly frameW = computed(() => this.exportW() * this.slides());
+  /** Onde a foto cai, em px de saída: o espaço do modelo, ou o quadro todo. */
+  readonly photoW = computed(() => this.frameW() * (this.slot()?.w ?? 1));
+  readonly photoH = computed(() => this.exportH() * (this.slot()?.h ?? 1));
 
   // ---------- desfazer ----------
 
@@ -183,6 +218,9 @@ export class SocialStore {
       luzForca: this.luzForca(),
       overlays: this.overlays(),
       slides: this.slides(),
+      templateId: this.templateId(),
+      slot: this.slot(),
+      bgPattern: this.bgPattern(),
     };
   }
 
@@ -235,7 +273,44 @@ export class SocialStore {
     this.luzForca.set(look.luzForca);
     this.overlays.set(look.overlays);
     this.slides.set(look.slides);
+    this.templateId.set(look.templateId);
+    this.slot.set(look.slot);
+    this.bgPattern.set(look.bgPattern);
     this.revision.update((v) => v + 1);
+  }
+
+  /** Aplica um modelo pronto: formato, fundo, espaço da foto e camadas. A foto
+   * que já estiver aberta continua, enquadrada do zero dentro do espaço novo.
+   * É um passo de histórico — Ctrl+Z volta ao que estava antes. */
+  applyTemplate(t: TemplateLook): void {
+    // Store recém-criado ainda não tem o passo inicial: sem ele, o primeiro
+    // modelo aplicado não teria pra onde voltar.
+    if (!this.history.length) this.resetHistory();
+    const format = SOCIAL_FORMATS.find((f) => f.id === t.formatId) ?? SOCIAL_FORMATS[0];
+    this.format.set(format);
+    this.exportW.set(format.width);
+    this.slides.set(Math.min(10, Math.max(1, t.slides)));
+    this.fit.set('cover');
+    this.resetFraming();
+    this.bgMode.set('cor');
+    this.bgColor.set(t.bgColor);
+    this.bgPattern.set(t.bgPattern);
+    this.slot.set(t.slot);
+    this.overlays.set(t.overlays);
+    this.selectedOverlay.set(null);
+    this.templateId.set(t.templateId);
+    this.commit();
+  }
+
+  /** Tira só a foto e mantém o modelo, que continua de pé sem ela. */
+  removePhoto(): void {
+    this.image.set(null);
+    this.src.set('');
+    this.storedCache = null;
+    this.fileName.set('');
+    this.luzIa.set('');
+    this.resetFraming();
+    this.commit();
   }
 
   setImage(img: PhotoSource, src: string, name: string, mime = 'image/jpeg'): void {
@@ -286,6 +361,9 @@ export class SocialStore {
     this.exportW.set(SOCIAL_FORMATS[0].width);
     this.overlays.set([]);
     this.slides.set(1);
+    this.templateId.set('');
+    this.slot.set(null);
+    this.bgPattern.set('');
     this.resetFraming();
     this.resetHistory();
   }
@@ -308,9 +386,9 @@ export class SocialStore {
   }
 
   serialize(): SocialProjectData | null {
-    if (!this.image()) return null;
+    if (!this.hasContent()) return null;
     const src = this.storedSrc();
-    if (!src) return null;
+    if (!src && !this.templateId()) return null;
     return {
       version: 1,
       src,
@@ -332,6 +410,9 @@ export class SocialStore {
       exportW: this.exportW(),
       overlays: this.overlays(),
       slides: this.slides(),
+      templateId: this.templateId(),
+      slot: this.slot(),
+      bgPattern: this.bgPattern(),
     };
   }
 
@@ -359,7 +440,19 @@ export class SocialStore {
     this.exportW.set(data.exportW || format.width);
     this.overlays.set(data.overlays ?? []);
     this.slides.set(Math.min(10, Math.max(1, data.slides ?? 1)));
+    this.templateId.set(data.templateId ?? '');
+    this.slot.set(data.slot ?? null);
+    this.bgPattern.set(data.bgPattern ?? '');
 
+    if (!data.src) {
+      // Modelo salvo antes de receber foto.
+      this.image.set(null);
+      this.src.set('');
+      this.storedCache = null;
+      this.fileName.set('');
+      this.resetHistory();
+      return;
+    }
     const img = await load(data.src);
     this.image.set(img);
     this.src.set(data.src);

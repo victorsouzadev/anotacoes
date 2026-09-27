@@ -3,6 +3,7 @@
  * medidas são frações do quadro, pra valerem em qualquer tamanho de saída. */
 
 import { FontLibrary, nearestWeight } from './fonts';
+import { brandAssetDef, brandImage, ensureBrandAssets } from './brand-assets';
 
 export type TextStyle = 'simples' | 'fundo' | 'contorno' | 'sombra';
 
@@ -14,6 +15,10 @@ interface OverlayBase {
   /** Altura da letra (ou da figurinha) em fração do lado menor do quadro. */
   size: number;
   rotation: number;
+  /** Travada: não é pega por clique no palco (só pela lista de camadas). É o
+   * caso das molduras e fundos dos modelos, que cobrem o quadro e senão
+   * roubariam o arraste da foto. */
+  locked?: boolean;
 }
 
 export interface TextOverlay extends OverlayBase {
@@ -25,6 +30,11 @@ export interface TextOverlay extends OverlayBase {
   style: TextStyle;
   /** Cor do fundo (estilo "fundo") ou do contorno (estilo "contorno"). */
   accent: string;
+  /** Espaço extra entre as letras, em fração do tamanho da letra. */
+  tracking?: number;
+  /** Alinhamento. À esquerda, `x` marca a borda esquerda do texto, e não o
+   * centro — é o que deixa uma lista de itens alinhada. */
+  align?: 'center' | 'left';
 }
 
 export interface StickerOverlay extends OverlayBase {
@@ -32,7 +42,53 @@ export interface StickerOverlay extends OverlayBase {
   sticker: string;
 }
 
-export type Overlay = TextOverlay | StickerOverlay;
+export type ShapeKind = 'retangulo' | 'circulo';
+
+/** Forma simples: retângulo (com ou sem cantos arredondados) ou círculo. É o
+ * que os modelos usam pra moldura, cartão e bolinha de número. */
+export interface ShapeOverlay extends OverlayBase {
+  kind: 'forma';
+  shape: ShapeKind;
+  /** Largura ÷ altura. A altura é `size`, como nas outras camadas. */
+  aspect: number;
+  /** Cor de preenchimento; vazio = sem preenchimento. */
+  fill: string;
+  /** Cor do contorno; vazio = sem contorno. */
+  stroke: string;
+  /** Espessura do contorno, em fração do lado menor do quadro. */
+  strokeWidth: number;
+  /** Raio dos cantos, em fração do lado menor do quadro. */
+  radius: number;
+  dashed?: boolean;
+}
+
+/** Arquivo da marca (logo, laço, ícone), por id de `BRAND_ASSETS`. */
+export interface ImageOverlay extends OverlayBase {
+  kind: 'imagem';
+  asset: string;
+  aspect: number;
+}
+
+export type Overlay = TextOverlay | StickerOverlay | ShapeOverlay | ImageOverlay;
+
+/** Nome curto de uma camada, pra lista do painel. */
+export function overlayLabel(o: Overlay): string {
+  switch (o.kind) {
+    case 'texto': return o.text.split('\n')[0] || 'Texto';
+    case 'figurinha': return o.sticker;
+    case 'forma': return o.shape === 'circulo' ? 'Círculo' : 'Retângulo';
+    case 'imagem': return brandAssetDef(o.asset)?.label ?? o.asset;
+  }
+}
+
+export function overlayKindLabel(o: Overlay): string {
+  return { texto: 'texto', figurinha: 'figurinha', forma: 'forma', imagem: 'marca' }[o.kind];
+}
+
+/** Carrega os arquivos da marca usados pelas camadas. */
+export function ensureOverlayAssets(overlays: Overlay[]): Promise<void> {
+  return ensureBrandAssets(overlays.filter((o): o is ImageOverlay => o.kind === 'imagem').map((o) => o.asset));
+}
 
 export interface StickerDef {
   id: string;
@@ -62,11 +118,13 @@ export interface OverlayBox {
   w: number;
   h: number;
   rotation: number;
+  locked?: boolean;
 }
 
 export function hitOverlay(boxes: OverlayBox[], x: number, y: number): string | null {
   for (let i = boxes.length - 1; i >= 0; i--) {
     const b = boxes[i];
+    if (b.locked) continue;
     const a = (-b.rotation * Math.PI) / 180;
     const dx = x - b.cx, dy = y - b.cy;
     const u = dx * Math.cos(a) - dy * Math.sin(a);
@@ -211,6 +269,36 @@ function drawSticker(ctx: CanvasRenderingContext2D, id: string, s: number): [num
   }
 }
 
+/** Desenha uma forma centrada na origem; devolve a caixa (w, h). */
+function drawShape(ctx: CanvasRenderingContext2D, o: ShapeOverlay, s: number, base: number): [number, number] {
+  const h = s;
+  const w = s * o.aspect;
+  const lw = o.strokeWidth * base;
+  ctx.beginPath();
+  if (o.shape === 'circulo') {
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else {
+    const r = Math.min(o.radius * base, w / 2, h / 2);
+    if (r > 0) roundRect(ctx, -w / 2, -h / 2, w, h, r);
+    else ctx.rect(-w / 2, -h / 2, w, h);
+  }
+  if (o.fill) {
+    ctx.fillStyle = o.fill;
+    ctx.fill();
+  }
+  if (o.stroke && lw > 0) {
+    ctx.strokeStyle = o.stroke;
+    ctx.lineWidth = lw;
+    if (o.dashed) {
+      ctx.lineCap = 'round';
+      ctx.setLineDash([lw * 3, lw * 3.5]);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  return [w, h];
+}
+
 /** Desenha as camadas no canvas (tamanho que ele já tiver). `selected`
  * ganha a moldura tracejada — só na prévia. */
 export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number, overlays: Overlay[], fonts: FontLibrary, selected: string | null = null): OverlayBox[] {
@@ -223,19 +311,41 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
     ctx.translate(cx, cy);
     ctx.rotate((o.rotation * Math.PI) / 180);
     let bw: number, bh: number;
+    let shift = 0;
     if (o.kind === 'figurinha') {
       [bw, bh] = drawSticker(ctx, o.sticker, s);
+    } else if (o.kind === 'forma') {
+      [bw, bh] = drawShape(ctx, o, s, base);
+    } else if (o.kind === 'imagem') {
+      bh = s;
+      bw = s * o.aspect;
+      const img = brandImage(o.asset);
+      if (img) ctx.drawImage(img, -bw / 2, -bh / 2, bw, bh);
     } else {
       const fam = fonts.family(o.fontId);
       const weight = nearestWeight(fam.weights, o.bold ? 700 : 400);
       ctx.font = `${weight} ${s}px "${fam.name}", system-ui, sans-serif`;
-      ctx.textAlign = 'center';
+      const left = o.align === 'left';
+      ctx.textAlign = left ? 'left' : 'center';
       ctx.textBaseline = 'middle';
+      // `letterSpacing` já entra na medida, então a caixa de seleção acompanha.
+      // Navegador sem suporte só desenha as letras juntas.
+      const spacing = o.tracking ? `${o.tracking * s}px` : '0px';
+      if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = spacing;
       const lines = o.text.split('\n');
       const lh = s * 1.15;
       const widths = lines.map((l) => ctx.measureText(l).width);
       bw = Math.max(...widths, s * 0.5) + s * 0.5;
       bh = lh * lines.length + s * 0.3;
+      if (left) {
+        // A caixa começa meia margem antes da borda: o centro dela anda pra
+        // direita, no eixo já girado da camada.
+        shift = bw / 2 - s * 0.25;
+        ctx.translate(shift, 0);
+      }
+      // Centrado, o espaçamento sobra depois da última letra: meio espaço pra
+      // direita devolve o texto ao meio.
+      const tx = left ? -bw / 2 + s * 0.25 : ((o.tracking ?? 0) * s) / 2;
       if (o.style === 'fundo') {
         ctx.fillStyle = o.accent;
         roundRect(ctx, -bw / 2, -bh / 2, bw, bh, s * 0.3);
@@ -247,7 +357,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
           ctx.lineJoin = 'round';
           ctx.lineWidth = s * 0.16;
           ctx.strokeStyle = o.accent;
-          ctx.strokeText(line, 0, y);
+          ctx.strokeText(line, tx, y);
         }
         if (o.style === 'sombra') {
           ctx.shadowColor = 'rgba(0,0,0,0.55)';
@@ -255,7 +365,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
           ctx.shadowOffsetY = s * 0.06;
         }
         ctx.fillStyle = o.color;
-        ctx.fillText(line, 0, y);
+        ctx.fillText(line, tx, y);
         ctx.shadowColor = 'transparent';
       });
     }
@@ -267,7 +377,8 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
       ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
     }
     ctx.restore();
-    boxes.push({ id: o.id, cx, cy, w: bw, h: bh, rotation: o.rotation });
+    const rad = (o.rotation * Math.PI) / 180;
+    boxes.push({ id: o.id, cx: cx + shift * Math.cos(rad), cy: cy + shift * Math.sin(rad), w: bw, h: bh, rotation: o.rotation, locked: o.locked });
   }
   return boxes;
 }
