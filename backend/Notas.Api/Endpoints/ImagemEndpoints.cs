@@ -26,6 +26,8 @@ public static class ImagemEndpoints
         MapNomes(app);
         MapBiblioteca(app);
         MapPreferencias(app);
+        MapModelos(app);
+        MapLegenda(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -57,6 +59,117 @@ public static class ImagemEndpoints
             project.DeletedAt = DateTime.UtcNow;
             project.UpdatedAt = DateTime.UtcNow;
             project.Data = "{}"; // libera o espaço das artes já na exclusão
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
+    }
+
+    private const int MaxLegendaImagemBytes = 3 * 1024 * 1024;
+    private static readonly string[] FormatosLegenda = ["story", "feed", "carrossel"];
+
+    /// <summary>
+    /// Legendas de Instagram escritas pela IA a partir da prévia do post, dos
+    /// textos da arte e do perfil da marca. Sem IA configurada, responde 200 com
+    /// o motivo — o editor mostra o aviso em vez de um erro.
+    /// </summary>
+    private static void MapLegenda(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/imagens/legenda", async (
+            LegendaRequest req, ClaimsPrincipal user, ILegendistaInstagram legendista, CancellationToken ct) =>
+        {
+            var imagem = string.IsNullOrWhiteSpace(req.Imagem) ? null : req.Imagem;
+            if (imagem is not null && (!imagem.StartsWith("data:image/", StringComparison.Ordinal) || imagem.Length > MaxLegendaImagemBytes))
+                return Results.BadRequest(new { erro = "A prévia precisa ser uma imagem de até 3 MB." });
+            var textos = (req.Textos ?? new List<string>()).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList();
+            if (textos.Count > 60 || textos.Sum(t => t.Length) > 6000)
+                return Results.BadRequest(new { erro = "Texto demais na arte para mandar à IA." });
+            var contexto = (req.Contexto ?? "").Trim();
+            if (contexto.Length > 1500) return Results.BadRequest(new { erro = "Descreva o post em até 1500 caracteres." });
+            var marca = (req.Marca ?? "").Trim();
+            if (marca.Length > 3000) return Results.BadRequest(new { erro = "Perfil da marca longo demais." });
+            var formato = FormatosLegenda.Contains(req.Formato) ? req.Formato! : "feed";
+            var tom = LegendistaInstagram.Tons.ContainsKey(req.Tom ?? "") ? req.Tom! : "carinhoso";
+
+            var r = await legendista.SugerirAsync(user.UserId(), new PedidoLegenda(imagem, textos, formato, tom, contexto, marca), ct);
+            return Results.Ok(new LegendaResponse(r.Legendas, r.UsouIa, r.Motivo));
+        }).RequireAuthorization();
+    }
+
+    // Um modelo é texto e números (as camadas); a miniatura é que pesa.
+    private const int MaxModeloBytes = 512 * 1024;
+    private const int MaxItensModelos = 200;
+    private static readonly string[] GruposModelo = ["Story", "Feed", "Carrossel"];
+
+    /// <summary>Modelos de post do modo Redes sociais criados pelo usuário.</summary>
+    private static void MapModelos(IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/imagens/modelos").RequireAuthorization();
+
+        // A lista já vem completa: são poucos e pequenos, e a galeria precisa de
+        // todos pra desenhar e aplicar sem ida e volta a cada clique.
+        group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var itens = await db.ImageSocialTemplates.AsNoTracking()
+                .Where(t => t.UserId == user.UserId())
+                .OrderBy(t => t.CreatedAt)
+                .Select(t => new ImageSocialTemplateDto(t.Id, t.Name, t.Group, t.Replaces, t.Data, t.Thumb, t.CreatedAt, t.UpdatedAt))
+                .ToListAsync();
+            return Results.Ok(itens);
+        });
+
+        group.MapPut("/{id}", async (string id, ImageSocialTemplateUpsertRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            if (string.IsNullOrWhiteSpace(id) || id.Length > 64) return Results.BadRequest(new { error = "Id inválido." });
+            var name = (req.Name ?? "").Trim();
+            if (name.Length is 0 or > 120) return Results.BadRequest(new { error = "Dê um nome de até 120 caracteres." });
+            var grupo = req.Group ?? "";
+            if (!GruposModelo.Contains(grupo)) return Results.BadRequest(new { error = "Grupo precisa ser Story, Feed ou Carrossel." });
+            var replaces = (req.Replaces ?? "").Trim();
+            if (replaces.Length > 64) return Results.BadRequest(new { error = "Modelo substituído inválido." });
+            var data = req.Data ?? "";
+            if (data.Length > MaxModeloBytes) return Results.Json(new { error = "Modelo grande demais." }, statusCode: 413);
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(data);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                    return Results.BadRequest(new { error = "O modelo precisa ser um objeto JSON." });
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return Results.BadRequest(new { error = "JSON inválido." });
+            }
+            if (!TentarLerDataUrl(req.Thumb, out _, out _) || req.Thumb!.Length > MaxThumbBytes)
+                return Results.BadRequest(new { error = "Miniatura inválida." });
+
+            var userId = user.UserId();
+            var item = await db.ImageSocialTemplates.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+            if (item is null)
+            {
+                if (await db.ImageSocialTemplates.AnyAsync(t => t.Id == id)) return Results.Conflict(new { error = "Id em uso." });
+                if (await db.ImageSocialTemplates.CountAsync(t => t.UserId == userId) >= MaxItensModelos)
+                    return Results.BadRequest(new { error = $"Você chegou a {MaxItensModelos} modelos — apague alguns antes." });
+                // Um modelo do editor só pode ter uma versão sua: salvar de novo
+                // por cima dele atualiza a mesma, em vez de empilhar cópias.
+                if (replaces.Length > 0 && await db.ImageSocialTemplates.AnyAsync(t => t.UserId == userId && t.Replaces == replaces))
+                    return Results.Conflict(new { error = "Esse modelo já foi editado; atualize a versão que existe." });
+                item = new ImageSocialTemplate { Id = id, UserId = userId, CreatedAt = DateTime.UtcNow };
+                db.ImageSocialTemplates.Add(item);
+            }
+            item.Name = name;
+            item.Group = grupo;
+            item.Replaces = replaces;
+            item.Data = data;
+            item.Thumb = req.Thumb!;
+            item.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Results.Ok(new ImageSocialTemplateDto(item.Id, item.Name, item.Group, item.Replaces, item.Data, item.Thumb, item.CreatedAt, item.UpdatedAt));
+        });
+
+        group.MapDelete("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var item = await db.ImageSocialTemplates.FirstOrDefaultAsync(t => t.Id == id && t.UserId == user.UserId());
+            if (item is null) return Results.NotFound();
+            db.ImageSocialTemplates.Remove(item);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });

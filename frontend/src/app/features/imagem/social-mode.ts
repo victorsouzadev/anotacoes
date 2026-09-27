@@ -29,7 +29,8 @@ import { downloadBlob, loadImageElement } from './svg-template';
 import { OverlayBox, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
-import { SocialTemplate } from './social-templates';
+import { SocialCaptionPanelComponent } from './social-caption-panel';
+import { GalleryEntry } from './social-templates.service';
 import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
 import { ZipEntry, zipStore } from './zip';
@@ -180,7 +181,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
 @Component({
   selector: 'app-social-mode',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent, SocialTemplateGalleryComponent],
+  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent, SocialTemplateGalleryComponent, SocialCaptionPanelComponent],
   host: { class: 'il-studio il-basic sm' },
   template: `
     <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
@@ -217,6 +218,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
       }
       @if (store.hasContent()) {
         <span class="sm-spacer"></span>
+        <button type="button" class="il-btn" data-tip="A IA escreve a legenda olhando o post" (click)="tab.set('exportar')"><il-icon name="sparkle" [size]="14" /> Legenda</button>
         <span class="il-cb-label">{{ exportW() }} × {{ exportH() }} px{{ store.slides() > 1 ? ' × ' + store.slides() : '' }}</span>
         <button type="button" class="il-btn il-primary" (click)="exportImage()"><il-icon name="download" [size]="13" /> Baixar {{ store.slides() > 1 ? 'carrossel' : (type() === 'png' ? 'PNG' : 'JPEG') }}</button>
       } @else {
@@ -253,8 +255,19 @@ async function heicToJpeg(file: File): Promise<Blob> {
         (pointermove)="onPointerMove($event)"
         (pointerup)="onPointerUp($event)"
         (pointercancel)="onPointerUp($event)"
+        (dblclick)="onDoubleClick($event)"
       >
         <canvas #preview class="sm-canvas il-paper" [style.aspect-ratio]="store.frameRatio()"></canvas>
+        @if (inlineEdit(); as ed) {
+          <textarea
+            #inlineInput class="sm-inline-edit" aria-label="Editar texto" spellcheck="true"
+            [style.left.px]="ed.left" [style.top.px]="ed.top" [style.min-width.px]="ed.width" [style.min-height.px]="ed.height"
+            [style.font-size.px]="ed.fontSize" [style.font-family]="ed.font" [style.font-weight]="ed.weight" [style.color]="ed.color"
+            [style.text-align]="ed.align" [value]="ed.text" [attr.rows]="ed.rows"
+            (input)="onInlineInput($event)" (blur)="endInlineEdit()" (keydown)="onInlineKey($event)"
+            (pointerdown)="$event.stopPropagation()" (dblclick)="$event.stopPropagation()"
+          ></textarea>
+        }
         @if (comparing()) { <span class="sm-badge">Foto original</span> }
       </div>
     } @else {
@@ -489,6 +502,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
             <sm-overlays-panel />
           }
           @case ('exportar') {
+            <sm-caption-panel [preview]="captionPreview" />
             <section class="il-sec">
               <div class="il-sec-body il-sec-body-top">
                 <div class="il-seg sm-seg-full">
@@ -583,6 +597,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-seg-full button { flex: 1; width: auto; font-size: 11px; }
     /* seis abas na largura do painel: menos respiro pra caberem todas */
     .il-tab { padding: 0 4px; min-width: 0; }
+    .sm-inline-edit {
+      position: absolute; z-index: 5; box-sizing: border-box; padding: 2px 6px; line-height: 1.15; resize: none; overflow: hidden;
+      field-sizing: content; max-width: 90%; background: rgba(255, 255, 255, 0.94); border: 2px solid var(--il-blue);
+      border-radius: 6px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); outline: none; white-space: pre;
+    }
     .sm-start-template { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
     .sm-swatches { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
     .sm-swatch { width: 24px; height: 24px; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; }
@@ -592,6 +611,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
 export class SocialModeComponent {
   private readonly previewRef = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly inlineInputRef = viewChild<ElementRef<HTMLTextAreaElement>>('inlineInput');
+  /** Texto sendo editado direto no palco, posicionado em cima dele. */
+  readonly inlineEdit = signal<{
+    id: string; text: string; left: number; top: number; width: number; height: number; rows: number;
+    fontSize: number; font: string; weight: number; color: string; align: string;
+  } | null>(null);
 
   private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
 
@@ -770,7 +795,7 @@ export class SocialModeComponent {
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
   /** Arraste de texto/figurinha: posição inicial em fração do quadro. */
-  private overlayDrag: { pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean } | null = null;
+  private overlayDrag: { pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean; again: boolean } | null = null;
   private boxes: OverlayBox[] = [];
   private readonly fontTick = signal(0);
   private readonly fonts = inject(FontLibrary);
@@ -1452,7 +1477,7 @@ export class SocialModeComponent {
 
   /** Modelo aplicado pela galeria: leva o usuário a onde ele vai mexer em
    * seguida — a foto, se o modelo pede uma e ainda não há, ou os textos. */
-  onTemplateApplied(t: SocialTemplate): void {
+  onTemplateApplied(t: GalleryEntry): void {
     this.recortada.set(false);
     this.status.set(t.photo && !this.image()
       ? `Modelo "${t.label}" aplicado. Clique no espaço tracejado pra pôr a foto.`
@@ -1554,9 +1579,10 @@ export class SocialModeComponent {
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
     if (hit) {
       const o = this.store.overlays().find((x) => x.id === hit)!;
+      const again = this.store.selectedOverlay() === hit;
       this.store.selectedOverlay.set(hit);
       this.tab.set('texto');
-      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false };
+      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false, again };
       return;
     }
     if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
@@ -1617,9 +1643,12 @@ export class SocialModeComponent {
 
   onPointerUp(event: PointerEvent): void {
     if (this.overlayDrag?.pointer === event.pointerId) {
-      const moved = this.overlayDrag.moved;
+      const { moved, again, id } = this.overlayDrag;
       this.overlayDrag = null;
       if (moved) this.commit();
+      // Tocar de novo num texto já selecionado, sem arrastar, abre a edição —
+      // é o que faz o celular (onde duplo clique não é gesto natural) editar.
+      else if (again) this.startInlineEdit(id);
       return;
     }
     this.pointers.delete(event.pointerId);
@@ -1635,6 +1664,63 @@ export class SocialModeComponent {
     const moved = this.drag.moved;
     this.drag = null;
     if (moved) this.commit();
+  }
+
+  onDoubleClick(event: MouseEvent): void {
+    const pt = this.canvasPoint(event);
+    const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
+    if (hit) this.startInlineEdit(hit);
+  }
+
+  /** Abre a caixa de edição em cima do texto, no tamanho e na fonte dele. */
+  startInlineEdit(id: string): void {
+    const o = this.store.overlays().find((x) => x.id === id);
+    const box = this.boxes.find((b) => b.id === id);
+    const canvas = this.previewRef()?.nativeElement;
+    const stage = canvas?.parentElement;
+    if (!o || o.kind !== 'texto' || !box || !canvas || !stage) return;
+    const cr = canvas.getBoundingClientRect();
+    const sr = stage.getBoundingClientRect();
+    const k = cr.width / canvas.width;
+    const base = Math.min(canvas.width, canvas.height);
+    const fam = this.fonts.family(o.fontId);
+    this.store.selectedOverlay.set(id);
+    this.inlineEdit.set({
+      id, text: o.text,
+      left: cr.left - sr.left + stage.scrollLeft + (box.cx - box.w / 2) * k,
+      top: cr.top - sr.top + stage.scrollTop + (box.cy - box.h / 2) * k,
+      width: box.w * k, height: box.h * k, rows: o.text.split('\n').length,
+      fontSize: Math.max(12, o.size * base * k), font: `"${fam.name}", system-ui, sans-serif`, weight: o.bold ? 700 : 400,
+      color: o.color.toLowerCase() === '#ffffff' ? '#4D4D4D' : o.color, align: o.align === 'left' ? 'left' : 'center',
+    });
+    setTimeout(() => {
+      const el = this.inlineInputRef()?.nativeElement;
+      el?.focus();
+      el?.select();
+    });
+  }
+
+  onInlineInput(event: Event): void {
+    const ed = this.inlineEdit();
+    if (!ed) return;
+    const text = (event.target as HTMLTextAreaElement).value;
+    this.store.patchOverlay(ed.id, { text });
+    this.inlineEdit.set({ ...ed, text, rows: text.split('\n').length });
+  }
+
+  onInlineKey(event: KeyboardEvent): void {
+    // Enter quebra linha (títulos têm duas); Esc ou Ctrl+Enter terminam.
+    event.stopPropagation();
+    if (event.key === 'Escape' || (event.key === 'Enter' && (event.ctrlKey || event.metaKey))) {
+      event.preventDefault();
+      (event.target as HTMLTextAreaElement).blur();
+    }
+  }
+
+  endInlineEdit(): void {
+    if (!this.inlineEdit()) return;
+    this.inlineEdit.set(null);
+    this.commit();
   }
 
   /** Distância entre os dois dedos, base da pinça. */
@@ -1802,6 +1888,18 @@ export class SocialModeComponent {
       ensureBrandAssets(pattern ? [pattern] : []),
     ]);
   }
+
+  /** O post como vai sair, reduzido e em JPEG — é o que a IA da legenda vê.
+   * No carrossel vai a faixa inteira, pra ela ler a sequência. */
+  readonly captionPreview = async (): Promise<string | null> => {
+    await this.assetsReady();
+    const full = this.renderFinal();
+    if (!full) return null;
+    const max = this.store.slides() > 1 ? 2000 : 1080;
+    const k = Math.min(1, max / full.width);
+    const canvas = k < 1 ? stepDownscale({ image: full, width: full.width, height: full.height }, full.width * k, full.height * k) : full;
+    return canvas.toDataURL('image/jpeg', 0.82);
+  };
 
   /** Nome base dos arquivos: o da foto, ou o do modelo. */
   private baseName(): string {

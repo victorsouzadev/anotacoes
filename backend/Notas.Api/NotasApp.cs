@@ -106,6 +106,12 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
+        // Legendas de Instagram: prévia do post entra, texto sai. Mesmo teto de
+        // tempo do nomeador, porque também leva imagem.
+        builder.Services.AddHttpClient(nameof(LegendistaInstagram), c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -120,6 +126,7 @@ public static class NotasApp
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
         builder.Services.AddScoped<INomeadorDeElementos, NomeadorDeElementos>();
+        builder.Services.AddScoped<ILegendistaInstagram, LegendistaInstagram>();
 
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();

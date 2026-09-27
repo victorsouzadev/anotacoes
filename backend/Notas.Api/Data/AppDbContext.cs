@@ -65,6 +65,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
     public DbSet<ImageLibraryItem> ImageLibrary => Set<ImageLibraryItem>();
     public DbSet<ImagePreferences> ImagePreferences => Set<ImagePreferences>();
+    public DbSet<ImageSocialTemplate> ImageSocialTemplates => Set<ImageSocialTemplate>();
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
@@ -159,6 +160,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(p => p.UserId);
             e.Property(p => p.Data).IsRequired();
             e.HasOne<User>().WithOne().HasForeignKey<ImagePreferences>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ImageSocialTemplate>(e =>
+        {
+            e.ToTable("imagem_modelos");
+            e.Property(t => t.Name).IsRequired().HasMaxLength(120);
+            e.Property(t => t.Group).HasMaxLength(20);
+            e.Property(t => t.Replaces).HasMaxLength(64);
+            e.Property(t => t.Data).IsRequired();
+            e.Property(t => t.Thumb).IsRequired();
+            e.HasIndex(t => new { t.UserId, t.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ImageLibraryItem>(e =>

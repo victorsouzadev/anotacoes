@@ -1,3 +1,5 @@
+using Notas.Api.Services.Imagens;
+
 namespace Notas.Api.Dtos;
 
 public record ImageProjectMetaDto(string Id, string Name, DateTime CreatedAt, DateTime UpdatedAt);
@@ -37,3 +39,11 @@ public record ImageLibraryItemDto(string Id, string Name, string Origin, string 
 public record ImageLibraryUpsertRequest(string? Name, string? Origin, string? Data, string? Thumb, double WidthMm);
 
 public record ImagePreferencesRequest(string? Data);
+
+public record ImageSocialTemplateDto(string Id, string Name, string Group, string Replaces, string Data, string Thumb, DateTime CreatedAt, DateTime UpdatedAt);
+
+public record ImageSocialTemplateUpsertRequest(string? Name, string? Group, string? Replaces, string? Data, string? Thumb);
+
+public record LegendaRequest(string? Imagem, List<string>? Textos, string? Formato, string? Tom, string? Contexto, string? Marca);
+
+public record LegendaResponse(IReadOnlyList<LegendaSugestao> Legendas, bool UsouIa, string? Motivo);

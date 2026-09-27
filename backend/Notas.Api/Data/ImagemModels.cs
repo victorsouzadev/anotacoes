@@ -49,3 +49,25 @@ public class ImagePreferences
     public string Data { get; set; } = "{}";
     public DateTime UpdatedAt { get; set; }
 }
+
+/// <summary>
+/// Modelo de post do modo Redes sociais criado pelo usuário: um post salvo pra
+/// servir de ponto de partida (formato, fundo, espaço da foto e camadas). Pode
+/// substituir um modelo que já vem no editor — aí <see cref="Replaces"/> guarda
+/// o id do original e a galeria mostra este no lugar dele. O conteúdo é JSON
+/// opaco pro servidor, como nos projetos.
+/// </summary>
+public class ImageSocialTemplate
+{
+    public string Id { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>Story, Feed ou Carrossel — só pra agrupar na galeria.</summary>
+    public string Group { get; set; } = "";
+    /// <summary>Id do modelo do editor que este substitui (vazio = modelo novo).</summary>
+    public string Replaces { get; set; } = "";
+    public string Data { get; set; } = "{}";
+    public string Thumb { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}

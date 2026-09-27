@@ -1,3 +1,4 @@
+import { CustomTemplateDto, galleryEntries, groupFor, lookFromCustom, parseCustom } from './social-templates.service';
 import { BRAND_ASSETS, brandAssetDef } from './brand-assets';
 import { SOCIAL_FORMATS } from './social-model';
 import { TEXT_FONTS, hitOverlay } from './social-overlays';
@@ -166,5 +167,52 @@ describe('modelo no store do modo redes sociais', () => {
 
   it('não salva nada sem foto e sem modelo', () => {
     expect(new SocialStore().serialize()).toBeNull();
+  });
+});
+
+describe('modelos da conta na galeria', () => {
+  const dto = (over: Partial<CustomTemplateDto>, look = SOCIAL_TEMPLATES[0].build()): CustomTemplateDto => ({
+    id: 'c1', name: 'Meu', group: 'Story', replaces: '', thumb: '', createdAt: '', updatedAt: '',
+    data: JSON.stringify({ version: 1, formatId: look.formatId, slides: look.slides, bgColor: look.bgColor, bgPattern: look.bgPattern, slot: look.slot, overlays: look.overlays }),
+    ...over,
+  });
+
+  it('sem modelos da conta, mostra só os do editor, na ordem', () => {
+    expect(galleryEntries([]).map((e) => e.id)).toEqual(SOCIAL_TEMPLATES.map((t) => t.id));
+    expect(galleryEntries([]).every((e) => e.kind === 'editor')).toBe(true);
+  });
+
+  it('a versão editada toma o lugar do original, sem duplicar', () => {
+    const entries = galleryEntries([dto({ id: 'ed', name: 'Encomendas (minha)', replaces: 'vm-story-encomendas' })]);
+    expect(entries.length).toBe(SOCIAL_TEMPLATES.length);
+    const i = SOCIAL_TEMPLATES.findIndex((t) => t.id === 'vm-story-encomendas');
+    expect(entries[i].id).toBe('ed');
+    expect(entries[i].kind).toBe('editado');
+    expect(entries[i].builtin?.id).toBe('vm-story-encomendas');
+  });
+
+  it('modelo novo entra no fim, e modelo corrompido é ignorado', () => {
+    const entries = galleryEntries([dto({ id: 'novo', group: 'Feed' }), dto({ id: 'ruim', data: '{oops' })]);
+    expect(entries.length).toBe(SOCIAL_TEMPLATES.length + 1);
+    expect(entries.at(-1)!.id).toBe('novo');
+    expect(entries.at(-1)!.kind).toBe('meu');
+  });
+
+  it('aplicar um modelo salvo gera ids de camada novos e aponta pro modelo', () => {
+    const c = dto({ id: 'abc' });
+    const data = parseCustom(c)!;
+    const a = lookFromCustom(c, data);
+    const b = lookFromCustom(c, data);
+    expect(a.templateId).toBe('abc');
+    expect(a.overlays.length).toBe(data.overlays.length);
+    expect(a.overlays[0].id).not.toBe(b.overlays[0].id);
+    expect(a.overlays[0].id).not.toBe(data.overlays[0].id);
+  });
+
+  it('decide o grupo pelo formato', () => {
+    expect(groupFor('story', 1)).toBe('Story');
+    expect(groupFor('feed', 1)).toBe('Feed');
+    expect(groupFor('retrato', 1)).toBe('Feed');
+    expect(groupFor('feed', 4)).toBe('Carrossel');
   });
 });

@@ -21,53 +21,16 @@ const STYLES: { id: TextStyle; label: string }[] = [
   imports: [IlIconComponent],
   encapsulation: ViewEncapsulation.None,
   template: `
-    <section class="il-sec">
-      <div class="il-sec-body il-sec-body-top">
-        <button type="button" class="il-btn il-primary il-wide" (click)="addText()"><il-icon name="plus" [size]="13" /> Adicionar texto</button>
-        <span class="il-mini-title">Figurinhas</span>
-        <div class="smo-stickers">
-          @for (st of stickers; track st.id) {
-            <button type="button" class="smo-sticker" [class.smo-badge]="!st.emoji" [attr.aria-label]="'Figurinha ' + st.label" (click)="addSticker(st.id)">{{ st.label }}</button>
-          }
-        </div>
-        <p class="il-note">Arraste no palco pra mover; com a camada selecionada, a roda do mouse muda o tamanho. Delete apaga.</p>
-      </div>
-    </section>
-    <section class="il-sec">
-      <div class="il-sec-head il-sec-static">Marca Viih Mimos</div>
-      <div class="il-sec-body">
-        <div class="smo-brand">
-          @for (a of brandAssets; track a.id) {
-            <button type="button" class="smo-brand-item" [attr.aria-label]="'Adicionar ' + a.label" [title]="a.label" (click)="addAsset(a.id)">
-              <img [src]="'marca/viih-mimos/' + a.file" alt="" [class.smo-dark]="a.id === 'assinatura-branca'" />
-            </button>
-          }
-        </div>
-      </div>
-    </section>
-    @if (store.overlays().length) {
-      <section class="il-sec">
-        <div class="il-sec-head il-sec-static">Camadas <small>{{ store.overlays().length }}</small></div>
-        @for (o of store.overlays(); track o.id) {
-          <div class="il-item" [class.il-on]="store.selectedOverlay() === o.id">
-            <button type="button" class="il-item-main" (click)="store.selectedOverlay.set(o.id)">
-              <span class="il-item-text"><span class="il-item-name">{{ label(o) }}</span><span class="il-item-sub">{{ kindLabel(o) }}{{ o.locked ? ' · travada' : '' }}</span></span>
-            </button>
-            <button type="button" class="il-ib il-ib-sm" data-tip="Trazer pra frente" aria-label="Trazer pra frente" (click)="store.moveOverlay(o.id, 1)"><il-icon name="forward" [size]="13" /></button>
-            <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Remover" aria-label="Remover" (click)="store.removeOverlay(o.id)"><il-icon name="trash" [size]="13" /></button>
-          </div>
-        }
-      </section>
-    }
     @if (selected(); as o) {
       <section class="il-sec">
         <div class="il-sec-head il-sec-static">{{ kindTitle[o.kind] }}</div>
         <div class="il-sec-body">
           @if (o.kind === 'texto') {
-            <textarea class="il-textarea" rows="2" [value]="o.text" aria-label="Texto" (input)="patch({ text: $any($event.target).value })" (change)="store.commit()"></textarea>
+            <p class="il-note">Dica: dois cliques no texto do palco editam ali mesmo.</p>
+            <textarea class="il-textarea" rows="3" [value]="o.text" aria-label="Texto" (input)="patch({ text: $any($event.target).value })" (change)="store.commit()"></textarea>
             <div class="il-row">
               <select class="il-select il-grow" [value]="o.fontId" aria-label="Fonte" (change)="patch({ fontId: $any($event.target).value }, true)">
-                @for (f of fontOptions; track f.id) { <option [value]="f.id">{{ f.name }}</option> }
+                @for (f of fontOptions; track f.id) { <option [value]="f.id" [selected]="f.id === o.fontId">{{ f.name }}</option> }
               </select>
               <button type="button" class="il-ib" [class.il-on]="o.bold" data-tip="Negrito" aria-label="Negrito" (click)="patch({ bold: !o.bold }, true)"><b>N</b></button>
               <input type="color" class="il-color-input" [value]="o.color" aria-label="Cor do texto" (input)="patch({ color: $any($event.target).value })" (change)="store.commit()" />
@@ -108,6 +71,44 @@ const STYLES: { id: TextStyle; label: string }[] = [
             <button type="button" class="il-btn il-grow" [class.il-on]="o.locked" data-tip="Travada não é pega por clique no palco" (click)="patch({ locked: !o.locked }, true)">{{ o.locked ? 'Destravar' : 'Travar' }}</button>
           </div>
         </div>
+      </section>
+    }
+    <section class="il-sec">
+      <div class="il-sec-body il-sec-body-top">
+        <button type="button" class="il-btn il-primary il-wide" (click)="addText()"><il-icon name="plus" [size]="13" /> Adicionar texto</button>
+        <span class="il-mini-title">Figurinhas</span>
+        <div class="smo-stickers">
+          @for (st of stickers; track st.id) {
+            <button type="button" class="smo-sticker" [class.smo-badge]="!st.emoji" [attr.aria-label]="'Figurinha ' + st.label" (click)="addSticker(st.id)">{{ st.label }}</button>
+          }
+        </div>
+        <p class="il-note">Arraste no palco pra mover; com a camada selecionada, a roda do mouse muda o tamanho. Delete apaga.</p>
+      </div>
+    </section>
+    <section class="il-sec">
+      <div class="il-sec-head il-sec-static">Marca Viih Mimos</div>
+      <div class="il-sec-body">
+        <div class="smo-brand">
+          @for (a of brandAssets; track a.id) {
+            <button type="button" class="smo-brand-item" [attr.aria-label]="'Adicionar ' + a.label" [title]="a.label" (click)="addAsset(a.id)">
+              <img [src]="'marca/viih-mimos/' + a.file" alt="" [class.smo-dark]="a.id === 'assinatura-branca'" />
+            </button>
+          }
+        </div>
+      </div>
+    </section>
+    @if (store.overlays().length) {
+      <section class="il-sec">
+        <div class="il-sec-head il-sec-static">Camadas <small>{{ store.overlays().length }}</small></div>
+        @for (o of store.overlays(); track o.id) {
+          <div class="il-item" [class.il-on]="store.selectedOverlay() === o.id">
+            <button type="button" class="il-item-main" (click)="store.selectedOverlay.set(o.id)">
+              <span class="il-item-text"><span class="il-item-name">{{ label(o) }}</span><span class="il-item-sub">{{ kindLabel(o) }}{{ o.locked ? ' · travada' : '' }}</span></span>
+            </button>
+            <button type="button" class="il-ib il-ib-sm" data-tip="Trazer pra frente" aria-label="Trazer pra frente" (click)="store.moveOverlay(o.id, 1)"><il-icon name="forward" [size]="13" /></button>
+            <button type="button" class="il-ib il-ib-sm il-danger" data-tip="Remover" aria-label="Remover" (click)="store.removeOverlay(o.id)"><il-icon name="trash" [size]="13" /></button>
+          </div>
+        }
       </section>
     }
   `,
