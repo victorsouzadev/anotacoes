@@ -3217,7 +3217,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       }
 
       // Projetos salvos antes do modo redes sociais simplesmente não têm a seção.
-      const temSocial = !!(data.social?.src || data.social?.templateId);
+      const temSocial = !!(data.social?.src || data.social?.templateId || data.social?.overlays?.length);
       if (temSocial && data.social) {
         await this.social.hydrate(data.social, loadImage);
         if (!data.images?.length && !data.molde?.svg) this.setModo('social');

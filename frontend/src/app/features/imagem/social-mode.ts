@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DesktopService, bytesToBase64 } from '../../core/desktop';
+import { uuid } from '../../core/uuid';
 import { IlIconComponent } from './illustration-icons';
 import { IlNumComponent } from './illustration-num';
 import { BridgeTarget, ModeBridge } from './mode-bridge';
@@ -26,11 +27,11 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { OverlayBox, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay } from './social-overlays';
+import { Overlay, OverlayBox, PhotoOverlay, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
-import { FracBox, snapBox } from './social-align';
+import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
 import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
@@ -40,6 +41,48 @@ type SectionId = 'foto' | 'formato' | 'filtros' | 'cor' | 'exportar';
 type TabId = 'modelos' | 'filtros' | 'ajustes' | 'foto' | 'texto' | 'exportar';
 
 export const PREFS_KEY = 'imagem-social-prefs';
+const GRID_KEY = 'imagem-social-grade';
+const RULERS_KEY = 'imagem-social-reguas';
+
+export interface GridPrefs {
+  on: boolean;
+  /** Colunas em cada post. */
+  cols: number;
+  rows: number;
+  /** As camadas grudam nas linhas da grade. */
+  snap: boolean;
+}
+
+export function loadGrid(): GridPrefs {
+  const fallback: GridPrefs = { on: false, cols: 6, rows: 6, snap: true };
+  try {
+    const raw = localStorage.getItem(GRID_KEY);
+    if (!raw) return fallback;
+    const g = { ...fallback, ...(JSON.parse(raw) as Partial<GridPrefs>) };
+    return { on: !!g.on, snap: g.snap !== false, cols: clampInt(g.cols, 1, 24, 6), rows: clampInt(g.rows, 1, 24, 6) };
+  } catch {
+    return fallback;
+  }
+}
+
+function loadRulers(): boolean {
+  try {
+    return localStorage.getItem(RULERS_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveLocal(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch { /* conveniência */ }
+}
+
+function clampInt(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
 
 /** Só os filtros abertos: é por onde se começa, e as outras seções empurravam
  * cor e exportação pra fora da tela. O que o usuário abrir fica guardado. */
@@ -170,6 +213,26 @@ function readAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** Maior lado de uma foto usada como camada: guardada dentro do projeto,
+ * então vai reduzida — 1600 px cobre um post inteiro com folga. */
+const MAX_LAYER_PHOTO = 1600;
+
+/** Lê, converte (HEIC) e reduz uma foto pra virar camada. Mantém PNG quando o
+ * arquivo pode ter transparência (recorte, logo); o resto vai em JPEG. */
+async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: number }> {
+  const heic = isHeicFile(file);
+  const blob: Blob = heic ? await heicToJpeg(file) : file;
+  const img = await loadImageElement(await readAsDataUrl(blob));
+  const src0 = sourceOf(img);
+  const k = Math.min(1, MAX_LAYER_PHOTO / Math.max(src0.width, src0.height));
+  const canvas = stepDownscale(src0, src0.width * k, src0.height * k);
+  const png = !heic && /png|webp|gif/.test(file.type);
+  return {
+    src: canvas.toDataURL(png ? 'image/png' : 'image/jpeg', png ? undefined : 0.88),
+    aspect: src0.width / src0.height,
+  };
+}
+
 /** Foto de iPhone. O `type` vem vazio em vários sistemas (o navegador não
  * conhece o formato), então a extensão também conta. */
 export function isHeicFile(file: { name: string; type: string }): boolean {
@@ -193,6 +256,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
   host: { class: 'il-studio il-basic sm' },
   template: `
     <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
+    <input #photosInput type="file" [attr.accept]="accept" multiple hidden (change)="onPhotosInput($event, photosPerSlide)" />
 
     <div class="il-controlbar">
       <div class="il-cb-group">
@@ -245,6 +309,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
       </div>
       <div class="il-tb-group">
         <button type="button" class="il-tool" aria-label="Abrir foto" data-tip="Abrir foto" data-help="JPEG, PNG, WebP e HEIC do iPhone" (click)="pick(fileInput)"><il-icon name="folder" [size]="18" /></button>
+        <button type="button" class="il-tool" aria-label="Adicionar fotos" data-tip="Adicionar fotos" data-help="Várias fotos como camadas, cada uma no seu tamanho" (click)="pickPhotos(store.slides() > 1)"><il-icon name="photo-add" [size]="18" /></button>
         <button type="button" class="il-tool" [class.il-on]="tab() === 'modelos'" aria-label="Modelos Viih Mimos" data-tip="Modelos Viih Mimos" data-help="Story, feed e carrossel na identidade da marca" (click)="tab.set('modelos')"><il-icon name="templates" [size]="18" /></button>
         <button type="button" class="il-tool" [disabled]="!image()" aria-label="Filtros" data-tip="Filtros prontos" (click)="tab.set('filtros')"><il-icon name="filter" [size]="18" /></button>
         <button type="button" class="il-tool" [disabled]="!image()" aria-label="Cor e luz" data-tip="Cor e luz" (click)="tab.set('ajustes')"><il-icon name="sun" [size]="18" /></button>
@@ -252,9 +317,18 @@ async function heicToJpeg(file: File): Promise<Blob> {
     </nav>
 
     @if (store.hasContent()) {
+     <div class="sm-stage-wrap" [class.sm-with-rulers]="rulers()">
+      @if (rulers()) {
+        <span class="sm-ruler-corner" aria-hidden="true">px</span>
+        <canvas #rulerTop class="sm-ruler sm-ruler-top" title="Arraste pra baixo pra criar uma guia horizontal"
+          (pointerdown)="onRulerDown($event, 'y')" (pointermove)="onGuideMove($event)" (pointerup)="onGuideUp($event)" (pointercancel)="onGuideUp($event)"></canvas>
+        <canvas #rulerLeft class="sm-ruler sm-ruler-left" title="Arraste pra direita pra criar uma guia vertical"
+          (pointerdown)="onRulerDown($event, 'x')" (pointermove)="onGuideMove($event)" (pointerup)="onGuideUp($event)" (pointercancel)="onGuideUp($event)"></canvas>
+      }
       <div
         #stage
         class="il-stage sm-stage"
+        (scroll)="scrollTick.update((v) => v + 1)"
         [class.sm-zoomed]="viewZoom() > 1"
         [class.il-drag-over]="dragOver()"
         (wheel)="onWheel($event)"
@@ -283,6 +357,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
         }
         @if (comparing()) { <span class="sm-badge">Foto original</span> }
       </div>
+     </div>
     } @else {
       <div class="il-stage" [class.il-drag-over]="dragOver()" (dragover)="onDragOver($event)" (dragleave)="onDragLeave()" (drop)="onDrop($event)">
         <button type="button" class="il-empty" (click)="pick(fileInput)">
@@ -292,7 +367,10 @@ async function heicToJpeg(file: File): Promise<Blob> {
           @if (converting()) { <span>Convertendo HEIC…</span> }
           @if (error()) { <span class="il-error">{{ error() }}</span> }
         </button>
-        <button type="button" class="il-btn sm-start-template" (click)="tab.set('modelos')"><il-icon name="templates" [size]="14" /> Ou comece por um modelo Viih Mimos</button>
+        <div class="sm-start-row">
+          <button type="button" class="il-btn" (click)="tab.set('modelos')"><il-icon name="templates" [size]="14" /> Começar por um modelo Viih Mimos</button>
+          <button type="button" class="il-btn" (click)="pickPhotos(true)"><il-icon name="photo-add" [size]="14" /> Carrossel com várias fotos</button>
+        </div>
       </div>
     }
 
@@ -451,9 +529,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
                 }
               </div>
             </section>
-            @if (store.templateId()) {
+            @if (store.templateId() || !image()) {
               <section class="il-sec">
-                <div class="il-sec-head il-sec-static">Fundo do modelo</div>
+                <div class="il-sec-head il-sec-static">{{ store.templateId() ? 'Fundo do modelo' : 'Fundo' }}</div>
                 <div class="il-sec-body">
                   <div class="sm-swatches" role="group" aria-label="Cor de fundo">
                     @for (c of brandColors; track c.id) {
@@ -467,7 +545,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
                       <button type="button" [class.il-on]="store.bgPattern() === pt.id" (click)="setPattern(pt.id)">{{ pt.label }}</button>
                     }
                   </div>
-                  <button type="button" class="il-btn il-wide" (click)="removeTemplate()"><il-icon name="trash" [size]="13" /> Tirar o modelo</button>
+                  @if (store.templateId()) {
+                    <button type="button" class="il-btn il-wide" (click)="removeTemplate()"><il-icon name="trash" [size]="13" /> Tirar o modelo</button>
+                  }
                   @if (store.slot()) {
                     <p class="il-note">{{ image() ? 'Arraste a foto dentro do espaço pra reenquadrar; a roda do mouse muda a escala.' : 'Clique no espaço tracejado do palco (ou em "Pôr foto") pra escolher a foto.' }}</p>
                   }
@@ -512,7 +592,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
             }
           }
           @case ('texto') {
-            <sm-overlays-panel />
+            <sm-overlays-panel (addPhotos)="pickPhotos($event)" />
           }
           @case ('exportar') {
             <sm-caption-panel [preview]="captionPreview" />
@@ -574,6 +654,18 @@ async function heicToJpeg(file: File): Promise<Blob> {
           <button type="button" class="il-ib il-ib-sm" data-tip="Aproximar  Ctrl+=" aria-label="Aproximar" (click)="zoomStep(1)">+</button>
           <button type="button" class="il-ib il-ib-sm" data-tip="Ajustar à tela  Ctrl+0" aria-label="Ajustar à tela" (click)="setViewZoom(1)"><il-icon name="fit" [size]="13" /></button>
         </div>
+        <button type="button" class="il-ib il-ib-sm il-txt" [class.il-on]="rulers()" data-tip="Réguas (arraste delas pra criar guias)" (click)="toggleRulers()">Réguas</button>
+        <button type="button" class="il-ib il-ib-sm il-txt" [class.il-on]="grid().on" data-tip="Grade pra organizar (as camadas grudam nela)" (click)="setGrid({ on: !grid().on })">Grade</button>
+        @if (grid().on) {
+          <span class="sm-grid-cfg">
+            <il-num label="" title="Colunas em cada post" unit="col" [value]="grid().cols" [min]="1" [max]="24" [decimals]="0" (valueChange)="setGrid({ cols: $event.value })" />
+            <il-num label="" title="Linhas" unit="lin" [value]="grid().rows" [min]="1" [max]="24" [decimals]="0" (valueChange)="setGrid({ rows: $event.value })" />
+            <button type="button" class="il-ib il-ib-sm il-txt" [class.il-on]="grid().snap" data-tip="Grudar na grade" (click)="setGrid({ snap: !grid().snap })">Ímã</button>
+          </span>
+        }
+        @if (store.userGuides().length) {
+          <button type="button" class="il-ib il-ib-sm il-txt" data-tip="Apagar as guias das réguas" (click)="clearGuides()">Limpar guias</button>
+        }
         @if (format().id === 'story') {
           <button type="button" class="il-ib il-ib-sm il-txt" [class.il-on]="safeArea()" data-tip="Faixas que o Instagram cobre no story" (click)="safeArea.set(!safeArea())">Área segura</button>
         }
@@ -621,12 +713,28 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-seg-full button { flex: 1; width: auto; font-size: 11px; }
     /* seis abas na largura do painel: menos respiro pra caberem todas */
     .il-tab { padding: 0 4px; min-width: 0; }
+    .sm-stage-wrap { grid-area: canvas; display: grid; grid-template: 'stage' minmax(0, 1fr) / minmax(0, 1fr); min-width: 0; min-height: 0; }
+    .sm-stage-wrap.sm-with-rulers { grid-template: 'corner top' 20px 'left stage' minmax(0, 1fr) / 20px minmax(0, 1fr); }
+    .sm-stage-wrap > .il-stage { grid-area: stage; }
+    .sm-ruler { display: block; width: 100%; height: 100%; background: var(--il-chrome); color: var(--text-muted); touch-action: none; }
+    .sm-ruler-top { grid-area: top; cursor: row-resize; border-bottom: 1px solid var(--il-line); }
+    .sm-ruler-left { grid-area: left; cursor: col-resize; border-right: 1px solid var(--il-line); }
+    .sm-ruler-corner {
+      grid-area: corner; display: flex; align-items: center; justify-content: center; font-size: 8px; color: var(--text-muted);
+      background: var(--il-chrome); border-right: 1px solid var(--il-line); border-bottom: 1px solid var(--il-line);
+    }
+    .sm-grid-cfg { display: inline-flex; align-items: center; gap: 2px; }
+    .sm-grid-cfg .il-num { height: 20px; }
+    .sm-grid-cfg .il-num input { width: 26px; font-size: 11px; }
+    @media (max-width: 900px) {
+      .sm-stage-wrap { order: 3; height: 56dvh; }
+    }
     .sm-inline-edit {
       position: absolute; z-index: 5; box-sizing: border-box; padding: 2px 6px; line-height: 1.15; resize: none; overflow: hidden;
       field-sizing: content; max-width: 90%; background: rgba(255, 255, 255, 0.94); border: 2px solid var(--il-blue);
       border-radius: 6px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); outline: none; white-space: pre;
     }
-    .sm-start-template { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); }
+    .sm-start-row { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
     .sm-swatches { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
     .sm-swatch { width: 24px; height: 24px; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; }
     .sm-swatch.il-on { outline: 2px solid var(--il-blue); outline-offset: 1px; }
@@ -635,7 +743,14 @@ async function heicToJpeg(file: File): Promise<Blob> {
 export class SocialModeComponent {
   private readonly previewRef = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly photosInputRef = viewChild<ElementRef<HTMLInputElement>>('photosInput');
   private readonly stageRef = viewChild<ElementRef<HTMLDivElement>>('stage');
+  private readonly rulerTopRef = viewChild<ElementRef<HTMLCanvasElement>>('rulerTop');
+  private readonly rulerLeftRef = viewChild<ElementRef<HTMLCanvasElement>>('rulerLeft');
+  /** Muda a cada rolagem do palco: as réguas acompanham. */
+  readonly scrollTick = signal(0);
+  /** Guia (das réguas) sendo arrastada: índice na lista do store. */
+  private guideDrag: { pointer: number; index: number } | null = null;
   /** Zoom da vista: só a tela, o post não muda. 1 = post inteiro na tela. */
   readonly viewZoom = signal(1);
   readonly minViewZoom = MIN_VIEW_ZOOM;
@@ -666,7 +781,7 @@ export class SocialModeComponent {
     { id: 'filtros', label: 'Filtros' },
     { id: 'ajustes', label: 'Cor e luz' },
     { id: 'foto', label: 'Foto' },
-    { id: 'texto', label: 'Texto' },
+    { id: 'texto', label: 'Camadas' },
     { id: 'exportar', label: 'Exportar' },
   ];
   readonly store = inject(SocialStore);
@@ -836,12 +951,26 @@ export class SocialModeComponent {
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
   /** Arraste de texto/figurinha: posição inicial em fração do quadro. */
   private overlayDrag: {
-    pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean; again: boolean;
-    /** Caixa da camada no começo do arraste, pras guias magnéticas. */
+    pointer: number; id: string; x: number; y: number; moved: boolean; again: boolean;
+    /** Posição de cada camada selecionada no começo do arraste. */
+    starts: Map<string, { x: number; y: number }>;
+    /** Caixa da seleção no começo do arraste, pras guias magnéticas. */
     box: FracBox | null;
+    additive: boolean;
   } | null = null;
+  /** Caixa de seleção sendo desenhada (em px do canvas da prévia). */
+  private marquee: {
+    pointer: number; x0: number; y0: number; additive: boolean; slotClick: boolean; moved: boolean; base: string[];
+  } | null = null;
+  readonly marqueeRect = signal<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** Arraste da alça do canto: tamanho proporcional à distância do centro. */
+  private resize: { pointer: number; id: string; cx: number; cy: number; dist: number; size: number; moved: boolean } | null = null;
   /** Mostra as faixas que a interface do Instagram cobre no story. */
   readonly safeArea = signal(true);
+  /** Grade da prévia (colunas por post e linhas), guardada neste aparelho. */
+  readonly grid = signal(loadGrid());
+  /** Réguas em volta do post, em px do arquivo final. */
+  readonly rulers = signal(loadRulers());
   private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private boxes: OverlayBox[] = [];
   private readonly fontTick = signal(0);
@@ -863,6 +992,15 @@ export class SocialModeComponent {
   private denoiseJob = 0;
 
   constructor() {
+    // Réguas: redesenhadas quando o post muda de tamanho ou de lugar na tela.
+    effect(() => {
+      const top = this.rulerTopRef()?.nativeElement;
+      const left = this.rulerLeftRef()?.nativeElement;
+      this.canvasCssW(); this.viewZoom(); this.scrollTick(); this.stageSize();
+      const slides = this.store.slides(), w = this.exportW(), h = this.exportH();
+      if (!top || !left) return;
+      requestAnimationFrame(() => this.drawRulers(top, left, slides, w, h));
+    });
     // O palco é medido pra o post caber nele (zoom 1) e crescer a partir daí.
     effect((onCleanup) => {
       const stage = this.stageRef()?.nativeElement;
@@ -925,15 +1063,19 @@ export class SocialModeComponent {
       canvas.height = Math.round(w / this.store.frameRatio());
       paintFrame(canvas, source, { ...this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()), placeholder: true });
       const overlays = this.store.overlays();
-      const selectedOverlay = this.store.selectedOverlay();
+      const selection = this.store.selection();
       const ctx2 = canvas.getContext('2d')!;
-      this.boxes = compare ? [] : drawOverlays(ctx2, canvas.width, canvas.height, overlays, this.fonts, selectedOverlay);
+      this.boxes = compare ? [] : drawOverlays(ctx2, canvas.width, canvas.height, overlays, this.fonts, selection);
       const cw = canvas.width, ch = canvas.height;
       const frac: FracBox[] = this.boxes.map((b) => ({ id: b.id, cx: b.cx / cw, cy: b.cy / ch, w: b.w / cw, h: b.h / ch, rotation: b.rotation, locked: b.locked }));
       untracked(() => this.store.overlayBoxes.set(frac));
       this.drawSlideGuides(ctx2, cw, ch);
       if (this.safeArea() && this.format().id === 'story' && !compare) this.drawSafeArea(ctx2, cw, ch);
+      const grid = this.grid();
+      if (grid.on && !compare) this.drawGrid(ctx2, cw, ch, grid.cols, grid.rows);
+      if (!compare) this.drawUserGuides(ctx2, cw, ch, this.store.userGuides());
       this.drawAlignGuides(ctx2, cw, ch, this.store.guides());
+      if (!compare) this.drawSelectionChrome(ctx2, selection, this.marqueeRect());
       // A nitidez custa uns 50 ms e não pode engasgar quem arrasta um controle:
       // a imagem aparece na hora e ganha o acabamento quando a mão para.
       if (this.sharpenTimer !== null) clearTimeout(this.sharpenTimer);
@@ -1425,24 +1567,37 @@ export class SocialModeComponent {
     // pode piscar a comparação.
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
     const selOverlay = this.store.selectedOverlay();
+    const mod = event.ctrlKey || event.metaKey;
+    if (!typing && mod && key === 'a' && this.store.hasContent()) {
+      event.preventDefault();
+      this.store.selectAll();
+      this.tab.set('texto');
+      return;
+    }
+    if (!typing && mod && key === 'd' && selOverlay) {
+      event.preventDefault();
+      this.store.duplicateSelected();
+      return;
+    }
+    if (!typing && key === 'escape' && selOverlay) {
+      this.store.select(null);
+      return;
+    }
     const arrows: Record<string, [number, number]> = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] };
     if (selOverlay && !typing && arrows[key]) {
-      // Seta move 1 px do arquivo final; com Shift, 10.
+      // Seta move 1 px do arquivo final; com Shift, 10. Vale pra todas as
+      // selecionadas.
       event.preventDefault();
       const [ax, ay] = arrows[key];
       const step = event.shiftKey ? 10 : 1;
-      const o = this.store.overlays().find((x) => x.id === selOverlay);
-      if (o) this.store.patchOverlay(o.id, {
-        x: clamp(o.x + (ax * step) / this.store.frameW(), 0, 1),
-        y: clamp(o.y + (ay * step) / this.exportH(), 0, 1),
-      });
+      this.store.moveSelectedBy((ax * step) / this.store.frameW(), (ay * step) / this.exportH());
       if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
       this.nudgeTimer = setTimeout(() => this.commit(), 400);
       return;
     }
     if (selOverlay && !typing && (key === 'delete' || key === 'backspace')) {
       event.preventDefault();
-      this.store.removeOverlay(selOverlay);
+      this.store.removeSelected();
       return;
     }
     if (key === 'c' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat) {
@@ -1510,8 +1665,74 @@ export class SocialModeComponent {
   onDrop(event: DragEvent): void {
     event.preventDefault();
     this.dragOver.set(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (file) void this.loadFile(file);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    // Várias fotos de uma vez viram camadas (no carrossel, uma por post);
+    // uma só continua sendo a foto do post.
+    if (files.length > 1) void this.addPhotoFiles(files, !this.store.hasContent() || this.store.slides() > 1);
+    else if (files[0]) void this.loadFile(files[0]);
+  }
+
+  /** Arquivos escolhidos no botão "Adicionar fotos". */
+  onPhotosInput(event: Event, perSlide: boolean): void {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    void this.addPhotoFiles(files, perSlide);
+  }
+
+  pickPhotos(perSlide: boolean): void {
+    this.photosPerSlide = perSlide;
+    this.photosInputRef()?.nativeElement.click();
+  }
+  photosPerSlide = false;
+
+  /** Fotos como camadas, cada uma no seu tamanho. Com `perSlide`, uma em cada
+   * post do carrossel (e o carrossel cresce pra caber, até 10); sem, todas no
+   * post da camada selecionada, levemente em cascata. */
+  async addPhotoFiles(files: File[], perSlide: boolean): Promise<void> {
+    const list = files.filter((f) => f.type.startsWith('image/') || isHeicFile(f));
+    if (!list.length) return;
+    this.status.set(`Preparando ${list.length} foto(s)…`);
+    const prepared: { src: string; aspect: number }[] = [];
+    for (const f of list) {
+      try {
+        prepared.push(await preparePhotoLayer(f));
+      } catch {
+        // foto que não abre fica de fora; as outras seguem
+      }
+    }
+    if (!prepared.length) {
+      this.status.set('Não consegui abrir essas fotos.');
+      return;
+    }
+    const slidesMax = this.slidesMax;
+    if (perSlide && prepared.length > this.store.slides()) {
+      this.store.slides.set(Math.min(slidesMax, prepared.length));
+    }
+    const n = this.store.slides();
+    const W = this.exportW(), H = this.exportH();
+    const base = Math.min(W * n, H);
+    const sel = this.store.overlays().find((o) => o.id === this.store.selectedOverlay());
+    const [s0] = slideRange(sel?.x ?? 0.0001, n);
+    const startSlide = Math.round(s0 * n);
+    const layers: PhotoOverlay[] = prepared.slice(0, perSlide ? slidesMax : prepared.length).map((p, i) => {
+      const slide = perSlide ? i % n : startSlide;
+      // Cabe em 80% da largura do post e 80% (carrossel) ou 60% da altura.
+      const maxW = W * (perSlide ? 0.84 : 0.6), maxH = H * (perSlide ? 0.8 : 0.6);
+      const hPx = Math.min(maxH, maxW / p.aspect);
+      const cascade = perSlide ? 0 : i * 0.04;
+      return {
+        id: uuid(), kind: 'foto', src: p.src, aspect: p.aspect,
+        x: (slide + 0.5) / n + cascade / n, y: 0.5 + cascade, size: hPx / base, rotation: 0,
+        radius: 0, border: '', borderWidth: 0,
+      };
+    });
+    await ensureOverlayAssets(layers);
+    this.store.addOverlays(layers);
+    this.tab.set('texto');
+    this.status.set(perSlide && layers.length > 1
+      ? `${layers.length} fotos, uma em cada post. Arraste pra ajustar; a alça do canto muda o tamanho.`
+      : `${layers.length} foto(s) adicionada(s). Arraste pra posicionar; a alça do canto muda o tamanho.`);
   }
 
   private async loadFile(file: File): Promise<void> {
@@ -1584,7 +1805,7 @@ export class SocialModeComponent {
     this.store.slot.set(null);
     this.store.bgPattern.set('');
     this.store.overlays.set([]);
-    this.store.selectedOverlay.set(null);
+    this.store.select(null);
     this.store.resetFraming();
     this.commit();
     this.status.set('Modelo retirado. Ctrl+Z traz de volta.');
@@ -1643,7 +1864,7 @@ export class SocialModeComponent {
       const o = this.store.overlays().find((x) => x.id === sel)!;
       // Forma pode passar do lado menor (uma faixa, um cartão); texto e
       // figurinha não precisam.
-      const max = o.kind === 'forma' ? 2 : 0.8;
+      const max = o.kind === 'forma' || o.kind === 'foto' ? 2 : 0.8;
       this.store.patchOverlay(sel, { size: clamp(o.size * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 0.02, max) });
       if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
       this.wheelTimer = setTimeout(() => this.commit(), 300);
@@ -1677,27 +1898,53 @@ export class SocialModeComponent {
     }
     if (this.pointers.size > 2) return;
     const pt = this.canvasPoint(event);
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    // Alça do canto da camada selecionada: redimensiona.
+    const handle = pt ? this.handleAt(event) : null;
+    if (handle) {
+      const o = this.store.overlays().find((x) => x.id === handle.id)!;
+      this.resize = { pointer: event.pointerId, id: o.id, cx: handle.cx, cy: handle.cy, dist: Math.max(1, Math.hypot(event.clientX - handle.cx, event.clientY - handle.cy)), size: o.size, moved: false };
+      return;
+    }
     const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
+    // Guia das réguas: arrastar move; soltar na régua apaga.
+    const guide = hit ? null : this.guideAt(event);
+    if (guide !== null) {
+      this.guideDrag = { pointer: event.pointerId, index: guide };
+      return;
+    }
     const onPhoto = !!pt && this.onPhoto(pt);
-    // Fora da foto e de qualquer camada: com zoom, arrastar move a vista; e
-    // um clique no espaço vazio da foto do modelo abre o seletor.
-    if (!hit && !onPhoto) {
-      if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
+    // Fora da foto e de qualquer camada (ou com Shift, mesmo em cima da
+    // foto): arrastar desenha uma caixa que seleciona tudo que ela toca. Com
+    // zoom, sem Shift, arrastar move a vista. Um clique no espaço vazio da
+    // foto do modelo abre o seletor.
+    if (!hit && (!onPhoto || additive)) {
+      const slotClick = !!pt && !this.image() && this.inSlot(pt) && !additive;
       const stage = this.stageRef()?.nativeElement;
-      const slotClick = !!pt && !this.image() && this.inSlot(pt);
-      if (stage) this.pan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop, moved: false, slotClick };
+      if (this.viewZoom() > 1 && !additive && stage) {
+        this.store.select(null);
+        this.pan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop, moved: false, slotClick };
+        return;
+      }
+      if (!additive) this.store.select(null);
+      if (pt) this.marquee = { pointer: event.pointerId, x0: pt.x, y0: pt.y, additive, slotClick, moved: false, base: [...this.store.selection()] };
       return;
     }
     if (hit) {
-      const o = this.store.overlays().find((x) => x.id === hit)!;
-      const again = this.store.selectedOverlay() === hit;
-      this.store.selectedOverlay.set(hit);
+      const again = this.store.selectedOverlay() === hit && this.store.selection().length === 1;
+      if (additive) this.store.select(hit, true);
+      // Clicar numa das selecionadas mantém o grupo (pra arrastar junto).
+      else if (!this.store.isSelected(hit)) this.store.select(hit);
       this.tab.set('texto');
-      const box = this.store.overlayBoxes().find((b) => b.id === hit) ?? null;
-      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false, again, box };
+      if (!this.store.isSelected(hit)) return;
+      const ids = this.store.selection();
+      const starts = new Map(this.store.overlays().filter((o) => ids.includes(o.id)).map((o) => [o.id, { x: o.x, y: o.y }]));
+      const boxes = this.store.overlayBoxes().filter((b) => ids.includes(b.id));
+      const box = boxes.length ? (boxes.length === 1 ? boxes[0] : groupBox(boxes, this.store.frameRatio())) : null;
+      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, starts, moved: false, again: again && !additive, box, additive };
       return;
     }
-    if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
+    this.store.select(null);
     this.drag = {
       id: event.pointerId, x: event.clientX, y: event.clientY,
       dx: this.offsetX(), dy: this.offsetY(), moved: false,
@@ -1707,6 +1954,10 @@ export class SocialModeComponent {
   onPointerMove(event: PointerEvent): void {
     if (this.pointers.has(event.pointerId)) {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (this.guideDrag?.pointer === event.pointerId) {
+      this.onGuideMove(event);
+      return;
     }
     const pan = this.pan;
     if (pan && pan.id === event.pointerId) {
@@ -1727,21 +1978,48 @@ export class SocialModeComponent {
       // nunca dispararia no celular.
       if (!od.moved && Math.hypot(event.clientX - od.x, event.clientY - od.y) < 3) return;
       od.moved = true;
-      let nx = od.ox + (event.clientX - od.x) / pt.box.width;
-      let ny = od.oy + (event.clientY - od.y) / pt.box.height;
-      // Guias magnéticas (Alt solta): a camada gruda no centro e nas margens
-      // do post e nas bordas e centros das outras camadas.
+      let dx = (event.clientX - od.x) / pt.box.width;
+      let dy = (event.clientY - od.y) / pt.box.height;
+      // Guias magnéticas (Alt solta): a seleção gruda no centro e nas margens
+      // do post, nas bordas e centros das outras camadas, na grade e nas
+      // guias das réguas.
       let guides: ReturnType<typeof snapBox>['guides'] = [];
       if (od.box && !event.altKey) {
-        const moving = { ...od.box, cx: od.box.cx + (nx - od.ox), cy: od.box.cy + (ny - od.oy) };
-        const others = this.store.overlayBoxes().filter((b) => b.id !== od.id);
-        const snap = snapBox(moving, others, this.store.slides(), this.format().ratio, 7 / pt.box.width, 7 / pt.box.height);
-        nx += snap.dx;
-        ny += snap.dy;
+        const moving = { ...od.box, cx: od.box.cx + dx, cy: od.box.cy + dy };
+        const others = this.store.overlayBoxes().filter((b) => !od.starts.has(b.id));
+        const snap = snapBox(moving, others, this.store.slides(), this.format().ratio, 7 / pt.box.width, 7 / pt.box.height, this.snapTargets());
+        dx += snap.dx;
+        dy += snap.dy;
         guides = snap.guides;
       }
       this.store.guides.set(guides);
-      this.store.patchOverlay(od.id, { x: clamp(nx, 0, 1), y: clamp(ny, 0, 1) });
+      this.store.overlays.update((l) => l.map((o) => {
+        const st = od.starts.get(o.id);
+        return st ? ({ ...o, x: clamp(st.x + dx, 0, 1), y: clamp(st.y + dy, 0, 1) } as Overlay) : o;
+      }));
+      return;
+    }
+    const mq = this.marquee;
+    if (mq && mq.pointer === event.pointerId) {
+      const pt = this.canvasPoint(event);
+      if (!pt) return;
+      if (!mq.moved && Math.hypot(pt.x - mq.x0, pt.y - mq.y0) < 6) return;
+      mq.moved = true;
+      const rect = { x: Math.min(mq.x0, pt.x), y: Math.min(mq.y0, pt.y), w: Math.abs(pt.x - mq.x0), h: Math.abs(pt.y - mq.y0) };
+      this.marqueeRect.set(rect);
+      const inside = this.boxes.filter((b) => !b.locked
+        && b.cx + b.w / 2 >= rect.x && b.cx - b.w / 2 <= rect.x + rect.w
+        && b.cy + b.h / 2 >= rect.y && b.cy - b.h / 2 <= rect.y + rect.h).map((b) => b.id);
+      this.store.selection.set(mq.additive ? [...new Set([...mq.base, ...inside])] : inside);
+      return;
+    }
+    const rz = this.resize;
+    if (rz && rz.pointer === event.pointerId) {
+      rz.moved = true;
+      const o = this.store.overlays().find((x) => x.id === rz.id);
+      const dist = Math.hypot(event.clientX - rz.cx, event.clientY - rz.cy);
+      const max = o?.kind === 'forma' || o?.kind === 'foto' ? 2 : 0.8;
+      this.store.patchOverlay(rz.id, { size: clamp((rz.size * dist) / rz.dist, 0.01, max) });
       return;
     }
     const pinch = this.pinch;
@@ -1781,6 +2059,10 @@ export class SocialModeComponent {
   }
 
   onPointerUp(event: PointerEvent): void {
+    if (this.guideDrag?.pointer === event.pointerId) {
+      this.onGuideUp(event);
+      return;
+    }
     if (this.pan?.id === event.pointerId) {
       const { moved, slotClick } = this.pan;
       this.pan = null;
@@ -1789,12 +2071,32 @@ export class SocialModeComponent {
       if (!moved && slotClick && input) this.pick(input);
       return;
     }
+    if (this.marquee?.pointer === event.pointerId) {
+      const { moved, slotClick } = this.marquee;
+      this.marquee = null;
+      this.marqueeRect.set(null);
+      this.pointers.delete(event.pointerId);
+      const input = this.fileInputRef()?.nativeElement;
+      if (!moved && slotClick && input) this.pick(input);
+      if (moved && this.store.selection().length) this.tab.set('texto');
+      return;
+    }
+    if (this.resize?.pointer === event.pointerId) {
+      const moved = this.resize.moved;
+      this.resize = null;
+      this.pointers.delete(event.pointerId);
+      if (moved) this.commit();
+      return;
+    }
     if (this.overlayDrag?.pointer === event.pointerId) {
       this.pointers.delete(event.pointerId);
       this.store.guides.set([]);
-      const { moved, again, id } = this.overlayDrag;
+      const { moved, again, id, additive } = this.overlayDrag;
       this.overlayDrag = null;
       if (moved) this.commit();
+      // Clique (sem arrastar) numa camada de um grupo selecionado fica só com
+      // ela; arrastar é que move o grupo todo.
+      else if (!additive && this.store.selection().length > 1) this.store.select(id);
       // Tocar de novo num texto já selecionado, sem arrastar, abre a edição —
       // é o que faz o celular (onde duplo clique não é gesto natural) editar.
       else if (again) this.startInlineEdit(id);
@@ -1834,7 +2136,7 @@ export class SocialModeComponent {
     const k = cr.width / canvas.width;
     const base = Math.min(canvas.width, canvas.height);
     const fam = this.fonts.family(o.fontId);
-    this.store.selectedOverlay.set(id);
+    this.store.select(id);
     this.inlineEdit.set({
       id, text: o.text,
       left: cr.left - sr.left + stage.scrollLeft + (box.cx - box.w / 2) * k,
@@ -1883,6 +2185,9 @@ export class SocialModeComponent {
     }
     this.drag = null;
     this.pan = null;
+    this.marquee = null;
+    this.marqueeRect.set(null);
+    this.resize = null;
     const mid = this.pointerMid();
     const pt = this.canvasPoint({ clientX: mid.x, clientY: mid.y });
     const mode = pt && this.onPhoto(pt) ? 'foto' : 'vista';
@@ -2072,6 +2377,266 @@ export class SocialModeComponent {
   }
 
   /** Linhas tracejadas entre os posts do carrossel (só na prévia). */
+  setGrid(patch: Partial<GridPrefs>): void {
+    this.grid.update((g) => ({ ...g, ...patch }));
+    saveLocal(GRID_KEY, this.grid());
+  }
+
+  toggleRulers(): void {
+    this.rulers.update((v) => !v);
+    saveLocal(RULERS_KEY, this.rulers());
+  }
+
+  /** Réguas em px do arquivo final. No carrossel a contagem recomeça em
+   * cada post, que é como ele vai ser visto. */
+  private drawRulers(top: HTMLCanvasElement, left: HTMLCanvasElement, slides: number, postW: number, postH: number): void {
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas) return;
+    const cr = canvas.getBoundingClientRect();
+    const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+    const paint = (rc: HTMLCanvasElement, horizontal: boolean) => {
+      const rr = rc.getBoundingClientRect();
+      rc.width = Math.max(1, Math.round(rr.width * dpr));
+      rc.height = Math.max(1, Math.round(rr.height * dpr));
+      const ctx = rc.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rr.width, rr.height);
+      const styles = getComputedStyle(rc);
+      const ink = styles.color || '#888';
+      ctx.strokeStyle = ink;
+      ctx.fillStyle = ink;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 1;
+      ctx.font = '9px system-ui, sans-serif';
+      const lengthPx = horizontal ? cr.width : cr.height;
+      const totalUnits = horizontal ? postW * slides : postH;
+      const pxPerUnit = lengthPx / totalUnits;
+      const steps = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+      const step = steps.find((st) => st * pxPerUnit >= 48) ?? 1000;
+      const minor = step / 5;
+      const origin = horizontal ? cr.left - rr.left : cr.top - rr.top;
+      const len = horizontal ? rr.width : rr.height;
+      const thick = horizontal ? rr.height : rr.width;
+      ctx.beginPath();
+      const firstUnit = Math.floor(-origin / pxPerUnit / minor) * minor;
+      for (let u = firstUnit; u <= totalUnits + minor; u += minor) {
+        const p = origin + u * pxPerUnit;
+        if (p < -2 || p > len + 2) continue;
+        const inRange = u >= 0 && u <= totalUnits;
+        const local = horizontal ? ((u % postW) + postW) % postW : u;
+        const major = Math.abs(local % step) < 1e-6 || (horizontal && Math.abs(local) < 1e-6);
+        const tick = !inRange ? 3 : major ? thick * 0.55 : thick * 0.25;
+        const q = Math.round(p) + 0.5;
+        if (horizontal) { ctx.moveTo(q, thick); ctx.lineTo(q, thick - tick); }
+        else { ctx.moveTo(thick, q); ctx.lineTo(thick - tick, q); }
+        // Perto do fim de um post o rótulo encavalaria com o "0" do seguinte.
+        const crowded = horizontal && slides > 1 && local > postW - step * 0.7 && u < totalUnits;
+        if (major && inRange && !crowded) {
+          // No fim da faixa mostra a largura do post, não um zero.
+          const label = String(Math.round(horizontal && u === totalUnits ? postW : local));
+          if (horizontal) ctx.fillText(label, q + 2, 9);
+          else {
+            ctx.save();
+            ctx.translate(9, q - 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+          }
+        }
+      }
+      ctx.stroke();
+      // Divisa entre os posts do carrossel.
+      if (horizontal && slides > 1) {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#2d7ff9';
+        ctx.beginPath();
+        for (let i = 1; i < slides; i++) {
+          const q = Math.round(origin + i * postW * pxPerUnit) + 0.5;
+          ctx.moveTo(q, 0);
+          ctx.lineTo(q, thick);
+        }
+        ctx.stroke();
+      }
+    };
+    paint(top, true);
+    paint(left, false);
+  }
+
+  /** Fração do quadro sob o ponteiro, num eixo. */
+  private fracAt(event: { clientX: number; clientY: number }, axis: 'x' | 'y'): number | null {
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas) return null;
+    const r = canvas.getBoundingClientRect();
+    return axis === 'x' ? (event.clientX - r.left) / r.width : (event.clientY - r.top) / r.height;
+  }
+
+  /** Puxar da régua cria uma guia, que segue o ponteiro até ser solta. */
+  onRulerDown(event: PointerEvent, axis: 'x' | 'y'): void {
+    event.preventDefault();
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    const pos = this.fracAt(event, axis) ?? 0;
+    this.store.userGuides.update((l) => [...l, { axis, pos }]);
+    this.guideDrag = { pointer: event.pointerId, index: this.store.userGuides().length - 1 };
+  }
+
+  onGuideMove(event: PointerEvent): void {
+    const gd = this.guideDrag;
+    if (!gd || gd.pointer !== event.pointerId) return;
+    const g = this.store.userGuides()[gd.index];
+    if (!g) return;
+    let pos = this.fracAt(event, g.axis) ?? g.pos;
+    // A guia gruda no centro do post e nas margens, pra ser fácil acertar.
+    if (!event.altKey) {
+      const canvas = this.previewRef()?.nativeElement;
+      const r = canvas?.getBoundingClientRect();
+      const tol = r ? 6 / (g.axis === 'x' ? r.width : r.height) : 0;
+      const n = this.store.slides();
+      const cands = g.axis === 'x' ? Array.from({ length: n }, (_, i) => (i + 0.5) / n) : [0.5];
+      for (const c of cands) if (Math.abs(c - pos) <= tol) pos = c;
+    }
+    this.store.userGuides.update((l) => l.map((x, i) => (i === gd.index ? { ...x, pos } : x)));
+  }
+
+  /** Soltar fora do post (de volta na régua) apaga a guia. */
+  onGuideUp(event: PointerEvent): void {
+    const gd = this.guideDrag;
+    if (!gd || gd.pointer !== event.pointerId) return;
+    this.guideDrag = null;
+    this.pointers.delete(event.pointerId);
+    const g = this.store.userGuides()[gd.index];
+    if (g && (g.pos < 0 || g.pos > 1)) this.store.userGuides.update((l) => l.filter((_, i) => i !== gd.index));
+  }
+
+  clearGuides(): void {
+    this.store.userGuides.set([]);
+  }
+
+  /** Guia das réguas sob o ponteiro (4 px de tolerância). */
+  private guideAt(event: { clientX: number; clientY: number }): number | null {
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas || !this.rulers()) return null;
+    const r = canvas.getBoundingClientRect();
+    const guides = this.store.userGuides();
+    for (let i = guides.length - 1; i >= 0; i--) {
+      const g = guides[i];
+      const d = g.axis === 'x' ? Math.abs(event.clientX - (r.left + g.pos * r.width)) : Math.abs(event.clientY - (r.top + g.pos * r.height));
+      if (d <= 4) return i;
+    }
+    return null;
+  }
+
+  /** Linhas extras em que as camadas grudam: a grade (se ligada) e as guias
+   * puxadas das réguas. */
+  private snapTargets(): { xs: number[]; ys: number[] } {
+    const xs: number[] = [], ys: number[] = [];
+    const g = this.grid();
+    if (g.on && g.snap) {
+      const lines = gridLines(this.store.slides(), this.format().ratio, g.cols, g.rows);
+      xs.push(...lines.xs);
+      ys.push(...lines.ys);
+    }
+    for (const guide of this.store.userGuides()) (guide.axis === 'x' ? xs : ys).push(guide.pos);
+    return { xs, ys };
+  }
+
+  private drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number, cols: number, rows: number): void {
+    const { xs, ys } = gridLines(this.store.slides(), this.format().ratio, cols, rows);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(45, 127, 249, 0.28)';
+    ctx.lineWidth = Math.max(1, w / 1400);
+    ctx.beginPath();
+    for (const x of xs) { const px = Math.round(x * w) + 0.5; ctx.moveTo(px, 0); ctx.lineTo(px, h); }
+    for (const y of ys) { const py = Math.round(y * h) + 0.5; ctx.moveTo(0, py); ctx.lineTo(w, py); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Guias das réguas: linhas ciano, na prévia só. */
+  private drawUserGuides(ctx: CanvasRenderingContext2D, w: number, h: number, guides: Guide[]): void {
+    if (!guides.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#00b3d6';
+    ctx.lineWidth = Math.max(1, w / 1000);
+    ctx.beginPath();
+    for (const g of guides) {
+      if (g.axis === 'x') { const x = Math.round(g.pos * w) + 0.5; ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+      else { const y = Math.round(g.pos * h) + 0.5; ctx.moveTo(0, y); ctx.lineTo(w, y); }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Alça de redimensionar na camada principal e a caixa de seleção. */
+  private drawSelectionChrome(ctx: CanvasRenderingContext2D, selection: string[], marquee: { x: number; y: number; w: number; h: number } | null): void {
+    const k = this.cssScale();
+    if (selection.length > 1) {
+      const boxes = this.boxes.filter((b) => selection.includes(b.id));
+      if (boxes.length > 1) {
+        const l = Math.min(...boxes.map((b) => b.cx - b.w / 2)), r = Math.max(...boxes.map((b) => b.cx + b.w / 2));
+        const t = Math.min(...boxes.map((b) => b.cy - b.h / 2)), bo = Math.max(...boxes.map((b) => b.cy + b.h / 2));
+        ctx.save();
+        ctx.strokeStyle = 'rgba(45, 127, 249, 0.7)';
+        ctx.lineWidth = Math.max(1, 1 / k);
+        ctx.strokeRect(l, t, r - l, bo - t);
+        ctx.restore();
+      }
+    }
+    const handle = this.handlePoint();
+    if (handle) {
+      const size = 9 / k;
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#2d7ff9';
+      ctx.lineWidth = Math.max(1.5, 1.5 / k);
+      ctx.fillRect(handle.x - size / 2, handle.y - size / 2, size, size);
+      ctx.strokeRect(handle.x - size / 2, handle.y - size / 2, size, size);
+      ctx.restore();
+    }
+    if (marquee) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(45, 127, 249, 0.1)';
+      ctx.strokeStyle = 'rgba(45, 127, 249, 0.9)';
+      ctx.lineWidth = Math.max(1, 1 / k);
+      ctx.fillRect(marquee.x, marquee.y, marquee.w, marquee.h);
+      ctx.strokeRect(marquee.x, marquee.y, marquee.w, marquee.h);
+      ctx.restore();
+    }
+  }
+
+  /** Px de tela por px do canvas da prévia. */
+  private cssScale(): number {
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas || !canvas.width) return 1;
+    return (this.canvasCssW() ?? canvas.getBoundingClientRect().width) / canvas.width || 1;
+  }
+
+  /** Canto de baixo à direita da camada principal (girado com ela), em px do
+   * canvas. Só quando há uma camada só selecionada, e destravada. */
+  private handlePoint(): { x: number; y: number; id: string } | null {
+    const sel = this.store.selection();
+    if (sel.length !== 1) return null;
+    const b = this.boxes.find((x) => x.id === sel[0]);
+    if (!b || b.locked) return null;
+    const a = (b.rotation * Math.PI) / 180;
+    const hx = b.w / 2, hy = b.h / 2;
+    return { id: b.id, x: b.cx + hx * Math.cos(a) - hy * Math.sin(a), y: b.cy + hx * Math.sin(a) + hy * Math.cos(a) };
+  }
+
+  /** A alça está sob o ponteiro? Devolve o centro da camada em px de tela,
+   * que é a referência do redimensionamento. */
+  private handleAt(event: { clientX: number; clientY: number }): { id: string; cx: number; cy: number } | null {
+    const hp = this.handlePoint();
+    const canvas = this.previewRef()?.nativeElement;
+    if (!hp || !canvas) return null;
+    const r = canvas.getBoundingClientRect();
+    const k = r.width / canvas.width;
+    const hx = r.left + hp.x * k, hy = r.top + hp.y * k;
+    if (Math.hypot(event.clientX - hx, event.clientY - hy) > 12) return null;
+    const b = this.boxes.find((x) => x.id === hp.id)!;
+    return { id: hp.id, cx: r.left + b.cx * k, cy: r.top + b.cy * k };
+  }
+
   /** Linhas das guias magnéticas, enquanto uma camada gruda nelas. */
   private drawAlignGuides(ctx: CanvasRenderingContext2D, w: number, h: number, guides: { axis: 'x' | 'y'; pos: number }[]): void {
     if (!guides.length) return;

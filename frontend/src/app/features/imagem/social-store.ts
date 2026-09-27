@@ -8,7 +8,8 @@ import {
 } from './social-model';
 import { PhotoSource, sourceOf, stepDownscale } from './social-render';
 import { Overlay } from './social-overlays';
-import { AlignMode, FracBox, Guide, alignDelta, anchorForAlign } from './social-align';
+import { AlignMode, Deltas, FracBox, Guide, alignDelta, alignWithin, anchorForAlign, distribute, groupBox } from './social-align';
+import { uuid } from '../../core/uuid';
 
 export interface SocialProjectData {
   version: number;
@@ -42,6 +43,8 @@ export interface SocialProjectData {
   templateId?: string;
   slot?: PhotoSlot | null;
   bgPattern?: string;
+  /** Guias puxadas das réguas. */
+  guias?: Guide[];
 }
 
 /** O que um modelo pronto escreve no post. */
@@ -151,7 +154,7 @@ export class SocialStore {
    * continua guardada — tirar o modelo ou desfazer traz ela de volta. */
   readonly photoVisible = computed(() => !(this.templateId() !== '' && this.slot() === null));
   /** Há o que desenhar: uma foto, ou um modelo (que funciona sem foto). */
-  readonly hasContent = computed(() => this.hasImage() || this.templateId() !== '');
+  readonly hasContent = computed(() => this.hasImage() || this.templateId() !== '' || this.overlays().length > 0);
   readonly exportH = computed(() => Math.round(this.exportW() / this.format().ratio));
   /** Textos e figurinhas por cima do post. */
   readonly overlays = signal<Overlay[]>([]);
@@ -161,13 +164,100 @@ export class SocialStore {
   readonly overlayBoxes = signal<FracBox[]>([]);
   /** Guias magnéticas à mostra durante um arraste (só na prévia). */
   readonly guides = signal<Guide[]>([]);
-  /** Camada selecionada no palco (não vai pro projeto nem pro histórico). */
-  readonly selectedOverlay = signal<string | null>(null);
+  /** Camadas selecionadas no palco, na ordem em que foram escolhidas (não
+   * vão pro projeto nem pro histórico). A última é a principal: é a que o
+   * painel edita. */
+  readonly selection = signal<string[]>([]);
+  readonly selectedOverlay = computed(() => this.selection().at(-1) ?? null);
+  /** Guias que o usuário puxou das réguas, em fração do quadro. Vão junto
+   * com o projeto. */
+  readonly userGuides = signal<Guide[]>([]);
+
+  /** Seleciona uma camada (ou nenhuma). Com `additive`, liga/desliga ela na
+   * seleção atual — é o Shift+clique. */
+  select(id: string | null, additive = false): void {
+    if (id === null) {
+      if (this.selection().length) this.selection.set([]);
+      return;
+    }
+    if (!additive) {
+      this.selection.set([id]);
+      return;
+    }
+    this.selection.update((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
+  }
+
+  isSelected(id: string): boolean {
+    return this.selection().includes(id);
+  }
+
+  /** Tudo o que não está travado. */
+  selectAll(): void {
+    this.selection.set(this.overlays().filter((o) => !o.locked).map((o) => o.id));
+  }
 
   addOverlay(o: Overlay): void {
     this.overlays.update((l) => [...l, o]);
-    this.selectedOverlay.set(o.id);
+    this.selection.set([o.id]);
     this.commit();
+  }
+
+  /** Várias camadas de uma vez (um passo só no histórico), já selecionadas. */
+  addOverlays(list: Overlay[]): void {
+    if (!list.length) return;
+    this.overlays.update((l) => [...l, ...list]);
+    this.selection.set(list.map((o) => o.id));
+    this.commit();
+  }
+
+  /** Move as camadas selecionadas (em fração do quadro). Sem commit: quem
+   * chama fecha o passo quando o gesto termina. */
+  moveSelectedBy(dx: number, dy: number): void {
+    const ids = new Set(this.selection());
+    this.overlays.update((l) => l.map((o) => (ids.has(o.id)
+      ? ({ ...o, x: Math.min(1, Math.max(0, o.x + dx)), y: Math.min(1, Math.max(0, o.y + dy)) } as Overlay)
+      : o)));
+  }
+
+  removeSelected(): void {
+    const ids = new Set(this.selection());
+    if (!ids.size) return;
+    this.overlays.update((l) => l.filter((o) => !ids.has(o.id)));
+    this.selection.set([]);
+    this.commit();
+  }
+
+  /** Cópias das selecionadas, um pouco deslocadas, e já selecionadas. */
+  duplicateSelected(): void {
+    const ids = new Set(this.selection());
+    const copies = this.overlays()
+      .filter((o) => ids.has(o.id))
+      .map((o) => ({ ...o, id: uuid(), x: Math.min(1, o.x + 0.03 / this.slides()), y: Math.min(1, o.y + 0.03), locked: false }) as Overlay);
+    this.addOverlays(copies);
+  }
+
+  private applyDeltas(d: Deltas): void {
+    if (![...d.values()].some((v) => Math.abs(v.dx) > 1e-6 || Math.abs(v.dy) > 1e-6)) return;
+    this.overlays.update((l) => l.map((o) => {
+      const v = d.get(o.id);
+      return v ? ({ ...o, x: o.x + v.dx, y: o.y + v.dy } as Overlay) : o;
+    }));
+    this.commit();
+  }
+
+  private selectedBoxes(): FracBox[] {
+    const ids = new Set(this.selection());
+    return this.overlayBoxes().filter((b) => ids.has(b.id));
+  }
+
+  /** Alinha as selecionadas entre si (duas ou mais). */
+  alignSelection(mode: AlignMode): void {
+    this.applyDeltas(alignWithin(this.selectedBoxes(), mode, this.frameRatio()));
+  }
+
+  /** Espaço igual entre as selecionadas (três ou mais). */
+  distributeSelection(axis: 'x' | 'y'): void {
+    this.applyDeltas(distribute(this.selectedBoxes(), axis, this.frameRatio()));
   }
 
   patchOverlay(id: string, patch: Partial<Overlay>): void {
@@ -176,20 +266,18 @@ export class SocialStore {
 
   removeOverlay(id: string): void {
     this.overlays.update((l) => l.filter((o) => o.id !== id));
-    if (this.selectedOverlay() === id) this.selectedOverlay.set(null);
+    this.selection.update((l) => l.filter((x) => x !== id));
     this.commit();
   }
 
-  /** Alinha a camada selecionada ao post em que ela está. */
+  /** Alinha a seleção ao post em que ela está. Várias camadas andam juntas,
+   * como um bloco: é a caixa do grupo que encosta ou centraliza. */
   alignSelected(mode: AlignMode): void {
-    const id = this.selectedOverlay();
-    const o = this.overlays().find((x) => x.id === id);
-    const box = this.overlayBoxes().find((b) => b.id === id);
-    if (!o || !box) return;
+    const boxes = this.selectedBoxes();
+    if (!boxes.length) return;
+    const box = boxes.length === 1 ? boxes[0] : groupBox(boxes, this.frameRatio());
     const { dx, dy } = alignDelta(box, mode, this.slides(), this.format().ratio);
-    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
-    this.patchOverlay(o.id, { x: o.x + dx, y: o.y + dy });
-    this.commit();
+    this.applyDeltas(new Map(boxes.map((b) => [b.id, { dx, dy }])));
   }
 
   /** Troca o alinhamento do texto selecionado sem a caixa sair do lugar. */
@@ -303,6 +391,9 @@ export class SocialStore {
     this.luzIa.set(look.luzIa);
     this.luzForca.set(look.luzForca);
     this.overlays.set(look.overlays);
+    // Desfazer pode sumir com uma camada que estava selecionada.
+    const ids = new Set(look.overlays.map((o) => o.id));
+    this.selection.update((l) => l.filter((x) => ids.has(x)));
     this.slides.set(look.slides);
     this.templateId.set(look.templateId);
     this.slot.set(look.slot);
@@ -328,7 +419,7 @@ export class SocialStore {
     this.bgPattern.set(t.bgPattern);
     this.slot.set(t.slot);
     this.overlays.set(t.overlays);
-    this.selectedOverlay.set(null);
+    this.selection.set([]);
     this.templateId.set(t.templateId);
     this.commit();
   }
@@ -395,6 +486,7 @@ export class SocialStore {
     this.templateId.set('');
     this.slot.set(null);
     this.bgPattern.set('');
+    this.userGuides.set([]);
     this.resetFraming();
     this.resetHistory();
   }
@@ -419,7 +511,7 @@ export class SocialStore {
   serialize(): SocialProjectData | null {
     if (!this.hasContent()) return null;
     const src = this.storedSrc();
-    if (!src && !this.templateId()) return null;
+    if (!src && !this.templateId() && !this.overlays().length) return null;
     return {
       version: 1,
       src,
@@ -444,6 +536,7 @@ export class SocialStore {
       templateId: this.templateId(),
       slot: this.slot(),
       bgPattern: this.bgPattern(),
+      guias: this.userGuides(),
     };
   }
 
@@ -474,6 +567,8 @@ export class SocialStore {
     this.templateId.set(data.templateId ?? '');
     this.slot.set(data.slot ?? null);
     this.bgPattern.set(data.bgPattern ?? '');
+    this.userGuides.set(Array.isArray(data.guias) ? data.guias.filter((g) => (g.axis === 'x' || g.axis === 'y') && Number.isFinite(g.pos)) : []);
+    this.selection.set([]);
 
     if (!data.src) {
       // Modelo salvo antes de receber foto.

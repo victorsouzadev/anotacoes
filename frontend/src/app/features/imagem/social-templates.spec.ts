@@ -227,3 +227,60 @@ describe('modelos da conta na galeria', () => {
     expect(groupFor('feed', 4)).toBe('Carrossel');
   });
 });
+
+describe('seleção de várias camadas no store', () => {
+  const setup = () => {
+    const store = new SocialStore();
+    store.applyTemplate(SOCIAL_TEMPLATES.find((x) => x.id === 'vm-feed-depoimento')!.build());
+    return store;
+  };
+
+  it('shift liga e desliga; a última escolhida é a principal', () => {
+    const store = setup();
+    const [a, b] = store.overlays().filter((o) => !o.locked).map((o) => o.id);
+    store.select(a);
+    store.select(b, true);
+    expect(store.selection()).toEqual([a, b]);
+    expect(store.selectedOverlay()).toBe(b);
+    store.select(a, true);
+    expect(store.selection()).toEqual([b]);
+    store.select(null);
+    expect(store.selectedOverlay()).toBeNull();
+  });
+
+  it('Ctrl+A pega só as destravadas; setas movem todas; duplicar e remover em grupo', () => {
+    const store = setup();
+    store.selectAll();
+    const ids = store.selection();
+    expect(ids.length).toBe(store.overlays().filter((o) => !o.locked).length);
+    const antes = store.overlays().filter((o) => ids.includes(o.id)).map((o) => o.x);
+    store.moveSelectedBy(0.01, 0);
+    const depois = store.overlays().filter((o) => ids.includes(o.id)).map((o) => o.x);
+    depois.forEach((x, i) => expect(x).toBeCloseTo(Math.min(1, antes[i] + 0.01), 6));
+    const total = store.overlays().length;
+    store.duplicateSelected();
+    expect(store.overlays().length).toBe(total + ids.length);
+    expect(store.selection().every((id) => !ids.includes(id))).toBe(true);
+    store.removeSelected();
+    expect(store.overlays().length).toBe(total);
+    store.undo();
+    expect(store.overlays().length).toBe(total + ids.length);
+  });
+
+  it('desfazer tira da seleção a camada que sumiu', () => {
+    const store = setup();
+    const extra = { ...store.overlays()[1], id: 'nova' };
+    store.addOverlay(extra);
+    expect(store.selection()).toEqual(['nova']);
+    store.undo();
+    expect(store.selection()).toEqual([]);
+  });
+
+  it('post só com camadas (sem foto nem modelo) conta como conteúdo e salva', () => {
+    const store = new SocialStore();
+    store.addOverlay({ id: 'f', kind: 'foto', src: 'data:image/png;base64,xx', aspect: 1.5, x: 0.5, y: 0.5, size: 0.4, rotation: 0, radius: 0, border: '', borderWidth: 0 });
+    expect(store.hasContent()).toBe(true);
+    const data = store.serialize();
+    expect(data?.overlays?.[0].kind).toBe('foto');
+  });
+});

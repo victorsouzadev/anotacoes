@@ -1,6 +1,6 @@
 /** Aba "Texto" do modo Redes sociais: textos e figurinhas por cima do post. */
 
-import { Component, ViewEncapsulation, computed, inject } from '@angular/core';
+import { Component, ViewEncapsulation, computed, inject, output } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { FontLibrary } from './fonts';
 import { IlIconComponent, IlIconName } from './illustration-icons';
@@ -22,7 +22,32 @@ const STYLES: { id: TextStyle; label: string }[] = [
   imports: [IlIconComponent],
   encapsulation: ViewEncapsulation.None,
   template: `
-    @if (selected(); as o) {
+    @if (store.selection().length > 1) {
+      <section class="il-sec">
+        <div class="il-sec-head il-sec-static">{{ store.selection().length }} camadas selecionadas</div>
+        <div class="il-sec-body">
+          <span class="il-mini-title">Alinhar entre elas</span>
+          <div class="smo-align" role="group" aria-label="Alinhar entre elas">
+            @for (a of alignButtons; track a.mode) {
+              <button type="button" class="il-ib" [attr.data-tip]="a.between" [attr.aria-label]="a.between" (click)="store.alignSelection(a.mode)"><il-icon [name]="a.icon" [size]="15" /></button>
+            }
+            <button type="button" class="il-ib" [disabled]="store.selection().length < 3" data-tip="Distribuir na horizontal (espaço igual)" aria-label="Distribuir na horizontal" (click)="store.distributeSelection('x')"><il-icon name="dist-h" [size]="15" /></button>
+            <button type="button" class="il-ib" [disabled]="store.selection().length < 3" data-tip="Distribuir na vertical (espaço igual)" aria-label="Distribuir na vertical" (click)="store.distributeSelection('y')"><il-icon name="dist-v" [size]="15" /></button>
+          </div>
+          <span class="il-mini-title">Alinhar o grupo no post</span>
+          <div class="smo-align" role="group" aria-label="Alinhar o grupo no post">
+            @for (a of alignButtons; track a.mode) {
+              <button type="button" class="il-ib" [attr.data-tip]="a.label" [attr.aria-label]="'Grupo: ' + a.label" (click)="store.alignSelected(a.mode)"><il-icon [name]="a.icon" [size]="15" /></button>
+            }
+          </div>
+          <p class="il-note">Arraste qualquer uma pra mover o grupo. Setas movem 1 px (Shift, 10). Shift+clique tira ou põe uma camada; Ctrl+A seleciona todas.</p>
+          <div class="il-row">
+            <button type="button" class="il-btn il-grow" (click)="store.duplicateSelected()"><il-icon name="copy" [size]="13" /> Duplicar</button>
+            <button type="button" class="il-btn il-grow il-danger" (click)="store.removeSelected()"><il-icon name="trash" [size]="13" /> Remover</button>
+          </div>
+        </div>
+      </section>
+    } @else if (selected(); as o) {
       <section class="il-sec">
         <div class="il-sec-head il-sec-static">{{ kindTitle[o.kind] }}</div>
         <div class="il-sec-body">
@@ -70,7 +95,7 @@ const STYLES: { id: TextStyle; label: string }[] = [
               }
             </div>
           }
-          <label class="il-range"><span>Tamanho</span><input type="range" min="2" [attr.max]="o.kind === 'forma' ? 200 : 60" step="0.5" [value]="o.size * 100" (input)="patch({ size: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ (o.size * 100).toFixed(0) }}</b></label>
+          <label class="il-range"><span>Tamanho</span><input type="range" min="2" [attr.max]="o.kind === 'forma' || o.kind === 'foto' ? 200 : 60" step="0.5" [value]="o.size * 100" (input)="patch({ size: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ (o.size * 100).toFixed(0) }}</b></label>
           <label class="il-range"><span>Giro</span><input type="range" min="-180" max="180" step="1" [value]="o.rotation" (input)="patch({ rotation: +$any($event.target).value })" (change)="store.commit()" /><b>{{ o.rotation }}°</b></label>
           <span class="il-mini-title">Alinhar no post</span>
           <div class="smo-align" role="group" aria-label="Alinhar no post">
@@ -82,7 +107,20 @@ const STYLES: { id: TextStyle; label: string }[] = [
             </button>
           </div>
           <p class="il-note">Arrastando, a camada gruda no centro, nas margens e nas outras camadas (Alt solta). Setas movem 1 px; com Shift, 10.</p>
+          @if (o.kind === 'foto') {
+            <span class="il-mini-title">Foto</span>
+            <label class="il-range"><span>Cantos</span><input type="range" min="0" max="50" step="1" [value]="o.radius * 100" (input)="patch({ radius: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ (o.radius * 100).toFixed(0) }}</b></label>
+            <label class="il-range"><span>Borda</span><input type="range" min="0" max="12" step="0.5" [value]="o.borderWidth * 100" (input)="patch({ borderWidth: $any($event.target).value / 100, border: o.border || '#FFFFFF' })" (change)="store.commit()" /><b>{{ (o.borderWidth * 100).toFixed(1) }}</b></label>
+            <div class="il-row">
+              <input type="color" class="il-color-input" [value]="o.border || '#ffffff'" aria-label="Cor da borda" (input)="patch({ border: $any($event.target).value })" (change)="store.commit()" />
+              @for (c of brandColors; track c.id) {
+                <button type="button" class="smo-swatch" [style.background]="c.hex" [title]="'Borda ' + c.label" [attr.aria-label]="'Borda ' + c.label" (click)="patch({ border: c.hex, borderWidth: o.borderWidth || 0.03 }, true)"></button>
+              }
+            </div>
+            <button type="button" class="il-btn il-wide" [class.il-on]="o.shadow" (click)="patch({ shadow: !o.shadow }, true)">{{ o.shadow ? 'Tirar a sombra' : 'Pôr sombra' }}</button>
+          }
           <div class="il-row">
+            <button type="button" class="il-btn il-grow" (click)="store.duplicateSelected()" data-tip="Ctrl+D"><il-icon name="copy" [size]="13" /> Duplicar</button>
             <button type="button" class="il-btn il-grow" [class.il-on]="o.locked" data-tip="Travada não é pega por clique no palco" (click)="patch({ locked: !o.locked }, true)">{{ o.locked ? 'Destravar' : 'Travar' }}</button>
           </div>
         </div>
@@ -90,7 +128,11 @@ const STYLES: { id: TextStyle; label: string }[] = [
     }
     <section class="il-sec">
       <div class="il-sec-body il-sec-body-top">
-        <button type="button" class="il-btn il-primary il-wide" (click)="addText()"><il-icon name="plus" [size]="13" /> Adicionar texto</button>
+        <div class="il-row">
+          <button type="button" class="il-btn il-primary il-grow" (click)="addText()"><il-icon name="plus" [size]="13" /> Texto</button>
+          <button type="button" class="il-btn il-primary il-grow" (click)="addPhotos.emit(false)"><il-icon name="photo-add" [size]="13" /> Fotos</button>
+        </div>
+        <button type="button" class="il-btn il-wide" (click)="addPhotos.emit(true)" data-tip="Cada foto num post; o carrossel cresce pra caber (até 10)"><il-icon name="photo-add" [size]="13" /> Carrossel: uma foto por post</button>
         <span class="il-mini-title">Figurinhas</span>
         <div class="smo-stickers">
           @for (st of stickers; track st.id) {
@@ -114,10 +156,11 @@ const STYLES: { id: TextStyle; label: string }[] = [
     </section>
     @if (store.overlays().length) {
       <section class="il-sec">
-        <div class="il-sec-head il-sec-static">Camadas <small>{{ store.overlays().length }}</small></div>
+        <div class="il-sec-head il-sec-static">Camadas <small>{{ store.overlays().length }} · Shift+clique seleciona várias</small></div>
         @for (o of store.overlays(); track o.id) {
-          <div class="il-item" [class.il-on]="store.selectedOverlay() === o.id">
-            <button type="button" class="il-item-main" (click)="store.selectedOverlay.set(o.id)">
+          <div class="il-item" [class.il-on]="store.selection().includes(o.id)">
+            <button type="button" class="il-item-main" (click)="store.select(o.id, $event.shiftKey || $event.ctrlKey || $event.metaKey)">
+              @if (o.kind === 'foto') { <img class="il-item-thumb" [src]="o.src" alt="" /> }
               <span class="il-item-text"><span class="il-item-name">{{ label(o) }}</span><span class="il-item-sub">{{ kindLabel(o) }}{{ o.locked ? ' · travada' : '' }}</span></span>
             </button>
             <button type="button" class="il-ib il-ib-sm" data-tip="Trazer pra frente" aria-label="Trazer pra frente" (click)="store.moveOverlay(o.id, 1)"><il-icon name="forward" [size]="13" /></button>
@@ -152,13 +195,15 @@ export class SocialOverlaysPanelComponent {
   readonly styles = STYLES;
   readonly fontOptions = TEXT_FONTS.map((id) => ({ id, name: this.fonts.family(id).name }));
 
-  readonly alignButtons: { mode: AlignMode; icon: IlIconName; label: string }[] = [
-    { mode: 'left', icon: 'align-left', label: 'Encostar à esquerda' },
-    { mode: 'hcenter', icon: 'align-hcenter', label: 'Centro na horizontal' },
-    { mode: 'right', icon: 'align-right', label: 'Encostar à direita' },
-    { mode: 'top', icon: 'align-top', label: 'Encostar em cima' },
-    { mode: 'vcenter', icon: 'align-vcenter', label: 'Centro na vertical' },
-    { mode: 'bottom', icon: 'align-bottom', label: 'Encostar embaixo' },
+  /** Pede ao modo pra abrir o seletor de fotos (`true` = uma por post). */
+  readonly addPhotos = output<boolean>();
+  readonly alignButtons: { mode: AlignMode; icon: IlIconName; label: string; between: string }[] = [
+    { mode: 'left', icon: 'align-left', label: 'Encostar à esquerda', between: 'Alinhar pelas esquerdas' },
+    { mode: 'hcenter', icon: 'align-hcenter', label: 'Centro na horizontal', between: 'Alinhar pelos centros (horizontal)' },
+    { mode: 'right', icon: 'align-right', label: 'Encostar à direita', between: 'Alinhar pelas direitas' },
+    { mode: 'top', icon: 'align-top', label: 'Encostar em cima', between: 'Alinhar pelos topos' },
+    { mode: 'vcenter', icon: 'align-vcenter', label: 'Centro na vertical', between: 'Alinhar pelos meios (vertical)' },
+    { mode: 'bottom', icon: 'align-bottom', label: 'Encostar embaixo', between: 'Alinhar pelas bases' },
   ];
   readonly textAligns: { id: 'left' | 'center' | 'right'; icon: IlIconName; label: string }[] = [
     { id: 'left', icon: 'text-left', label: 'Texto à esquerda' },
@@ -169,7 +214,7 @@ export class SocialOverlaysPanelComponent {
   readonly brandColors = BRAND_COLORS;
   readonly label = overlayLabel;
   readonly kindLabel = overlayKindLabel;
-  readonly kindTitle: Record<string, string> = { texto: 'Texto', figurinha: 'Figurinha', forma: 'Forma', imagem: 'Marca' };
+  readonly kindTitle: Record<string, string> = { texto: 'Texto', figurinha: 'Figurinha', forma: 'Forma', imagem: 'Marca', foto: 'Foto' };
 
   selected = computed(() => this.store.overlays().find((o) => o.id === this.store.selectedOverlay()) ?? null);
 

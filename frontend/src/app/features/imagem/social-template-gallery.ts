@@ -261,7 +261,8 @@ export class SocialTemplateGalleryComponent {
       bgColor: this.store.bgColor(),
       bgPattern: this.store.bgPattern(),
       slot: this.store.slot(),
-      overlays: this.store.overlays(),
+      // Fotos ficam fora do modelo: pesariam demais e são de cada post.
+      overlays: this.store.overlays().filter((o) => o.kind !== 'foto'),
     };
   }
 

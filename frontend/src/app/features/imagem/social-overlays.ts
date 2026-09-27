@@ -69,7 +69,24 @@ export interface ImageOverlay extends OverlayBase {
   aspect: number;
 }
 
-export type Overlay = TextOverlay | StickerOverlay | ShapeOverlay | ImageOverlay;
+/** Foto como camada: várias por post, cada uma do seu tamanho — é o que monta
+ * um carrossel de fotos, ou um post com duas ou três fotos lado a lado. A
+ * foto vai embutida (data URL já reduzida), como a foto de fundo. */
+export interface PhotoOverlay extends OverlayBase {
+  kind: 'foto';
+  src: string;
+  /** Largura ÷ altura da foto. */
+  aspect: number;
+  /** Raio dos cantos, em fração do lado menor da foto (0 a 0,5). */
+  radius: number;
+  /** Borda; vazio = sem borda. */
+  border: string;
+  /** Espessura da borda, em fração do lado menor da foto. */
+  borderWidth: number;
+  shadow?: boolean;
+}
+
+export type Overlay = TextOverlay | StickerOverlay | ShapeOverlay | ImageOverlay | PhotoOverlay;
 
 /** Nome curto de uma camada, pra lista do painel. */
 export function overlayLabel(o: Overlay): string {
@@ -78,16 +95,41 @@ export function overlayLabel(o: Overlay): string {
     case 'figurinha': return o.sticker;
     case 'forma': return o.shape === 'circulo' ? 'Círculo' : 'Retângulo';
     case 'imagem': return brandAssetDef(o.asset)?.label ?? o.asset;
+    case 'foto': return 'Foto';
   }
 }
 
 export function overlayKindLabel(o: Overlay): string {
-  return { texto: 'texto', figurinha: 'figurinha', forma: 'forma', imagem: 'marca' }[o.kind];
+  return { texto: 'texto', figurinha: 'figurinha', forma: 'forma', imagem: 'marca', foto: 'foto' }[o.kind];
 }
 
-/** Carrega os arquivos da marca usados pelas camadas. */
+/** Fotos das camadas já decodificadas, pela data URL (a mesma foto
+ * duplicada não carrega duas vezes). */
+const photoCache = new Map<string, HTMLImageElement>();
+const photoPending = new Map<string, Promise<void>>();
+
+function loadPhoto(src: string): Promise<void> {
+  if (photoCache.has(src)) return Promise.resolve();
+  let job = photoPending.get(src);
+  if (!job) {
+    job = new Promise<void>((resolve) => {
+      const img = new Image();
+      img.onload = () => { photoCache.set(src, img); photoPending.delete(src); resolve(); };
+      img.onerror = () => { photoPending.delete(src); resolve(); };
+      img.src = src;
+    });
+    photoPending.set(src, job);
+  }
+  return job;
+}
+
+/** Carrega os arquivos da marca e as fotos usados pelas camadas. */
 export function ensureOverlayAssets(overlays: Overlay[]): Promise<void> {
-  return ensureBrandAssets(overlays.filter((o): o is ImageOverlay => o.kind === 'imagem').map((o) => o.asset));
+  const fotos = overlays.filter((o): o is PhotoOverlay => o.kind === 'foto').map((o) => loadPhoto(o.src));
+  return Promise.all([
+    ensureBrandAssets(overlays.filter((o): o is ImageOverlay => o.kind === 'imagem').map((o) => o.asset)),
+    ...fotos,
+  ]).then(() => undefined);
 }
 
 export interface StickerDef {
@@ -269,6 +311,52 @@ function drawSticker(ctx: CanvasRenderingContext2D, id: string, s: number): [num
   }
 }
 
+/** Foto centrada na origem, com cantos, borda e sombra. */
+function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h: number): void {
+  const img = photoCache.get(o.src);
+  const side = Math.min(w, h);
+  const r = Math.min(Math.max(0, o.radius), 0.5) * side;
+  const path = () => {
+    ctx.beginPath();
+    if (r > 0) roundRect(ctx, -w / 2, -h / 2, w, h, r);
+    else ctx.rect(-w / 2, -h / 2, w, h);
+  };
+  if (o.shadow) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+    ctx.shadowBlur = side * 0.06;
+    ctx.shadowOffsetY = side * 0.02;
+    path();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  path();
+  ctx.clip();
+  if (img) {
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } else {
+    ctx.fillStyle = '#eeeeee';
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
+  ctx.restore();
+  const bwid = o.border ? o.borderWidth * side : 0;
+  if (bwid > 0) {
+    ctx.save();
+    ctx.strokeStyle = o.border;
+    ctx.lineWidth = bwid;
+    // A borda fica pra dentro, pra a foto não crescer ao ganhar moldura.
+    ctx.beginPath();
+    const i = bwid / 2;
+    if (r > 0) roundRect(ctx, -w / 2 + i, -h / 2 + i, w - bwid, h - bwid, Math.max(0, r - i));
+    else ctx.rect(-w / 2 + i, -h / 2 + i, w - bwid, h - bwid);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 /** Desenha uma forma centrada na origem; devolve a caixa (w, h). */
 function drawShape(ctx: CanvasRenderingContext2D, o: ShapeOverlay, s: number, base: number): [number, number] {
   const h = s;
@@ -301,8 +389,12 @@ function drawShape(ctx: CanvasRenderingContext2D, o: ShapeOverlay, s: number, ba
 
 /** Desenha as camadas no canvas (tamanho que ele já tiver). `selected`
  * ganha a moldura tracejada — só na prévia. */
-export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number, overlays: Overlay[], fonts: FontLibrary, selected: string | null = null): OverlayBox[] {
+export function drawOverlays(
+  ctx: CanvasRenderingContext2D, w: number, h: number, overlays: Overlay[], fonts: FontLibrary,
+  selected: string | readonly string[] | null = null,
+): OverlayBox[] {
   const base = Math.min(w, h);
+  const sel = new Set(selected === null ? [] : typeof selected === 'string' ? [selected] : selected);
   const boxes: OverlayBox[] = [];
   for (const o of overlays) {
     const s = o.size * base;
@@ -316,6 +408,10 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
       [bw, bh] = drawSticker(ctx, o.sticker, s);
     } else if (o.kind === 'forma') {
       [bw, bh] = drawShape(ctx, o, s, base);
+    } else if (o.kind === 'foto') {
+      bh = s;
+      bw = s * o.aspect;
+      drawPhoto(ctx, o, bw, bh);
     } else if (o.kind === 'imagem') {
       bh = s;
       bw = s * o.aspect;
@@ -370,7 +466,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
         ctx.shadowColor = 'transparent';
       });
     }
-    if (o.id === selected) {
+    if (sel.has(o.id)) {
       ctx.shadowColor = 'transparent';
       ctx.setLineDash([6, 4]);
       ctx.lineWidth = Math.max(1.5, base / 400);

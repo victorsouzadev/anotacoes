@@ -1,4 +1,4 @@
-import { ALIGN_MARGIN, FracBox, aabb, alignDelta, anchorForAlign, slideRange, snapBox } from './social-align';
+import { ALIGN_MARGIN, FracBox, aabb, alignDelta, alignWithin, anchorForAlign, distribute, gridLines, groupBox, slideRange, snapBox } from './social-align';
 
 const box = (over: Partial<FracBox> = {}): FracBox => ({ id: 'a', cx: 0.3, cy: 0.4, w: 0.2, h: 0.1, rotation: 0, ...over });
 
@@ -58,5 +58,48 @@ describe('alinhamento das camadas', () => {
     expect(anchorForAlign(b, 'left', 0.01)).toBeCloseTo(0.31, 6);
     expect(anchorForAlign(b, 'right', 0.01)).toBeCloseTo(0.69, 6);
     expect(anchorForAlign(b, 'center', 0.01)).toBe(0.5);
+  });
+});
+
+describe('alinhamento entre várias camadas', () => {
+  const b = (id: string, cx: number, cy: number, w = 0.1, h = 0.1): FracBox => ({ id, cx, cy, w, h, rotation: 0 });
+
+  it('alinha pelas esquerdas, centros e bases da caixa do grupo', () => {
+    const boxes = [b('a', 0.2, 0.2), b('c', 0.5, 0.6, 0.2, 0.2)];
+    const left = alignWithin(boxes, 'left', 1);
+    expect(0.5 - 0.1 + left.get('c')!.dx).toBeCloseTo(0.15, 6);
+    expect(left.get('a')!.dx).toBeCloseTo(0, 6);
+    const bottom = alignWithin(boxes, 'bottom', 1);
+    expect(0.2 + 0.05 + bottom.get('a')!.dy).toBeCloseTo(0.7, 6);
+    const centro = alignWithin(boxes, 'hcenter', 1);
+    expect(0.2 + centro.get('a')!.dx).toBeCloseTo(0.5 + centro.get('c')!.dx, 6);
+    expect(alignWithin([boxes[0]], 'left', 1).size).toBe(0);
+  });
+
+  it('distribui com espaço igual sem mexer nas pontas', () => {
+    const boxes = [b('a', 0.1, 0.5), b('b', 0.3, 0.5), b('c', 0.9, 0.5)];
+    const d = distribute(boxes, 'x', 1);
+    expect(d.get('a')!.dx).toBeCloseTo(0, 6);
+    expect(d.get('c')!.dx).toBeCloseTo(0, 6);
+    // pontas em 0.05..0.95, três de 0.1: espaço (0.9 - 0.3) / 2 = 0.3
+    expect(0.3 + d.get('b')!.dx).toBeCloseTo(0.5, 6);
+    expect(distribute(boxes.slice(0, 2), 'x', 1).size).toBe(0);
+  });
+
+  it('caixa do grupo envolve todas', () => {
+    const g = groupBox([b('a', 0.2, 0.2), b('c', 0.6, 0.7)], 1);
+    expect(g.cx).toBeCloseTo(0.4, 6);
+    expect(g.w).toBeCloseTo(0.5, 6);
+    expect(g.h).toBeCloseTo(0.6, 6);
+  });
+
+  it('grade: colunas em cada post, entre as margens, e ímã nas linhas dela', () => {
+    const { xs, ys } = gridLines(2, 1, 4, 3);
+    expect(xs.length).toBe(10);
+    expect(xs[0]).toBeCloseTo(ALIGN_MARGIN / 2, 6);
+    expect(xs[4]).toBeCloseTo(0.5 - ALIGN_MARGIN / 2, 6);
+    expect(ys.length).toBe(4);
+    const r = snapBox(b('m', 0.18, 0.3), [], 2, 1, 0.02, 0.02, { xs: [0.195], ys: [] });
+    expect(r.dx).toBeCloseTo(0.015, 6);
   });
 });

@@ -78,14 +78,15 @@ export function alignDelta(
  * `tx`/`ty` são a distância máxima, em fração do quadro. */
 export function snapBox(
   moving: FracBox, others: FracBox[], slides: number, slideRatio: number, tx: number, ty: number,
+  extra: { xs: number[]; ys: number[] } = { xs: [], ys: [] },
 ): { dx: number; dy: number; guides: Guide[] } {
   const frameRatio = slideRatio * Math.max(1, slides);
   const m = aabb(moving, frameRatio);
   const [s0, s1] = slideRange(moving.cx, slides);
   const { mx, my } = margins(slides, slideRatio);
 
-  const xs = [s0 + mx, (s0 + s1) / 2, s1 - mx];
-  const ys = [my, 0.5, 1 - my];
+  const xs = [s0 + mx, (s0 + s1) / 2, s1 - mx, ...extra.xs];
+  const ys = [my, 0.5, 1 - my, ...extra.ys];
   for (const o of others) {
     if (o.id === moving.id) continue;
     const r = aabb(o, frameRatio);
@@ -119,4 +120,71 @@ export function anchorForAlign(box: FracBox, align: 'left' | 'center' | 'right',
   if (align === 'left') return box.cx - box.w / 2 + pad;
   if (align === 'right') return box.cx + box.w / 2 - pad;
   return box.cx;
+}
+
+/** Caixa que envolve várias camadas (já contando o giro de cada uma). */
+export function groupBox(boxes: FracBox[], frameRatio: number): FracBox {
+  const rs = boxes.map((b) => aabb(b, frameRatio));
+  const l = Math.min(...rs.map((r) => r.l)), r = Math.max(...rs.map((x) => x.r));
+  const t = Math.min(...rs.map((x) => x.t)), b = Math.max(...rs.map((x) => x.b));
+  return { id: '__grupo__', cx: (l + r) / 2, cy: (t + b) / 2, w: r - l, h: b - t, rotation: 0 };
+}
+
+export type Deltas = Map<string, { dx: number; dy: number }>;
+
+/** Alinha as camadas entre si: todas encostam na borda (ou no centro) da
+ * caixa que envolve o grupo. */
+export function alignWithin(boxes: FracBox[], mode: AlignMode, frameRatio: number): Deltas {
+  const out: Deltas = new Map();
+  if (boxes.length < 2) return out;
+  const g = aabb(groupBox(boxes, frameRatio), frameRatio);
+  for (const b of boxes) {
+    const r = aabb(b, frameRatio);
+    let dx = 0, dy = 0;
+    if (mode === 'left') dx = g.l - r.l;
+    if (mode === 'right') dx = g.r - r.r;
+    if (mode === 'hcenter') dx = (g.l + g.r) / 2 - b.cx;
+    if (mode === 'top') dy = g.t - r.t;
+    if (mode === 'bottom') dy = g.b - r.b;
+    if (mode === 'vcenter') dy = (g.t + g.b) / 2 - b.cy;
+    out.set(b.id, { dx, dy });
+  }
+  return out;
+}
+
+/** Distribui as camadas com o mesmo espaço entre elas, sem mexer nas duas
+ * das pontas. Precisa de três ou mais. */
+export function distribute(boxes: FracBox[], axis: 'x' | 'y', frameRatio: number): Deltas {
+  const out: Deltas = new Map();
+  if (boxes.length < 3) return out;
+  const items = boxes
+    .map((b) => ({ b, r: aabb(b, frameRatio) }))
+    .sort((p, q) => (axis === 'x' ? p.r.l - q.r.l : p.r.t - q.r.t));
+  const start = axis === 'x' ? items[0].r.l : items[0].r.t;
+  const end = axis === 'x' ? Math.max(...items.map((i) => i.r.r)) : Math.max(...items.map((i) => i.r.b));
+  const sizes = items.map((i) => (axis === 'x' ? i.r.r - i.r.l : i.r.b - i.r.t));
+  const gap = (end - start - sizes.reduce((a, v) => a + v, 0)) / (items.length - 1);
+  let pos = start;
+  items.forEach((i, k) => {
+    const cur = axis === 'x' ? i.r.l : i.r.t;
+    const d = pos - cur;
+    out.set(i.b.id, axis === 'x' ? { dx: d, dy: 0 } : { dx: 0, dy: d });
+    pos += sizes[k] + gap;
+  });
+  return out;
+}
+
+/** Linhas da grade, em fração do quadro: `cols` colunas em cada post (entre
+ * as margens) e `rows` linhas na altura. */
+export function gridLines(slides: number, slideRatio: number, cols: number, rows: number): { xs: number[]; ys: number[] } {
+  const n = Math.max(1, slides);
+  const { mx, my } = margins(n, slideRatio);
+  const xs: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const s0 = i / n + mx, s1 = (i + 1) / n - mx;
+    for (let c = 0; c <= cols; c++) xs.push(s0 + ((s1 - s0) * c) / Math.max(1, cols));
+  }
+  const ys: number[] = [];
+  for (let r = 0; r <= rows; r++) ys.push(my + ((1 - 2 * my) * r) / Math.max(1, rows));
+  return { xs, ys };
 }
