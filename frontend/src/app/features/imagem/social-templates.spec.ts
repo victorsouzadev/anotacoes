@@ -56,6 +56,17 @@ describe('modelos Viih Mimos', () => {
     }
   });
 
+  it('nos stories, texto fica fora das faixas que o Instagram cobre', () => {
+    // topo ~250 px (perfil) e rodapé ~340 px (resposta) de 1920
+    for (const t of SOCIAL_TEMPLATES.filter((x) => x.formatId === 'story')) {
+      for (const o of t.build().overlays) {
+        if (o.kind !== 'texto') continue;
+        expect(o.y * 1920, `${t.id}: ${o.text}`).toBeGreaterThan(250);
+        expect(o.y * 1920, `${t.id}: ${o.text}`).toBeLessThan(1920 - 340);
+      }
+    }
+  });
+
   it('não repete id de camada entre duas aplicações do mesmo modelo', () => {
     const a = SOCIAL_TEMPLATES[0].build().overlays.map((o) => o.id);
     const b = SOCIAL_TEMPLATES[0].build().overlays.map((o) => o.id);

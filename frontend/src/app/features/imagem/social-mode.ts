@@ -30,6 +30,7 @@ import { OverlayBox, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitO
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
+import { FracBox, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
 import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
@@ -110,6 +111,13 @@ function isTouchPicker(): boolean {
  * nítida que o arquivo exportado — e a comparação fica injusta. */
 const MAX_PREVIEW_DPR = 2;
 const PREVIEW_CSS_WIDTH = 900;
+/** Teto de pixels da prévia: com zoom alto, o canvas acompanha o tamanho na
+ * tela (pra não borrar), mas não além disto — a cor é feita pixel a pixel. */
+const MAX_PREVIEW_PIXELS = 12_000_000;
+/** Zoom da vista, relativo ao post ajustado à tela (1 = ajustado). */
+const VIEW_ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8];
+const MIN_VIEW_ZOOM = 0.5;
+const MAX_VIEW_ZOOM = 8;
 
 const MIN_SCALE = 0.2;
 const MAX_SCALE = 6;
@@ -245,7 +253,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
 
     @if (store.hasContent()) {
       <div
+        #stage
         class="il-stage sm-stage"
+        [class.sm-zoomed]="viewZoom() > 1"
         [class.il-drag-over]="dragOver()"
         (wheel)="onWheel($event)"
         (dragover)="onDragOver($event)"
@@ -257,7 +267,10 @@ async function heicToJpeg(file: File): Promise<Blob> {
         (pointercancel)="onPointerUp($event)"
         (dblclick)="onDoubleClick($event)"
       >
-        <canvas #preview class="sm-canvas il-paper" [style.aspect-ratio]="store.frameRatio()"></canvas>
+        <canvas
+          #preview class="sm-canvas il-paper" [class.sm-measured]="canvasCssW() !== null"
+          [style.aspect-ratio]="store.frameRatio()" [style.width.px]="canvasCssW()"
+        ></canvas>
         @if (inlineEdit(); as ed) {
           <textarea
             #inlineInput class="sm-inline-edit" aria-label="Editar texto" spellcheck="true"
@@ -555,10 +568,19 @@ async function heicToJpeg(file: File): Promise<Blob> {
 
     <footer class="il-status">
       @if (store.hasContent()) {
+        <div class="il-status-zoom">
+          <button type="button" class="il-ib il-ib-sm" data-tip="Afastar  Ctrl+−" aria-label="Afastar" (click)="zoomStep(-1)">−</button>
+          <il-num label="" title="Zoom da vista (100% = post inteiro na tela)" unit="%" [value]="viewZoom() * 100" [step]="25" [min]="minViewZoom * 100" [max]="maxViewZoom * 100" [decimals]="0" (valueChange)="setViewZoom($event.value / 100)" />
+          <button type="button" class="il-ib il-ib-sm" data-tip="Aproximar  Ctrl+=" aria-label="Aproximar" (click)="zoomStep(1)">+</button>
+          <button type="button" class="il-ib il-ib-sm" data-tip="Ajustar à tela  Ctrl+0" aria-label="Ajustar à tela" (click)="setViewZoom(1)"><il-icon name="fit" [size]="13" /></button>
+        </div>
+        @if (format().id === 'story') {
+          <button type="button" class="il-ib il-ib-sm il-txt" [class.il-on]="safeArea()" data-tip="Faixas que o Instagram cobre no story" (click)="safeArea.set(!safeArea())">Área segura</button>
+        }
         <span class="il-status-info">{{ fileName() || (store.templateId() ? 'Modelo Viih Mimos' : '') }}</span>
         <span>{{ format().label }} · {{ exportW() }} × {{ exportH() }} px{{ image() ? ' · escala ' + (scale() * 100).toFixed(0) + '%' : '' }}</span>
       }
-      <span class="il-status-msg">{{ status() || (image() ? 'Arraste a foto pra reenquadrar · roda do mouse muda a escala · segure C pra comparar' : (store.templateId() ? 'Clique num texto pra editar · solte uma foto pra preencher o espaço do modelo' : 'Solte, cole ou abra uma foto')) }}</span>
+      <span class="il-status-msg">{{ status() || (image() ? 'Arraste a foto pra reenquadrar · roda muda a escala da foto · Ctrl+roda dá zoom na vista · C compara' : (store.templateId() ? 'Dois cliques num texto editam · Ctrl+roda dá zoom · solte uma foto no espaço do modelo' : 'Solte, cole ou abra uma foto')) }}</span>
     </footer>
   `,
   styles: [`
@@ -566,7 +588,9 @@ async function heicToJpeg(file: File): Promise<Blob> {
     .sm-spacer { flex: 1; }
     .sm-stage { touch-action: none; cursor: grab; }
     .sm-stage:active { cursor: grabbing; }
-    .sm-canvas { display: block; margin: auto; max-width: 100%; max-height: 100%; }
+    .sm-canvas { display: block; flex: none; margin: auto; }
+    /* antes de medir o palco, o post só cabe nele */
+    .sm-canvas:not(.sm-measured) { max-width: 100%; max-height: 100%; }
     .sm-badge {
       position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px;
       font-size: 11px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.65); pointer-events: none;
@@ -611,6 +635,22 @@ async function heicToJpeg(file: File): Promise<Blob> {
 export class SocialModeComponent {
   private readonly previewRef = viewChild<ElementRef<HTMLCanvasElement>>('preview');
   private readonly fileInputRef = viewChild<ElementRef<HTMLInputElement>>('fileInput');
+  private readonly stageRef = viewChild<ElementRef<HTMLDivElement>>('stage');
+  /** Zoom da vista: só a tela, o post não muda. 1 = post inteiro na tela. */
+  readonly viewZoom = signal(1);
+  readonly minViewZoom = MIN_VIEW_ZOOM;
+  readonly maxViewZoom = MAX_VIEW_ZOOM;
+  /** Área útil do palco, em px de tela (sem o respiro). */
+  private readonly stageSize = signal<{ w: number; h: number } | null>(null);
+  /** Largura do post na tela; `null` enquanto o palco não foi medido. */
+  readonly canvasCssW = computed(() => {
+    const size = this.stageSize();
+    if (!size || size.w <= 0 || size.h <= 0) return null;
+    const fit = Math.min(size.w, size.h * this.store.frameRatio());
+    return Math.max(40, Math.round(fit * this.viewZoom()));
+  });
+  /** Arraste da vista (com zoom): posição de partida da rolagem. */
+  private pan: { id: number; x: number; y: number; left: number; top: number; moved: boolean; slotClick: boolean } | null = null;
   private readonly inlineInputRef = viewChild<ElementRef<HTMLTextAreaElement>>('inlineInput');
   /** Texto sendo editado direto no palco, posicionado em cima dele. */
   readonly inlineEdit = signal<{
@@ -795,7 +835,14 @@ export class SocialModeComponent {
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
   /** Arraste de texto/figurinha: posição inicial em fração do quadro. */
-  private overlayDrag: { pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean; again: boolean } | null = null;
+  private overlayDrag: {
+    pointer: number; id: string; x: number; y: number; ox: number; oy: number; moved: boolean; again: boolean;
+    /** Caixa da camada no começo do arraste, pras guias magnéticas. */
+    box: FracBox | null;
+  } | null = null;
+  /** Mostra as faixas que a interface do Instagram cobre no story. */
+  readonly safeArea = signal(true);
+  private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private boxes: OverlayBox[] = [];
   private readonly fontTick = signal(0);
   private readonly fonts = inject(FontLibrary);
@@ -803,7 +850,7 @@ export class SocialModeComponent {
   batching = signal('');
   /** Dedos (ou ponteiros) em cima do palco agora. Dois viram pinça. */
   private readonly pointers = new Map<number, { x: number; y: number }>();
-  private pinch: { distance: number; scale: number } | null = null;
+  private pinch: { mode: 'foto' | 'vista'; distance: number; scale: number; zoom: number; mid: { x: number; y: number } } | null = null;
   private wheelTimer: ReturnType<typeof setTimeout> | null = null;
   private sharpenTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -816,6 +863,22 @@ export class SocialModeComponent {
   private denoiseJob = 0;
 
   constructor() {
+    // O palco é medido pra o post caber nele (zoom 1) e crescer a partir daí.
+    effect((onCleanup) => {
+      const stage = this.stageRef()?.nativeElement;
+      if (!stage) return;
+      const measure = () => {
+        const cs = getComputedStyle(stage);
+        const w = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        const h = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        const cur = untracked(this.stageSize);
+        if (!cur || Math.abs(cur.w - w) > 0.5 || Math.abs(cur.h - h) > 0.5) this.stageSize.set({ w, h });
+      };
+      measure();
+      const ro = new ResizeObserver(measure);
+      ro.observe(stage);
+      onCleanup(() => ro.disconnect());
+    });
     // Fontes dos textos: carregadas antes de desenhar, e a prévia refeita.
     effect(() => {
       const overlays = this.store.overlays();
@@ -853,7 +916,11 @@ export class SocialModeComponent {
       // Enquanto a mão está num controle a prévia desenha menor: a conta de cor
       // agora é por pixel, e resposta imediata vale mais que nitidez num quadro
       // que vai ser substituído em seguida. Ao parar, volta ao tamanho cheio.
-      const w = Math.round(PREVIEW_CSS_WIDTH * dpr * (this.interacting() ? 0.55 : 1));
+      // Com zoom, o canvas acompanha o tamanho na tela pra não borrar.
+      const cssW = Math.max(PREVIEW_CSS_WIDTH, this.canvasCssW() ?? 0);
+      const ratio = this.store.frameRatio();
+      const full = Math.min(cssW * dpr, Math.sqrt(MAX_PREVIEW_PIXELS * ratio));
+      const w = Math.round(full * (this.interacting() ? 0.55 : 1));
       canvas.width = w;
       canvas.height = Math.round(w / this.store.frameRatio());
       paintFrame(canvas, source, { ...this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()), placeholder: true });
@@ -861,7 +928,12 @@ export class SocialModeComponent {
       const selectedOverlay = this.store.selectedOverlay();
       const ctx2 = canvas.getContext('2d')!;
       this.boxes = compare ? [] : drawOverlays(ctx2, canvas.width, canvas.height, overlays, this.fonts, selectedOverlay);
-      this.drawSlideGuides(ctx2, canvas.width, canvas.height);
+      const cw = canvas.width, ch = canvas.height;
+      const frac: FracBox[] = this.boxes.map((b) => ({ id: b.id, cx: b.cx / cw, cy: b.cy / ch, w: b.w / cw, h: b.h / ch, rotation: b.rotation, locked: b.locked }));
+      untracked(() => this.store.overlayBoxes.set(frac));
+      this.drawSlideGuides(ctx2, cw, ch);
+      if (this.safeArea() && this.format().id === 'story' && !compare) this.drawSafeArea(ctx2, cw, ch);
+      this.drawAlignGuides(ctx2, cw, ch, this.store.guides());
       // A nitidez custa uns 50 ms e não pode engasgar quem arrasta um controle:
       // a imagem aparece na hora e ganha o acabamento quando a mão para.
       if (this.sharpenTimer !== null) clearTimeout(this.sharpenTimer);
@@ -1332,6 +1404,12 @@ export class SocialModeComponent {
     if (target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
 
     const key = event.key.toLowerCase();
+    // Ctrl + / − / 0: zoom da vista (no lugar do zoom da página inteira).
+    if ((event.ctrlKey || event.metaKey) && this.store.hasContent()) {
+      if (key === '=' || key === '+' || event.code === 'NumpadAdd') { event.preventDefault(); this.zoomStep(1); return; }
+      if (key === '-' || event.code === 'NumpadSubtract') { event.preventDefault(); this.zoomStep(-1); return; }
+      if (key === '0' || event.code === 'Numpad0') { event.preventDefault(); this.setViewZoom(1); return; }
+    }
     if ((event.ctrlKey || event.metaKey) && key === 'z') {
       event.preventDefault();
       if (event.shiftKey) this.redo();
@@ -1347,6 +1425,21 @@ export class SocialModeComponent {
     // pode piscar a comparação.
     const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
     const selOverlay = this.store.selectedOverlay();
+    const arrows: Record<string, [number, number]> = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] };
+    if (selOverlay && !typing && arrows[key]) {
+      // Seta move 1 px do arquivo final; com Shift, 10.
+      event.preventDefault();
+      const [ax, ay] = arrows[key];
+      const step = event.shiftKey ? 10 : 1;
+      const o = this.store.overlays().find((x) => x.id === selOverlay);
+      if (o) this.store.patchOverlay(o.id, {
+        x: clamp(o.x + (ax * step) / this.store.frameW(), 0, 1),
+        y: clamp(o.y + (ay * step) / this.exportH(), 0, 1),
+      });
+      if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
+      this.nudgeTimer = setTimeout(() => this.commit(), 400);
+      return;
+    }
     if (selOverlay && !typing && (key === 'delete' || key === 'backspace')) {
       event.preventDefault();
       this.store.removeOverlay(selOverlay);
@@ -1534,6 +1627,15 @@ export class SocialModeComponent {
   }
 
   onWheel(event: WheelEvent): void {
+    // Ctrl+roda (e a pinça do trackpad, que chega assim) é zoom da vista.
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const factor = Math.abs(event.deltaY) >= 40
+        ? (event.deltaY < 0 ? 1.2 : 1 / 1.2)
+        : Math.exp(-event.deltaY * 0.01);
+      this.setViewZoom(this.viewZoom() * factor, { x: event.clientX, y: event.clientY });
+      return;
+    }
     const sel = this.store.selectedOverlay();
     const pt = sel ? this.canvasPoint(event) : null;
     if (sel && pt && hitOverlay(this.boxes, pt.x, pt.y) === sel) {
@@ -1566,34 +1668,36 @@ export class SocialModeComponent {
 
   onPointerDown(event: PointerEvent): void {
     if (!this.store.hasContent()) return;
-    const pt = this.canvasPoint(event);
-    const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
-    // Modelo ainda sem foto: clicar no espaço dela abre o seletor. Modelo
-    // sem espaço de foto: não há foto pra arrastar.
-    if (!hit && (!this.image() || !this.store.photoVisible())) {
-      if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
-      const input = this.fileInputRef()?.nativeElement;
-      if (pt && input && this.inSlot(pt)) this.pick(input);
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // Segundo dedo: vira pinça, seja lá o que o primeiro estava fazendo.
+    if (this.pointers.size === 2) {
+      this.startPinch();
       return;
     }
-    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    if (this.pointers.size > 2) return;
+    const pt = this.canvasPoint(event);
+    const hit = pt ? hitOverlay(this.boxes, pt.x, pt.y) : null;
+    const onPhoto = !!pt && this.onPhoto(pt);
+    // Fora da foto e de qualquer camada: com zoom, arrastar move a vista; e
+    // um clique no espaço vazio da foto do modelo abre o seletor.
+    if (!hit && !onPhoto) {
+      if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
+      const stage = this.stageRef()?.nativeElement;
+      const slotClick = !!pt && !this.image() && this.inSlot(pt);
+      if (stage) this.pan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop, moved: false, slotClick };
+      return;
+    }
     if (hit) {
       const o = this.store.overlays().find((x) => x.id === hit)!;
       const again = this.store.selectedOverlay() === hit;
       this.store.selectedOverlay.set(hit);
       this.tab.set('texto');
-      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false, again };
+      const box = this.store.overlayBoxes().find((b) => b.id === hit) ?? null;
+      this.overlayDrag = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, ox: o.x, oy: o.y, moved: false, again, box };
       return;
     }
     if (this.store.selectedOverlay()) this.store.selectedOverlay.set(null);
-    this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (this.pointers.size === 2) {
-      this.pinch = { distance: this.pointerDistance(), scale: this.scale() };
-      // Dois dedos na tela é pinça, não arraste: o arraste em curso termina
-      // aqui pra foto não escapar junto com a ampliação.
-      this.drag = null;
-      return;
-    }
     this.drag = {
       id: event.pointerId, x: event.clientX, y: event.clientY,
       dx: this.offsetX(), dy: this.offsetY(), moved: false,
@@ -1601,28 +1705,63 @@ export class SocialModeComponent {
   }
 
   onPointerMove(event: PointerEvent): void {
+    if (this.pointers.has(event.pointerId)) {
+      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    const pan = this.pan;
+    if (pan && pan.id === event.pointerId) {
+      const stage = this.stageRef()?.nativeElement;
+      const dx = event.clientX - pan.x, dy = event.clientY - pan.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) pan.moved = true;
+      if (stage && pan.moved) {
+        stage.scrollLeft = pan.left - dx;
+        stage.scrollTop = pan.top - dy;
+      }
+      return;
+    }
     const od = this.overlayDrag;
     if (od && od.pointer === event.pointerId) {
       const pt = this.canvasPoint(event);
       if (!pt) return;
+      // Um tremido do dedo não é arraste: senão o "toque de novo pra editar"
+      // nunca dispararia no celular.
+      if (!od.moved && Math.hypot(event.clientX - od.x, event.clientY - od.y) < 3) return;
       od.moved = true;
-      this.store.patchOverlay(od.id, {
-        x: clamp(od.ox + (event.clientX - od.x) / pt.box.width, 0, 1),
-        y: clamp(od.oy + (event.clientY - od.y) / pt.box.height, 0, 1),
-      });
+      let nx = od.ox + (event.clientX - od.x) / pt.box.width;
+      let ny = od.oy + (event.clientY - od.y) / pt.box.height;
+      // Guias magnéticas (Alt solta): a camada gruda no centro e nas margens
+      // do post e nas bordas e centros das outras camadas.
+      let guides: ReturnType<typeof snapBox>['guides'] = [];
+      if (od.box && !event.altKey) {
+        const moving = { ...od.box, cx: od.box.cx + (nx - od.ox), cy: od.box.cy + (ny - od.oy) };
+        const others = this.store.overlayBoxes().filter((b) => b.id !== od.id);
+        const snap = snapBox(moving, others, this.store.slides(), this.format().ratio, 7 / pt.box.width, 7 / pt.box.height);
+        nx += snap.dx;
+        ny += snap.dy;
+        guides = snap.guides;
+      }
+      this.store.guides.set(guides);
+      this.store.patchOverlay(od.id, { x: clamp(nx, 0, 1), y: clamp(ny, 0, 1) });
       return;
     }
-    if (this.pointers.has(event.pointerId)) {
-      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    }
-
     const pinch = this.pinch;
     if (pinch && this.pointers.size === 2) {
       const distance = this.pointerDistance();
-      if (pinch.distance > 0 && distance > 0) {
+      if (pinch.distance <= 0 || distance <= 0) return;
+      if (pinch.mode === 'foto') {
         this.touch();
         this.scale.set(clamp((pinch.scale * distance) / pinch.distance, MIN_SCALE, MAX_SCALE));
+        return;
       }
+      // Pinça fora da foto: zoom da vista, e o meio dos dedos arrasta a vista.
+      const mid = this.pointerMid();
+      const stage = this.stageRef()?.nativeElement;
+      if (stage) {
+        stage.scrollLeft -= mid.x - pinch.mid.x;
+        stage.scrollTop -= mid.y - pinch.mid.y;
+      }
+      pinch.mid = mid;
+      this.setViewZoom((pinch.zoom * distance) / pinch.distance, mid);
       return;
     }
 
@@ -1642,7 +1781,17 @@ export class SocialModeComponent {
   }
 
   onPointerUp(event: PointerEvent): void {
+    if (this.pan?.id === event.pointerId) {
+      const { moved, slotClick } = this.pan;
+      this.pan = null;
+      this.pointers.delete(event.pointerId);
+      const input = this.fileInputRef()?.nativeElement;
+      if (!moved && slotClick && input) this.pick(input);
+      return;
+    }
     if (this.overlayDrag?.pointer === event.pointerId) {
+      this.pointers.delete(event.pointerId);
+      this.store.guides.set([]);
       const { moved, again, id } = this.overlayDrag;
       this.overlayDrag = null;
       if (moved) this.commit();
@@ -1653,8 +1802,9 @@ export class SocialModeComponent {
     }
     this.pointers.delete(event.pointerId);
     if (this.pinch && this.pointers.size < 2) {
+      const mode = this.pinch.mode;
       this.pinch = null;
-      this.commit();
+      if (mode === 'foto') this.commit();
       // O dedo que sobrou não vira arraste no meio do gesto: ele recomeça só
       // no próximo toque.
       this.drag = null;
@@ -1721,6 +1871,73 @@ export class SocialModeComponent {
     if (!this.inlineEdit()) return;
     this.inlineEdit.set(null);
     this.commit();
+  }
+
+  /** Começa a pinça. Com os dedos em cima da foto, ela muda a escala da foto
+   * (como antes); fora dela — ou sem foto —, dá zoom na vista. */
+  private startPinch(): void {
+    // O que o primeiro dedo fazia termina aqui, pra nada escapar junto.
+    if (this.overlayDrag) {
+      if (this.overlayDrag.moved) this.commit();
+      this.overlayDrag = null;
+    }
+    this.drag = null;
+    this.pan = null;
+    const mid = this.pointerMid();
+    const pt = this.canvasPoint({ clientX: mid.x, clientY: mid.y });
+    const mode = pt && this.onPhoto(pt) ? 'foto' : 'vista';
+    this.pinch = { mode, distance: this.pointerDistance(), scale: this.scale(), zoom: this.viewZoom(), mid };
+  }
+
+  private pointerMid(): { x: number; y: number } {
+    const [a, b] = [...this.pointers.values()];
+    if (!a || !b) return a ?? { x: 0, y: 0 };
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  /** O ponto (em px da prévia) cai em cima da foto que dá pra arrastar? */
+  private onPhoto(pt: { x: number; y: number }): boolean {
+    if (!this.image() || !this.store.photoVisible()) return false;
+    const canvas = this.previewRef()?.nativeElement;
+    if (!canvas) return false;
+    if (pt.x < 0 || pt.y < 0 || pt.x > canvas.width || pt.y > canvas.height) return false;
+    return this.store.slot() ? this.inSlot(pt) : true;
+  }
+
+  // --- zoom da vista ---------------------------------------------------------
+
+  /** Muda o zoom da vista mantendo parado o ponto sob o cursor (ou o centro). */
+  setViewZoom(z: number, anchor?: { x: number; y: number }): void {
+    const next = clamp(Number.isFinite(z) ? z : 1, MIN_VIEW_ZOOM, MAX_VIEW_ZOOM);
+    const prev = this.viewZoom();
+    if (Math.abs(next - prev) < 1e-4) return;
+    const stage = this.stageRef()?.nativeElement;
+    const canvas = this.previewRef()?.nativeElement;
+    if (!stage || !canvas) {
+      this.viewZoom.set(next);
+      return;
+    }
+    const sr = stage.getBoundingClientRect();
+    const at = anchor ?? { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 };
+    const before = canvas.getBoundingClientRect();
+    const fx = (at.x - before.left) / before.width;
+    const fy = (at.y - before.top) / before.height;
+    this.viewZoom.set(next);
+    // O tamanho novo só existe depois que o Angular aplicar a largura: espera
+    // o quadro seguinte pra acertar a rolagem.
+    requestAnimationFrame(() => {
+      const after = canvas.getBoundingClientRect();
+      stage.scrollLeft += after.left + fx * after.width - at.x;
+      stage.scrollTop += after.top + fy * after.height - at.y;
+    });
+  }
+
+  zoomStep(dir: 1 | -1): void {
+    const z = this.viewZoom();
+    const next = dir > 0
+      ? VIEW_ZOOM_STEPS.find((s) => s > z + 1e-3)
+      : [...VIEW_ZOOM_STEPS].reverse().find((s) => s < z - 1e-3);
+    this.setViewZoom(next ?? z);
   }
 
   /** Distância entre os dois dedos, base da pinça. */
@@ -1855,6 +2072,49 @@ export class SocialModeComponent {
   }
 
   /** Linhas tracejadas entre os posts do carrossel (só na prévia). */
+  /** Linhas das guias magnéticas, enquanto uma camada gruda nelas. */
+  private drawAlignGuides(ctx: CanvasRenderingContext2D, w: number, h: number, guides: { axis: 'x' | 'y'; pos: number }[]): void {
+    if (!guides.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#ff2d95';
+    ctx.lineWidth = Math.max(1, w / 1000);
+    for (const g of guides) {
+      ctx.beginPath();
+      if (g.axis === 'x') {
+        const x = Math.round(g.pos * w) + 0.5;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+      } else {
+        const y = Math.round(g.pos * h) + 0.5;
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Story: o topo (foto e nome do perfil) e o rodapé (campo de resposta)
+   * ficam cobertos pela interface do Instagram. Só na prévia. */
+  private drawSafeArea(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+    const top = h * (250 / 1920);
+    const bottom = h * (340 / 1920);
+    ctx.save();
+    ctx.fillStyle = 'rgba(40, 40, 60, 0.12)';
+    ctx.fillRect(0, 0, w, top);
+    ctx.fillRect(0, h - bottom, w, bottom);
+    ctx.strokeStyle = 'rgba(40, 40, 60, 0.45)';
+    ctx.lineWidth = Math.max(1, w / 900);
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, top);
+    ctx.lineTo(w, top);
+    ctx.moveTo(0, h - bottom);
+    ctx.lineTo(w, h - bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawSlideGuides(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     const n = this.store.slides();
     if (n < 2) return;

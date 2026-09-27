@@ -8,6 +8,7 @@ import {
 } from './social-model';
 import { PhotoSource, sourceOf, stepDownscale } from './social-render';
 import { Overlay } from './social-overlays';
+import { AlignMode, FracBox, Guide, alignDelta, anchorForAlign } from './social-align';
 
 export interface SocialProjectData {
   version: number;
@@ -155,6 +156,11 @@ export class SocialStore {
   /** Textos e figurinhas por cima do post. */
   readonly overlays = signal<Overlay[]>([]);
   readonly slides = signal(1);
+  /** Caixas das camadas como a prévia desenhou, em fração do quadro — o que
+   * o alinhamento precisa saber (largura do texto só existe depois de medir). */
+  readonly overlayBoxes = signal<FracBox[]>([]);
+  /** Guias magnéticas à mostra durante um arraste (só na prévia). */
+  readonly guides = signal<Guide[]>([]);
   /** Camada selecionada no palco (não vai pro projeto nem pro histórico). */
   readonly selectedOverlay = signal<string | null>(null);
 
@@ -171,6 +177,31 @@ export class SocialStore {
   removeOverlay(id: string): void {
     this.overlays.update((l) => l.filter((o) => o.id !== id));
     if (this.selectedOverlay() === id) this.selectedOverlay.set(null);
+    this.commit();
+  }
+
+  /** Alinha a camada selecionada ao post em que ela está. */
+  alignSelected(mode: AlignMode): void {
+    const id = this.selectedOverlay();
+    const o = this.overlays().find((x) => x.id === id);
+    const box = this.overlayBoxes().find((b) => b.id === id);
+    if (!o || !box) return;
+    const { dx, dy } = alignDelta(box, mode, this.slides(), this.format().ratio);
+    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
+    this.patchOverlay(o.id, { x: o.x + dx, y: o.y + dy });
+    this.commit();
+  }
+
+  /** Troca o alinhamento do texto selecionado sem a caixa sair do lugar. */
+  setTextAlign(align: 'left' | 'center' | 'right'): void {
+    const id = this.selectedOverlay();
+    const o = this.overlays().find((x) => x.id === id);
+    const box = this.overlayBoxes().find((b) => b.id === id);
+    if (!o || o.kind !== 'texto' || (o.align ?? 'center') === align) return;
+    // Meia margem interna da caixa (0,25 da letra), em fração da largura.
+    const pad = o.size * 0.25 * Math.min(1, 1 / this.frameRatio());
+    const x = box && !o.rotation ? anchorForAlign(box, align, pad) : o.x;
+    this.patchOverlay(o.id, { align, x });
     this.commit();
   }
 

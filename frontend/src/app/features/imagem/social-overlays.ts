@@ -32,9 +32,9 @@ export interface TextOverlay extends OverlayBase {
   accent: string;
   /** Espaço extra entre as letras, em fração do tamanho da letra. */
   tracking?: number;
-  /** Alinhamento. À esquerda, `x` marca a borda esquerda do texto, e não o
-   * centro — é o que deixa uma lista de itens alinhada. */
-  align?: 'center' | 'left';
+  /** Alinhamento. À esquerda (ou à direita), `x` marca a borda esquerda (ou
+   * direita) do texto, e não o centro — é o que deixa uma lista alinhada. */
+  align?: 'center' | 'left' | 'right';
 }
 
 export interface StickerOverlay extends OverlayBase {
@@ -326,7 +326,8 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
       const weight = nearestWeight(fam.weights, o.bold ? 700 : 400);
       ctx.font = `${weight} ${s}px "${fam.name}", system-ui, sans-serif`;
       const left = o.align === 'left';
-      ctx.textAlign = left ? 'left' : 'center';
+      const right = o.align === 'right';
+      ctx.textAlign = left ? 'left' : right ? 'right' : 'center';
       ctx.textBaseline = 'middle';
       // `letterSpacing` já entra na medida, então a caixa de seleção acompanha.
       // Navegador sem suporte só desenha as letras juntas.
@@ -337,15 +338,15 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, w: number, h: number
       const widths = lines.map((l) => ctx.measureText(l).width);
       bw = Math.max(...widths, s * 0.5) + s * 0.5;
       bh = lh * lines.length + s * 0.3;
-      if (left) {
-        // A caixa começa meia margem antes da borda: o centro dela anda pra
-        // direita, no eixo já girado da camada.
-        shift = bw / 2 - s * 0.25;
+      if (left || right) {
+        // A caixa começa (ou termina) meia margem além da borda: o centro dela
+        // anda pro lado do texto, no eixo já girado da camada.
+        shift = (left ? 1 : -1) * (bw / 2 - s * 0.25);
         ctx.translate(shift, 0);
       }
       // Centrado, o espaçamento sobra depois da última letra: meio espaço pra
       // direita devolve o texto ao meio.
-      const tx = left ? -bw / 2 + s * 0.25 : ((o.tracking ?? 0) * s) / 2;
+      const tx = left ? -bw / 2 + s * 0.25 : right ? bw / 2 - s * 0.25 : ((o.tracking ?? 0) * s) / 2;
       if (o.style === 'fundo') {
         ctx.fillStyle = o.accent;
         roundRect(ctx, -bw / 2, -bh / 2, bw, bh, s * 0.3);

@@ -165,19 +165,19 @@ function storyEncomendas(): TemplateLook {
   b.divider(0, 1110);
   b.text(0, W / 2, 1200, 'topos de bolo · kits festa · agendas', 44);
   b.caps(0, 1305, 'chama no direct 💕', 34);
-  b.handle(0, 1790);
+  b.handle(0, 1545);
   return b.look('vm-story-encomendas');
 }
 
 function storyNovidade(): TemplateLook {
   const b = new TemplateBuilder('story');
   b.frame(0);
-  b.bow(0, 215, 100);
-  b.photo(0, 120, 320, 840, 1020, 36);
-  b.script(0, 1470, 'novidade', 140);
-  b.text(0, W / 2, 1585, 'arraste e veja o que saiu do ateliê hoje', 38);
-  b.divider(0, 1680);
-  b.handle(0, 1790);
+  b.bow(0, 320, 100);
+  b.photo(0, 140, 400, 800, 800, 36);
+  b.script(0, 1300, 'novidade', 130);
+  b.text(0, W / 2, 1405, 'arraste e veja o que saiu do ateliê hoje', 36);
+  b.divider(0, 1480);
+  b.handle(0, 1545);
   return b.look('vm-story-novidade');
 }
 
@@ -194,10 +194,10 @@ function storyObrigada(): TemplateLook {
 
 function storyBastidores(): TemplateLook {
   const b = new TemplateBuilder('story');
-  b.photo(0, 60, 60, 960, 1480, 40);
-  b.script(0, 1655, 'bastidores', 120);
-  b.text(0, W / 2, 1765, 'cortado, montado e conferido à mão ✂️', 38);
-  b.handle(0, 1850, 26);
+  b.photo(0, 60, 60, 960, 1250, 40);
+  b.script(0, 1400, 'bastidores', 120);
+  b.text(0, W / 2, 1500, 'cortado, montado e conferido à mão ✂️', 36);
+  b.handle(0, 1560, 26);
   return b.look('vm-story-bastidores');
 }
 

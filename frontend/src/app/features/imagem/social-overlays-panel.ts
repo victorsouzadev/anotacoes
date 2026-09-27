@@ -3,7 +3,8 @@
 import { Component, ViewEncapsulation, computed, inject } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { FontLibrary } from './fonts';
-import { IlIconComponent } from './illustration-icons';
+import { IlIconComponent, IlIconName } from './illustration-icons';
+import { AlignMode } from './social-align';
 import { ImageOverlay, STICKERS, TEXT_FONTS, TextOverlay, TextStyle, overlayKindLabel, overlayLabel } from './social-overlays';
 import { BRAND_ASSETS, BRAND_COLORS, ensureBrandAssets } from './brand-assets';
 import { SocialStore } from './social-store';
@@ -50,6 +51,11 @@ const STYLES: { id: TextStyle; label: string }[] = [
                 <button type="button" class="smo-swatch" [style.background]="c.hex" [title]="c.label" [attr.aria-label]="'Texto ' + c.label" (click)="patch({ color: c.hex }, true)"></button>
               }
             </div>
+            <div class="il-seg" role="group" aria-label="Alinhamento do texto">
+              @for (t of textAligns; track t.id) {
+                <button type="button" [class.il-on]="(o.align ?? 'center') === t.id" [attr.data-tip]="t.label" [attr.aria-label]="t.label" (click)="store.setTextAlign(t.id)"><il-icon [name]="t.icon" [size]="14" /></button>
+              }
+            </div>
           }
           @if (o.kind === 'forma') {
             <div class="il-row">
@@ -66,8 +72,17 @@ const STYLES: { id: TextStyle; label: string }[] = [
           }
           <label class="il-range"><span>Tamanho</span><input type="range" min="2" [attr.max]="o.kind === 'forma' ? 200 : 60" step="0.5" [value]="o.size * 100" (input)="patch({ size: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ (o.size * 100).toFixed(0) }}</b></label>
           <label class="il-range"><span>Giro</span><input type="range" min="-180" max="180" step="1" [value]="o.rotation" (input)="patch({ rotation: +$any($event.target).value })" (change)="store.commit()" /><b>{{ o.rotation }}°</b></label>
+          <span class="il-mini-title">Alinhar no post</span>
+          <div class="smo-align" role="group" aria-label="Alinhar no post">
+            @for (a of alignButtons; track a.mode) {
+              <button type="button" class="il-ib" [attr.data-tip]="a.label" [attr.aria-label]="a.label" (click)="store.alignSelected(a.mode)"><il-icon [name]="a.icon" [size]="15" /></button>
+            }
+            <button type="button" class="il-ib smo-center" data-tip="Centralizar no post" aria-label="Centralizar no post" (click)="center()">
+              <il-icon name="align-hcenter" [size]="15" /><il-icon name="align-vcenter" [size]="15" />
+            </button>
+          </div>
+          <p class="il-note">Arrastando, a camada gruda no centro, nas margens e nas outras camadas (Alt solta). Setas movem 1 px; com Shift, 10.</p>
           <div class="il-row">
-            <button type="button" class="il-btn il-grow" (click)="center()">Centralizar</button>
             <button type="button" class="il-btn il-grow" [class.il-on]="o.locked" data-tip="Travada não é pega por clique no palco" (click)="patch({ locked: !o.locked }, true)">{{ o.locked ? 'Destravar' : 'Travar' }}</button>
           </div>
         </div>
@@ -123,6 +138,8 @@ const STYLES: { id: TextStyle; label: string }[] = [
     .smo-brand-item:hover { border-color: var(--il-blue); }
     .smo-brand-item img { width: 100%; height: 100%; object-fit: contain; display: block; }
     .smo-brand-item img.smo-dark { background: #E7548C; border-radius: 3px; }
+    .smo-align { display: flex; flex-wrap: wrap; gap: 2px; }
+    .smo-center { width: auto; padding: 0 4px; gap: 0; }
     .smo-swatches { display: flex; gap: 4px; flex-wrap: wrap; }
     .smo-swatch { width: 22px; height: 22px; padding: 0; border: 1px solid var(--il-line-strong); border-radius: 50%; cursor: pointer; }
     .smo-swatch:hover { outline: 2px solid var(--il-blue); outline-offset: 1px; }
@@ -135,6 +152,19 @@ export class SocialOverlaysPanelComponent {
   readonly styles = STYLES;
   readonly fontOptions = TEXT_FONTS.map((id) => ({ id, name: this.fonts.family(id).name }));
 
+  readonly alignButtons: { mode: AlignMode; icon: IlIconName; label: string }[] = [
+    { mode: 'left', icon: 'align-left', label: 'Encostar à esquerda' },
+    { mode: 'hcenter', icon: 'align-hcenter', label: 'Centro na horizontal' },
+    { mode: 'right', icon: 'align-right', label: 'Encostar à direita' },
+    { mode: 'top', icon: 'align-top', label: 'Encostar em cima' },
+    { mode: 'vcenter', icon: 'align-vcenter', label: 'Centro na vertical' },
+    { mode: 'bottom', icon: 'align-bottom', label: 'Encostar embaixo' },
+  ];
+  readonly textAligns: { id: 'left' | 'center' | 'right'; icon: IlIconName; label: string }[] = [
+    { id: 'left', icon: 'text-left', label: 'Texto à esquerda' },
+    { id: 'center', icon: 'text-center', label: 'Texto centralizado' },
+    { id: 'right', icon: 'text-right', label: 'Texto à direita' },
+  ];
   readonly brandAssets = BRAND_ASSETS.filter((a) => a.palette);
   readonly brandColors = BRAND_COLORS;
   readonly label = overlayLabel;
@@ -172,7 +202,9 @@ export class SocialOverlaysPanelComponent {
     if (commit) this.store.commit();
   }
 
+  /** Centro do post em que a camada está (no carrossel, o do slide dela). */
   center(): void {
-    this.patch({ x: 0.5, y: 0.5 }, true);
+    this.store.alignSelected('hcenter');
+    this.store.alignSelected('vcenter');
   }
 }
