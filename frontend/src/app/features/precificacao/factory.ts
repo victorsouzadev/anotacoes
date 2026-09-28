@@ -88,3 +88,33 @@ export function orcamentoVazio(numero: number): Orcamento {
     itens: [],
   };
 }
+
+function comNovosIds<T extends { id: string }>(lista: T[]): T[] {
+  return lista.map((item) => ({ ...item, id: uuid() }));
+}
+
+/** Cópia independente da ficha: novo id (salvar não sobrescreve a original) e novos ids nas listas. */
+export function clonarProduto(origem: ProdutoFicha): ProdutoFicha {
+  const p = structuredClone(origem);
+  return {
+    ...p,
+    id: uuid(),
+    nome: p.nome.trim() ? `${p.nome.trim()} (cópia)` : '',
+    materiais: comNovosIds(p.materiais),
+    insumos: comNovosIds(p.insumos),
+    embalagens: comNovosIds(p.embalagens),
+    outrosCustos: comNovosIds(p.outrosCustos),
+    atividadesHH: comNovosIds(p.atividadesHH),
+    usosMaquina: comNovosIds(p.usosMaquina),
+    personalizacoes: comNovosIds(p.personalizacoes),
+    taxas: comNovosIds(p.taxas),
+    faixasQuantidade: comNovosIds(p.faixasQuantidade),
+    atualizadoEm: new Date().toISOString(),
+  };
+}
+
+/** Novo orçamento a partir de outro: mesmo cliente e itens, com novo número e data de hoje. */
+export function clonarOrcamento(origem: Orcamento, numero: number): Orcamento {
+  const o = structuredClone(origem);
+  return { ...o, id: uuid(), numero, dataISO: new Date().toISOString(), itens: comNovosIds(o.itens) };
+}

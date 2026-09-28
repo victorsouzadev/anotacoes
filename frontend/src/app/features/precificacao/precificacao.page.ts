@@ -18,7 +18,7 @@ import {
   valorHora,
   validaComposicaoPercentual,
 } from './calc';
-import { itemCustoVazio, orcamentoItemVazio, orcamentoVazio, produtoExemplo, produtoVazio, valorNomeadoVazio } from './factory';
+import { clonarOrcamento, clonarProduto, itemCustoVazio, orcamentoItemVazio, orcamentoVazio, produtoExemplo, produtoVazio, valorNomeadoVazio } from './factory';
 import {
   AtividadeHH,
   CATEGORIAS_PADRAO,
@@ -285,6 +285,10 @@ export class PrecificacaoPageComponent {
     if (encontrado) this.produto.set(structuredClone(encontrado));
   }
 
+  clonarProdutoAtual(): void {
+    this.produto.set(clonarProduto(this.produto()));
+  }
+
   excluirProduto(id: string): void {
     this.storage.removerProduto(id);
     if (this.produto().id === id) this.novoProduto();
@@ -360,6 +364,14 @@ export class PrecificacaoPageComponent {
     if (o) {
       this.orcamentoRascunho.set(structuredClone(o));
       this.orcamentoView.set('preview');
+    }
+  }
+
+  clonarOrcamentoSalvo(id: string): void {
+    const o = this.orcamentos().find((x) => x.id === id);
+    if (o) {
+      this.orcamentoRascunho.set(clonarOrcamento(o, this.storage.proximoNumeroOrcamento()));
+      this.orcamentoView.set('editor');
     }
   }
 

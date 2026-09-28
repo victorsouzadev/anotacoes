@@ -23,6 +23,9 @@
         }
       </select>
       <button type="button" class="btn" (click)="novoProduto()">Novo produto</button>
+      <button type="button" class="btn" (click)="clonarProdutoAtual()" title="Cria uma cópia desta ficha como novo produto (salve para guardar)">
+        <app-icon name="duplicate" [size]="14" /> Clonar ficha
+      </button>
       <button type="button" class="btn" (click)="carregarExemplo()">Carregar exemplo</button>
       <button type="button" class="btn destaque" (click)="salvarProduto()" title="Salva a ficha e registra este cálculo no histórico">Salvar ficha</button>
       <button type="button" class="btn" (click)="abrirOrcamentos()">
@@ -544,6 +547,7 @@
                   <div class="item-historico-acoes">
                     <button type="button" class="btn-icone" (click)="visualizarOrcamento(o.id)">Ver / imprimir</button>
                     <button type="button" class="btn-icone" (click)="editarOrcamento(o.id)">Editar</button>
+                    <button type="button" class="btn-icone" (click)="clonarOrcamentoSalvo(o.id)" title="Cria um novo orçamento a partir deste">Clonar</button>
                     <button type="button" class="btn-remover" (click)="excluirOrcamento(o.id)" title="Excluir"><app-icon name="delete" [size]="13" /></button>
                   </div>
                 </li>
