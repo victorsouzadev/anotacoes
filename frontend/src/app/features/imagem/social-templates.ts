@@ -38,6 +38,8 @@ export interface SocialTemplate {
   slides: number;
   /** O modelo reserva um espaço pra foto. */
   photo: boolean;
+  /** O modelo tem espaços de foto (camadas): recebe várias fotos de uma vez. */
+  photos?: boolean;
   build: () => TemplateLook;
 }
 
@@ -125,6 +127,14 @@ export class TemplateBuilder {
     this.slot = {
       x: this.fx(slide, x), y: y / this.H, w: w / this.frameW, h: h / this.H, radius: radius / this.base,
     };
+  }
+
+  /** Espaço de foto (camada), em px de design: tracejado, com um "+" no meio.
+   * A foto escolhida entra por cima, recortada pro tamanho dele. */
+  photoSpot(slide: number, x: number, y: number, w: number, h: number, radius: number): ShapeOverlay {
+    const o = this.rect(slide, x, y, w, h, { fill: VM.branco, stroke: VM.algodao, strokeWidth: 4, radius, dashed: true });
+    o.placeholder = true;
+    return o;
   }
 
   // --- peças que se repetem ---
@@ -356,6 +366,41 @@ function carrosselProduto(): TemplateLook {
   return b.look('vm-carrossel-produto');
 }
 
+/** Quantos posts de foto o carrossel de entregas começa tendo. */
+const ENTREGAS_FOTOS = 4;
+
+function carrosselEntregas(): TemplateLook {
+  const n = ENTREGAS_FOTOS + 2;
+  const b = new TemplateBuilder('retrato', n);
+  for (let i = 0; i < n; i++) b.frame(i);
+
+  // 1. capa
+  b.bow(0, 300, 120);
+  b.script(0, 530, 'entregas\nda semana', 132);
+  b.divider(0, 720);
+  b.text(0, W / 2, 830, 'cada festa que saiu do ateliê\ncom muito carinho 💕', 38);
+  b.caps(0, 1110, 'arrasta pro lado →', 24, { color: VM.grafite, bold: false, tracking: 0.25 });
+  b.handle(0, 1250, 26);
+
+  // 2 a 5. uma entrega por post: a foto grande e quem foi
+  for (let i = 1; i <= ENTREGAS_FOTOS; i++) {
+    b.photoSpot(i, 100, 100, 880, 960, 32);
+    b.script(i, 1150, 'festa da Alice', 84);
+    b.caps(i, 1235, 'topo de bolo · kit festa', 24, { color: VM.grafite, bold: false, tracking: 0.2 });
+  }
+
+  // 6. chamada
+  const c = n - 1;
+  b.bow(c, 330, 120);
+  b.script(c, 530, 'a próxima festa\npode ser a sua', 100);
+  b.divider(c, 700);
+  b.text(c, W / 2, 830, 'encomende pelo direct\nou pelo WhatsApp', 40);
+  b.text(c, W / 2, 990, VM_WHATSAPP, 38, { bold: true, color: VM.branco, style: 'fundo', accent: VM.rosa, tracking: 0.06 });
+  b.handle(c, 1250, 26);
+
+  return b.look('vm-carrossel-entregas');
+}
+
 export const SOCIAL_TEMPLATES: SocialTemplate[] = [
   { id: 'vm-story-encomendas', label: 'Encomendas abertas', group: 'Story', help: 'Início de semana ou quando abrir agenda', formatId: 'story', slides: 1, photo: false, build: storyEncomendas },
   { id: 'vm-story-novidade', label: 'Novidade', group: 'Story', help: 'Foto de uma peça nova, com laço e título', formatId: 'story', slides: 1, photo: true, build: storyNovidade },
@@ -366,6 +411,7 @@ export const SOCIAL_TEMPLATES: SocialTemplate[] = [
   { id: 'vm-feed-depoimento', label: 'Depoimento', group: 'Feed', help: 'Frase de cliente com estrelas', formatId: 'feed', slides: 1, photo: false, build: feedDepoimento },
   { id: 'vm-feed-obrigada', label: 'Obrigada', group: 'Feed', help: 'Agradecer clientes, fim de semana, fim de mês', formatId: 'feed', slides: 1, photo: false, build: feedObrigada },
   { id: 'vm-carrossel-lancamento', label: 'Apresentação', group: 'Carrossel', help: '6 posts: capa, quem faz, o que faço, como encomendar, prazos e chamada', formatId: 'feed', slides: 6, photo: false, build: carrosselLancamento },
+  { id: 'vm-carrossel-entregas', label: 'Entregas', group: 'Carrossel', help: 'Capa, uma entrega por post e chamada. Escolha várias fotos de uma vez: cada uma vai num post, e o carrossel cresce pra caber (até 10)', formatId: 'retrato', slides: ENTREGAS_FOTOS + 2, photo: false, photos: true, build: carrosselEntregas },
   { id: 'vm-carrossel-produto', label: 'Produto', group: 'Carrossel', help: '3 posts 4:5: foto de capa, detalhes e chamada', formatId: 'retrato', slides: 3, photo: true, build: carrosselProduto },
 ];
 

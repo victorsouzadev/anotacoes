@@ -72,7 +72,7 @@ const GROUPS: TemplateGroup[] = ['Story', 'Feed', 'Carrossel'];
                   <canvas #thumb class="smt-thumb" [attr.data-template]="t.id"></canvas>
                   <span class="smt-label">
                     {{ t.label }}
-                    @if (t.photo) { <il-icon name="photo-add" [size]="11" /> }
+                    @if (t.photo || t.photos) { <il-icon name="photo-add" [size]="11" /> }
                     @if (t.kind === 'editado') { <em class="smt-badge">editado</em> }
                     @if (t.kind === 'meu') { <em class="smt-badge">seu</em> }
                   </span>

@@ -10,6 +10,7 @@ import { PhotoSource, sourceOf, stepDownscale } from './social-render';
 import { Overlay } from './social-overlays';
 import { AlignMode, Deltas, FracBox, Guide, alignDelta, alignWithin, anchorForAlign, distribute, groupBox } from './social-align';
 import { uuid } from '../../core/uuid';
+import { SlotPhoto, fillPhotoSlots, placeholders, slideOf } from './social-photo-slots';
 
 export interface SocialProjectData {
   version: number;
@@ -422,6 +423,29 @@ export class SocialStore {
     this.selection.set([]);
     this.templateId.set(t.templateId);
     this.commit();
+  }
+
+  /** Põe fotos nos espaços de foto (modelo de entregas), a partir de
+   * `startId`; sobrando foto, o carrossel cresce. Devolve quantas entraram e
+   * quantos posts foram acrescentados. Um passo de histórico. */
+  fillPhotoSlots(photos: SlotPhoto[], maxSlides: number, startId?: string): { placed: number; added: number } {
+    const before = this.slides();
+    const r = fillPhotoSlots(this.overlays(), before, photos, this.format().ratio, maxSlides, startId);
+    if (!r.placed) return { placed: 0, added: 0 };
+    if (r.added) {
+      // Guias verticais seguem o post delas, como as camadas.
+      const n = r.slides;
+      const last = Math.max(...placeholders(this.overlays(), before).map((p) => slideOf(p, before)));
+      this.userGuides.update((l) => l.map((g) => {
+        if (g.axis !== 'x') return g;
+        const unit = g.pos * before;
+        return { ...g, pos: (unit > last + 1 ? unit + r.added : unit) / n };
+      }));
+    }
+    this.overlays.set(r.overlays);
+    this.slides.set(r.slides);
+    this.commit();
+    return { placed: r.placed, added: r.added };
   }
 
   /** Tira só a foto e mantém o modelo, que continua de pé sem ela. */

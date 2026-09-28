@@ -60,6 +60,10 @@ export interface ShapeOverlay extends OverlayBase {
   /** Raio dos cantos, em fração do lado menor do quadro. */
   radius: number;
   dashed?: boolean;
+  /** Espaço de foto: marca onde uma foto entra (modelo de entregas). As fotos
+   * escolhidas preenchem esses espaços em ordem, recortadas pro tamanho dele,
+   * e ficam por cima — o espaço continua embaixo, pra voltar se a foto sair. */
+  placeholder?: boolean;
 }
 
 /** Arquivo da marca (logo, laço, ícone), por id de `BRAND_ASSETS`. */
@@ -84,6 +88,12 @@ export interface PhotoOverlay extends OverlayBase {
   /** Espessura da borda, em fração do lado menor da foto. */
   borderWidth: number;
   shadow?: boolean;
+  /** Largura ÷ altura da foto em si, quando a caixa (`aspect`) tem outra
+   * proporção: a foto preenche a caixa e o que sobra é cortado, pelo centro.
+   * É o caso da foto que entra num espaço de foto. */
+  natural?: number;
+  /** Espaço de foto que esta foto preenche. */
+  slotId?: string;
 }
 
 export type Overlay = TextOverlay | StickerOverlay | ShapeOverlay | ImageOverlay | PhotoOverlay;
@@ -93,7 +103,7 @@ export function overlayLabel(o: Overlay): string {
   switch (o.kind) {
     case 'texto': return o.text.split('\n')[0] || 'Texto';
     case 'figurinha': return o.sticker;
-    case 'forma': return o.shape === 'circulo' ? 'Círculo' : 'Retângulo';
+    case 'forma': return o.placeholder ? 'Espaço de foto' : o.shape === 'circulo' ? 'Círculo' : 'Retângulo';
     case 'imagem': return brandAssetDef(o.asset)?.label ?? o.asset;
     case 'foto': return 'Foto';
   }
@@ -121,6 +131,11 @@ function loadPhoto(src: string): Promise<void> {
     photoPending.set(src, job);
   }
   return job;
+}
+
+/** Decodifica fotos antes de elas virarem camada, pra entrarem já desenhadas. */
+export function preloadPhotos(srcs: string[]): Promise<void> {
+  return Promise.all(srcs.map(loadPhoto)).then(() => undefined);
 }
 
 /** Carrega os arquivos da marca e as fotos usados pelas camadas. */
@@ -336,7 +351,8 @@ function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h:
   ctx.clip();
   if (img) {
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    const [sx, sy, sw, sh] = photoCrop(img.naturalWidth || img.width, img.naturalHeight || img.height, o);
+    ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
   } else {
     ctx.fillStyle = '#eeeeee';
     ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -355,6 +371,40 @@ function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h:
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/** Pedaço da foto (em px dela) que vai pra caixa da camada: a foto inteira,
+ * ou, com `natural`, o recorte central que preenche a caixa sem deformar. */
+export function photoCrop(iw: number, ih: number, o: Pick<PhotoOverlay, 'aspect' | 'natural'>): [number, number, number, number] {
+  if (!o.natural || Math.abs(o.natural - o.aspect) < 1e-3) return [0, 0, iw, ih];
+  if (iw / ih > o.aspect) {
+    const sw = ih * o.aspect;
+    return [(iw - sw) / 2, 0, sw, ih];
+  }
+  const sh = iw / o.aspect;
+  return [0, (ih - sh) / 2, iw, sh];
+}
+
+/** Sinal de "+" no meio do espaço de foto vazio (a foto, quando entra, cobre). */
+function drawPlaceholderMark(ctx: CanvasRenderingContext2D, o: ShapeOverlay, w: number, h: number): void {
+  const r = Math.min(w, h) * 0.09;
+  ctx.save();
+  ctx.fillStyle = o.stroke || '#E7548C';
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = r * 0.18;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.45, 0);
+  ctx.lineTo(r * 0.45, 0);
+  ctx.moveTo(0, -r * 0.45);
+  ctx.lineTo(0, r * 0.45);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** Desenha uma forma centrada na origem; devolve a caixa (w, h). */
@@ -384,6 +434,7 @@ function drawShape(ctx: CanvasRenderingContext2D, o: ShapeOverlay, s: number, ba
     ctx.stroke();
     ctx.setLineDash([]);
   }
+  if (o.placeholder) drawPlaceholderMark(ctx, o, w, h);
   return [w, h];
 }
 

@@ -27,12 +27,13 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { Overlay, OverlayBox, PhotoOverlay, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay } from './social-overlays';
+import { Overlay, OverlayBox, PhotoOverlay, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
 import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
+import { emptyPlaceholders, isPlaceholder } from './social-photo-slots';
 import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
 import { ZipEntry, zipStore } from './zip';
@@ -287,6 +288,11 @@ async function heicToJpeg(file: File): Promise<Blob> {
         </div>
       } @else if (store.slot()) {
         <button type="button" class="il-btn" (click)="pick(fileInput)"><il-icon name="photo-add" [size]="14" /> Pôr foto</button>
+      }
+      @if (hasPhotoSpots()) {
+        <button type="button" class="il-btn" [class.il-primary]="emptySpots() > 0" data-tip="Escolha várias de uma vez: cada foto vai num espaço, e o carrossel cresce pra caber (até 10 posts)" (click)="pickPhotos(true)">
+          <il-icon name="photo-add" [size]="14" /> {{ emptySpots() > 0 ? 'Pôr fotos (' + emptySpots() + ' ' + (emptySpots() === 1 ? 'espaço vazio' : 'espaços vazios') + ')' : 'Mais fotos' }}
+        </button>
       }
       @if (store.hasContent()) {
         <span class="sm-spacer"></span>
@@ -1668,7 +1674,8 @@ export class SocialModeComponent {
     const files = Array.from(event.dataTransfer?.files ?? []);
     // Várias fotos de uma vez viram camadas (no carrossel, uma por post);
     // uma só continua sendo a foto do post.
-    if (files.length > 1) void this.addPhotoFiles(files, !this.store.hasContent() || this.store.slides() > 1);
+    // Num modelo com espaços de foto, qualquer foto vai pros espaços.
+    if (files.length > 1 || (files[0] && this.hasPhotoSpots())) void this.addPhotoFiles(files, !this.store.hasContent() || this.store.slides() > 1);
     else if (files[0]) void this.loadFile(files[0]);
   }
 
@@ -1680,11 +1687,19 @@ export class SocialModeComponent {
     void this.addPhotoFiles(files, perSlide);
   }
 
-  pickPhotos(perSlide: boolean): void {
+  pickPhotos(perSlide: boolean, startSpot?: string): void {
     this.photosPerSlide = perSlide;
+    this.photosStartSpot = startSpot;
     this.photosInputRef()?.nativeElement.click();
   }
   photosPerSlide = false;
+  /** Espaço de foto clicado no palco: as fotos escolhidas começam por ele. */
+  private photosStartSpot: string | undefined;
+
+  /** O post tem espaços de foto (modelo de entregas)? */
+  readonly hasPhotoSpots = computed(() => this.store.overlays().some(isPlaceholder));
+  private readonly emptySpotIds = computed(() => new Set(emptyPlaceholders(this.store.overlays(), this.store.slides()).map((p) => p.id)));
+  readonly emptySpots = computed(() => emptyPlaceholders(this.store.overlays(), this.store.slides()).length);
 
   /** Fotos como camadas, cada uma no seu tamanho. Com `perSlide`, uma em cada
    * post do carrossel (e o carrossel cresce pra caber, até 10); sem, todas no
@@ -1706,6 +1721,21 @@ export class SocialModeComponent {
       return;
     }
     const slidesMax = this.slidesMax;
+    // Modelo com espaços de foto: cada foto entra num espaço, recortada pro
+    // tamanho dele; sobrando foto, o carrossel ganha posts iguais ao último.
+    if (this.hasPhotoSpots()) {
+      const start = this.photosStartSpot;
+      this.photosStartSpot = undefined;
+      await preloadPhotos(prepared.map((p) => p.src));
+      const { placed, added } = this.store.fillPhotoSlots(prepared, slidesMax, start);
+      this.store.select(null);
+      const left = prepared.length - placed;
+      this.status.set(!placed
+        ? 'Não há espaço vazio a partir daí, e o carrossel já está no máximo (10 posts).'
+        : `${placed} foto(s) nos espaços${added ? `; o carrossel ganhou ${added} post(s)` : ''}.`
+          + (left > 0 ? ` ${left} ficaram de fora: o carrossel chegou a ${slidesMax} posts.` : ' Clique numa foto pra ajustar; troque os nomes com duplo clique.'));
+      return;
+    }
     if (perSlide && prepared.length > this.store.slides()) {
       this.store.slides.set(Math.min(slidesMax, prepared.length));
     }
@@ -1793,7 +1823,9 @@ export class SocialModeComponent {
    * seguida — a foto, se o modelo pede uma e ainda não há, ou os textos. */
   onTemplateApplied(t: GalleryEntry): void {
     this.recortada.set(false);
-    this.status.set(t.photo && !this.image()
+    this.status.set(t.photos
+      ? `Modelo "${t.label}" aplicado. Clique em "Pôr fotos" e escolha várias de uma vez — ou clique num espaço tracejado.`
+      : t.photo && !this.image()
       ? `Modelo "${t.label}" aplicado. Clique no espaço tracejado pra pôr a foto.`
       : `Modelo "${t.label}" aplicado. Clique num texto pra trocar. Ctrl+Z desfaz.`);
   }
@@ -2094,6 +2126,8 @@ export class SocialModeComponent {
       const { moved, again, id, additive } = this.overlayDrag;
       this.overlayDrag = null;
       if (moved) this.commit();
+      // Clique num espaço de foto vazio abre o seletor, começando por ele.
+      else if (!additive && this.emptySpotIds().has(id)) this.pickPhotos(true, id);
       // Clique (sem arrastar) numa camada de um grupo selecionado fica só com
       // ela; arrastar é que move o grupo todo.
       else if (!additive && this.store.selection().length > 1) this.store.select(id);

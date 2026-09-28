@@ -14,6 +14,7 @@ import { PhotoSlot, SOCIAL_FORMATS } from './social-model';
 import { Overlay } from './social-overlays';
 import { TemplateLook } from './social-store';
 import { SOCIAL_TEMPLATES, SocialTemplate, TemplateGroup } from './social-templates';
+import { isPlaceholder } from './social-photo-slots';
 
 export interface CustomTemplateDto {
   id: string;
@@ -46,6 +47,8 @@ export interface GalleryEntry {
   group: TemplateGroup;
   help: string;
   photo: boolean;
+  /** Tem espaços de foto: recebe várias fotos de uma vez. */
+  photos: boolean;
   slides: number;
   kind: 'editor' | 'editado' | 'meu';
   /** O modelo do editor por trás (nos dois primeiros tipos). */
@@ -99,7 +102,7 @@ export function galleryEntries(custom: CustomTemplateDto[]): GalleryEntry[] {
     .map((c) => ({ c, data: parseCustom(c) }))
     .filter((x): x is { c: CustomTemplateDto; data: CustomTemplateData } => x.data !== null);
   const fromCustom = (c: CustomTemplateDto, data: CustomTemplateData, kind: 'editado' | 'meu', builtin?: SocialTemplate): GalleryEntry => ({
-    id: c.id, label: c.name, group: c.group, slides: data.slides, photo: data.slot !== null, kind, builtin, custom: c,
+    id: c.id, label: c.name, group: c.group, slides: data.slides, photo: data.slot !== null, photos: data.overlays.some(isPlaceholder), kind, builtin, custom: c,
     help: kind === 'editado' ? `Sua versão de "${builtin?.label}"` : 'Modelo seu',
     build: () => lookFromCustom(c, data),
   });
@@ -107,7 +110,7 @@ export function galleryEntries(custom: CustomTemplateDto[]): GalleryEntry[] {
   const entries: GalleryEntry[] = SOCIAL_TEMPLATES.map((t) => {
     const edited = valid.find((x) => x.c.replaces === t.id);
     if (edited) return fromCustom(edited.c, edited.data, 'editado', t);
-    return { id: t.id, label: t.label, group: t.group, help: t.help, photo: t.photo, slides: t.slides, kind: 'editor', builtin: t, build: t.build };
+    return { id: t.id, label: t.label, group: t.group, help: t.help, photo: t.photo, photos: !!t.photos, slides: t.slides, kind: 'editor', builtin: t, build: t.build };
   });
   for (const x of valid) {
     // Versão editada de um modelo que não existe mais no editor vira modelo comum.
