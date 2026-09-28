@@ -94,15 +94,18 @@ export interface PhotoOverlay extends OverlayBase {
   natural?: number;
   /** Espaço de foto que esta foto preenche. */
   slotId?: string;
-  /** Escala da foto dentro da caixa (1 = preenche; mais que 1 aproxima). A
-   * caixa não muda — muda o pedaço da foto que aparece nela. */
+  /** Escala da foto dentro da caixa. 1 = preenche a caixa; mais que 1
+   * aproxima; menos que 1 afasta (a foto encolhe e aparece o fundo do post
+   * em volta). A caixa não muda. */
   zoom?: number;
-  /** Enquadramento dentro da caixa, de -1 (encostada à esquerda/em cima) a 1
-   * (à direita/embaixo); 0 é o centro. Só tem efeito onde sobra foto. */
+  /** Enquadramento dentro da caixa, de -1 a 1; 0 é o centro. Com a foto
+   * maior que a caixa, -1 mostra a borda esquerda/de cima da foto; menor,
+   * -1 encosta a foto à esquerda/em cima da caixa. */
   panX?: number;
   panY?: number;
 }
 
+export const PHOTO_ZOOM_MIN = 0.2;
 export const PHOTO_ZOOM_MAX = 5;
 
 export type Overlay = TextOverlay | StickerOverlay | ShapeOverlay | ImageOverlay | PhotoOverlay;
@@ -360,8 +363,8 @@ function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h:
   ctx.clip();
   if (img) {
     ctx.imageSmoothingQuality = 'high';
-    const [sx, sy, sw, sh] = photoCrop(img.naturalWidth || img.width, img.naturalHeight || img.height, o);
-    ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+    const [x, y, dw, dh] = photoRect(o, w, h);
+    ctx.drawImage(img, x - w / 2, y - h / 2, dw, dh);
   } else {
     ctx.fillStyle = '#eeeeee';
     ctx.fillRect(-w / 2, -h / 2, w, h);
@@ -382,44 +385,39 @@ function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h:
   }
 }
 
-/** Pedaço da foto (em px dela) que vai pra caixa da camada: a foto inteira,
- * ou, com `natural`, o recorte que preenche a caixa sem deformar. O zoom
- * aperta o recorte, e o enquadramento escolhe onde ele fica. */
-export function photoCrop(
-  iw: number, ih: number, o: Pick<PhotoOverlay, 'aspect' | 'natural' | 'zoom' | 'panX' | 'panY'>,
+/** Onde a foto é desenhada dentro de uma caixa `w` × `h` (de 0,0 no canto):
+ * sem `natural`, ocupa a caixa; com, cobre a caixa sem deformar. A escala
+ * aumenta ou diminui isso, e o enquadramento escolhe a posição — o que
+ * passa da caixa é cortado por ela. */
+export function photoRect(
+  o: Pick<PhotoOverlay, 'aspect' | 'natural' | 'zoom' | 'panX' | 'panY'>, w: number, h: number,
 ): [number, number, number, number] {
-  let cw = iw, ch = ih;
+  let cw = w, ch = h;
   if (o.natural && Math.abs(o.natural - o.aspect) >= 1e-3) {
-    if (iw / ih > o.aspect) cw = ih * o.aspect;
-    else ch = iw / o.aspect;
+    if (o.natural > w / h) cw = h * o.natural;
+    else ch = w / o.natural;
   }
-  const z = Math.min(PHOTO_ZOOM_MAX, Math.max(1, o.zoom ?? 1));
-  const sw = cw / z, sh = ch / z;
+  const z = Math.min(PHOTO_ZOOM_MAX, Math.max(PHOTO_ZOOM_MIN, o.zoom ?? 1));
+  const dw = cw * z, dh = ch * z;
   const px = Math.min(1, Math.max(-1, o.panX ?? 0));
   const py = Math.min(1, Math.max(-1, o.panY ?? 0));
-  return [((iw - sw) / 2) * (1 + px), ((ih - sh) / 2) * (1 + py), sw, sh];
+  return [((w - dw) / 2) * (1 + px), ((h - dh) / 2) * (1 + py), dw, dh];
 }
 
 /** Quanto do enquadramento (-1..1) anda quando a foto é arrastada `dx`, `dy`
- * px na tela, dentro de uma caixa de `bw` × `bh` px. Arrastar pra direita
- * mostra mais do lado esquerdo da foto. */
+ * px na tela, dentro de uma caixa de `bw` × `bh` px — a foto acompanha o
+ * dedo, seja ela maior ou menor que a caixa. */
 export function photoPanDelta(
-  iw: number, ih: number, o: Pick<PhotoOverlay, 'aspect' | 'natural' | 'zoom'>, bw: number, bh: number, dx: number, dy: number,
+  o: Pick<PhotoOverlay, 'aspect' | 'natural' | 'zoom'>, bw: number, bh: number, dx: number, dy: number,
 ): { panX: number; panY: number } {
-  const [, , sw, sh] = photoCrop(iw, ih, { ...o, panX: 0, panY: 0 });
-  // Sobra da foto além da caixa, em px da tela.
-  const slackX = bw * ((iw - sw) / sw);
-  const slackY = bh * ((ih - sh) / sh);
+  const [, , dw, dh] = photoRect(o, bw, bh);
+  // Folga entre a foto e a caixa, em px da tela (negativa se a foto é menor).
+  const slackX = dw - bw;
+  const slackY = dh - bh;
   return {
-    panX: slackX > 0.5 ? (-2 * dx) / slackX : 0,
-    panY: slackY > 0.5 ? (-2 * dy) / slackY : 0,
+    panX: Math.abs(slackX) > 0.5 ? (-2 * dx) / slackX : 0,
+    panY: Math.abs(slackY) > 0.5 ? (-2 * dy) / slackY : 0,
   };
-}
-
-/** Tamanho natural de uma foto de camada já carregada. */
-export function photoSize(src: string): { w: number; h: number } | null {
-  const img = photoCache.get(src);
-  return img ? { w: img.naturalWidth || img.width, h: img.naturalHeight || img.height } : null;
 }
 
 /** Sinal de "+" no meio do espaço de foto vazio (a foto, quando entra, cobre). */
@@ -484,6 +482,9 @@ export function drawOverlays(
   const base = Math.min(w, h);
   const sel = new Set(selected === null ? [] : typeof selected === 'string' ? [selected] : selected);
   const boxes: OverlayBox[] = [];
+  // Espaço de foto já preenchido não aparece: com a foto afastada (escala
+  // menor que 100%), o que se vê em volta dela é o fundo do post.
+  const filled = new Set(overlays.flatMap((o) => (o.kind === 'foto' && o.slotId ? [o.slotId] : [])));
   for (const o of overlays) {
     const s = o.size * base;
     const cx = o.x * w, cy = o.y * h;
@@ -495,7 +496,8 @@ export function drawOverlays(
     if (o.kind === 'figurinha') {
       [bw, bh] = drawSticker(ctx, o.sticker, s);
     } else if (o.kind === 'forma') {
-      [bw, bh] = drawShape(ctx, o, s, base);
+      if (o.placeholder && filled.has(o.id)) [bw, bh] = [s * o.aspect, s];
+      else [bw, bh] = drawShape(ctx, o, s, base);
     } else if (o.kind === 'foto') {
       bh = s;
       bw = s * o.aspect;

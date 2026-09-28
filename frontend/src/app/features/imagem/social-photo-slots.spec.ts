@@ -1,4 +1,4 @@
-import { PhotoOverlay, ShapeOverlay, photoCrop, photoPanDelta } from './social-overlays';
+import { PhotoOverlay, ShapeOverlay, photoPanDelta, photoRect } from './social-overlays';
 import { emptyPlaceholders, fillPhotoSlots, insertSlides, placeholders, slideOf } from './social-photo-slots';
 import { SocialStore } from './social-store';
 import { SOCIAL_TEMPLATES } from './social-templates';
@@ -118,51 +118,71 @@ describe('carrossel de entregas', () => {
   });
 });
 
-describe('recorte da foto na caixa', () => {
-  it('sem proporção natural, usa a foto inteira', () => {
-    expect(photoCrop(400, 300, { aspect: 4 / 3 })).toEqual([0, 0, 400, 300]);
+describe('foto dentro da caixa', () => {
+  it('sem proporção natural, ocupa a caixa', () => {
+    expect(photoRect({ aspect: 4 / 3 }, 400, 300)).toEqual([0, 0, 400, 300]);
   });
 
-  it('foto larga numa caixa em pé corta as laterais, pelo centro', () => {
-    const [sx, sy, sw, sh] = photoCrop(400, 300, { aspect: 0.5, natural: 4 / 3 });
-    expect(sh).toBe(300);
-    expect(sw).toBeCloseTo(150, 6);
-    expect(sx).toBeCloseTo(125, 6);
-    expect(sy).toBe(0);
+  it('foto larga numa caixa em pé sobra nas laterais, centrada', () => {
+    const [x, y, w, h] = photoRect({ aspect: 0.5, natural: 4 / 3 }, 100, 200);
+    expect(h).toBe(200);
+    expect(w).toBeCloseTo(800 / 3, 6);
+    expect(x).toBeCloseTo((100 - 800 / 3) / 2, 6);
+    expect(y).toBe(0);
   });
 
-  it('foto em pé numa caixa larga corta em cima e embaixo', () => {
-    const [sx, sy, sw, sh] = photoCrop(300, 400, { aspect: 1, natural: 0.75 });
-    expect([sx, sw]).toEqual([0, 300]);
-    expect(sh).toBeCloseTo(300, 6);
-    expect(sy).toBeCloseTo(50, 6);
+  it('foto em pé numa caixa larga sobra em cima e embaixo', () => {
+    const [x, y, w, h] = photoRect({ aspect: 1, natural: 0.75 }, 300, 300);
+    expect([x, w]).toEqual([0, 300]);
+    expect(h).toBeCloseTo(400, 6);
+    expect(y).toBeCloseTo(-50, 6);
   });
 
-  it('escala aproxima pelo centro, sem mudar a proporção da caixa', () => {
-    const [sx, sy, sw, sh] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, zoom: 2 });
-    expect(sw).toBeCloseTo(150, 6);
-    expect(sh).toBeCloseTo(150, 6);
-    expect(sx).toBeCloseTo(125, 6);
-    expect(sy).toBeCloseTo(75, 6);
+  it('escala acima de 100% aproxima pelo centro', () => {
+    const [x, y, w, h] = photoRect({ aspect: 1, natural: 1, zoom: 2 }, 100, 100);
+    expect([x, y, w, h]).toEqual([-50, -50, 200, 200]);
   });
 
-  it('enquadramento encosta o recorte na borda da foto', () => {
-    expect(photoCrop(400, 300, { aspect: 1, natural: 4 / 3, panX: -1 })[0]).toBeCloseTo(0, 6);
-    const [sx, , sw] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, panX: 1 });
-    expect(sx + sw).toBeCloseTo(400, 6);
-    // valores fora da faixa não deixam o recorte sair da foto
-    const [x2, y2, w2, h2] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, zoom: 99, panX: 5, panY: -5 });
-    expect(x2 + w2).toBeLessThanOrEqual(400 + 1e-6);
-    expect(y2).toBeGreaterThanOrEqual(0);
-    expect(h2).toBeGreaterThan(0);
+  it('escala abaixo de 100% encolhe a foto no meio da caixa', () => {
+    const [x, y, w, h] = photoRect({ aspect: 1, natural: 4 / 3, zoom: 0.5 }, 300, 300);
+    // cobrir: 400 × 300; pela metade: 200 × 150, centrada
+    expect(w).toBeCloseTo(200, 6);
+    expect(h).toBeCloseTo(150, 6);
+    expect(x).toBeCloseTo(50, 6);
+    expect(y).toBeCloseTo(75, 6);
+    // "caber a foto inteira" é a escala em que a largura dela é a da caixa
+    const [, , wFit, hFit] = photoRect({ aspect: 1, natural: 4 / 3, zoom: 0.75 }, 300, 300);
+    expect(wFit).toBeCloseTo(300, 6);
+    expect(hFit).toBeLessThan(300);
   });
 
-  it('arrastar pra direita mostra mais do lado esquerdo; sem sobra, não anda', () => {
-    // caixa quadrada de 100 px; a foto 4:3 sobra 1/3 na largura
-    const d = photoPanDelta(400, 300, { aspect: 1, natural: 4 / 3 }, 100, 100, 10, 10);
-    expect(d.panX).toBeLessThan(0);
+  it('enquadramento encosta a foto na borda; valores fora da faixa são contidos', () => {
+    expect(photoRect({ aspect: 1, natural: 4 / 3, panX: -1 }, 300, 300)[0]).toBeCloseTo(0, 6);
+    const [x, , w] = photoRect({ aspect: 1, natural: 4 / 3, panX: 1 }, 300, 300);
+    expect(x + w).toBeCloseTo(300, 6);
+    const [x2, y2, w2, h2] = photoRect({ aspect: 1, natural: 1, zoom: 99, panX: 5, panY: -5 }, 100, 100);
+    expect(w2).toBe(500);
+    expect(x2 + w2).toBeCloseTo(100, 6);
+    expect(y2).toBeCloseTo(0, 6);
+    expect(h2).toBe(500);
+    expect(photoRect({ aspect: 1, natural: 1, zoom: 0.01 }, 100, 100)[2]).toBeCloseTo(20, 6);
+  });
+
+  it('arrastada, a foto acompanha o dedo — maior ou menor que a caixa', () => {
+    const big = { aspect: 1, natural: 4 / 3 };
+    // caixa de 300: a foto cobre com 400 de largura, sobra 100
+    const d = photoPanDelta(big, 300, 300, 10, 10);
+    expect(d.panX).toBeCloseTo(-0.2, 6);
     expect(d.panY).toBe(0);
-    // metade da sobra (≈16,7 px) leva do centro à borda
-    expect(photoPanDelta(400, 300, { aspect: 1, natural: 4 / 3 }, 100, 100, 100 / 6, 0).panX).toBeCloseTo(-1, 6);
+    const [x0] = photoRect(big, 300, 300);
+    const [x1] = photoRect({ ...big, panX: d.panX }, 300, 300);
+    expect(x1 - x0).toBeCloseTo(10, 6);
+
+    const small = { aspect: 1, natural: 1, zoom: 0.5 };
+    const d2 = photoPanDelta(small, 300, 300, 15, -15);
+    const [sx0, sy0] = photoRect(small, 300, 300);
+    const [sx1, sy1] = photoRect({ ...small, panX: d2.panX, panY: d2.panY }, 300, 300);
+    expect(sx1 - sx0).toBeCloseTo(15, 6);
+    expect(sy1 - sy0).toBeCloseTo(-15, 6);
   });
 });

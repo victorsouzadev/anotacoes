@@ -27,7 +27,7 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, photoSize, preloadPhotos } from './social-overlays';
+import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, PHOTO_ZOOM_MIN, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
@@ -291,8 +291,8 @@ async function heicToJpeg(file: File): Promise<Blob> {
       }
       @if (selectedPhoto(); as ph) {
         <div class="il-cb-group">
-          <il-num label="Escala da foto" title="Aproxima a foto dentro da caixa dela (a roda do mouse em cima da foto também muda). Arraste a foto pra escolher o pedaço que aparece." unit="%" [value]="(ph.zoom ?? 1) * 100" [step]="5" [min]="100" [max]="photoZoomMax * 100" [decimals]="0" (valueChange)="setPhotoZoom($event.value / 100)" />
-          <button type="button" class="il-ib" data-tip="Reenquadrar a foto" aria-label="Reenquadrar a foto" [disabled]="!ph.zoom && !ph.panX && !ph.panY" (click)="resetPhotoFraming()"><il-icon name="reframe" /></button>
+          <il-num label="Escala da foto" title="Aproxima (mais de 100%) ou afasta (menos de 100%) a foto dentro da caixa dela (a roda do mouse em cima da foto também muda). Arraste a foto pra escolher o pedaço que aparece." unit="%" [value]="(ph.zoom ?? 1) * 100" [step]="5" [min]="photoZoomMin * 100" [max]="photoZoomMax * 100" [decimals]="0" (valueChange)="setPhotoZoom($event.value / 100)" />
+          <button type="button" class="il-ib" data-tip="Reenquadrar a foto" aria-label="Reenquadrar a foto" [disabled]="(ph.zoom ?? 1) === 1 && !ph.panX && !ph.panY" (click)="resetPhotoFraming()"><il-icon name="reframe" /></button>
         </div>
       }
       @if (hasPhotoSpots()) {
@@ -1706,6 +1706,7 @@ export class SocialModeComponent {
   private photosStartSpot: string | undefined;
 
   readonly photoZoomMax = PHOTO_ZOOM_MAX;
+  readonly photoZoomMin = PHOTO_ZOOM_MIN;
   /** A camada de foto selecionada (sozinha), pra escala dela na barra. */
   readonly selectedPhoto = computed(() => {
     if (this.store.selection().length !== 1) return null;
@@ -1716,7 +1717,7 @@ export class SocialModeComponent {
   setPhotoZoom(zoom: number, commit = true): void {
     const ph = this.selectedPhoto();
     if (!ph) return;
-    this.store.patchOverlay(ph.id, { zoom: clamp(zoom, 1, PHOTO_ZOOM_MAX) });
+    this.store.patchOverlay(ph.id, { zoom: clamp(zoom, PHOTO_ZOOM_MIN, PHOTO_ZOOM_MAX) });
     if (commit) this.commit();
   }
 
@@ -1927,7 +1928,7 @@ export class SocialModeComponent {
       const o = this.store.overlays().find((x) => x.id === sel)!;
       if (o.kind === 'foto' && o.slotId) {
         // Foto num espaço: a roda aproxima a foto; a caixa fica.
-        this.store.patchOverlay(sel, { zoom: clamp((o.zoom ?? 1) * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 1, PHOTO_ZOOM_MAX) });
+        this.store.patchOverlay(sel, { zoom: clamp((o.zoom ?? 1) * (event.deltaY < 0 ? 1.08 : 1 / 1.08), PHOTO_ZOOM_MIN, PHOTO_ZOOM_MAX) });
         if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
         this.wheelTimer = setTimeout(() => this.commit(), 300);
         return;
@@ -2052,9 +2053,8 @@ export class SocialModeComponent {
       const o = this.store.overlays().find((x) => x.id === pp.id);
       const fb = this.store.overlayBoxes().find((b) => b.id === pp.id);
       const rect = this.previewRef()?.nativeElement.getBoundingClientRect();
-      const size = o?.kind === 'foto' ? photoSize(o.src) : null;
-      if (o?.kind !== 'foto' || !fb || !rect || !size) return;
-      const d = photoPanDelta(size.w, size.h, o, fb.w * rect.width, fb.h * rect.height, event.clientX - pp.x, event.clientY - pp.y);
+      if (o?.kind !== 'foto' || !fb || !rect) return;
+      const d = photoPanDelta(o, fb.w * rect.width, fb.h * rect.height, event.clientX - pp.x, event.clientY - pp.y);
       this.store.patchOverlay(pp.id, { panX: clamp(pp.panX + d.panX, -1, 1), panY: clamp(pp.panY + d.panY, -1, 1) });
       return;
     }
