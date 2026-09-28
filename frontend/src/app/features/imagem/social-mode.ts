@@ -27,7 +27,7 @@ import { SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { Overlay, OverlayBox, PhotoOverlay, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, preloadPhotos } from './social-overlays';
+import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, photoSize, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
@@ -288,6 +288,12 @@ async function heicToJpeg(file: File): Promise<Blob> {
         </div>
       } @else if (store.slot()) {
         <button type="button" class="il-btn" (click)="pick(fileInput)"><il-icon name="photo-add" [size]="14" /> Pôr foto</button>
+      }
+      @if (selectedPhoto(); as ph) {
+        <div class="il-cb-group">
+          <il-num label="Escala da foto" title="Aproxima a foto dentro da caixa dela (a roda do mouse em cima da foto também muda). Arraste a foto pra escolher o pedaço que aparece." unit="%" [value]="(ph.zoom ?? 1) * 100" [step]="5" [min]="100" [max]="photoZoomMax * 100" [decimals]="0" (valueChange)="setPhotoZoom($event.value / 100)" />
+          <button type="button" class="il-ib" data-tip="Reenquadrar a foto" aria-label="Reenquadrar a foto" [disabled]="!ph.zoom && !ph.panX && !ph.panY" (click)="resetPhotoFraming()"><il-icon name="reframe" /></button>
+        </div>
       }
       @if (hasPhotoSpots()) {
         <button type="button" class="il-btn" [class.il-primary]="emptySpots() > 0" data-tip="Escolha várias de uma vez: cada foto vai num espaço, e o carrossel cresce pra caber (até 10 posts)" (click)="pickPhotos(true)">
@@ -955,6 +961,9 @@ export class SocialModeComponent {
   readonly advanced = signal(this.prefs.advanced);
 
   private drag: { id: number; x: number; y: number; dx: number; dy: number; moved: boolean } | null = null;
+  /** Arraste de uma foto que está num espaço de foto: reenquadra a foto
+   * dentro da caixa, em vez de tirar a caixa do lugar. */
+  private photoPan: { pointer: number; id: string; x: number; y: number; panX: number; panY: number; moved: boolean } | null = null;
   /** Arraste de texto/figurinha: posição inicial em fração do quadro. */
   private overlayDrag: {
     pointer: number; id: string; x: number; y: number; moved: boolean; again: boolean;
@@ -1696,6 +1705,28 @@ export class SocialModeComponent {
   /** Espaço de foto clicado no palco: as fotos escolhidas começam por ele. */
   private photosStartSpot: string | undefined;
 
+  readonly photoZoomMax = PHOTO_ZOOM_MAX;
+  /** A camada de foto selecionada (sozinha), pra escala dela na barra. */
+  readonly selectedPhoto = computed(() => {
+    if (this.store.selection().length !== 1) return null;
+    const o = this.store.overlays().find((x) => x.id === this.store.selectedOverlay());
+    return o?.kind === 'foto' ? o : null;
+  });
+
+  setPhotoZoom(zoom: number, commit = true): void {
+    const ph = this.selectedPhoto();
+    if (!ph) return;
+    this.store.patchOverlay(ph.id, { zoom: clamp(zoom, 1, PHOTO_ZOOM_MAX) });
+    if (commit) this.commit();
+  }
+
+  resetPhotoFraming(): void {
+    const ph = this.selectedPhoto();
+    if (!ph) return;
+    this.store.patchOverlay(ph.id, { zoom: 1, panX: 0, panY: 0 });
+    this.commit();
+  }
+
   /** O post tem espaços de foto (modelo de entregas)? */
   readonly hasPhotoSpots = computed(() => this.store.overlays().some(isPlaceholder));
   private readonly emptySpotIds = computed(() => new Set(emptyPlaceholders(this.store.overlays(), this.store.slides()).map((p) => p.id)));
@@ -1894,6 +1925,13 @@ export class SocialModeComponent {
     if (sel && pt && hitOverlay(this.boxes, pt.x, pt.y) === sel) {
       event.preventDefault();
       const o = this.store.overlays().find((x) => x.id === sel)!;
+      if (o.kind === 'foto' && o.slotId) {
+        // Foto num espaço: a roda aproxima a foto; a caixa fica.
+        this.store.patchOverlay(sel, { zoom: clamp((o.zoom ?? 1) * (event.deltaY < 0 ? 1.08 : 1 / 1.08), 1, PHOTO_ZOOM_MAX) });
+        if (this.wheelTimer !== null) clearTimeout(this.wheelTimer);
+        this.wheelTimer = setTimeout(() => this.commit(), 300);
+        return;
+      }
       // Forma pode passar do lado menor (uma faixa, um cartão); texto e
       // figurinha não precisam.
       const max = o.kind === 'forma' || o.kind === 'foto' ? 2 : 0.8;
@@ -1969,6 +2007,11 @@ export class SocialModeComponent {
       else if (!this.store.isSelected(hit)) this.store.select(hit);
       this.tab.set('texto');
       if (!this.store.isSelected(hit)) return;
+      const hitLayer = this.store.overlays().find((o) => o.id === hit);
+      if (hitLayer?.kind === 'foto' && hitLayer.slotId && !additive && this.store.selection().length === 1) {
+        this.photoPan = { pointer: event.pointerId, id: hit, x: event.clientX, y: event.clientY, panX: hitLayer.panX ?? 0, panY: hitLayer.panY ?? 0, moved: false };
+        return;
+      }
       const ids = this.store.selection();
       const starts = new Map(this.store.overlays().filter((o) => ids.includes(o.id)).map((o) => [o.id, { x: o.x, y: o.y }]));
       const boxes = this.store.overlayBoxes().filter((b) => ids.includes(b.id));
@@ -2000,6 +2043,19 @@ export class SocialModeComponent {
         stage.scrollLeft = pan.left - dx;
         stage.scrollTop = pan.top - dy;
       }
+      return;
+    }
+    const pp = this.photoPan;
+    if (pp && pp.pointer === event.pointerId) {
+      if (!pp.moved && Math.hypot(event.clientX - pp.x, event.clientY - pp.y) < 3) return;
+      pp.moved = true;
+      const o = this.store.overlays().find((x) => x.id === pp.id);
+      const fb = this.store.overlayBoxes().find((b) => b.id === pp.id);
+      const rect = this.previewRef()?.nativeElement.getBoundingClientRect();
+      const size = o?.kind === 'foto' ? photoSize(o.src) : null;
+      if (o?.kind !== 'foto' || !fb || !rect || !size) return;
+      const d = photoPanDelta(size.w, size.h, o, fb.w * rect.width, fb.h * rect.height, event.clientX - pp.x, event.clientY - pp.y);
+      this.store.patchOverlay(pp.id, { panX: clamp(pp.panX + d.panX, -1, 1), panY: clamp(pp.panY + d.panY, -1, 1) });
       return;
     }
     const od = this.overlayDrag;
@@ -2120,6 +2176,13 @@ export class SocialModeComponent {
       if (moved) this.commit();
       return;
     }
+    if (this.photoPan?.pointer === event.pointerId) {
+      this.pointers.delete(event.pointerId);
+      const moved = this.photoPan.moved;
+      this.photoPan = null;
+      if (moved) this.commit();
+      return;
+    }
     if (this.overlayDrag?.pointer === event.pointerId) {
       this.pointers.delete(event.pointerId);
       this.store.guides.set([]);
@@ -2216,6 +2279,10 @@ export class SocialModeComponent {
     if (this.overlayDrag) {
       if (this.overlayDrag.moved) this.commit();
       this.overlayDrag = null;
+    }
+    if (this.photoPan) {
+      if (this.photoPan.moved) this.commit();
+      this.photoPan = null;
     }
     this.drag = null;
     this.pan = null;

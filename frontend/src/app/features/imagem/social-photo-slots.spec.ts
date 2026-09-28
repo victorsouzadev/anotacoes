@@ -1,4 +1,4 @@
-import { PhotoOverlay, ShapeOverlay, photoCrop } from './social-overlays';
+import { PhotoOverlay, ShapeOverlay, photoCrop, photoPanDelta } from './social-overlays';
 import { emptyPlaceholders, fillPhotoSlots, insertSlides, placeholders, slideOf } from './social-photo-slots';
 import { SocialStore } from './social-store';
 import { SOCIAL_TEMPLATES } from './social-templates';
@@ -136,5 +136,33 @@ describe('recorte da foto na caixa', () => {
     expect([sx, sw]).toEqual([0, 300]);
     expect(sh).toBeCloseTo(300, 6);
     expect(sy).toBeCloseTo(50, 6);
+  });
+
+  it('escala aproxima pelo centro, sem mudar a proporção da caixa', () => {
+    const [sx, sy, sw, sh] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, zoom: 2 });
+    expect(sw).toBeCloseTo(150, 6);
+    expect(sh).toBeCloseTo(150, 6);
+    expect(sx).toBeCloseTo(125, 6);
+    expect(sy).toBeCloseTo(75, 6);
+  });
+
+  it('enquadramento encosta o recorte na borda da foto', () => {
+    expect(photoCrop(400, 300, { aspect: 1, natural: 4 / 3, panX: -1 })[0]).toBeCloseTo(0, 6);
+    const [sx, , sw] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, panX: 1 });
+    expect(sx + sw).toBeCloseTo(400, 6);
+    // valores fora da faixa não deixam o recorte sair da foto
+    const [x2, y2, w2, h2] = photoCrop(400, 300, { aspect: 1, natural: 4 / 3, zoom: 99, panX: 5, panY: -5 });
+    expect(x2 + w2).toBeLessThanOrEqual(400 + 1e-6);
+    expect(y2).toBeGreaterThanOrEqual(0);
+    expect(h2).toBeGreaterThan(0);
+  });
+
+  it('arrastar pra direita mostra mais do lado esquerdo; sem sobra, não anda', () => {
+    // caixa quadrada de 100 px; a foto 4:3 sobra 1/3 na largura
+    const d = photoPanDelta(400, 300, { aspect: 1, natural: 4 / 3 }, 100, 100, 10, 10);
+    expect(d.panX).toBeLessThan(0);
+    expect(d.panY).toBe(0);
+    // metade da sobra (≈16,7 px) leva do centro à borda
+    expect(photoPanDelta(400, 300, { aspect: 1, natural: 4 / 3 }, 100, 100, 100 / 6, 0).panX).toBeCloseTo(-1, 6);
   });
 });

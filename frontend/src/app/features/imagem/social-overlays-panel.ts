@@ -5,7 +5,7 @@ import { uuid } from '../../core/uuid';
 import { FontLibrary } from './fonts';
 import { IlIconComponent, IlIconName } from './illustration-icons';
 import { AlignMode } from './social-align';
-import { ImageOverlay, STICKERS, TEXT_FONTS, TextOverlay, TextStyle, overlayKindLabel, overlayLabel } from './social-overlays';
+import { ImageOverlay, PHOTO_ZOOM_MAX, STICKERS, TEXT_FONTS, TextOverlay, TextStyle, overlayKindLabel, overlayLabel } from './social-overlays';
 import { BRAND_ASSETS, BRAND_COLORS, ensureBrandAssets } from './brand-assets';
 import { SocialStore } from './social-store';
 
@@ -109,6 +109,13 @@ const STYLES: { id: TextStyle; label: string }[] = [
           <p class="il-note">Arrastando, a camada gruda no centro, nas margens e nas outras camadas (Alt solta). Setas movem 1 px; com Shift, 10.</p>
           @if (o.kind === 'foto') {
             <span class="il-mini-title">Foto</span>
+            <label class="il-range"><span>Escala</span><input type="range" min="100" [attr.max]="photoZoomMax * 100" step="1" [value]="(o.zoom ?? 1) * 100" (input)="patch({ zoom: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ ((o.zoom ?? 1) * 100).toFixed(0) }}%</b></label>
+            <label class="il-range"><span>Horizontal</span><input type="range" min="-100" max="100" step="1" [value]="(o.panX ?? 0) * 100" (input)="patch({ panX: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ ((o.panX ?? 0) * 100).toFixed(0) }}</b></label>
+            <label class="il-range"><span>Vertical</span><input type="range" min="-100" max="100" step="1" [value]="(o.panY ?? 0) * 100" (input)="patch({ panY: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ ((o.panY ?? 0) * 100).toFixed(0) }}</b></label>
+            @if ((o.zoom ?? 1) !== 1 || o.panX || o.panY) {
+              <button type="button" class="il-btn il-wide" (click)="patch({ zoom: 1, panX: 0, panY: 0 }, true)">Reenquadrar a foto</button>
+            }
+            <p class="il-note">Escala aproxima a foto dentro da caixa, sem mudar o tamanho dela.{{ o.slotId ? ' Arraste a foto no palco pra escolher o pedaço que aparece; a roda do mouse também aproxima.' : '' }}</p>
             <label class="il-range"><span>Cantos</span><input type="range" min="0" max="50" step="1" [value]="o.radius * 100" (input)="patch({ radius: $any($event.target).value / 100 })" (change)="store.commit()" /><b>{{ (o.radius * 100).toFixed(0) }}</b></label>
             <label class="il-range"><span>Borda</span><input type="range" min="0" max="12" step="0.5" [value]="o.borderWidth * 100" (input)="patch({ borderWidth: $any($event.target).value / 100, border: o.border || '#FFFFFF' })" (change)="store.commit()" /><b>{{ (o.borderWidth * 100).toFixed(1) }}</b></label>
             <div class="il-row">
@@ -215,6 +222,7 @@ export class SocialOverlaysPanelComponent {
   readonly label = overlayLabel;
   readonly kindLabel = overlayKindLabel;
   readonly kindTitle: Record<string, string> = { texto: 'Texto', figurinha: 'Figurinha', forma: 'Forma', imagem: 'Marca', foto: 'Foto' };
+  readonly photoZoomMax = PHOTO_ZOOM_MAX;
 
   selected = computed(() => this.store.overlays().find((o) => o.id === this.store.selectedOverlay()) ?? null);
 
