@@ -23,6 +23,9 @@ import {
   temArte,
 } from './folha';
 import { carregarImagem, pngDaFolha } from './impressao';
+import { AnaliseIaService, ResultadoAnalise, aplicarValores } from './analise-ia.service';
+import { DecalqueEstado } from './decalque-estado';
+import { DecalquePainelComponent } from './decalque-painel';
 import { Campo, CampoNumero, ImagemCarregada, Molde, Params, TipoMolde, Valor, fmt, sim, str } from './modelo';
 
 const STORAGE_KEY = 'moldes:v1';
@@ -79,8 +82,8 @@ function miniatura(tipo: TipoMolde): string | null {
 @Component({
   selector: 'app-moldes-page',
   standalone: true,
-  imports: [RouterLink, IconComponent],
-  providers: [FontLibrary],
+  imports: [RouterLink, IconComponent, DecalquePainelComponent],
+  providers: [FontLibrary, DecalqueEstado],
   templateUrl: './moldes.page.html',
   styleUrl: './moldes.page.css',
 })
@@ -89,6 +92,8 @@ export class MoldesPageComponent {
   readonly theme = inject(ThemeService);
   readonly fonts = inject(FontLibrary);
   private readonly sanitizer = inject(DomSanitizer);
+  readonly decalque = inject(DecalqueEstado);
+  private readonly analiseIa = inject(AnaliseIaService);
 
   readonly categorias = CATEGORIAS;
   readonly tipos = TIPOS;
@@ -135,7 +140,7 @@ export class MoldesPageComponent {
 
   readonly molde = computed<Molde>(() => {
     try {
-      return this.tipo().gerar(this.params(), { fonte: this.fonte(), imagem: this.imagem() });
+      return this.tipo().gerar(this.params(), { fonte: this.fonte(), imagem: this.imagem(), decalque: this.decalque.saida() });
     } catch (e) {
       console.error(e);
       return { pecas: [], avisos: ['Não consegui montar o molde com essas medidas. Confira os valores.'] };
@@ -188,6 +193,10 @@ export class MoldesPageComponent {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(salvar));
       } catch { /* sem armazenamento, só não lembra da próxima vez */ }
+    });
+    // o decalque reprocessa a foto quando os parâmetros dele mudam
+    effect(() => {
+      if (this.tipoId() === 'decalque') this.decalque.params.set(this.params());
     });
     // ao trocar de molde ou de medidas, volta pra primeira folha se a atual sumiu
     effect(() => {
@@ -272,6 +281,61 @@ export class MoldesPageComponent {
   removerImagem(): void {
     this.imagem.set(null);
     this.nomeImagem.set('');
+  }
+
+  // ------------------------------------------------------------ foto da embalagem (IA)
+
+  readonly iaAberto = signal(false);
+  readonly iaFoto = signal<string | null>(null);
+  readonly iaMedidaChave = signal('');
+  readonly iaMedidaValor = signal(0);
+  readonly iaAnalisando = signal(false);
+  readonly iaResultado = signal<ResultadoAnalise | null>(null);
+  /** Medidas que dão escala à foto (a chave tem de existir no molde reconhecido). */
+  readonly medidasConhecidas = [
+    { chave: 'altura', rotulo: 'Altura' },
+    { chave: 'largura', rotulo: 'Largura (frente)' },
+    { chave: 'profundidade', rotulo: 'Profundidade (lateral)' },
+    { chave: 'lado', rotulo: 'Lado da base (pirâmide)' },
+    { chave: 'boca', rotulo: 'Diâmetro da boca (cone)' },
+  ];
+  private readonly tiposDeEmbalagem = TIPOS.filter((t) => t.categoria === 'Caixas e embalagens');
+
+  async escolherFotoIa(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    this.iaResultado.set(null);
+    try {
+      this.iaFoto.set(await this.analiseIa.reduzir(file));
+    } catch {
+      this.iaResultado.set({ usouIa: false, motivo: 'Não consegui abrir essa foto.', tipo: null, confianca: null, valores: null, explicacao: null });
+    }
+  }
+
+  async analisarFotoIa(): Promise<void> {
+    const foto = this.iaFoto();
+    if (!foto) return;
+    this.iaAnalisando.set(true);
+    const chave = this.iaMedidaChave();
+    const valor = this.iaMedidaValor();
+    const medida = chave && valor > 0 ? { chave, valor } : null;
+    const r = await this.analiseIa.analisar(foto, this.tiposDeEmbalagem, medida);
+    this.iaAnalisando.set(false);
+    this.iaResultado.set(r);
+    if (!r.usouIa || !r.tipo) return;
+    const tipo = tipoPorId(r.tipo);
+    if (tipo.id !== r.tipo) return;
+    let novos = aplicarValores(tipo, this.todosParams()[tipo.id] ?? tipo.padrao, r.valores ?? {});
+    // a medida que a pessoa conhece vale mais que a estimativa
+    if (medida && tipo.campos.some((c) => c.chave === medida.chave)) novos = aplicarValores(tipo, novos, { [medida.chave]: medida.valor });
+    this.todosParams.update((todos) => ({ ...todos, [tipo.id]: novos }));
+    this.escolherTipo(tipo.id);
+  }
+
+  nomeDoTipo(id: string | null): string {
+    return id ? tipoPorId(id).nome : '';
   }
 
   // ------------------------------------------------------------ exportação

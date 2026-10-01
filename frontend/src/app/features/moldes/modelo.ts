@@ -52,7 +52,12 @@ export interface CampoImagem extends CampoBase {
   tipo: 'imagem';
 }
 
-export type Campo = CampoNumero | CampoOpcoes | CampoTexto | CampoSimNao | CampoFonte | CampoCor | CampoImagem;
+/** Painel do decalque (foto do molde, cantos do papel e revisão das linhas). */
+export interface CampoDecalque extends CampoBase {
+  tipo: 'decalque';
+}
+
+export type Campo = CampoNumero | CampoOpcoes | CampoTexto | CampoSimNao | CampoFonte | CampoCor | CampoImagem | CampoDecalque;
 
 /** O que vai impresso numa peça (topper com foto). Coordenadas da peça. */
 export interface Arte {
@@ -66,6 +71,8 @@ export interface Arte {
     h: number;
     /** Recorta a foto nesta forma (null = foto inteira, já sem fundo). */
     clip: VPath[] | null;
+    /** Desenha a foto espelhada na horizontal (o verso de uma caixa silhueta). */
+    espelhar?: boolean;
   };
 }
 
@@ -90,13 +97,23 @@ export interface ImagemCarregada {
   contorno: Polygon | null;
 }
 
+/** Linhas tiradas de uma foto ou scan de molde, já em mm (ver `decalque.ts`). */
+export interface LinhasDecalcadas {
+  corte: VPath[];
+  dobra: VPath[];
+  w: number;
+  h: number;
+}
+
 export interface Contexto {
   /** Fonte do campo `fonte`, ou null enquanto carrega. */
   fonte: FontLike | null;
   imagem: ImagemCarregada | null;
+  /** Resultado do decalque, quando o molde é o "Molde de uma foto". */
+  decalque?: LinhasDecalcadas | null;
 }
 
-export type Categoria = 'Caixas e embalagens' | 'Toppers';
+export type Categoria = 'Caixas e embalagens' | 'Toppers' | 'A partir de imagem';
 
 export interface TipoMolde {
   id: string;

@@ -10,6 +10,7 @@ using Notas.Api.Endpoints;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Imagens;
+using Notas.Api.Services.Moldes;
 using Notas.Api.Services.Seguranca;
 using Notas.Api.Services.Sites;
 
@@ -112,6 +113,12 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
+        // Moldes: foto de embalagem entra, tipo de molde e medidas saem. Também
+        // leva imagem, então usa o mesmo teto de tempo dos outros com anexo.
+        builder.Services.AddHttpClient(nameof(AnalisadorDeEmbalagem), c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -127,6 +134,7 @@ public static class NotasApp
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
         builder.Services.AddScoped<INomeadorDeElementos, NomeadorDeElementos>();
         builder.Services.AddScoped<ILegendistaInstagram, LegendistaInstagram>();
+        builder.Services.AddScoped<IAnalisadorDeEmbalagem, AnalisadorDeEmbalagem>();
 
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();
@@ -240,6 +248,7 @@ public static class NotasApp
         app.MapTasksEndpoints();
         app.MapImagemEndpoints();
         app.MapSitesEndpoints();
+        app.MapMoldesEndpoints();
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

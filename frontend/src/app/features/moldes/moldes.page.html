@@ -25,7 +25,11 @@
                 @if (t.categoria === cat) {
                   <button type="button" class="tipo" [class.ativo]="t.id === tipoId()" (click)="escolherTipo(t.id)" [title]="t.descricao">
                     <span class="mini">
-                      @if (miniaturas[t.id]; as mini) {
+                      @if (t.id === 'decalque') {
+                        <app-icon name="fit-to-screen" [size]="34" />
+                      } @else if (t.id === 'caixa-silhueta') {
+                        <app-icon name="image" [size]="34" />
+                      } @else if (miniaturas[t.id]; as mini) {
                         <span class="mini-svg" [innerHTML]="mini"></span>
                       } @else {
                         <span class="mini-texto">Aa</span>
@@ -37,6 +41,56 @@
               }
             </div>
           }
+          <div class="ia">
+            <button type="button" class="btn-ia" (click)="iaAberto.set(!iaAberto())" [class.aberto]="iaAberto()">
+              <app-icon name="eye" [size]="14" /> Reconhecer embalagem por foto (IA)
+            </button>
+            @if (iaAberto()) {
+              <div class="ia-painel">
+                <p class="ajuda">Fotografe uma caixa pronta: a IA diz qual molde é e preenche as medidas. Informe uma medida real para acertar a escala.</p>
+                <div class="envio">
+                  <label class="btn">
+                    <app-icon name="upload" [size]="14" /> {{ iaFoto() ? 'Trocar foto' : 'Escolher foto' }}
+                    <input type="file" accept="image/*" hidden (change)="escolherFotoIa($event)" />
+                  </label>
+                  @if (iaFoto(); as f) { <img class="ia-miniatura" [src]="f" alt="Foto da embalagem" /> }
+                </div>
+                <div class="campos">
+                  <label class="campo">
+                    <span>Medida que você sabe</span>
+                    <select (change)="iaMedidaChave.set($any($event.target).value)">
+                      <option value="" [selected]="!iaMedidaChave()">Nenhuma (estimar)</option>
+                      @for (m of medidasConhecidas; track m.chave) {
+                        <option [value]="m.chave" [selected]="m.chave === iaMedidaChave()">{{ m.rotulo }}</option>
+                      }
+                    </select>
+                  </label>
+                  @if (iaMedidaChave()) {
+                    <label class="campo">
+                      <span>Valor</span>
+                      <span class="com-unidade">
+                        <input type="number" min="0" step="0.5" [value]="iaMedidaValor() || ''" (input)="iaMedidaValor.set(+$any($event.target).value || 0)" />
+                        <span class="unidade">cm</span>
+                      </span>
+                    </label>
+                  }
+                </div>
+                <button type="button" class="btn destaque" [disabled]="!iaFoto() || iaAnalisando()" (click)="analisarFotoIa()">
+                  {{ iaAnalisando() ? 'Analisando…' : 'Analisar foto' }}
+                </button>
+                @if (iaResultado(); as r) {
+                  @if (r.usouIa && r.tipo) {
+                    <div class="ia-ok">
+                      Parece uma <strong>{{ nomeDoTipo(r.tipo) }}</strong> (confiança {{ r.confianca }}). Medidas preenchidas — confira antes de cortar.
+                      @if (r.explicacao) { <br /><small>{{ r.explicacao }}</small> }
+                    </div>
+                  } @else {
+                    <div class="aviso">{{ r.motivo }}</div>
+                  }
+                }
+              </div>
+            }
+          </div>
         </section>
 
         <section class="card">
@@ -116,6 +170,9 @@
                     <span>{{ c.rotulo }}</span>
                     <input type="color" [value]="valor(c)" (input)="definir(c.chave, $any($event.target).value)" />
                   </label>
+                }
+                @case ('decalque') {
+                  <div class="campo largo"><app-decalque-painel /></div>
                 }
                 @case ('imagem') {
                   <div class="campo largo">

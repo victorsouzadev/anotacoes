@@ -10,7 +10,7 @@ import { AreaSource, booleanPaths, offsetOutline } from '../imagem/vector-ops';
 import { Point, VPath, circulo, elipse, juntarRetas, poligono, poligonoArredondado, retangulo, retanguloArredondado } from './geometria';
 import { Arte, Contexto, Molde, Params, TipoMolde, fmt, num, sim, str } from './modelo';
 
-const area = (paths: VPath[]): AreaSource => ({ paths, pad: 0, strokeOnly: false, nonzero: true });
+export const area = (paths: VPath[]): AreaSource => ({ paths, pad: 0, strokeOnly: false, nonzero: true });
 
 /** Palitos saindo de baixo do contorno. `topo` é onde o palito começa (dentro
  * da peça, pra soldar), `fundo` é a borda de baixo da peça. */
@@ -135,11 +135,18 @@ function estrela(w: number, h: number): VPath {
   return poligonoArredondado(q, q.map((_, i) => (i % 2 ? 0 : Math.min(w, h) * 0.02)));
 }
 
-/** Silhueta da imagem (px) em mm, centrada, com `largura` mm. */
-function contornoEmMm(poly: Polygon, imgW: number, imgH: number, largura: number): { path: VPath; w: number; h: number } {
-  const s = largura / imgW;
-  const path = polygonToVPath(poly.map(([x, y]): Point => [(x - imgW / 2) * s, (y - imgH / 2) * s]));
-  return { path, w: largura, h: imgH * s };
+/** Silhueta da imagem (px) em mm: o desenho (não a imagem, que pode ter
+ * sobra transparente em volta) fica com `largura` mm e centrado na origem.
+ * Devolve também onde a imagem inteira cai, pra foto casar com o contorno. */
+export function contornoEmMm(
+  poly: Polygon, imgW: number, imgH: number, largura: number,
+): { path: VPath; h: number; foto: { x: number; y: number; w: number; h: number } } {
+  const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const s = largura / Math.max(1e-6, x1 - x0);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const path = polygonToVPath(poly.map(([x, y]): Point => [(x - cx) * s, (y - cy) * s]));
+  return { path, h: (y1 - y0) * s, foto: { x: -cx * s, y: -cy * s, w: imgW * s, h: imgH * s } };
 }
 
 export function topperFoto(p: Params, ctx: Contexto): Molde {
@@ -163,7 +170,7 @@ export function topperFoto(p: Params, ctx: Contexto): Molde {
     const c = contornoEmMm(img.contorno, img.w, img.h, iw);
     interno = c.path;
     ih = c.h;
-    foto = { src: img.src, x: -iw / 2, y: -ih / 2, w: iw, h: ih, clip: null };
+    foto = { src: img.src, ...c.foto, clip: null };
   } else {
     switch (forma) {
       case 'oval': interno = elipse([0, 0], iw / 2, ih / 2); break;

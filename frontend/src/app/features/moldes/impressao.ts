@@ -87,6 +87,10 @@ export async function pngDaFolha(folha: Folha): Promise<Blob> {
         imagens.set(ft.src, img);
       }
       if (ft.clip) ctx.clip(new Path2D(pathsToD(ft.clip)));
+      if (ft.espelhar) {
+        ctx.translate(2 * ft.x + ft.w, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(img, ft.x, ft.y, ft.w, ft.h);
     }
     ctx.restore();

@@ -172,7 +172,9 @@ export function svgDaFolha(folha: Folha, o: OpcoesSaida): string {
           defs.push(`<clipPath id="${id}"><path d="${pathsToD(f.clip)}"/></clipPath>`);
           clip = ` clip-path="url(#${id})"`;
         }
-        g.push(`<g${clip}><image x="${r3(f.x)}" y="${r3(f.y)}" width="${r3(f.w)}" height="${r3(f.h)}" preserveAspectRatio="none" href="${esc(f.src)}" xlink:href="${esc(f.src)}"/></g>`);
+        const img = `<image x="${r3(f.x)}" y="${r3(f.y)}" width="${r3(f.w)}" height="${r3(f.h)}" preserveAspectRatio="none" href="${esc(f.src)}" xlink:href="${esc(f.src)}"/>`;
+        const espelho = f.espelhar ? `<g transform="matrix(-1 0 0 1 ${r3(2 * f.x + f.w)} 0)">${img}</g>` : img;
+        g.push(`<g${clip}>${espelho}</g>`);
       }
       partes.push(`<g transform="${matrixAttr(item.m)}">${g.join('')}</g>`);
     });

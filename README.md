@@ -35,7 +35,9 @@ inicial, sem exigir outro login nem outro deploy.
 - **Moldes** — gerador de moldes por medidas para a Silhouette: caixa milk, caixa de
   bombom (fundo + tampa, com janela), sacolinha, pirâmide, cone, topo de bolo com nome
   e topper com foto. Linhas de corte e de dobra (vinco ou meio-corte tracejado), aba de
-  cola, espessura do papel, distribuição na folha com cópias, export SVG/DXF/PNG.
+  cola, espessura do papel, distribuição na folha com cópias, export SVG/DXF/PNG. E a
+  partir de imagem: caixa no formato de um desenho, molde decalcado de uma foto/scan de
+  molde em papel e reconhecimento de embalagem pronta por IA.
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
 
@@ -378,6 +380,24 @@ ficam lembradas no `localStorage`.
   estrela (com zoom e posição), ou seguindo o contorno de um PNG sem fundo; sai com
   o PNG de impressão 300 DPI do mesmo tamanho da folha do corte (Print & Cut).
 
+**A partir de imagem:**
+
+- **Caixa no formato do desenho** — um PNG sem fundo (personagem, letra, número) vira
+  frente e verso (verso com o desenho espelhado ou liso) ligados por uma lateral com
+  abas dentadas, que acompanha as curvas; lateral comprida é dividida em pedaços
+  emendados. Sai com PNG de impressão pra Print & Cut.
+- **Molde de uma foto ou scan** — fotografe um molde de papel: os cantos do papel são
+  achados sozinhos (ou arrastados), a foto é endireitada por homografia e a escala vem
+  do tamanho do papel (A4, Carta, A5, Ofício, A3 ou outra medida). O contorno vira
+  corte (no meio do traço), vãos fechados pequenos viram furo, e as linhas de dentro —
+  inclusive tracejadas, que são emendadas — viram dobra, esticadas até o corte. Na
+  revisão, um clique troca a linha entre corte, dobra e ignorar. Dá pra ampliar ou
+  reduzir o molde.
+- **Reconhecer embalagem por foto (IA)** — foto de uma caixa pronta vai pro provedor de
+  IA já configurado (OpenRouter, com modelo que leia imagem); volta o tipo de molde e
+  as medidas estimadas, que preenchem o gerador. Uma medida real informada (ex.:
+  altura = 10 cm) dá a escala e prevalece sobre a estimativa.
+
 Comum a todos: aba de cola e espessura do papel (os painéis crescem pela espessura),
 "duas metades" na caixa milk e na sacolinha (cabem em A4), folha A4/Carta/A3/base
 30×30/30×60 com margem, orientação automática, cópias e espaço entre peças. As
@@ -527,8 +547,14 @@ O gerador de Moldes mora em `frontend/src/app/features/moldes/`, com a geometria
 fora do Angular e testada em `moldes.spec.ts`: `geometria.ts` (retas, arcos,
 cantos arredondados, abas, tracejado), `modelo.ts` (tipos e campos declarativos —
 a tela monta o formulário sozinha), `caixas.ts` e `toppers.ts` (um gerador por
-molde), `folha.ts` (distribuição na folha, SVG e DXF), `impressao.ts` (leitura da
-foto e PNG 300 DPI) e `moldes.page.*`. Novo molde = um `TipoMolde` em `caixas.ts`
+molde), `silhueta.ts` (caixa no formato do desenho), `decalque.ts` (visão
+computacional do decalque: homografia, Otsu, inundação, afinamento de Zhang-Suen,
+emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts`,
+`decalque-estado.ts` e `decalque-painel.ts` (cantos e revisão das linhas),
+`analise-ia.service.ts` (catálogo enviado à IA e conferência dos valores), `folha.ts`
+(distribuição na folha, SVG e DXF), `impressao.ts` (leitura da foto e PNG 300 DPI) e
+`moldes.page.*`. No backend, `Services/Moldes/AnalisadorDeEmbalagem.cs` e
+`Endpoints/MoldesEndpoints.cs`. Novo molde = um `TipoMolde` em `caixas.ts`
 ou `toppers.ts` registrado em `catalogo.ts`.
 
 Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
@@ -552,6 +578,7 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `GET/PUT/DELETE /api/imagens/biblioteca[/{id}]` | Biblioteca de artes do Editor de Imagens (a lista traz só miniaturas) |
 | `GET/PUT /api/imagens/preferencias` | Preferências da conta no Editor de Imagens (anotações de material) |
 | `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |
+| `POST /api/moldes/analisar` | Foto de embalagem + catálogo de moldes → tipo de molde e medidas estimadas pela IA (valores conferidos contra o catálogo) |
 | `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
 | `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |
 | `POST /api/configuracoes/ia/testar` | Faz uma extração real com a configuração informada, antes de salvar |
