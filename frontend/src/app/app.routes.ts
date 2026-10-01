@@ -98,6 +98,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/cake/cake-simulator.page').then((m) => m.CakeSimulatorPageComponent),
   },
   {
+    path: 'moldes',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/moldes/moldes.page').then((m) => m.MoldesPageComponent),
+  },
+  {
     path: 'precificacao',
     canActivate: [authGuard],
     loadComponent: () => import('./features/precificacao/precificacao.page').then((m) => m.PrecificacaoPageComponent),

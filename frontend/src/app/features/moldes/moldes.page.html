@@ -1,0 +1,285 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="box" [size]="14" /></span> Moldes</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
+        <app-icon [name]="themeIconName()" [size]="16" />
+      </button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="grade">
+      <div class="coluna-config">
+        <section class="card">
+          <h2>Molde</h2>
+          @for (cat of categorias; track cat) {
+            <h3>{{ cat }}</h3>
+            <div class="tipos">
+              @for (t of tipos; track t.id) {
+                @if (t.categoria === cat) {
+                  <button type="button" class="tipo" [class.ativo]="t.id === tipoId()" (click)="escolherTipo(t.id)" [title]="t.descricao">
+                    <span class="mini">
+                      @if (miniaturas[t.id]; as mini) {
+                        <span class="mini-svg" [innerHTML]="mini"></span>
+                      } @else {
+                        <span class="mini-texto">Aa</span>
+                      }
+                    </span>
+                    <span class="tipo-nome">{{ t.nome }}</span>
+                  </button>
+                }
+              }
+            </div>
+          }
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>{{ tipo().nome }}</h2>
+            <button type="button" class="btn-link" (click)="restaurarPadrao()" title="Volta às medidas padrão deste molde">
+              <app-icon name="refresh" [size]="13" /> Padrão
+            </button>
+          </div>
+          <p class="ajuda">{{ tipo().descricao }}</p>
+          <div class="campos">
+            @for (c of camposVisiveis(); track c.chave) {
+              @switch (c.tipo) {
+                @case ('numero') {
+                  <label class="campo" [class.largo]="c.unidade === '%'">
+                    <span>{{ c.rotulo }}</span>
+                    @if (c.unidade === '%') {
+                      <span class="faixa">
+                        <input type="range" [min]="c.min" [max]="c.max" [step]="c.passo" [value]="numero(c)" (input)="definirNumero(c, $any($event.target).value)" />
+                        <span class="faixa-valor">{{ numero(c) }}%</span>
+                      </span>
+                    } @else {
+                      <span class="com-unidade">
+                        <input type="number" inputmode="decimal" [min]="c.min" [max]="c.max" [step]="c.passo" [value]="numero(c)" (input)="definirNumero(c, $any($event.target).value)" (change)="definirNumero(c, $any($event.target).value, true); $any($event.target).value = numero(c)" />
+                        @if (c.unidade !== 'un') { <span class="unidade">{{ c.unidade }}</span> }
+                      </span>
+                    }
+                    @if (c.ajuda) { <small>{{ c.ajuda }}</small> }
+                  </label>
+                }
+                @case ('opcoes') {
+                  <label class="campo largo">
+                    <span>{{ c.rotulo }}</span>
+                    <select (change)="definir(c.chave, $any($event.target).value)">
+                      @for (o of c.opcoes; track o.valor) {
+                        <option [value]="o.valor" [selected]="o.valor === valor(c)">{{ o.rotulo }}</option>
+                      }
+                    </select>
+                    @if (c.ajuda) { <small>{{ c.ajuda }}</small> }
+                  </label>
+                }
+                @case ('texto') {
+                  <label class="campo largo">
+                    <span>{{ c.rotulo }}</span>
+                    @if (c.multilinha) {
+                      <textarea rows="2" [attr.maxlength]="c.max ?? null" [value]="valor(c)" (input)="definir(c.chave, $any($event.target).value)"></textarea>
+                    } @else {
+                      <input type="text" [attr.maxlength]="c.max ?? null" [value]="valor(c)" (input)="definir(c.chave, $any($event.target).value)" />
+                    }
+                    @if (c.ajuda) { <small>{{ c.ajuda }}</small> }
+                  </label>
+                }
+                @case ('sim-nao') {
+                  <label class="check largo">
+                    <input type="checkbox" [checked]="valor(c) === true" (change)="definir(c.chave, $any($event.target).checked)" />
+                    <span>{{ c.rotulo }}</span>
+                    @if (c.ajuda) { <small>{{ c.ajuda }}</small> }
+                  </label>
+                }
+                @case ('fonte') {
+                  <label class="campo largo">
+                    <span>{{ c.rotulo }}</span>
+                    <select (change)="definir(c.chave, $any($event.target).value)" [style.font-family]="previewFamily($any(valor(c)))">
+                      @for (cat of fontCategories; track cat) {
+                        <optgroup [label]="cat">
+                          @for (f of fontesDa(cat); track f.id) {
+                            <option [value]="f.id" [selected]="f.id === valor(c)">{{ f.name }}</option>
+                          }
+                        </optgroup>
+                      }
+                    </select>
+                    <span class="amostra" [style.font-family]="previewFamily($any(valor(c)))">{{ params()['texto'] || 'Maria' }}</span>
+                  </label>
+                }
+                @case ('cor') {
+                  <label class="campo">
+                    <span>{{ c.rotulo }}</span>
+                    <input type="color" [value]="valor(c)" (input)="definir(c.chave, $any($event.target).value)" />
+                  </label>
+                }
+                @case ('imagem') {
+                  <div class="campo largo">
+                    <span>{{ c.rotulo }}</span>
+                    <div class="envio">
+                      <label class="btn">
+                        <app-icon name="upload" [size]="14" /> {{ imagem() ? 'Trocar' : 'Escolher imagem' }}
+                        <input type="file" accept="image/png,image/jpeg,image/webp" hidden (change)="escolherImagem($event)" />
+                      </label>
+                      @if (carregandoImagem()) { <span class="ajuda">Lendo a imagem…</span> }
+                      @if (imagem(); as img) {
+                        <span class="arquivo" [title]="nomeImagem()">{{ nomeImagem() }}</span>
+                        <span class="tag">{{ img.contorno ? 'sem fundo' : 'com fundo' }}</span>
+                        <button type="button" class="btn-remover" (click)="removerImagem()" title="Tirar a imagem"><app-icon name="x" [size]="14" /></button>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+            }
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Folha e corte</h2>
+          <div class="campos">
+            <label class="campo largo">
+              <span>Papel / base de corte</span>
+              <select (change)="definirFolha('formato', $any($event.target).value)">
+                @for (f of formatos; track f.id) {
+                  <option [value]="f.id" [selected]="f.id === folhaCfg().formato">{{ f.nome }}</option>
+                }
+              </select>
+            </label>
+            <label class="campo">
+              <span>Orientação</span>
+              <select (change)="definirFolha('orientacao', $any($event.target).value)">
+                <option value="auto" [selected]="folhaCfg().orientacao === 'auto'">Automática</option>
+                <option value="retrato" [selected]="folhaCfg().orientacao === 'retrato'">Retrato</option>
+                <option value="paisagem" [selected]="folhaCfg().orientacao === 'paisagem'">Paisagem</option>
+              </select>
+            </label>
+            <label class="campo">
+              <span>Cópias</span>
+              <input type="number" min="1" max="100" step="1" [value]="folhaCfg().copias" (input)="numeroFolha('copias', $any($event.target).value, 1, 100)" />
+            </label>
+            <label class="campo">
+              <span>Margem da folha</span>
+              <span class="com-unidade">
+                <input type="number" min="0" max="40" step="1" [value]="folhaCfg().margem" (input)="numeroFolha('margem', $any($event.target).value, 0, 40)" />
+                <span class="unidade">mm</span>
+              </span>
+            </label>
+            <label class="campo">
+              <span>Espaço entre peças</span>
+              <span class="com-unidade">
+                <input type="number" min="0" max="30" step="1" [value]="folhaCfg().espaco" (input)="numeroFolha('espaco', $any($event.target).value, 0, 30)" />
+                <span class="unidade">mm</span>
+              </span>
+            </label>
+            <label class="campo largo">
+              <span>Linhas de dobra</span>
+              <select (change)="definirFolha('dobra', $any($event.target).value)">
+                <option value="linha" [selected]="folhaCfg().dobra === 'linha'">Linha azul separada (vinco ou caneta no Studio)</option>
+                <option value="tracejado" [selected]="folhaCfg().dobra === 'tracejado'">Tracejado já cortado (meio-corte)</option>
+                <option value="nenhuma" [selected]="folhaCfg().dobra === 'nenhuma'">Sem linhas de dobra</option>
+              </select>
+              <small>
+                @switch (folhaCfg().dobra) {
+                  @case ('linha') { No Studio, selecione as linhas azuis e mande "Vinco" (com a ferramenta de vinco) ou "Perfurar". }
+                  @case ('tracejado') { A dobra vira uma série de cortes curtos — funciona até no Studio Basic, sem configurar nada. }
+                  @default { Só o contorno: você vinca na régua. }
+                }
+              </small>
+            </label>
+            @if (folhaCfg().dobra === 'tracejado') {
+              <label class="campo">
+                <span>Corte do tracejado</span>
+                <span class="com-unidade">
+                  <input type="number" min="0.5" max="10" step="0.5" [value]="folhaCfg().traco" (input)="numeroFolha('traco', $any($event.target).value, 0.5, 10)" />
+                  <span class="unidade">mm</span>
+                </span>
+              </label>
+              <label class="campo">
+                <span>Papel inteiro entre cortes</span>
+                <span class="com-unidade">
+                  <input type="number" min="0.5" max="10" step="0.5" [value]="folhaCfg().vao" (input)="numeroFolha('vao', $any($event.target).value, 0.5, 10)" />
+                  <span class="unidade">mm</span>
+                </span>
+              </label>
+            }
+          </div>
+        </section>
+      </div>
+
+      <div class="coluna-previa">
+        <section class="card previa-card">
+          <div class="card-header">
+            <h2>Prévia</h2>
+            @if (folhas().length > 1) {
+              <div class="paginacao">
+                <button type="button" class="btn-mini" [disabled]="folhaAtual() === 0" (click)="folhaAtual.set(folhaAtual() - 1)">‹</button>
+                <span>Folha {{ folhaAtual() + 1 }} de {{ folhas().length }}</span>
+                <button type="button" class="btn-mini" [disabled]="folhaAtual() >= folhas().length - 1" (click)="folhaAtual.set(folhaAtual() + 1)">›</button>
+              </div>
+            }
+          </div>
+
+          <div class="folha">
+            @if (previa(); as svg) {
+              <div class="folha-svg" [innerHTML]="svg"></div>
+            } @else {
+              <div class="folha-vazia">Nada para mostrar ainda.</div>
+            }
+          </div>
+
+          <div class="legenda">
+            <span><i class="traco" [style.background]="corCorte"></i> Corte</span>
+            @if (folhaCfg().dobra === 'linha') { <span><i class="traco tracejado" [style.color]="corDobra"></i> Dobra / vinco</span> }
+            @if (folhaCfg().dobra === 'tracejado') { <span>Dobras em meio-corte (vermelho)</span> }
+          </div>
+
+          @if (medidas().length) {
+            <ul class="medidas">
+              @for (m of medidas(); track $index) {
+                <li><strong>{{ m.nome }}</strong> <span>{{ fmt(m.w) }} × {{ fmt(m.h) }} cm planificado</span></li>
+              }
+            </ul>
+          }
+
+          @for (a of avisos(); track a) {
+            <div class="aviso">{{ a }}</div>
+          }
+          @if (erro()) { <div class="erro">{{ erro() }}</div> }
+
+          <div class="acoes">
+            <button type="button" class="btn destaque" [disabled]="!folhaVisivel()" (click)="baixarSvg()" title="Abre no Silhouette Studio Designer Edition (ou Cricut/Inkscape)">
+              <app-icon name="download" [size]="14" /> SVG {{ comArte() ? '(impressão + corte)' : 'de corte' }}
+            </button>
+            <button type="button" class="btn" [disabled]="!folhaVisivel()" (click)="baixarDxf()" title="Silhouette Studio Basic abre DXF (não abre SVG)">
+              <app-icon name="download" [size]="14" /> DXF (Studio Basic)
+            </button>
+            @if (comArte()) {
+              <button type="button" class="btn" [disabled]="!folhaVisivel() || exportando()" (click)="baixarPng()" title="PNG 300 DPI do tamanho exato da folha">
+                <app-icon name="download" [size]="14" /> PNG de impressão
+              </button>
+            }
+            <button type="button" class="btn" [disabled]="!folhas().length || exportando()" (click)="baixarTudo()">
+              <app-icon name="download" [size]="14" /> {{ folhas().length > 1 ? 'Todas as folhas' : 'Tudo' }} (ZIP)
+            </button>
+          </div>
+          <p class="ajuda dica">
+            No Silhouette Studio, abra o arquivo, ajuste a página para o mesmo papel ({{ fmt((folhaVisivel()?.w ?? 0) / 10) }} × {{ fmt((folhaVisivel()?.h ?? 0) / 10) }} cm)
+            e confira a escala: as medidas já estão em milímetros reais.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Montagem</h2>
+          <ol class="montagem">
+            @for (passo of tipo().montagem; track $index) { <li>{{ passo }}</li> }
+          </ol>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>

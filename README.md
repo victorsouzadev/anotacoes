@@ -32,6 +32,10 @@ inicial, sem exigir outro login nem outro deploy.
   (um editor vetorial que lê imagens e extrai os contornos em curvas, escreve texto
   em 37 fontes ou na fonte que você enviar, solda formas e gera contorno de corte
   com margem).
+- **Moldes** — gerador de moldes por medidas para a Silhouette: caixa milk, caixa de
+  bombom (fundo + tampa, com janela), sacolinha, pirâmide, cone, topo de bolo com nome
+  e topper com foto. Linhas de corte e de dobra (vinco ou meio-corte tracejado), aba de
+  cola, espessura do papel, distribuição na folha com cópias, export SVG/DXF/PNG.
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
 
@@ -351,6 +355,37 @@ fundo e ampliar na placa de vídeo (ONNX Runtime + DirectML), projetos em arquiv
 "Abrir no Silhouette Studio", fontes do Windows e pasta monitorada no lote. Detalhes,
 instalador e a avaliação do corte direto pela USB em [`desktop/README.md`](desktop/README.md).
 
+### Moldes
+
+Gerador de moldes planificados (`/moldes`): escolhe o tipo, digita as medidas em cm e
+a prévia mostra a folha pronta. Tudo roda no navegador, sem backend; as medidas
+ficam lembradas no `localStorage`.
+
+- **Caixa milk** — tampa com o "V" curvo nas laterais, faixa de fechamento com furo
+  para a fita e fundo de abas com lingueta.
+- **Caixa de bombom** — duas peças (fundo e tampa); a tampa sai maior pela folga de
+  duas espessuras de papel + 1 mm, com janela opcional para acetato ou foto.
+- **Sacolinha** — sanfona lateral com os vincos em "V", fundo quadrado, dobra de
+  reforço na boca e furos da alça casando na dobra e no corpo.
+- **Pirâmide** — de 3 a 8 lados, fechada com fita (furo na ponta de cada face) ou
+  com abas de cola; a planificação gira sozinha no ângulo que ocupa menos folha.
+- **Cone** — cone de ponta, copinho (cone cortado) ou cilindro, com aba de cola e
+  disco de fundo com dentes. Cone muito aberto sai em duas metades.
+- **Topo de bolo** — nome/frase em qualquer fonte do catálogo do Editor de Imagens,
+  barra que liga as letras, borda (sombra), 0–3 palitos (ponta reta ou pontuda) e a
+  camada do texto como peça separada pra topo em camadas.
+- **Topper com foto** — foto encaixada em círculo, oval, coração, retângulo ou
+  estrela (com zoom e posição), ou seguindo o contorno de um PNG sem fundo; sai com
+  o PNG de impressão 300 DPI do mesmo tamanho da folha do corte (Print & Cut).
+
+Comum a todos: aba de cola e espessura do papel (os painéis crescem pela espessura),
+"duas metades" na caixa milk e na sacolinha (cabem em A4), folha A4/Carta/A3/base
+30×30/30×60 com margem, orientação automática, cópias e espaço entre peças. As
+dobras saem como linha azul separada (no Studio: "Vinco" ou "Perfurar"), como
+tracejado já cortado (funciona até no Studio Basic) ou não saem. Exporta SVG em mm
+(Designer Edition), DXF R12 com camadas CORTE/DOBRA/PAGINA (Studio Basic) e ZIP com
+todas as folhas.
+
 ### Simulador de Bolo 3D
 
 Monta um bolo em CSS 3D (`perspective` + `preserve-3d`, cada camada é um prisma de
@@ -487,6 +522,14 @@ de contexto e atalhos), `illustration-toolbar.ts`, `illustration-controlbar.ts`
 (que também guarda os estilos compartilhados), `illustration-panel.ts` (dock),
 `illustration-layers.ts`, `illustration-font-picker.ts`, `illustration-num.ts`
 (campo numérico com arrasto) e `illustration-icons.ts`.
+
+O gerador de Moldes mora em `frontend/src/app/features/moldes/`, com a geometria
+fora do Angular e testada em `moldes.spec.ts`: `geometria.ts` (retas, arcos,
+cantos arredondados, abas, tracejado), `modelo.ts` (tipos e campos declarativos —
+a tela monta o formulário sozinha), `caixas.ts` e `toppers.ts` (um gerador por
+molde), `folha.ts` (distribuição na folha, SVG e DXF), `impressao.ts` (leitura da
+foto e PNG 300 DPI) e `moldes.page.*`. Novo molde = um `TipoMolde` em `caixas.ts`
+ou `toppers.ts` registrado em `catalogo.ts`.
 
 Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
 com uma rota lazy-loaded em `app.routes.ts`, um card na tela `features/hub/hub.page.ts`,

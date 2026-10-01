@@ -46,6 +46,12 @@ const TOOLS: ToolCard[] = [
     windows: true,
   },
   {
+    path: '/moldes',
+    icon: 'box',
+    title: 'Moldes',
+    description: 'Gerador de moldes para Silhouette: caixa milk, bombom, sacolinha, pirâmide, cone, topo de bolo e topper com foto — por medidas, com corte e vinco.',
+  },
+  {
     path: '/bolo-3d',
     icon: 'cake',
     title: 'Simulador de Bolo 3D',
