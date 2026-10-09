@@ -26,6 +26,7 @@ import { carregarImagem, pngDaFolha } from './impressao';
 import { AnaliseIaService, ResultadoAnalise, aplicarValores } from './analise-ia.service';
 import { DecalqueEstado } from './decalque-estado';
 import { DecalquePainelComponent } from './decalque-painel';
+import { EntradaImagemComponent } from './entrada-imagem';
 import { Campo, CampoNumero, ImagemCarregada, Molde, Params, TipoMolde, Valor, fmt, sim, str } from './modelo';
 
 const STORAGE_KEY = 'moldes:v1';
@@ -82,7 +83,7 @@ function miniatura(tipo: TipoMolde): string | null {
 @Component({
   selector: 'app-moldes-page',
   standalone: true,
-  imports: [RouterLink, IconComponent, DecalquePainelComponent],
+  imports: [RouterLink, IconComponent, DecalquePainelComponent, EntradaImagemComponent],
   providers: [FontLibrary, DecalqueEstado],
   templateUrl: './moldes.page.html',
   styleUrl: './moldes.page.css',
@@ -264,11 +265,7 @@ export class MoldesPageComponent {
     return this.fonts.previewFamily(id);
   }
 
-  async escolherImagem(ev: Event): Promise<void> {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
+  async carregarArquivoImagem(file: File): Promise<void> {
     this.erro.set('');
     this.carregandoImagem.set(true);
     try {

@@ -177,18 +177,14 @@
                 @case ('imagem') {
                   <div class="campo largo">
                     <span>{{ c.rotulo }}</span>
-                    <div class="envio">
-                      <label class="btn">
-                        <app-icon name="upload" [size]="14" /> {{ imagem() ? 'Trocar' : 'Escolher imagem' }}
-                        <input type="file" accept="image/png,image/jpeg,image/webp" hidden (change)="escolherImagem($event)" />
-                      </label>
+                    <app-entrada-imagem [rotulo]="imagem() ? 'Trocar' : 'Escolher imagem'" (arquivo)="carregarArquivoImagem($event)">
                       @if (carregandoImagem()) { <span class="ajuda">Lendo a imagem…</span> }
                       @if (imagem(); as img) {
                         <span class="arquivo" [title]="nomeImagem()">{{ nomeImagem() }}</span>
                         <span class="tag">{{ img.contorno ? 'sem fundo' : 'com fundo' }}</span>
                         <button type="button" class="btn-remover" (click)="removerImagem()" title="Tirar a imagem"><app-icon name="x" [size]="14" /></button>
                       }
-                    </div>
+                    </app-entrada-imagem>
                   </div>
                 }
               }

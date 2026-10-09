@@ -119,6 +119,19 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
+        // Moldes: baixar imagem de um link colado. Sem seguir redirecionamento
+        // sozinho (cada salto é conferido) e com a conexão presa a IP público.
+        builder.Services.AddHttpClient(nameof(BaixadorDeImagem), c => c.Timeout = TimeSpan.FromSeconds(20))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+                ConnectCallback = BaixadorDeImagem.ConectarSeguro,
+                ConnectTimeout = TimeSpan.FromSeconds(10),
+            });
+        builder.Services.AddSingleton<IResolvedorDeHost, ResolvedorDns>();
+        builder.Services.AddScoped<IBaixadorDeImagem, BaixadorDeImagem>();
+
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -180,6 +193,18 @@ public static class NotasApp
                 {
                     PermitLimit = 10,
                     Window = TimeSpan.FromMinutes(5),
+                }));
+
+            // Baixar imagem de link põe o servidor pra buscar URL de terceiros: limite
+            // por usuário pra ele não virar robô de download.
+            o.AddPolicy("moldes-imagem", ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.User.FindFirst("sub")?.Value
+                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20,
+                    Window = TimeSpan.FromMinutes(1),
                 }));
         });
 

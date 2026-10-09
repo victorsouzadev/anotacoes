@@ -37,5 +37,19 @@ public static class MoldesEndpoints
             var r = await analisador.AnalisarAsync(user.UserId(), req.Imagem, tipos, req.MedidaConhecida, ct);
             return Results.Ok(r);
         }).RequireAuthorization();
+
+        // Imagem de um link (direto ou de página, como um pin do Pinterest):
+        // o navegador não consegue baixar de outro site por causa do CORS.
+        app.MapPost("/api/moldes/imagem-do-link", async (ImagemDoLinkRequest req, IBaixadorDeImagem baixador, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Url) || req.Url.Length > 2048)
+            {
+                return Results.BadRequest(new { erro = "Cole o link da imagem." });
+            }
+            var r = await baixador.BaixarAsync(req.Url, ct);
+            return r.Ok
+                ? Results.Ok(new ImagemDoLinkResponse(r.DataUrl!))
+                : Results.BadRequest(new { erro = r.Motivo });
+        }).RequireAuthorization().RequireRateLimiting("moldes-imagem");
     }
 }

@@ -6,23 +6,20 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { IconComponent } from '../../shared/icon';
 import { pathsToD } from '../imagem/illustration-model';
 import { DecalqueEstado } from './decalque-estado';
+import { EntradaImagemComponent } from './entrada-imagem';
 import { COR_CORTE, COR_DOBRA } from './folha';
 
 @Component({
   selector: 'app-decalque-painel',
   standalone: true,
-  imports: [IconComponent],
+  imports: [IconComponent, EntradaImagemComponent],
   template: `
-    <div class="envio">
-      <label class="btn">
-        <app-icon name="upload" [size]="14" /> {{ estado.foto() ? 'Trocar foto' : 'Escolher foto ou scan' }}
-        <input type="file" accept="image/*" hidden (change)="escolher($event)" />
-      </label>
+    <app-entrada-imagem [rotulo]="estado.foto() ? 'Trocar imagem' : 'Escolher foto, scan ou imagem'" (arquivo)="receber($event)">
       @if (estado.foto(); as f) {
         <span class="arquivo" [title]="f.nome">{{ f.nome }}</span>
-        <button type="button" class="btn-remover" (click)="estado.limpar()" title="Tirar a foto"><app-icon name="x" [size]="14" /></button>
+        <button type="button" class="btn-remover" (click)="estado.limpar()" title="Tirar a imagem"><app-icon name="x" [size]="14" /></button>
       }
-    </div>
+    </app-entrada-imagem>
     @if (estado.erro()) { <div class="erro">{{ estado.erro() }}</div> }
 
     @if (estado.foto(); as f) {
@@ -133,11 +130,7 @@ export class DecalquePainelComponent {
     return c;
   });
 
-  async escolher(ev: Event): Promise<void> {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
+  async receber(file: File): Promise<void> {
     await this.estado.carregar(file);
     this.aba.set('cantos');
   }

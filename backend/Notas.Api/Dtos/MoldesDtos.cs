@@ -22,3 +22,7 @@ public record AnalisarEmbalagemResponse(
     string? Confianca,
     Dictionary<string, object>? Valores,
     string? Explicacao);
+
+public record ImagemDoLinkRequest(string? Url);
+
+public record ImagemDoLinkResponse(string Imagem);

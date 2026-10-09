@@ -398,6 +398,14 @@ ficam lembradas no `localStorage`.
   exato, fenda/alça vira cápsula, trecho reto vira reta (horizontal/vertical exata),
   canto arredondado vira arco tangente e degrau de pixel some; dobra em linha cheia
   é reconhecida, e linha solta no meio da peça (fenda) vira corte.
+- **Imagem da internet, sem salvar arquivo** — em qualquer campo de imagem dos Moldes
+  dá pra colar o link (imagem direta ou página: num pin do Pinterest, inclusive link
+  curto `pin.it`, vem a imagem principal na maior resolução) ou colar a própria imagem
+  (Ctrl+V na página, ou "Colar" no campo, no celular). O link é baixado pelo servidor
+  (`POST /api/moldes/imagem-do-link`), que só aceita http/https em portas padrão e
+  endereços públicos — conferidos também a cada redirecionamento e na hora de abrir
+  a conexão —, confere a assinatura do arquivo e limita a 12 MB e 20 downloads por
+  minuto por usuário.
 - **Reconhecer embalagem por foto (IA)** — foto de uma caixa pronta vai pro provedor de
   IA já configurado (OpenRouter, com modelo que leia imagem); volta o tipo de molde e
   as medidas estimadas, que preenchem o gerador. Uma medida real informada (ex.:
@@ -557,9 +565,10 @@ computacional do decalque: homografia, Otsu, inundação, afinamento de Zhang-Su
 emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts`,
 `regularizar.ts` (retas, círculos, cápsulas e arcos no lugar do traçado de pixel),
 `decalque-estado.ts` e `decalque-painel.ts` (cantos e revisão das linhas),
-`analise-ia.service.ts` (catálogo enviado à IA e conferência dos valores), `folha.ts`
+`analise-ia.service.ts` (catálogo enviado à IA e conferência dos valores),
+`entrada-imagem.ts` (arquivo, link ou imagem colada), `folha.ts`
 (distribuição na folha, SVG e DXF), `impressao.ts` (leitura da foto e PNG 300 DPI) e
-`moldes.page.*`. No backend, `Services/Moldes/AnalisadorDeEmbalagem.cs` e
+`moldes.page.*`. No backend, `Services/Moldes/AnalisadorDeEmbalagem.cs`, `Services/Moldes/BaixadorDeImagem.cs` e
 `Endpoints/MoldesEndpoints.cs`. Novo molde = um `TipoMolde` em `caixas.ts`
 ou `toppers.ts` registrado em `catalogo.ts`.
 
@@ -584,6 +593,7 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `GET/PUT/DELETE /api/imagens/biblioteca[/{id}]` | Biblioteca de artes do Editor de Imagens (a lista traz só miniaturas) |
 | `GET/PUT /api/imagens/preferencias` | Preferências da conta no Editor de Imagens (anotações de material) |
 | `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |
+| `POST /api/moldes/imagem-do-link` | Baixa a imagem de um link (direto ou de página, como pin do Pinterest) e devolve em data URL; bloqueia endereços internos |
 | `POST /api/moldes/analisar` | Foto de embalagem + catálogo de moldes → tipo de molde e medidas estimadas pela IA (valores conferidos contra o catálogo) |
 | `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
 | `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |
