@@ -392,7 +392,12 @@ ficam lembradas no `localStorage`.
   corte (no meio do traço), vãos fechados pequenos viram furo, e as linhas de dentro —
   inclusive tracejadas, que são emendadas — viram dobra, esticadas até o corte. Na
   revisão, um clique troca a linha entre corte, dobra e ignorar. Dá pra ampliar ou
-  reduzir o molde.
+  reduzir o molde. Também lê **desenho digital** (print de tela, arquivo baixado):
+  acha o molde sozinho ignorando barras e botões do celular, e a escala vem da
+  largura final informada. Por padrão o traçado é **regularizado**: furo vira círculo
+  exato, fenda/alça vira cápsula, trecho reto vira reta (horizontal/vertical exata),
+  canto arredondado vira arco tangente e degrau de pixel some; dobra em linha cheia
+  é reconhecida, e linha solta no meio da peça (fenda) vira corte.
 - **Reconhecer embalagem por foto (IA)** — foto de uma caixa pronta vai pro provedor de
   IA já configurado (OpenRouter, com modelo que leia imagem); volta o tipo de molde e
   as medidas estimadas, que preenchem o gerador. Uma medida real informada (ex.:
@@ -550,6 +555,7 @@ a tela monta o formulário sozinha), `caixas.ts` e `toppers.ts` (um gerador por
 molde), `silhueta.ts` (caixa no formato do desenho), `decalque.ts` (visão
 computacional do decalque: homografia, Otsu, inundação, afinamento de Zhang-Suen,
 emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts`,
+`regularizar.ts` (retas, círculos, cápsulas e arcos no lugar do traçado de pixel),
 `decalque-estado.ts` e `decalque-painel.ts` (cantos e revisão das linhas),
 `analise-ia.service.ts` (catálogo enviado à IA e conferência dos valores), `folha.ts`
 (distribuição na folha, SVG e DXF), `impressao.ts` (leitura da foto e PNG 300 DPI) e

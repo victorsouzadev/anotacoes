@@ -4,7 +4,7 @@
 
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { loadImageElement } from '../imagem/svg-template';
-import { Cantos, Cinza, OPCOES_PADRAO, ResultadoDecalque, TipoLinha, acharCantos, decalcar, otsu, paraCinza, retificar } from './decalque';
+import { Cantos, Cinza, OPCOES_PADRAO, ResultadoDecalque, TipoLinha, acharCantos, acharMolde, decalcar, otsu, paraCinza, retificar } from './decalque';
 import { tamanhoDoPapel } from './decalque-tipo';
 import { LinhasDecalcadas, Params, num } from './modelo';
 
@@ -52,6 +52,9 @@ export class DecalqueEstado {
   /** Trocas feitas pelo usuário (clicando nas linhas), por id. */
   readonly trocas = signal<Record<number, TipoLinha>>({});
   readonly erro = signal('');
+  /** A imagem é um desenho digital (print, arquivo): sobe a cada vez que a
+   * foto enviada é reconhecida assim, pra página sugerir a escala pela largura. */
+  readonly digital = signal(0);
 
   private timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -71,7 +74,8 @@ export class DecalqueEstado {
   private readonly opcoes = computed(() => {
     const p = this.params();
     return {
-      papel: tamanhoDoPapel(p),
+      papelP: { papelFoto: p['papelFoto'], larguraMolde: p['larguraMolde'], larguraFoto: p['larguraFoto'], alturaFoto: p['alturaFoto'] } as Params,
+      regularizar: p['regularizar'] !== false,
       sensibilidade: num(p, 'sensibilidade', 50),
       fecharFalhas: num(p, 'fecharFalhas', OPCOES_PADRAO.fecharFalhas),
       vaoTracejado: num(p, 'vaoTracejado', OPCOES_PADRAO.vaoTracejado),
@@ -116,7 +120,9 @@ export class DecalqueEstado {
       const cinza = paraCinza(ctx.getImageData(0, 0, w, h).data, w, h);
       this.trocas.set({});
       this.foto.set({ src: c.toDataURL('image/jpeg', 0.85), nome: file.name, cinza });
-      this.cantos.set(this.palpiteDeCantos(cinza));
+      const molde = this.palpiteDeCantos(cinza) === null ? acharMolde(cinza) : null;
+      this.cantos.set(molde ?? this.palpiteDeCantos(cinza) ?? [[0, 0], [w, 0], [w, h], [0, h]]);
+      if (molde) this.digital.update((n) => n + 1);
     } catch {
       this.erro.set('Não consegui abrir essa foto.');
     } finally {
@@ -124,18 +130,38 @@ export class DecalqueEstado {
     }
   }
 
-  /** Procura o papel numa versão pequena da foto (é só um palpite). */
-  palpiteDeCantos(cinza: Cinza): Cantos {
+  /** Procura o papel numa versão pequena da foto (é só um palpite). Null
+   * quando não há papel destacado do fundo (scan, print de tela). */
+  palpiteDeCantos(cinza: Cinza): Cantos | null {
     const s = Math.min(1, 400 / Math.max(cinza.w, cinza.h));
-    if (s >= 1) return acharCantos(cinza);
     const w = Math.max(1, Math.round(cinza.w * s)), h = Math.max(1, Math.round(cinza.h * s));
-    const pequena = retificar(cinza, [[0, 0], [cinza.w, 0], [cinza.w, cinza.h], [0, cinza.h]], w, h);
-    return acharCantos(pequena).map(([x, y]) => [(x * cinza.w) / w, (y * cinza.h) / h]) as Cantos;
+    const pequena = s >= 1 ? cinza : retificar(cinza, [[0, 0], [cinza.w, 0], [cinza.w, cinza.h], [0, cinza.h]], w, h);
+    const c = acharCantos(pequena);
+    const inteira = c[0][0] === 0 && c[0][1] === 0 && c[2][0] === pequena.w && c[2][1] === pequena.h;
+    if (inteira) return null;
+    return c.map(([x, y]) => [(x * cinza.w) / pequena.w, (y * cinza.h) / pequena.h]) as Cantos;
   }
 
   detectarCantos(): void {
     const f = this.foto();
-    if (f) this.cantos.set(this.palpiteDeCantos(f.cinza));
+    if (!f) return;
+    const c = this.palpiteDeCantos(f.cinza);
+    if (c) this.cantos.set(c);
+    else this.erro.set('Não achei um papel destacado do fundo. Se é um print ou arquivo, use "Recortar no molde".');
+  }
+
+  /** Desenho digital: recorta em volta do molde (ignora barras e botões do print). */
+  recortarNoMolde(): void {
+    const f = this.foto();
+    if (!f) return;
+    const c = acharMolde(f.cinza);
+    if (c) {
+      this.erro.set('');
+      this.cantos.set(c);
+      this.digital.update((n) => n + 1);
+    } else {
+      this.erro.set('Não achei o molde sozinho: pode haver algo encostado nele (botão do celular, outra figura). Arraste os cantos à mão.');
+    }
   }
 
   imagemInteira(): void {
@@ -167,18 +193,18 @@ export class DecalqueEstado {
     this.trocas.set({});
   }
 
-  private processar(foto: FotoDoMolde, cantos: Cantos, o: { papel: [number, number]; sensibilidade: number; fecharFalhas: number; vaoTracejado: number; minimo: number }): void {
+  private processar(foto: FotoDoMolde, cantos: Cantos, o: { papelP: Params; regularizar: boolean; sensibilidade: number; fecharFalhas: number; vaoTracejado: number; minimo: number }): void {
     try {
-      const [Wmm, Hmm] = o.papel;
       // resolução: a da própria foto (não adianta inventar pixel), com teto
       const ladoW = (dist(cantos[0], cantos[1]) + dist(cantos[3], cantos[2])) / 2;
       const ladoH = (dist(cantos[0], cantos[3]) + dist(cantos[1], cantos[2])) / 2;
+      const [Wmm, Hmm] = tamanhoDoPapel(o.papelP, ladoH / Math.max(1, ladoW));
       const daFoto = Math.min(ladoW / Wmm, ladoH / Hmm);
       const k = Math.max(1.5, Math.min(MAX_PX_MM, daFoto, MAX_RETIFICADA / Math.max(Wmm, Hmm)));
       const g = retificar(foto.cinza, cantos, Math.round(Wmm * k), Math.round(Hmm * k));
       const base = otsu(g);
       const limiar = Math.max(5, Math.min(250, base + (o.sensibilidade - 50) * 2.4));
-      const r = decalcar(g, { pxPorMm: k, limiar, fecharFalhas: o.fecharFalhas, furoMax: OPCOES_PADRAO.furoMax, vaoTracejado: o.vaoTracejado, minimo: o.minimo });
+      const r = decalcar(g, { pxPorMm: k, limiar, fecharFalhas: o.fecharFalhas, furoMax: OPCOES_PADRAO.furoMax, vaoTracejado: o.vaoTracejado, minimo: o.minimo, regularizar: o.regularizar });
       if (daFoto < 3) r.avisos.push('A foto tem pouca resolução para esse papel (menos de 3 px por mm): linhas finas podem sumir. Fotografe mais de perto.');
       this.trocas.set({});
       this.resultado.set(r);

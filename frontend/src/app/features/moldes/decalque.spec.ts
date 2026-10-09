@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { flattenPath, pathsBounds } from '../imagem/illustration-model';
-import { Cinza, aplicarH, decalcar, homografia, juntarTracos, otsu, retificar, OPCOES_PADRAO } from './decalque';
+import { Cinza, acharMolde, aplicarH, decalcar, homografia, juntarTracos, otsu, retificar, OPCOES_PADRAO } from './decalque';
 import { Point } from './geometria';
 
 /** Folha branca com desenho em preto, à mão de pixel. */
@@ -112,5 +112,47 @@ describe('decalque', () => {
     const vazia = decalcar(folha(100, 100), { ...OPCOES_PADRAO, pxPorMm: k, limiar: 128 });
     expect(vazia.linhas).toHaveLength(0);
     expect(vazia.avisos.length).toBe(1);
+  });
+});
+
+describe('desenho digital (print de tela)', () => {
+  const k = 4;
+  // print: barra preta em cima e embaixo, molde no meio
+  const g = folha(500, 700);
+  g.pintar(0, 0, 500, 40); g.pintar(0, 650, 500, 700);
+  g.pintar(60, 60, 64, 120); // botão encostado na barra? não: separado do molde
+  // molde: retângulo 300 × 400 em (100, 150), com uma aba à esquerda
+  g.pintar(100, 150, 400, 152); g.pintar(100, 548, 400, 550); g.pintar(398, 150, 400, 550);
+  g.pintar(100, 150, 102, 250); g.pintar(100, 330, 102, 550);
+  // aba: 40 px pra fora entre y=250 e 330, fechada por uma dobra contínua (x=100)
+  g.pintar(60, 250, 102, 252); g.pintar(60, 328, 102, 330); g.pintar(60, 250, 62, 330);
+  g.pintar(100, 252, 102, 328);
+  // fenda solta no meio
+  g.pintar(220, 300, 280, 302);
+
+  it('acha o molde ignorando as barras do celular', () => {
+    const c = acharMolde(g)!;
+    expect(c).not.toBeNull();
+    expect(c[0][0]).toBeGreaterThan(40);
+    expect(c[0][0]).toBeLessThan(60);
+    expect(c[0][1]).toBeGreaterThan(130);
+    expect(c[2][1]).toBeLessThan(570);
+  });
+
+  it('aba fechada por dobra contínua não vira furo; fenda solta vira corte', () => {
+    const c = acharMolde(g)!;
+    const W = c[1][0] - c[0][0], H = c[2][1] - c[1][1];
+    const rg = retificar(g, c, W, H);
+    const r = decalcar(rg, { ...OPCOES_PADRAO, pxPorMm: k, limiar: otsu(rg) });
+    expect(r.linhas.filter((l) => l.origem === 'furo')).toHaveLength(0);
+    expect(r.linhas.filter((l) => l.origem === 'contorno')).toHaveLength(1);
+    const internas = r.linhas.filter((l) => l.origem === 'interna');
+    const dobra = internas.find((l) => l.tipo === 'dobra')!;
+    const bd = pathsBounds([dobra.path])!;
+    expect(bd.maxX - bd.minX).toBeLessThan(0.01);
+    const fenda = internas.find((l) => l.tipo === 'corte')!;
+    const bf = pathsBounds([fenda.path])!;
+    expect(bf.maxX - bf.minX).toBeGreaterThan(12);
+    expect(bf.maxY - bf.minY).toBeLessThan(1.5);
   });
 });

@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
@@ -197,6 +197,12 @@ export class MoldesPageComponent {
     // o decalque reprocessa a foto quando os parâmetros dele mudam
     effect(() => {
       if (this.tipoId() === 'decalque') this.decalque.params.set(this.params());
+    });
+    // print ou arquivo do computador: não há papel, a escala vem da largura do molde
+    effect(() => {
+      if (this.decalque.digital() > 0 && untracked(() => this.tipoId()) === 'decalque') {
+        untracked(() => { if (str(this.params(), 'papelFoto') !== 'medida') this.definir('papelFoto', 'medida'); });
+      }
     });
     // ao trocar de molde ou de medidas, volta pra primeira folha se a atual sumiu
     effect(() => {

@@ -35,7 +35,7 @@ import { COR_CORTE, COR_DOBRA } from './folha';
       </div>
 
       @if (aba() === 'cantos') {
-        <p class="ajuda">Arraste as bolinhas até os cantos do papel. É deles que sai a escala e o endireitamento da foto.</p>
+        <p class="ajuda">Foto de papel: arraste as bolinhas até os cantos do papel (é deles que sai a escala). Print ou desenho do computador: "Recortar no molde" e escolha "Desenho digital" no papel.</p>
         <svg #palco class="palco" [attr.viewBox]="'0 0 ' + f.cinza.w + ' ' + f.cinza.h"
              (pointermove)="arrastar($event, palco)" (pointerup)="soltar()" (pointerleave)="soltar()">
           <image [attr.href]="f.src" x="0" y="0" [attr.width]="f.cinza.w" [attr.height]="f.cinza.h" />
@@ -49,6 +49,7 @@ import { COR_CORTE, COR_DOBRA } from './folha';
         </svg>
         <div class="linha-botoes">
           <button type="button" class="btn" (click)="estado.detectarCantos()">Procurar o papel</button>
+          <button type="button" class="btn" (click)="estado.recortarNoMolde()" title="Print ou arquivo do computador: recorta em volta do molde">Recortar no molde</button>
           <button type="button" class="btn" (click)="estado.imagemInteira()">Usar a imagem inteira (scan)</button>
           <button type="button" class="btn destaque" (click)="aba.set('linhas')">Revisar linhas</button>
         </div>

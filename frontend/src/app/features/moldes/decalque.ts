@@ -17,6 +17,7 @@ import { Point, Polygon, traceMask } from '../imagem/contour';
 import { VPath, polygonToVPath } from '../imagem/illustration-model';
 import { fitFreehand, offsetOutline } from '../imagem/vector-ops';
 import { linha } from './geometria';
+import { REGULARIZAR_PADRAO, endireitarDobra, regularizarContorno, regularizarFuro } from './regularizar';
 import { area } from './toppers';
 
 export interface Cinza {
@@ -149,6 +150,70 @@ export function acharCantos(g: Cinza): Cantos {
     }
   }
   return melhor.map((m) => m[1]) as Cantos;
+}
+
+/** Molde desenhado no computador (print de tela, arquivo baixado): não há
+ * papel pra achar, então procura o próprio molde — a maior forma fechada que
+ * não encosta na borda da imagem (barra de navegação e botões do celular
+ * encostam ou são pequenos). Devolve o retângulo em volta dele, com folga, ou
+ * null se não achou nada que pareça um molde. */
+export function acharMolde(g: Cinza): Cantos | null {
+  const { w, h } = g;
+  // fundo é o tom mais comum; tinta é o que fica bem mais escuro que ele
+  const hist = new Array<number>(256).fill(0);
+  for (let i = 0; i < w * h; i++) hist[g.data[i]]++;
+  const fundo = hist.indexOf(Math.max(...hist));
+  if (fundo < 150) return null;
+  const tinta = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) if (g.data[i] < fundo - 45) tinta[i] = 1;
+  // O lado de fora do molde é a área clara que o envolve: a que tem a maior
+  // caixa. Não dá pra partir da borda da imagem — num print, o molde costuma
+  // estar num cartão branco cercado de preto (barra de status, navegação).
+  const claro = dilatar(tinta, w, h, 1).map((v) => (v ? 0 : 1));
+  const fundos = rotular(claro, w, h);
+  const caixaF = fundos.areas.map(() => [w, h, -1, -1]);
+  for (let i = 0; i < w * h; i++) {
+    const c = fundos.rotulo[i] - 1;
+    if (c < 0) continue;
+    const x = i % w, y = (i - x) / w;
+    const b = caixaF[c];
+    if (x < b[0]) b[0] = x;
+    if (y < b[1]) b[1] = y;
+    if (x > b[2]) b[2] = x;
+    if (y > b[3]) b[3] = y;
+  }
+  let externo = -1, maiorCaixa = -1;
+  caixaF.forEach(([a, b, c, d], i) => {
+    const area = (c - a + 1) * (d - b + 1);
+    if (c >= 0 && area > maiorCaixa) { maiorCaixa = area; externo = i; }
+  });
+  if (externo < 0) return null;
+  const dentro = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) if (fundos.rotulo[i] !== externo + 1) dentro[i] = 1;
+  const { rotulo, areas } = rotular(dentro, w, h);
+  const caixa = areas.map(() => [w, h, -1, -1]);
+  for (let i = 0; i < w * h; i++) {
+    const c = rotulo[i] - 1;
+    if (c < 0) continue;
+    const x = i % w, y = (i - x) / w;
+    const b = caixa[c];
+    if (x < b[0]) b[0] = x;
+    if (y < b[1]) b[1] = y;
+    if (x > b[2]) b[2] = x;
+    if (y > b[3]) b[3] = y;
+  }
+  let melhor = -1;
+  areas.forEach((a, c) => {
+    const [x0, y0, x1, y1] = caixa[c];
+    const encosta = x0 <= 0 || y0 <= 0 || x1 >= w - 1 || y1 >= h - 1;
+    if (!encosta && a >= w * h * 0.03 && (melhor < 0 || a > areas[melhor])) melhor = c;
+  });
+  if (melhor < 0) return null;
+  const [x0, y0, x1, y1] = caixa[melhor];
+  const folga = Math.round(Math.max(x1 - x0, y1 - y0) * 0.015) + 2;
+  const a = Math.max(0, x0 - folga), b = Math.max(0, y0 - folga);
+  const c = Math.min(w, x1 + 1 + folga), d = Math.min(h, y1 + 1 + folga);
+  return [[a, b], [c, b], [c, d], [a, d]];
 }
 
 // ---------------------------------------------------------------- máscaras
@@ -377,6 +442,74 @@ function direcaoNaPonta(pts: Point[], inicio: boolean, trecho: number): Point {
   return [dx / l, dy / l];
 }
 
+/** Separa os componentes pequenos e compridos da máscara (os traços de um
+ * tracejado) e devolve cada um como o segmento do seu eixo principal; o resto
+ * da máscara segue pro afinamento. Bolinha (pingo, sujeira) some. */
+export function tracinhos(m: Uint8Array, w: number, h: number, maxComprimento: number): { pedacos: Point[][]; resto: Uint8Array } {
+  const resto = m.slice();
+  const visto = new Uint8Array(w * h);
+  const pedacos: Point[][] = [];
+  const fila: number[] = [];
+  const comp: number[] = [];
+  for (let s0 = 0; s0 < w * h; s0++) {
+    if (!m[s0] || visto[s0]) continue;
+    // componente com 8 vizinhos (traço diagonal fino só se toca pelas quinas)
+    comp.length = 0;
+    fila.length = 0;
+    fila.push(s0);
+    visto[s0] = 1;
+    let grande = false;
+    while (fila.length) {
+      const i = fila.pop()!;
+      comp.push(i);
+      if (comp.length > maxComprimento * maxComprimento) grande = true;
+      const x = i % w, y = (i - x) / w;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+        const j = yy * w + xx;
+        if (m[j] && !visto[j]) { visto[j] = 1; fila.push(j); }
+      }
+    }
+    if (grande) continue;
+    // eixo principal pela covariância dos pixels
+    let mx = 0, my = 0;
+    for (const i of comp) { mx += i % w; my += Math.floor(i / w); }
+    mx /= comp.length; my /= comp.length;
+    let sxx = 0, syy = 0, sxy = 0;
+    for (const i of comp) {
+      const dx = (i % w) - mx, dy = Math.floor(i / w) - my;
+      sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+    }
+    const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    const ux = Math.cos(ang), uy = Math.sin(ang);
+    let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
+    for (const i of comp) {
+      const dx = (i % w) - mx, dy = Math.floor(i / w) - my;
+      const t = dx * ux + dy * uy, n = -dx * uy + dy * ux;
+      a = Math.min(a, t); b = Math.max(b, t); c = Math.min(c, n); d = Math.max(d, n);
+    }
+    const comprimento = b - a + 1, largura = d - c + 1;
+    if (comprimento > maxComprimento) continue;
+    for (const i of comp) resto[i] = 0;
+    if (comprimento < largura * 1.6) continue;
+    pedacos.push([[mx + 0.5 + ux * a, my + 0.5 + uy * a], [mx + 0.5 + ux * b, my + 0.5 + uy * b]]);
+  }
+  return { pedacos, resto };
+}
+
+function distanciaAPolilinha(p: Point, l: Point[]): number {
+  let melhor = Infinity;
+  for (let i = 0; i < l.length; i++) {
+    const a = l[i], b = l[Math.min(i + 1, l.length - 1)];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const L2 = dx * dx + dy * dy;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0;
+    melhor = Math.min(melhor, Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy));
+  }
+  return melhor;
+}
+
 /** Emenda os traços de uma linha tracejada: pontas próximas, alinhadas entre si
  * e com o vão entre elas. */
 export function juntarTracos(linhas: Point[][], vaoMax: number, angMaxGraus: number, desvioMax: number): Point[][] {
@@ -456,6 +589,8 @@ export interface OpcoesDecalque {
   vaoTracejado: number;
   /** Linha de dobra mais curta que isto (mm) é descartada (sujeira, texto miúdo). */
   minimo: number;
+  /** Troca o traçado fiel aos pixels por retas, círculos e curvas limpas. */
+  regularizar?: boolean;
 }
 
 export const OPCOES_PADRAO: Omit<OpcoesDecalque, 'pxPorMm' | 'limiar'> = {
@@ -463,6 +598,7 @@ export const OPCOES_PADRAO: Omit<OpcoesDecalque, 'pxPorMm' | 'limiar'> = {
   furoMax: 0.02,
   vaoTracejado: 5,
   minimo: 5,
+  regularizar: true,
 };
 
 export type OrigemLinha = 'contorno' | 'furo' | 'interna';
@@ -538,6 +674,14 @@ export function decalcar(g: Cinza, o: OpcoesDecalque): ResultadoDecalque {
   for (let i = 0; i < w * h; i++) if (!fora[i] && !tintaD[i]) dentroVazio[i] = 1;
   const { rotulo, areas } = rotular(dentroVazio, w, h);
   const ehFuro = areas.map((a) => a <= areaPeca * o.furoMax && a >= (1.2 * k) ** 2);
+  // Vão separado de fora só pelo traço do contorno é aba ou painel fechado por
+  // dobra contínua (moldes que desenham a dobra como linha cheia), não furo.
+  const encostaLim = Math.ceil(tracoPx * 1.5 + r + 2);
+  const distFora = distancia(fora, w, h, encostaLim + 1);
+  for (let i = 0; i < w * h; i++) {
+    const c = rotulo[i] - 1;
+    if (c >= 0 && ehFuro[c] && distFora[i] <= encostaLim) ehFuro[c] = false;
+  }
   const furos = new Uint8Array(w * h);
   // caixa de cada componente numa passada só
   const caixa = areas.map(() => [w, h, 0, 0]);
@@ -575,21 +719,24 @@ export function decalcar(g: Cinza, o: OpcoesDecalque): ResultadoDecalque {
   const dist = distancia(borda, w, h, faixa + 2);
   const interna = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) if (tinta[i] && !fora[i] && dist[i] > faixa) interna[i] = 1;
-  const sk = esqueleto(interna, w, h);
-  const brutas = tracarEsqueleto(sk, w, h)
-    .map((l) => simplificar(l, 0.7))
+  // Traço curto (pedaço de tracejado) vira o próprio eixo dele: o afinamento
+  // reduziria um tracinho fino de 2 mm a dois ou três pixels.
+  const { pedacos, resto } = tracinhos(interna, w, h, Math.max(8, 8 * k));
+  const sk = esqueleto(resto, w, h);
+  const brutas = [...tracarEsqueleto(sk, w, h).map((l) => simplificar(l, 0.7)), ...pedacos]
     .filter((l) => comprimentoPts(l) >= Math.max(2, 0.8 * k));
   const emendadas = juntarTracos(brutas, o.vaoTracejado * k, 25, Math.max(2, 0.8 * k))
     .map((l) => simplificar(l, 0.7))
     .filter((l) => comprimentoPts(l) >= o.minimo * k);
 
-  for (const l of emendadas) {
-    // As pontas pararam a uma faixa do contorno: estica até o meio do traço do
-    // corte, se ele estiver ali na frente.
-    for (const inicio of [true, false]) {
+  // As pontas pararam a uma faixa do contorno: estica até o meio do traço do
+  // corte, se ele estiver ali na frente. Guarda quais pontas chegaram nele.
+  const chegou = emendadas.map((l) =>
+    [true, false].map((inicio) => {
       const p = inicio ? l[0] : l[l.length - 1];
       const d = direcaoNaPonta(l, inicio, 3 * k);
-      const max = faixa + tracoPx * 2 + 2 * k;
+      // o tracejado pode terminar num vão: alcança até um vão inteiro além da faixa
+      const max = faixa + tracoPx * 2 + Math.max(2, o.vaoTracejado) * k;
       for (let t = 0; t <= max; t += 0.5) {
         const x = Math.floor(p[0] + d[0] * t), y = Math.floor(p[1] + d[1] * t);
         if (x < 0 || y < 0 || x >= w || y >= h || fora[y * w + x] || furos[y * w + x]) {
@@ -598,14 +745,46 @@ export function decalcar(g: Cinza, o: OpcoesDecalque): ResultadoDecalque {
             const q: Point = [p[0] + d[0] * (t - recuoPx), p[1] + d[1] * (t - recuoPx)];
             if (inicio) l.unshift(q); else l.push(q);
           }
-          break;
+          return true;
         }
       }
-    }
+      return false;
+    }),
+  );
+
+  // Linha solta no meio da peça — nenhuma ponta no contorno nem em outra linha
+  // — é fenda (de encaixe, de alça), e fenda se corta. Volta fechada também.
+  const perto = Math.max(3 * tracoPx, 1.5 * k, 0.8 * o.vaoTracejado * k);
+  // fenda é curta; linha comprida solta é dobra que o tracejado não deixou emendar
+  const fendaMax = 60 * k;
+  // ponta perto do contorno (até um vão de tracejado) também não é solta
+  const limBorda = faixa + Math.ceil(Math.max(2, o.vaoTracejado) * k) + 2;
+  const distBorda = distancia(fora, w, h, limBorda + 1);
+  const pertoDaBorda = (pt: Point): boolean => {
+    const x = Math.min(w - 1, Math.max(0, Math.floor(pt[0]))), y = Math.min(h - 1, Math.max(0, Math.floor(pt[1])));
+    return distBorda[y * w + x] <= limBorda;
+  };
+  const pontaLivre = (pt: Point, j: number): boolean =>
+    !pertoDaBorda(pt) && emendadas.every((outra, i) => i === j || distanciaAPolilinha(pt, outra) > perto);
+  emendadas.forEach((l, j) => {
+    const fechada = l.length > 3 && Math.hypot(l[0][0] - l[l.length - 1][0], l[0][1] - l[l.length - 1][1]) < perto;
+    const solta = !chegou[j][0] && !chegou[j][1] && comprimentoPts(l) <= fendaMax && pontaLivre(l[0], j) && pontaLivre(l[l.length - 1], j);
     const mm = l.map(([x, y]): Point => [x / k, y / k]);
     const reta = simplificar(mm, 0.35).length === 2;
-    const path = reta ? linha(mm[0], mm[mm.length - 1]) : fitFreehand(mm, 0.2, false);
-    if (path) linhas.push({ id: id++, origem: 'interna', tipo: 'dobra', path });
+    const path = reta ? linha(mm[0], mm[mm.length - 1]) : fitFreehand(mm, 0.2, fechada);
+    if (path) linhas.push({ id: id++, origem: 'interna', tipo: fechada || solta ? 'corte' : 'dobra', path });
+  });
+
+  if (o.regularizar ?? true) {
+    for (const l of linhas) {
+      try {
+        if (l.origem === 'contorno') l.path = regularizarContorno(l.path, REGULARIZAR_PADRAO);
+        else if (l.origem === 'furo' || (l.path.closed && l.tipo === 'corte')) l.path = regularizarFuro(l.path, REGULARIZAR_PADRAO);
+        else l.path = endireitarDobra(l.path, REGULARIZAR_PADRAO);
+      } catch {
+        // regularizar é acabamento: se falhar, fica o traçado fiel
+      }
+    }
   }
 
   if (!linhas.some((l) => l.origem === 'contorno')) avisos.push('Não consegui fechar o contorno do molde.');
