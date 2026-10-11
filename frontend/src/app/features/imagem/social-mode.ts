@@ -27,7 +27,7 @@ import { AiDraft, SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
-import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, PHOTO_ZOOM_MIN, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, preloadPhotos } from './social-overlays';
+import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, PHOTO_ZOOM_MIN, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, loadedPhoto, photoPanDelta, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent, preload as preloadLook } from './social-template-gallery';
 import { SocialCaptionPanelComponent, presetCaptions } from './social-caption-panel';
@@ -240,6 +240,21 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
   };
 }
 
+/** Signal de leitura e escrita cujo alvo muda (foto selecionada ou principal). */
+interface EditTarget<T> {
+  (): T;
+  set(v: T): void;
+  update(fn: (v: T) => T): void;
+}
+
+function editTarget<T>(read: () => T, write: (v: T) => void): EditTarget<T> {
+  const value = computed(read);
+  const t = (() => value()) as EditTarget<T>;
+  t.set = write;
+  t.update = (fn) => write(fn(untracked(value)));
+  return t;
+}
+
 @Component({
   selector: 'app-social-mode',
   standalone: true,
@@ -428,6 +443,7 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
             <sm-template-gallery (applied)="onTemplateApplied($event)" />
           }
           @case ('filtros') {
+            <p class="il-note sm-pad sm-target">{{ selectedPhoto() ? 'Editando a foto selecionada. Clique fora dela pra voltar à foto principal.' : (hasPhotoLayers() ? 'Editando a foto principal. Pra mexer numa foto do carrossel, clique nela no post.' : '') }}</p>
             @for (g of groups; track g.name) {
               <section class="il-sec">
                 <div class="il-sec-head il-sec-static">{{ g.name }}</div>
@@ -442,7 +458,7 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
                         (click)="applyPreset(p)"
                         [title]="preset() === p.id && presetEdited() ? p.label + ' (com ajustes seus — clique pra voltar ao original)' : p.label"
                       >
-                        @if (image()) {
+                        @if (image() || selectedPhoto()) {
                           <canvas #presetCanvas class="sm-preset-chip" [attr.data-preset]="p.id"></canvas>
                         } @else {
                           <span class="sm-preset-chip sm-chip-demo" [style.filter]="chipFilter(p)"></span>
@@ -457,10 +473,11 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
             <p class="il-note sm-pad">{{ presets.length }} filtros. A miniatura mostra a sua foto; depois de aplicar, dá pra continuar ajustando em "Cor e luz".</p>
           }
           @case ('ajustes') {
+            <p class="il-note sm-pad sm-target">{{ selectedPhoto() ? 'Editando a foto selecionada. Clique fora dela pra voltar à foto principal.' : (hasPhotoLayers() ? 'Editando a foto principal. Pra mexer numa foto do carrossel, clique nela no post.' : '') }}</p>
             <section class="il-sec">
               <div class="il-sec-head il-sec-static">Cor e luz <small>{{ dirty() ? 'ajustado' : 'neutro' }}</small></div>
               <div class="il-sec-body">
-                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image()" (click)="melhorarAuto()"><il-icon name="sparkle" [size]="13" /> Melhorar automaticamente</button>
+                <button type="button" class="il-btn il-primary il-wide" [disabled]="!image() || !!selectedPhoto()" (click)="melhorarAuto()"><il-icon name="sparkle" [size]="13" /> Melhorar automaticamente</button>
                 @if (autoResumo()) { <p class="il-note">{{ autoResumo() }} Ctrl+Z desfaz; segure C pra comparar.</p> }
                 @for (s of basicSliders; track s.key) {
                   <label class="il-range sm-r">
@@ -738,6 +755,7 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
     .sm-slide-actions { margin-top: 4px; }
     .sm-rot90 { transform: rotate(90deg); }
     .sm-rot-90 { transform: rotate(-90deg); }
+    .sm-target:empty { display: none; }
     .sm-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     .sm-preset { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text); }
     .sm-preset:hover { background: var(--il-hover); }
@@ -875,8 +893,17 @@ export class SocialModeComponent {
   readonly offsetY = this.store.offsetY;
   readonly bgMode = this.store.bgMode;
   readonly bgColor = this.store.bgColor;
-  readonly adjust = this.store.adjust;
-  readonly preset = this.store.preset;
+  /** O que Filtros e Cor e luz editam: a foto-camada selecionada (as dos
+   * espaços do carrossel) ou, sem ela, a foto principal. Lê e escreve como um
+   * signal, pra os controles não precisarem saber qual das duas é. */
+  readonly adjust = editTarget(
+    () => { const ph = this.selectedPhoto(); return ph ? (ph.adjust ?? NEUTRAL) : this.store.adjust(); },
+    (v) => { const ph = this.selectedPhoto(); if (ph) this.store.patchOverlay(ph.id, { adjust: v }); else this.store.adjust.set(v); },
+  );
+  readonly preset = editTarget(
+    () => { const ph = this.selectedPhoto(); return ph ? (ph.preset ?? 'original') : this.store.preset(); },
+    (v) => { const ph = this.selectedPhoto(); if (ph) this.store.patchOverlay(ph.id, { preset: v }); else this.store.preset.set(v); },
+  );
   readonly type = this.store.type;
   readonly quality = this.store.quality;
   readonly exportW = this.store.exportW;
@@ -1089,7 +1116,7 @@ export class SocialModeComponent {
     let thumbTimer: ReturnType<typeof setTimeout> | undefined;
     effect(() => {
       const refs = this.slideThumbRefs();
-      this.store.overlays(); this.store.slides(); this.store.slot(); this.image(); this.adjust(); this.fontTick();
+      this.store.overlays(); this.store.slides(); this.store.slot(); this.image(); this.store.adjust(); this.fontTick();
       this.bgColor(); this.store.bgPattern(); this.format();
       clearTimeout(thumbTimer);
       thumbTimer = setTimeout(() => untracked(() => this.paintSlideThumbs(refs)), 250);
@@ -1139,7 +1166,7 @@ export class SocialModeComponent {
       const w = Math.round(full * (this.interacting() ? 0.55 : 1));
       canvas.width = w;
       canvas.height = Math.round(w / this.store.frameRatio());
-      paintFrame(canvas, source, { ...this.frameOptions(compare ? { ...NEUTRAL } : this.adjust()), placeholder: true });
+      paintFrame(canvas, source, { ...this.frameOptions(compare ? { ...NEUTRAL } : this.store.adjust()), placeholder: true });
       const overlays = this.store.overlays();
       const selection = this.store.selection();
       const ctx2 = canvas.getContext('2d')!;
@@ -1231,10 +1258,13 @@ export class SocialModeComponent {
     // então mexer num controle não obriga a redesenhar as 34.
     effect(() => {
       const refs = this.presetRefs();
-      const source = this.currentSource();
+      // Com uma foto-camada selecionada, os filtros são dela: a miniatura também.
+      const ph = this.selectedPhoto();
+      const img = ph ? loadedPhoto(ph.src) : undefined;
+      const source = img ? { image: img, width: img.naturalWidth || 1, height: img.naturalHeight || 1 } : this.currentSource();
       // As miniaturas mostram a foto, não o modelo em volta dela.
       const slot = this.store.slot();
-      const ratio = slot ? (slot.w * this.store.frameRatio()) / slot.h : this.store.frameRatio();
+      const ratio = img ? ph!.aspect : slot ? (slot.w * this.store.frameRatio()) / slot.h : this.store.frameRatio();
       const frame = { ...this.frameOptions(NEUTRAL), slot: null, bgPattern: '', ratio };
       if (!refs.length || !source) return;
       this.schedule(() => this.paintThumbs(refs, source, frame));
@@ -1412,8 +1442,8 @@ export class SocialModeComponent {
     const reducao = r.w > 0 ? source.width / r.w : 1;
 
     const auto = melhorarAutomaticamente(dados.pixels, dados.width, dados.height, reducao);
-    this.adjust.set(auto.adjust);
-    this.preset.set('original');
+    this.store.adjust.set(auto.adjust);
+    this.store.preset.set('original');
     this.denoise.set(auto.denoise);
     this.sharpen.set(auto.sharpen);
     this.autoResumo.set(descreverAuto(auto));
@@ -1793,6 +1823,9 @@ export class SocialModeComponent {
     this.store.patchOverlay(ph.id, { zoom: 1, panX: 0, panY: 0 });
     this.commit();
   }
+
+  /** Há fotos-camada (espaços do carrossel, fotos soltas)? */
+  readonly hasPhotoLayers = computed(() => this.store.overlays().some((o) => o.kind === 'foto'));
 
   /** O post tem espaços de foto (modelo de entregas)? */
   readonly hasPhotoSpots = computed(() => this.store.overlays().some(isPlaceholder));
@@ -2575,7 +2608,7 @@ export class SocialModeComponent {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    paintFrame(canvas, source, { ...this.frameOptions(this.adjust()), ...framing });
+    paintFrame(canvas, source, { ...this.frameOptions(this.store.adjust()), ...framing });
     this.applySharpen(canvas);
     drawOverlays(canvas.getContext('2d')!, w, h, this.store.overlays(), this.fonts, null);
     return canvas;
@@ -3012,7 +3045,7 @@ export class SocialModeComponent {
     strip.width = postW * n;
     strip.height = postH;
     const source = this.store.photoVisible() ? this.currentSource() : null;
-    paintFrame(strip, source, { ...this.frameOptions(this.adjust()), placeholder: true });
+    paintFrame(strip, source, { ...this.frameOptions(this.store.adjust()), placeholder: true });
     drawOverlays(strip.getContext('2d')!, strip.width, strip.height, this.store.overlays(), this.fonts, null);
     for (const r of refs) {
       const c = r.nativeElement;

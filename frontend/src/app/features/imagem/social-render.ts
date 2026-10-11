@@ -127,6 +127,33 @@ export function paintFrame(canvas: HTMLCanvasElement, src: Source | null, o: Fra
   }
 }
 
+/** Cópia da foto com os ajustes de cor aplicados — pras fotos que são
+ * camadas (as dos espaços do carrossel), que têm ajuste próprio. Mesma conta
+ * da foto principal; reduzida a `maxSide` porque a camada nunca ocupa mais
+ * que um post. */
+export function adjustedCopy(src: Source, a: Adjustments, maxSide = 1600): HTMLCanvasElement {
+  const k = Math.min(1, maxSide / Math.max(src.width, src.height));
+  const w = Math.max(1, Math.round(src.width * k));
+  const h = Math.max(1, Math.round(src.height * k));
+  const canvas = k < 1 ? stepDownscale(src, w, h) : drawInto(src.image, w, h);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return canvas;
+  if (a.blur) {
+    const copy = drawInto(canvas, w, h);
+    ctx.clearRect(0, 0, w, h);
+    ctx.filter = `blur(${(a.blur / 100) * Math.max(w, h) * 0.03}px)`;
+    ctx.drawImage(copy, 0, 0);
+    ctx.filter = 'none';
+  }
+  if (!isNeutralLook(a)) {
+    const data = ctx.getImageData(0, 0, w, h);
+    aplicarLuz(data.data, w, h, a.shadows, a.highlights);
+    applyLook(data.data, w, h, a);
+    ctx.putImageData(data, 0, 0);
+  }
+  return canvas;
+}
+
 /** Fundo do quadro: a própria foto borrada, ou a cor com o padrão por cima. */
 function paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, src: Source | null, o: FrameOptions): void {
   if (o.bgMode === 'desfoque' && src) {

@@ -3,6 +3,9 @@
  * medidas são frações do quadro, pra valerem em qualquer tamanho de saída. */
 
 import { FontLibrary, nearestWeight } from './fonts';
+import { Adjustments } from './social-model';
+import { adjustedCopy } from './social-render';
+import { isNeutralLook } from './color';
 import { brandAssetDef, brandImage, ensureBrandAssets } from './brand-assets';
 
 export type TextStyle = 'simples' | 'fundo' | 'contorno' | 'sombra';
@@ -94,6 +97,9 @@ export interface PhotoOverlay extends OverlayBase {
   natural?: number;
   /** Espaço de foto que esta foto preenche. */
   slotId?: string;
+  /** Filtro e ajustes de cor desta foto (a principal tem os dela). */
+  adjust?: Adjustments;
+  preset?: string;
   /** Escala da foto dentro da caixa. 1 = preenche a caixa; mais que 1
    * aproxima; menos que 1 afasta (a foto encolhe e aparece o fundo do post
    * em volta). A caixa não muda. */
@@ -128,6 +134,29 @@ export function overlayKindLabel(o: Overlay): string {
 /** Fotos das camadas já decodificadas, pela data URL (a mesma foto
  * duplicada não carrega duas vezes). */
 const photoCache = new Map<string, HTMLImageElement>();
+
+/** A foto já carregada de uma camada, se estiver. */
+export function loadedPhoto(src: string): HTMLImageElement | undefined {
+  return photoCache.get(src);
+}
+
+/** Versões ajustadas das fotos-camada. A chave é a foto + os ajustes, então
+ * mexer num controle gera uma entrada nova; as velhas saem pelo limite. */
+const adjustedCache = new Map<string, HTMLCanvasElement>();
+const ADJUSTED_MAX = 24;
+
+function photoImage(o: PhotoOverlay): CanvasImageSource | undefined {
+  const img = photoCache.get(o.src);
+  if (!img || !o.adjust || (isNeutralLook(o.adjust) && !o.adjust.blur)) return img;
+  const key = `${o.src.length}:${o.src.slice(-64)}|${JSON.stringify(o.adjust)}`;
+  let c = adjustedCache.get(key);
+  if (!c) {
+    c = adjustedCopy({ image: img, width: img.naturalWidth || 1, height: img.naturalHeight || 1 }, o.adjust);
+    adjustedCache.set(key, c);
+    if (adjustedCache.size > ADJUSTED_MAX) adjustedCache.delete(adjustedCache.keys().next().value!);
+  }
+  return c;
+}
 const photoPending = new Map<string, Promise<void>>();
 
 function loadPhoto(src: string): Promise<void> {
@@ -340,7 +369,7 @@ function drawSticker(ctx: CanvasRenderingContext2D, id: string, s: number): [num
 
 /** Foto centrada na origem, com cantos, borda e sombra. */
 function drawPhoto(ctx: CanvasRenderingContext2D, o: PhotoOverlay, w: number, h: number): void {
-  const img = photoCache.get(o.src);
+  const img = photoImage(o);
   const side = Math.min(w, h);
   const r = Math.min(Math.max(0, o.radius), 0.5) * side;
   const path = () => {
