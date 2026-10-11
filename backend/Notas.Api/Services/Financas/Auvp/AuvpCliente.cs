@@ -80,11 +80,20 @@ public class AuvpCliente(IHttpClientFactory httpFactory, IOptions<AuvpOptions> o
             $"limit={limite}",
             "sortBy=date",
             "sortOrder=asc",
-            // "Tudo": transferências entre contas próprias também entram.
-            "includeInternalTransfers=true",
+            // Sem filtro de transferência: a resposta já traz tudo, ignoradas e
+            // transferências internas incluídas. "includeInternalTransfers=true"
+            // não acrescenta — devolve SÓ as transferências e ignoradas.
         };
-        if (de is { } d) query.Add($"from={d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
-        if (ate is { } a) query.Add($"to={a.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+
+        // A API só aplica o período com as duas pontas; uma sozinha é ignorada
+        // em silêncio e volta o histórico inteiro.
+        if (de is not null || ate is not null)
+        {
+            var inicio = de ?? new DateOnly(2000, 1, 1);
+            var fim = ate ?? new DateOnly(2100, 12, 31);
+            query.Add($"from={inicio.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+            query.Add($"to={fim.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+        }
 
         var url = $"{o.BaseUrl.TrimEnd('/')}/transactions?{string.Join('&', query)}";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
