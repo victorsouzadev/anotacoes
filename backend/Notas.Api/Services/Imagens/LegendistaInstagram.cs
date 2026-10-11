@@ -153,7 +153,7 @@ public class LegendistaInstagram : ILegendistaInstagram
         return request;
     }
 
-    private static bool TentarSepararDataUrl(string? dataUrl, out string mime, out string base64)
+    internal static bool TentarSepararDataUrl(string? dataUrl, out string mime, out string base64)
     {
         mime = "";
         base64 = "";

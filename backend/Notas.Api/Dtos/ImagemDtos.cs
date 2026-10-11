@@ -47,3 +47,9 @@ public record ImageSocialTemplateUpsertRequest(string? Name, string? Group, stri
 public record LegendaRequest(string? Imagem, List<string>? Textos, string? Formato, string? Tom, string? Contexto, string? Marca);
 
 public record LegendaResponse(IReadOnlyList<LegendaSugestao> Legendas, bool UsouIa, string? Motivo);
+
+public record ModeloPostRequest(string? Id, string? Nome, string? Grupo, string? Ajuda, int Fotos, bool Cresce, List<string>? Textos);
+
+public record PostIaRequest(List<string>? Fotos, List<ModeloPostRequest>? Modelos, List<string>? Filtros, string? Tipo, string? Tom, string? Contexto, string? Marca);
+
+public record PostIaResponse(PostSugerido? Post, bool UsouIa, string? Motivo);

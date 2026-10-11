@@ -51,7 +51,7 @@ export function captionFormat(formatId: string, slides: number): 'story' | 'feed
   return formatId === 'story' ? 'story' : 'feed';
 }
 
-function readBrand(): string {
+export function readBrand(): string {
   try {
     return localStorage.getItem(BRAND_KEY) ?? DEFAULT_BRAND_PROFILE;
   } catch {

@@ -29,8 +29,9 @@ import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
 import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, PHOTO_ZOOM_MIN, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
-import { SocialTemplateGalleryComponent } from './social-template-gallery';
+import { SocialTemplateGalleryComponent, preload as preloadLook } from './social-template-gallery';
 import { SocialCaptionPanelComponent } from './social-caption-panel';
+import { AiPost, SocialAiPostPanelComponent } from './social-ai-post-panel';
 import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
 import { emptyPlaceholders, isPlaceholder } from './social-photo-slots';
@@ -253,7 +254,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
 @Component({
   selector: 'app-social-mode',
   standalone: true,
-  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent, SocialTemplateGalleryComponent, SocialCaptionPanelComponent],
+  imports: [IlIconComponent, IlNumComponent, SocialOverlaysPanelComponent, SocialTemplateGalleryComponent, SocialCaptionPanelComponent, SocialAiPostPanelComponent],
   host: { class: 'il-studio il-basic sm' },
   template: `
     <input #fileInput type="file" [attr.accept]="accept" hidden (change)="onFileInput($event)" />
@@ -395,6 +396,7 @@ async function heicToJpeg(file: File): Promise<Blob> {
       <div class="il-tab-body">
         @switch (tab()) {
           @case ('modelos') {
+            <sm-ai-post-panel (generated)="applyAiPost($event)" />
             <sm-template-gallery (applied)="onTemplateApplied($event)" />
           }
           @case ('filtros') {
@@ -1860,6 +1862,26 @@ export class SocialModeComponent {
       : t.photo && !this.image()
       ? `Modelo "${t.label}" aplicado. Clique no espaço tracejado pra pôr a foto.`
       : `Modelo "${t.label}" aplicado. Clique num texto pra trocar. Ctrl+Z desfaz.`);
+  }
+
+  /** Post montado pela IA: aplica o modelo com os textos novos, põe a melhor
+   * foto no espaço principal (se o modelo tiver) e o resto nos espaços de
+   * foto. Cada passo é um Ctrl+Z. */
+  async applyAiPost(p: AiPost): Promise<void> {
+    await preloadLook(p.look, this.fonts);
+    this.store.applyTemplate(p.look);
+    this.recortada.set(false);
+    let files = p.files;
+    if (p.look.slot && files.length) {
+      await this.loadFile(files[0]);
+      files = files.slice(1);
+      const preset = FILTER_PRESETS.find((f) => f.id === p.preset);
+      if (preset) this.applyPreset(preset);
+    }
+    if (files.length && this.hasPhotoSpots()) await this.addPhotoFiles(files, true);
+    this.tab.set('modelos');
+    this.status.set(`Post com IA: "${p.entry.label}". Clique num texto pra ajustar; Ctrl+Z desfaz.`
+      + (files.length && !this.hasPhotoSpots() ? ` ${files.length} foto(s) não couberam neste modelo.` : ''));
   }
 
   /** Volta a um post comum: sem espaço de foto, sem padrão e sem as camadas
