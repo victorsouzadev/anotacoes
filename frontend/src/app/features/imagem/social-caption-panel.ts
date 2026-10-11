@@ -51,7 +51,7 @@ export function captionFormat(formatId: string, slides: number): 'story' | 'feed
   return formatId === 'story' ? 'story' : 'feed';
 }
 
-function readBrand(): string {
+export function readBrand(): string {
   try {
     return localStorage.getItem(BRAND_KEY) ?? DEFAULT_BRAND_PROFILE;
   } catch {
@@ -62,6 +62,11 @@ function readBrand(): string {
 // As opções sobrevivem à troca de aba: gerar custa, e perder o resultado por
 // ter ido olhar os filtros seria desperdício.
 const lastOptions = signal<string[]>([]);
+
+/** Legendas que chegaram prontas (rascunho do MCP) aparecem no painel. */
+export function presetCaptions(list: string[]): void {
+  lastOptions.set(list);
+}
 const lastContext = signal('');
 const lastTone = signal<string>('carinhoso');
 

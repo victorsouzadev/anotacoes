@@ -28,6 +28,7 @@ public static class ImagemEndpoints
         MapPreferencias(app);
         MapModelos(app);
         MapLegenda(app);
+        MapPostIa(app);
         var group = app.MapGroup("/api/imagens/projetos").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
@@ -92,6 +93,43 @@ public static class ImagemEndpoints
 
             var r = await legendista.SugerirAsync(user.UserId(), new PedidoLegenda(imagem, textos, formato, tom, contexto, marca), ct);
             return Results.Ok(new LegendaResponse(r.Legendas, r.UsouIa, r.Motivo));
+        }).RequireAuthorization();
+    }
+
+    private const int MaxFotosPost = 6;
+    private const int MaxFotoPostBytes = 1536 * 1024;
+
+    /// <summary>
+    /// Post com IA: a partir das fotos, a IA escolhe um modelo da marca e
+    /// reescreve os textos dele. O editor aplica. Sem IA, 200 com o motivo.
+    /// </summary>
+    private static void MapPostIa(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/imagens/post-ia", async (
+            PostIaRequest req, ClaimsPrincipal user, IMontadorDePost montador, CancellationToken ct) =>
+        {
+            var fotos = req.Fotos ?? new List<string>();
+            if (fotos.Count == 0 || fotos.Count > MaxFotosPost)
+                return Results.BadRequest(new { erro = $"Escolha de 1 a {MaxFotosPost} fotos." });
+            if (fotos.Any(f => !f.StartsWith("data:image/", StringComparison.Ordinal) || f.Length > MaxFotoPostBytes))
+                return Results.BadRequest(new { erro = "Cada foto precisa ser uma imagem de até 1,5 MB." });
+            var modelos = (req.Modelos ?? new List<ModeloPostRequest>())
+                .Where(m => !string.IsNullOrWhiteSpace(m.Id))
+                .Select(m => new ModeloParaIa(m.Id!, (m.Nome ?? "").Trim(), m.Grupo ?? "", (m.Ajuda ?? "").Trim(),
+                    Math.Clamp(m.Fotos, 0, 10), m.Cresce, (m.Textos ?? new List<string>()).Select(t => t ?? "").ToList()))
+                .ToList();
+            if (modelos.Count == 0 || modelos.Count > 60 || modelos.Sum(m => m.Textos.Sum(t => t.Length) + m.Ajuda.Length) > 20000)
+                return Results.BadRequest(new { erro = "Lista de modelos inválida." });
+            var contexto = (req.Contexto ?? "").Trim();
+            if (contexto.Length > 1500) return Results.BadRequest(new { erro = "Descreva o post em até 1500 caracteres." });
+            var marca = (req.Marca ?? "").Trim();
+            if (marca.Length > 3000) return Results.BadRequest(new { erro = "Perfil da marca longo demais." });
+            var filtros = (req.Filtros ?? new List<string>()).Where(f => !string.IsNullOrWhiteSpace(f)).Take(80).ToList();
+            var tipo = MontadorDePost.Tipos.Contains(req.Tipo) ? req.Tipo! : "auto";
+            var tom = LegendistaInstagram.Tons.ContainsKey(req.Tom ?? "") ? req.Tom! : "carinhoso";
+
+            var r = await montador.MontarAsync(user.UserId(), new PedidoPost(fotos, modelos, filtros, tipo, tom, contexto, marca), ct);
+            return Results.Ok(new PostIaResponse(r.Post, r.UsouIa, r.Motivo));
         }).RequireAuthorization();
     }
 

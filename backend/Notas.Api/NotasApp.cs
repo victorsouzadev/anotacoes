@@ -134,6 +134,11 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
+        // Post com IA: várias fotos entram, modelo e textos saem.
+        builder.Services.AddHttpClient(nameof(MontadorDePost), c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
+
         // Moldes: foto de embalagem entra, tipo de molde e medidas saem. Também
         // leva imagem, então usa o mesmo teto de tempo dos outros com anexo.
         builder.Services.AddHttpClient(nameof(AnalisadorDeEmbalagem), c =>
@@ -155,6 +160,7 @@ public static class NotasApp
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
         builder.Services.AddScoped<INomeadorDeElementos, NomeadorDeElementos>();
         builder.Services.AddScoped<ILegendistaInstagram, LegendistaInstagram>();
+        builder.Services.AddScoped<IMontadorDePost, MontadorDePost>();
         builder.Services.AddScoped<IAnalisadorDeEmbalagem, AnalisadorDeEmbalagem>();
 
         builder.Services.AddScoped<TransacaoExtractionService>();
