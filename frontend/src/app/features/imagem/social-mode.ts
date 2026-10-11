@@ -410,7 +410,7 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
                   }
                   <div class="il-row">
                     <button type="button" class="il-btn il-grow" [disabled]="store.slides() >= slidesMax" (click)="addBlank()">+ Em branco</button>
-                    @if (activePhoto()?.spot) {
+                    @if (activePhoto()) {
                       <button type="button" class="il-btn il-grow" [disabled]="store.slides() >= slidesMax" data-tip="Mesmo post, com o espaço vazio pra outra foto" (click)="duplicateActive(false)">+ Outro com foto</button>
                     }
                   </div>
@@ -2948,7 +2948,9 @@ export class SocialModeComponent {
 
   duplicateActive(withPhotos: boolean): void {
     const p = this.activeSlide();
-    this.strip((s) => duplicateSlide(s, p, this.ratio, withPhotos), p + 1);
+    const img = this.image();
+    const main = img && this.store.src() ? { src: this.store.src(), aspect: sourceOf(img).width / sourceOf(img).height } : null;
+    this.strip((s) => duplicateSlide(s, p, this.ratio, withPhotos, main), p + 1);
     this.status.set(withPhotos ? `Post ${p + 1} duplicado.` : `Post novo com o espaço vazio: clique em "Pôr foto".`);
   }
 
