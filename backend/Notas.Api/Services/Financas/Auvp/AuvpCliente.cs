@@ -305,14 +305,23 @@ public class AuvpCliente(IHttpClientFactory httpFactory, IOptions<AuvpOptions> o
 
         using (res)
         {
-            if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                throw new AuvpIndisponivelException("A AUVP recusou a chave de API.", chaveRecusada: true);
             if (res.StatusCode == HttpStatusCode.NotFound && metodo == HttpMethod.Get)
                 throw new AuvpNaoEncontradoException();
 
             // A mensagem da AUVP diz o que ela não aceitou ("property x should not
-            // exist"); sem ela não haveria como saber o que ajustar.
+            // exist", "API key inválida"); sem ela não haveria como saber o que ajustar.
             var detalhe = await LerMensagemAsync(res, ct);
+            var sufixo = detalhe is null ? "" : $" (AUVP: {detalhe})";
+
+            // Ler e alterar têm permissões diferentes: uma chave somente leitura
+            // sincroniza normalmente e só leva 401/403 ao tentar gravar. Dizer
+            // "chave recusada" nesse caso manda o usuário trocar uma chave que funciona.
+            if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw metodo == HttpMethod.Get
+                    ? new AuvpIndisponivelException($"A AUVP recusou a chave de API{sufixo}.", chaveRecusada: true)
+                    : new AuvpIndisponivelException(
+                        $"A chave da AUVP não tem permissão para alterar transações — ela pode ser somente leitura{sufixo}.");
+
             throw new AuvpIndisponivelException(
                 $"A AUVP respondeu {(int)res.StatusCode}{(detalhe is null ? "" : $": {detalhe}")}.");
         }
