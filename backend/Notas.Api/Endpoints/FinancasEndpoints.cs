@@ -287,6 +287,7 @@ public static class FinancasEndpoints
             {
                 if (!Enum.IsDefined(req.Categoria.Value)) return Results.BadRequest(new { erro = "Categoria inválida." });
                 transacao.Categoria = req.Categoria.Value;
+                transacao.CategoriaConfirmada = true;
             }
 
             if (req.Data is not null)
@@ -376,6 +377,7 @@ public static class FinancasEndpoints
             foreach (var t in parecidos)
             {
                 t.Categoria = modelo.Categoria;
+                t.CategoriaConfirmada = true;
                 var aviso = await auvp.EnviarAsync(t, new MudancaLocal(Categoria: modelo.Categoria), ct);
                 if (aviso is not null) { falhas++; primeira ??= aviso; }
             }
@@ -400,6 +402,7 @@ public static class FinancasEndpoints
             {
                 var mudouCategoria = req.Categoria is { } c && c != t.Categoria;
                 if (mudouCategoria) t.Categoria = req.Categoria!.Value;
+                if (req.Categoria is not null) t.CategoriaConfirmada = true;
                 var mudouFora = req.ForaDosTotais is { } f && f != t.ForaDosTotais;
                 if (mudouFora) t.ForaDosTotais = req.ForaDosTotais!.Value;
 
@@ -429,8 +432,24 @@ public static class FinancasEndpoints
                 if (aviso is not null) { falhas++; primeira ??= aviso; }
             }
 
+            // Categorizar em lote também ensina: a próxima compra dessas lojas já
+            // chega na categoria escolhida. "Outros" não vira regra.
+            if (req.Categoria is { } categoria && categoria != Categoria.Outros)
+                foreach (var descricao in lista.Select(t => t.Descricao)
+                             .DistinctBy(RegrasCategoria.ChaveDeDescricao))
+                    await RegrasCategoria.AprenderAsync(db, userId, descricao, categoria, ct);
+
             await db.SaveChangesAsync(ct);
             return Results.Ok(new AtualizarLoteResponse(lista.Count, falhas, primeira));
+        });
+
+        // GET /api/financas/transacoes/categorizar?ano=&mes= — fila do que falta
+        // categorizar (sem ano/mês: o histórico inteiro), agrupada por loja.
+        transacoes.MapGet("/categorizar", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct,
+            int? ano, int? mes) =>
+        {
+            if (mes is < 1 or > 12) return Results.BadRequest(new { erro = $"Mês inválido: {mes}." });
+            return Results.Ok(await Categorizacao.MontarAsync(db, user.UserId(), ano, mes, ct));
         });
 
         transacoes.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>

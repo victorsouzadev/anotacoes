@@ -1,3 +1,4 @@
+using Notas.Api.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -177,6 +178,12 @@ public partial class HeuristicLlmExtractor : ILlmExtractor
 
         return decimal.TryParse(texto, NumberStyles.Any, CultureInfo.InvariantCulture, out valor);
     }
+
+    /// <summary>Categoria pelas palavras de uma descrição livre, se alguma bater.</summary>
+    public static Categoria? SugerirCategoria(string descricao) =>
+        DetectarCategoria(descricao.ToLowerInvariant()) is { } c && CategoriaInfo.TryParse(c, out var categoria)
+            ? categoria
+            : null;
 
     private static string? DetectarCategoria(string textoLower)
     {

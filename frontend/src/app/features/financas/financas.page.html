@@ -43,6 +43,11 @@
                 [class.ativa]="aba() === 'lancamentos'" (click)="trocarAba('lancamentos')">
           Lançamentos
         </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'categorizar'"
+                [class.ativa]="aba() === 'categorizar'" (click)="trocarAba('categorizar')">
+          Categorizar
+          @if (semCategoria() > 0) { <span class="badge" [attr.aria-label]="semCategoria() + ' sem categoria'">{{ semCategoria() }}</span> }
+        </button>
         <button type="button" role="tab" [attr.aria-selected]="aba() === 'planejamento'"
                 [class.ativa]="aba() === 'planejamento'" (click)="trocarAba('planejamento')">
           Planejamento
@@ -93,6 +98,12 @@
         </button>
         <button type="button" class="atalho secundario" (click)="trocarAba('planejamento')">Ver planejamento</button>
       </div>
+      @if (semCategoria() > 0) {
+        <button type="button" class="aviso-categorizar" (click)="trocarAba('categorizar')">
+          <strong>{{ semCategoria() }}</strong> {{ semCategoria() === 1 ? 'lançamento está' : 'lançamentos estão' }} sem categoria
+          neste mês — os gráficos ficam mais certos com tudo categorizado. <span class="ir">Categorizar →</span>
+        </button>
+      }
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
       } @else {
@@ -181,6 +192,8 @@
         <app-orcamento-auvp [ano]="ano()" [mes]="mes()" />
       }
       <app-orcamento data-tour="orcamento" [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+    } @else if (aba() === 'categorizar') {
+      <app-categorizar [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
     } @else if (aba() === 'planejamento') {
       <app-planejamento [ano]="ano()" [mes]="mes()" />
     } @else if (aba() === 'metas') {

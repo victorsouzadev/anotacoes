@@ -74,6 +74,12 @@ public class Transacao
     /// </summary>
     public DateOnly Competencia { get; set; }
 
+    /// <summary>
+    /// O usuário escolheu a categoria (mesmo que tenha sido "Outros"). Sem isso,
+    /// um lançamento em Outros é tratado como "ainda não categorizado".
+    /// </summary>
+    public bool CategoriaConfirmada { get; set; }
+
     /// <summary>Compra parcelada: "3/10" vira Parcela 3, TotalParcelas 10.</summary>
     public int? Parcela { get; set; }
     public int? TotalParcelas { get; set; }

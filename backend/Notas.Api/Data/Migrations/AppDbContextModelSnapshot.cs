@@ -1093,6 +1093,9 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("CategoriaConfirmada")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateOnly>("Competencia")
                         .HasColumnType("TEXT");
 

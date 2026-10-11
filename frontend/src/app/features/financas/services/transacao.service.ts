@@ -6,6 +6,7 @@ import {
   AtualizarLoteResponse,
   AtualizarTransacaoRequest,
   CriarTransacaoRequest,
+  FilaCategorizacao,
   ListarTransacoesFiltro,
   Transacao,
 } from '../models/transacao.model';
@@ -57,6 +58,13 @@ export class TransacaoService {
   /** Leva a categoria deste lançamento aos parecidos (mesma loja). */
   aplicarCategoriaAosParecidos(id: string): Observable<AtualizarLoteResponse> {
     return this.http.post<AtualizarLoteResponse>(`${this.baseUrl}/${id}/aplicar-categoria`, {});
+  }
+
+  /** O que falta categorizar (sem ano/mês: o histórico inteiro), agrupado por loja. */
+  categorizar(ano?: number, mes?: number): Observable<FilaCategorizacao> {
+    let params = new HttpParams();
+    if (ano && mes) params = params.set('ano', ano).set('mes', mes);
+    return this.http.get<FilaCategorizacao>(`${this.baseUrl}/categorizar`, { params });
   }
 
   remover(id: string): Observable<void> {

@@ -17,6 +17,18 @@ public static partial class RegrasCategoria
         // CulturaBr, e não Normalize: sem ICU, Normalize não tira acento e a mesma
         // loja ganharia chaves diferentes conforme o ambiente.
         var semAcento = CulturaBr.SemAcentos(descricao).ToUpperInvariant();
+
+        // PIX e transferência: quem identifica é o destinatário, não as três
+        // primeiras palavras ("PIX PARA NU…" seria qualquer cliente do Nubank).
+        // Fica a descrição inteira, com os dígitos do CPF mascarado.
+        if (semAcento.StartsWith("PIX", StringComparison.Ordinal) || semAcento.StartsWith("TRANSF", StringComparison.Ordinal)
+            || semAcento.StartsWith("TED", StringComparison.Ordinal) || semAcento.StartsWith("DOC ", StringComparison.Ordinal))
+        {
+            var inteira = string.Join(' ', NaoAlfanumerico().Replace(semAcento, " ")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            return inteira.Length > 120 ? inteira[..120] : inteira;
+        }
+
         var palavras = NaoLetra().Replace(semAcento, " ")
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(p => p.Length > 1)
@@ -52,4 +64,7 @@ public static partial class RegrasCategoria
 
     [GeneratedRegex(@"[^A-Z]+")]
     private static partial Regex NaoLetra();
+
+    [GeneratedRegex(@"[^A-Z0-9]+")]
+    private static partial Regex NaoAlfanumerico();
 }

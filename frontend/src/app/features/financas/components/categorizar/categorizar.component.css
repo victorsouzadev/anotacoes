@@ -1,0 +1,65 @@
+:host { display: flex; flex-direction: column; gap: 12px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+}
+
+.topo { display: flex; flex-direction: column; gap: 10px; }
+.linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.escopo { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.escopo button {
+  font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 12px; border: none; border-radius: 6px;
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.escopo button.ativo { background: var(--accent); color: var(--accent-contrast); }
+.contagem { font-size: 13px; }
+.progresso { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+.progresso span { display: block; height: 100%; background: var(--positivo); border-radius: inherit; transition: width 0.3s; }
+.muted { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+
+.aviso {
+  display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; font-size: 12.5px;
+  border-radius: var(--radius-sm); color: var(--positivo); background: color-mix(in srgb, var(--positivo) 10%, transparent);
+}
+.fechar { margin-left: auto; background: none; border: none; color: inherit; font-size: 16px; cursor: pointer; }
+.erro { color: var(--danger); font-size: 12.5px; margin: 0; }
+
+.grupos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.grupo { display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; }
+.grupo.ocupado { opacity: 0.5; }
+.cabeca { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.descricao { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.detalhe { font-size: 11.5px; color: var(--text-muted); }
+.valor { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--negativo); white-space: nowrap; }
+.valor.receita { color: var(--positivo); }
+
+.escolhas { display: flex; flex-wrap: wrap; gap: 6px; }
+.escolhas button {
+  font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.escolhas button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.escolhas button.sugestao { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.escolhas button.sugestao:hover:not(:disabled) { color: var(--accent-contrast); opacity: 0.9; }
+.escolhas button:disabled { cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.rodape { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.espaco { flex: 1; }
+.link {
+  font: inherit; font-size: 12px; font-weight: 600; background: none; border: none; padding: 0;
+  color: var(--text-muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
+.link:hover:not(:disabled) { color: var(--accent); }
+
+.vazio { display: flex; flex-direction: column; gap: 6px; text-align: center; padding: 32px 16px; font-size: 13px; color: var(--text-muted); }
+.vazio strong { color: var(--positivo); font-size: 15px; }
+
+@media (max-width: 600px) {
+  .escolhas button { padding: 8px 12px; }
+}

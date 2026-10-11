@@ -161,6 +161,16 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
   últimos 6 meses), parcelas já comprometidas nos próximos 12 meses e, na aba
   Orçamento, o método AUVP (Custos Fixos, Conforto, Metas…) como está lá.
 
+#### Categorizar (aba própria)
+
+Fila de tudo que ainda está sem categoria (em "Outros" sem confirmação), agrupado
+por loja — PIX e transferências agrupam pelo destinatário. Cada grupo traz uma
+sugestão (o que você já escolheu para aquela loja, o nome do estabelecimento ou
+palavras da descrição; pagamento de fatura sugere tirar dos totais) e um clique
+categoriza o grupo inteiro, vira regra para os próximos e vai para a AUVP. Dá para
+confirmar "Outros" ou marcar "não é gasto". A aba mostra quantos faltam no mês, e o
+Painel avisa quando há pendentes.
+
 #### Planejamento (aba própria)
 
 Metodologias de organização financeira calculadas sobre os lançamentos; cada seção

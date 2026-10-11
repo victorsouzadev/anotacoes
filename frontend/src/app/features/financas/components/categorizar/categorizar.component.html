@@ -1,0 +1,89 @@
+<section class="topo card" data-tour="categorizar">
+  <div class="linha">
+    <div class="escopo" role="tablist" aria-label="Período">
+      <button type="button" role="tab" [class.ativo]="escopo() === 'mes'" [attr.aria-selected]="escopo() === 'mes'"
+              (click)="escopo.set('mes')">Este mês</button>
+      <button type="button" role="tab" [class.ativo]="escopo() === 'tudo'" [attr.aria-selected]="escopo() === 'tudo'"
+              (click)="escopo.set('tudo')">Todo o histórico</button>
+    </div>
+    @if (fila(); as f) {
+      <span class="contagem">
+        @if (f.pendentes === 0) { Tudo categorizado }
+        @else { <strong>{{ f.pendentes }}</strong> {{ f.pendentes === 1 ? 'lançamento sem categoria' : 'lançamentos sem categoria' }} }
+      </span>
+    }
+  </div>
+  @if (fila(); as f) {
+    <div class="progresso" role="progressbar" [attr.aria-valuenow]="f.percentual" aria-valuemin="0" aria-valuemax="100">
+      <span [style.width.%]="f.percentual"></span>
+    </div>
+    <p class="muted">{{ f.percentual | number: '1.0-0' }}% de {{ f.total }} lançamentos categorizados
+      {{ escopo() === 'mes' ? 'neste mês' : 'no histórico' }}.
+      @if (escopo() === 'mes' && f.pendentes === 0 && f.pendentesHistorico > 0) {
+        Ainda há {{ f.pendentesHistorico }} em outros meses —
+        <button type="button" class="link" (click)="escopo.set('tudo')">ver todos</button>.
+      }
+    </p>
+  }
+</section>
+
+@if (aviso(); as a) {
+  <p class="aviso" role="status">{{ a }} <button type="button" class="fechar" (click)="aviso.set(null)" aria-label="Dispensar">×</button></p>
+}
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+@if (fila(); as f) {
+  @if (f.grupos.length === 0) {
+    <div class="vazio card">
+      <strong>Tudo categorizado.</strong>
+      <span>Cada lançamento está numa categoria de verdade — o painel, o orçamento e o planejamento ficam certos.
+        Os novos que chegarem sem categoria aparecem aqui.</span>
+    </div>
+  } @else {
+    <ul class="grupos">
+      @for (g of f.grupos; track chave(g)) {
+        <li class="card grupo" [class.ocupado]="ocupado() === chave(g)">
+          <div class="cabeca">
+            <div class="info">
+              <span class="descricao" [title]="g.descricao">{{ g.descricao }}</span>
+              <span class="detalhe">
+                {{ g.quantidade }} {{ g.quantidade === 1 ? 'lançamento' : 'lançamentos' }} · último em {{ g.ultimaData | date: 'dd/MM/yyyy' }}
+                @if (g.conta) { · {{ g.conta }} }
+              </span>
+            </div>
+            <strong class="valor" [class.receita]="g.tipo === 'receita'">
+              {{ g.tipo === 'receita' ? '+' : '−' }} {{ g.total | currency }}
+            </strong>
+          </div>
+
+          <div class="escolhas">
+            @if (g.sugerirForaDosTotais) {
+              <button type="button" class="sugestao" (click)="naoEGasto(g)" [disabled]="!!ocupado()">✓ Não é gasto</button>
+            }
+            @if (g.sugestao) {
+              <button type="button" class="sugestao" (click)="categorizar(g, g.sugestao)" [disabled]="!!ocupado()"
+                      [title]="'Sugestão ' + (g.motivo ?? '')">
+                ✓ {{ g.sugestaoRotulo }}
+              </button>
+            }
+            @for (c of opcoes(g); track c.valor) {
+              <button type="button" class="chip" (click)="categorizar(g, c.valor)" [disabled]="!!ocupado()">{{ c.rotulo }}</button>
+            }
+          </div>
+
+          <div class="rodape">
+            @if (g.motivo) { <span class="detalhe">Sugestão: {{ g.motivo }}.</span> }
+            <span class="espaco"></span>
+            <button type="button" class="link" (click)="categorizar(g, 'Outros')" [disabled]="!!ocupado()">É "Outros" mesmo</button>
+            <button type="button" class="link" (click)="naoEGasto(g)" [disabled]="!!ocupado()"
+                    title="Transferência entre contas, reembolso, pagamento de fatura…">
+              {{ g.tipo === 'receita' ? 'Não é receita' : 'Não é gasto' }}</button>
+          </div>
+        </li>
+      }
+    </ul>
+    @if (f.grupos.length >= 150) { <p class="muted">Mostrando as 150 lojas de maior valor.</p> }
+  }
+} @else if (!erro()) {
+  <p class="muted">Carregando…</p>
+}

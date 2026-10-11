@@ -134,3 +134,28 @@ export const FORMAS_PAGAMENTO: { valor: FormaPagamento; rotulo: string }[] = [
 export function rotuloFormaPagamento(forma: FormaPagamento | null): string {
   return FORMAS_PAGAMENTO.find((f) => f.valor === forma)?.rotulo ?? '';
 }
+
+export interface GrupoPendente {
+  chave: string;
+  descricao: string;
+  tipo: TipoTransacao;
+  quantidade: number;
+  total: number;
+  ultimaData: string;
+  conta: string | null;
+  ids: string[];
+  sugestao: Categoria | null;
+  sugestaoRotulo: string | null;
+  motivo: string | null;
+  /** Pagamento de fatura: o certo é tirar dos totais, não categorizar. */
+  sugerirForaDosTotais: boolean;
+}
+
+export interface FilaCategorizacao {
+  total: number;
+  pendentes: number;
+  percentual: number;
+  totalHistorico: number;
+  pendentesHistorico: number;
+  grupos: GrupoPendente[];
+}

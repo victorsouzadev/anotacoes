@@ -16,6 +16,7 @@ import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { OrcamentoAuvpComponent } from './components/orcamento-auvp/orcamento-auvp.component';
 import { PlanejamentoComponent } from './components/planejamento/planejamento.component';
 import { PassoTutorial, TutorialComponent } from './components/tutorial/tutorial.component';
+import { CategorizarComponent } from './components/categorizar/categorizar.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
 import {
   CategoriaResumo,
@@ -41,7 +42,7 @@ import {
   mensagemDoAlerta,
 } from './alertas-orcamento';
 
-type Aba = 'painel' | 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
+type Aba = 'painel' | 'lancamentos' | 'categorizar' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
@@ -59,6 +60,7 @@ type Aba = 'painel' | 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | '
     OrcamentoAuvpComponent,
     PlanejamentoComponent,
     TutorialComponent,
+    CategorizarComponent,
     MetasComponent,
     HistoricoComponent,
   ],
@@ -115,6 +117,8 @@ export class FinancasPageComponent {
   readonly recorrentes = signal<Recorrente[]>([]);
   readonly compromissos = signal<Compromissos | null>(null);
   readonly gastosPorTag = signal<TagResumo[]>([]);
+  /** Lançamentos do mês ainda sem categoria (contador da aba Categorizar). */
+  readonly semCategoria = signal(0);
 
   // Da AUVP, quando há chave: o que existe lá para escolher na edição.
   readonly tagsAuvp = signal<string[]>([]);
@@ -343,8 +347,10 @@ export class FinancasPageComponent {
       recorrentes: this.dashboardService.recorrentes().pipe(catchError(() => of([]))),
       compromissos: this.dashboardService.compromissos().pipe(catchError(() => of(null))),
       tags: this.dashboardService.tags(this.ano(), this.mes()).pipe(catchError(() => of([]))),
+      fila: this.transacaoService.categorizar(this.ano(), this.mes()).pipe(catchError(() => of(null))),
     }).subscribe({
-      next: ({ doMes, transacoes, resumo, categorias, tendencias, recorrentes, compromissos, tags }) => {
+      next: ({ doMes, transacoes, resumo, categorias, tendencias, recorrentes, compromissos, tags, fila }) => {
+        this.semCategoria.set(fila?.pendentes ?? 0);
         this.transacoesDoMes.set(doMes);
         this.transacoes.set(transacoes ?? doMes);
         this.recorrentes.set(recorrentes);
@@ -443,6 +449,14 @@ const PASSOS_TUTORIAL: PassoTutorial[] = [
     texto:
       'O lápis edita; o olho tira o lançamento dos totais (transferência, reembolso). Marque vários para mudar de uma ' +
       'vez. Corrigiu a categoria de uma loja? O app aprende e acerta as próximas.',
+  },
+  {
+    aba: 'categorizar',
+    alvo: '[data-tour="categorizar"]',
+    titulo: 'Categorizar tudo',
+    texto:
+      'Aqui ficam os lançamentos que ainda estão sem categoria, agrupados por loja. Um clique categoriza o grupo ' +
+      'inteiro — use a sugestão ou escolha outra — e o app aprende para as próximas. O número na aba mostra quantos faltam.',
   },
   {
     aba: 'planejamento',
