@@ -9,8 +9,8 @@
 import { uuid } from '../../core/uuid';
 import { PhotoSlot } from './social-model';
 import { Guide } from './social-align';
-import { Overlay } from './social-overlays';
-import { slideOf } from './social-photo-slots';
+import { Overlay, ShapeOverlay } from './social-overlays';
+import { SlotPhoto, photoForPlaceholder, slideOf } from './social-photo-slots';
 
 export interface Strip {
   overlays: Overlay[];
@@ -103,11 +103,37 @@ function copyPage(overlays: Overlay[], slides: number, page: number, offset: num
   });
 }
 
-/** Duplica o post logo depois dele. A foto do espaço principal do modelo
- * (`slot`) é uma só, então não se copia. */
-export function duplicateSlide(s: Strip, page: number, ratio: number, withPhotos = true): Strip {
+/** Post do espaço principal da foto, ou -1. */
+export function slotPage(s: Strip): number {
+  return s.slot ? Math.min(s.slides - 1, Math.floor((s.slot.x + s.slot.w / 2) * s.slides)) : -1;
+}
+
+/** Espaço de foto (camada tracejada) no mesmo lugar do espaço principal,
+ * deslocado `offset` posts — é como a área da foto vai pra cópia do post. */
+export function spotFromSlot(s: Strip, ratio: number, offset: number): ShapeOverlay {
+  const slot = s.slot!;
+  const b = base(s.slides, ratio);
+  return {
+    id: uuid(), kind: 'forma', shape: 'retangulo',
+    x: slot.x + slot.w / 2 + offset / s.slides, y: slot.y + slot.h / 2,
+    size: slot.h / b, rotation: 0, aspect: (slot.w * s.slides * ratio) / slot.h,
+    fill: '#FFFFFF', stroke: '#F28BAE', strokeWidth: (4 * ratio) / (1080 * b), radius: slot.radius,
+    dashed: true, placeholder: true,
+  };
+}
+
+/** Duplica o post logo depois dele. O espaço principal da foto do modelo é
+ * um só; na cópia ele vira um espaço de foto comum, no mesmo lugar — com a
+ * mesma foto dentro se `mainPhoto` vier e `withPhotos` estiver ligado. */
+export function duplicateSlide(s: Strip, page: number, ratio: number, withPhotos = true, mainPhoto?: SlotPhoto | null): Strip {
   const opened = insertBlank(s, page, 1, ratio);
-  return { ...opened, overlays: [...opened.overlays, ...copyPage(opened.overlays, opened.slides, page, 1, withPhotos)] };
+  const copies = copyPage(opened.overlays, opened.slides, page, 1, withPhotos);
+  if (slotPage(opened) === page) {
+    const spot = spotFromSlot(opened, ratio, 1);
+    copies.unshift(spot);
+    if (withPhotos && mainPhoto) copies.splice(1, 0, photoForPlaceholder(spot, mainPhoto));
+  }
+  return { ...opened, overlays: [...opened.overlays, ...copies] };
 }
 
 /** Traz o post `page` de outro modelo (mesmo formato) para depois de `after`. */

@@ -1,5 +1,5 @@
 import { Overlay, PhotoOverlay, ShapeOverlay, TextOverlay } from './social-overlays';
-import { clearSlidePhotos, duplicateSlide, insertBlank, insertForeignPage, moveSlide, removeSlide } from './social-slides';
+import { clearSlidePhotos, spotFromSlot, duplicateSlide, insertBlank, insertForeignPage, moveSlide, removeSlide } from './social-slides';
 import { slideOf } from './social-photo-slots';
 
 const text = (id: string, page: number, slides: number, size = 0.1): TextOverlay => ({
@@ -83,5 +83,21 @@ describe('posts do carrossel', () => {
     const moved = moveSlide({ overlays: [], slides: 3, slot, guides: [] }, 0, 1, RATIO);
     expect(moved.slot!.x).toBeCloseTo(1 / 3 + 0.02);
     expect(removeSlide({ overlays: [], slides: 3, slot, guides: [] }, 0, RATIO).slot).toBeNull();
+  });
+
+  it('duplicar o post da foto principal leva a área da foto (e a foto) pra cópia', () => {
+    const slot = { x: 0.02, y: 0.05, w: 0.3, h: 0.8, radius: 0.03 };
+    const r = duplicateSlide({ overlays: [], slides: 3, slot, guides: [] }, 0, RATIO, true, { src: 'data:x', aspect: 1 });
+    expect(r.slides).toBe(4);
+    const spot = r.overlays.find((o) => o.kind === 'forma') as ShapeOverlay;
+    expect(spot.placeholder).toBe(true);
+    expect(slideOf(spot, 4)).toBe(1);
+    const ph = r.overlays.find((o) => o.kind === 'foto') as PhotoOverlay;
+    expect(ph.slotId).toBe(spot.id);
+    // Mesma caixa do espaço principal, um post pra frente.
+    const sp = spotFromSlot(r, RATIO, 0);
+    expect(spot.size).toBeCloseTo(sp.size);
+    expect(spot.aspect).toBeCloseTo(sp.aspect);
+    expect(duplicateSlide({ overlays: [], slides: 3, slot, guides: [] }, 0, RATIO, false).overlays.some((o) => o.kind === 'foto')).toBe(false);
   });
 });
