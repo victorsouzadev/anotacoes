@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
@@ -16,9 +14,9 @@ public static partial class RegrasCategoria
     /// </summary>
     public static string ChaveDeDescricao(string descricao)
     {
-        var semAcento = new string(descricao.ToUpperInvariant().Normalize(NormalizationForm.FormD)
-            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-            .ToArray());
+        // CulturaBr, e não Normalize: sem ICU, Normalize não tira acento e a mesma
+        // loja ganharia chaves diferentes conforme o ambiente.
+        var semAcento = CulturaBr.SemAcentos(descricao).ToUpperInvariant();
         var palavras = NaoLetra().Replace(semAcento, " ")
             .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Where(p => p.Length > 1)

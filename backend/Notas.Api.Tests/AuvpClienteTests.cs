@@ -9,7 +9,8 @@ namespace Notas.Api.Tests;
 // única pista do usuário quando algo é recusado lá.
 public class AuvpClienteTests
 {
-    private sealed class Resposta(HttpStatusCode status, string corpo) : HttpMessageHandler
+    private sealed class Resposta(HttpStatusCode status, string corpo, string tipo = "application/json")
+        : HttpMessageHandler
     {
         public HttpRequestMessage? Recebida { get; private set; }
 
@@ -18,7 +19,7 @@ public class AuvpClienteTests
             Recebida = request;
             return Task.FromResult(new HttpResponseMessage(status)
             {
-                Content = new StringContent(corpo, System.Text.Encoding.UTF8, "application/json"),
+                Content = new StringContent(corpo, System.Text.Encoding.UTF8, tipo),
             });
         }
     }
@@ -52,5 +53,16 @@ public class AuvpClienteTests
         Assert.Contains("somente leitura", ex.Message);
         Assert.Contains("Forbidden resource", ex.Message);
         Assert.Equal(HttpMethod.Patch, h.Recebida!.Method);
+    }
+
+    [Fact]
+    public async Task Bloqueio_do_firewall_nao_e_confundido_com_chave_recusada()
+    {
+        var h = new Resposta(HttpStatusCode.Forbidden, "<html>Attention Required! | Cloudflare</html>", "text/html");
+        var ex = await Assert.ThrowsAsync<AuvpIndisponivelException>(() =>
+            Cliente(h).ListarTagsAsync("auvp_x", CancellationToken.None));
+        Assert.False(ex.ChaveRecusada);
+        Assert.Contains("bloqueou a conexão deste servidor", ex.Message);
+        Assert.Contains("403", ex.Message);
     }
 }

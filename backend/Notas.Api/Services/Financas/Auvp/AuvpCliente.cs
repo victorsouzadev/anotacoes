@@ -313,6 +313,16 @@ public class AuvpCliente(IHttpClientFactory httpFactory, IOptions<AuvpOptions> o
             var detalhe = await LerMensagemAsync(res, ct);
             var sufixo = detalhe is null ? "" : $" (AUVP: {detalhe})";
 
+            // A API sempre responde JSON. HTML (ou nada) num 401/403 vem de quem
+            // está na frente dela — firewall/CDN barrando o IP do servidor —, e a
+            // chave nem chegou a ser avaliada: trocá-la não resolveria.
+            var tipo = res.Content.Headers.ContentType?.MediaType ?? "";
+            if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                && !tipo.Contains("json", StringComparison.OrdinalIgnoreCase))
+                throw new AuvpIndisponivelException(
+                    $"A AUVP bloqueou a conexão deste servidor antes de avaliar a chave (HTTP {(int)res.StatusCode}, " +
+                    $"resposta {(tipo.Length == 0 ? "vazia" : tipo)}). Provável bloqueio do IP pelo firewall dela.");
+
             // Ler e alterar têm permissões diferentes: uma chave somente leitura
             // sincroniza normalmente e só leva 401/403 ao tentar gravar. Dizer
             // "chave recusada" nesse caso manda o usuário trocar uma chave que funciona.

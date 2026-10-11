@@ -232,11 +232,9 @@ public static class AuvpCategorias
 
     public static string Normalizar(string texto)
     {
-        var decomposto = texto.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
-        return new string(decomposto
-            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
-                        != System.Globalization.UnicodeCategory.NonSpacingMark)
-            .ToArray());
+        // CulturaBr, e não Normalize: sem ICU (globalização invariante) Normalize
+        // não tira acento e "Alimentação" deixaria de casar com "alimentacao".
+        return CulturaBr.SemAcentos(texto.Trim()).ToLowerInvariant();
     }
 
     public static Categoria Mapear(int? id, TipoTransacao tipo) => id switch
