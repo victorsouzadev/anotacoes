@@ -138,6 +138,10 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 - **Mês da fatura (competência)**: os totais somam pelo mês em que o lançamento
   conta — numa compra no cartão, o da fatura, como no painel da AUVP. Lançamentos
   digitados contam no mês da própria data.
+- **Bloqueio do firewall da AUVP**: a API fica atrás do Cloudflare, que barra
+  alguns IPs de datacenter (a tela mostra "bloqueou a conexão deste servidor").
+  Peça à AUVP para liberar o IP da VPS ou defina `AUVP_PROXY`
+  (`http://usuario:senha@host:porta`) para só as chamadas à AUVP saírem por outro IP.
 - **Sincronização automática**: a cada `AUVP_INTERVALO_HORAS` (padrão 6) o servidor
   sincroniza sozinho quem tem chave cadastrada; o botão continua para forçar.
   Um lançamento importado que o usuário apaga não volta.

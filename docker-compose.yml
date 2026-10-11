@@ -20,6 +20,9 @@ services:
       - Auvp__HeaderChave=${AUVP_HEADER_CHAVE:-Authorization}
       - Auvp__PrefixoChave=${AUVP_PREFIXO_CHAVE:-Bearer }
       - Auvp__IntervaloSincronizacaoHoras=${AUVP_INTERVALO_HORAS:-6}
+      # Proxy HTTP só para a AUVP, se o firewall dela barrar o IP da VPS
+      # (ex.: http://usuario:senha@host:porta). Vazio = conexão direta.
+      - Auvp__Proxy=${AUVP_PROXY:-}
       - Llm__Provider=${LLM_PROVIDER:-}
       # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde

@@ -357,3 +357,25 @@ public class AuvpCliente(IHttpClientFactory httpFactory, IOptions<AuvpOptions> o
         }
     }
 }
+
+public static class AuvpProxy
+{
+    /// <summary>
+    /// Handler com o proxy de Auvp__Proxy ("http://usuario:senha@host:porta"), ou
+    /// direto se vazio. WebProxy não lê usuário e senha da URL; vão como credencial.
+    /// </summary>
+    public static HttpMessageHandler Handler(string? proxy)
+    {
+        if (string.IsNullOrWhiteSpace(proxy)) return new HttpClientHandler();
+
+        var uri = new Uri(proxy.Trim());
+        var web = new WebProxy(new UriBuilder(uri) { UserName = "", Password = "" }.Uri);
+        if (uri.UserInfo.Length > 0)
+        {
+            var partes = uri.UserInfo.Split(':', 2);
+            web.Credentials = new NetworkCredential(Uri.UnescapeDataString(partes[0]),
+                partes.Length > 1 ? Uri.UnescapeDataString(partes[1]) : "");
+        }
+        return new HttpClientHandler { Proxy = web, UseProxy = true };
+    }
+}

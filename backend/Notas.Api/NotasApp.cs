@@ -71,8 +71,16 @@ public static class NotasApp
         // integração fica desligada e a tela não oferece o botão.
         builder.Services.Configure<AuvpOptions>(builder.Configuration.GetSection(AuvpOptions.SectionName));
         builder.Services.AddHttpClient(nameof(AuvpCliente), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                Math.Clamp(builder.Configuration.GetValue("Auvp:TimeoutSegundos", 30), 5, 120)));
+            {
+                c.Timeout = TimeSpan.FromSeconds(
+                    Math.Clamp(builder.Configuration.GetValue("Auvp:TimeoutSegundos", 30), 5, 120));
+                // Sem User-Agent o .NET não manda nenhum, e o firewall na frente da
+                // AUVP (Cloudflare) trata cliente anônimo com mais desconfiança.
+                c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Financas/1.0");
+            })
+            // O Cloudflare da AUVP barra alguns IPs de datacenter (403 em HTML). Com
+            // Auvp__Proxy as chamadas saem por outro endereço, sem afetar o resto do app.
+            .ConfigurePrimaryHttpMessageHandler(() => AuvpProxy.Handler(builder.Configuration["Auvp:Proxy"]));
         builder.Services.AddScoped<IAuvpCliente, AuvpCliente>();
         builder.Services.AddScoped<AuvpSincronizador>();
         builder.Services.AddScoped<AuvpEscrita>();

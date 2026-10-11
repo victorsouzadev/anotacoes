@@ -65,4 +65,15 @@ public class AuvpClienteTests
         Assert.Contains("bloqueou a conexão deste servidor", ex.Message);
         Assert.Contains("403", ex.Message);
     }
+
+    [Fact]
+    public void Proxy_com_usuario_e_senha_na_url_vira_credencial()
+    {
+        var handler = Assert.IsType<HttpClientHandler>(AuvpProxy.Handler("http://eu:s%40nha@proxy.exemplo:3128"));
+        var proxy = Assert.IsType<WebProxy>(handler.Proxy);
+        Assert.Equal("http://proxy.exemplo:3128/", proxy.Address!.ToString());
+        var cred = proxy.Credentials!.GetCredential(proxy.Address, "Basic")!;
+        Assert.Equal(("eu", "s@nha"), (cred.UserName, cred.Password));
+        Assert.Null(Assert.IsType<HttpClientHandler>(AuvpProxy.Handler("")).Proxy);
+    }
 }
