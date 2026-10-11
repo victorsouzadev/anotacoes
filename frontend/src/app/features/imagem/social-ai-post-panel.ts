@@ -6,6 +6,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, ViewEncapsulation, inject, output, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { asBrowserImage, isHeicFile } from './heic';
 import { IlIconComponent } from './illustration-icons';
 import { CAPTION_TONES, readBrand } from './social-caption-panel';
 import { FILTER_PRESETS } from './social-model';
@@ -121,9 +122,9 @@ const lastTone = signal<string>('carinhoso');
     <section class="il-sec">
       <div class="il-sec-head il-sec-static"><il-icon name="sparkle" [size]="13" /> Post com IA</div>
       <div class="il-sec-body">
-        <input #fotosInput type="file" accept="image/jpeg,image/png,image/webp" multiple hidden (change)="pick($any($event.target))" />
-        <button type="button" class="il-btn il-wide" (click)="fotosInput.click()">
-          <il-icon name="image" [size]="13" /> {{ files().length ? 'Trocar fotos (' + files().length + ')' : 'Escolher fotos' }}
+        <input #fotosInput type="file" accept="image/*,.heic,.heif" multiple hidden (change)="pick($any($event.target))" />
+        <button type="button" class="il-btn il-wide" [disabled]="converting()" (click)="fotosInput.click()">
+          <il-icon name="image" [size]="13" /> {{ converting() ? 'Convertendo HEIC…' : files().length ? 'Trocar fotos (' + files().length + ')' : 'Escolher fotos' }}
         </button>
         @if (thumbs().length) {
           <div class="smp-thumbs">
@@ -142,14 +143,14 @@ const lastTone = signal<string>('carinhoso');
             <button type="button" [class.il-on]="tone() === t.id" (click)="tone.set(t.id)">{{ t.label }}</button>
           }
         </div>
-        <button type="button" class="il-btn il-primary il-wide" [disabled]="loading() || !files().length" (click)="generate()">
+        <button type="button" class="il-btn il-primary il-wide" [disabled]="loading() || converting() || !files().length" (click)="generate()">
           <il-icon name="sparkle" [size]="13" /> {{ loading() ? 'Montando…' : 'Gerar post' }}
         </button>
         <p class="il-note">
           @if (loading()) { A IA está olhando as fotos e escolhendo o modelo. }
           @else if (error()) { <span class="il-warn">{{ error() }}</span> }
           @else if (done()) { {{ done() }} }
-          @else { Até {{ max }} fotos. A IA escolhe o modelo da marca, reescreve os textos e põe as fotos no lugar. Ctrl+Z desfaz. }
+          @else { Até {{ max }} fotos (HEIC do iPhone também). A IA escolhe o modelo da marca, reescreve os textos e põe as fotos no lugar. Ctrl+Z desfaz. }
         </p>
       </div>
     </section>
@@ -175,21 +176,29 @@ export class SocialAiPostPanelComponent {
   readonly files = signal<File[]>([]);
   readonly thumbs = signal<string[]>([]);
   readonly loading = signal(false);
+  readonly converting = signal(false);
   readonly error = signal('');
   readonly done = signal('');
 
   async pick(input: HTMLInputElement): Promise<void> {
-    const list = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/'));
+    const list = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/') || isHeicFile(f));
     input.value = '';
     if (!list.length) return;
     this.error.set(list.length > this.max ? `Usei as ${this.max} primeiras fotos.` : '');
     this.done.set('');
-    const chosen = list.slice(0, this.max);
+    const picked = list.slice(0, this.max);
+    // HEIC (iPhone) é convertido aqui, uma vez: a miniatura pra IA e a foto que
+    // entra no post saem do mesmo JPEG.
+    const heic = picked.some(isHeicFile);
+    if (heic) this.converting.set(true);
     try {
+      const chosen = await Promise.all(picked.map(asBrowserImage));
       this.thumbs.set(await Promise.all(chosen.map(shrinkForAi)));
       this.files.set(chosen);
     } catch {
-      this.error.set('Não consegui abrir uma das fotos (HEIC? exporte como JPEG).');
+      this.error.set(heic ? 'Não consegui converter uma das fotos HEIC. Tente exportar como JPEG.' : 'Não consegui abrir uma das fotos.');
+    } finally {
+      this.converting.set(false);
     }
   }
 

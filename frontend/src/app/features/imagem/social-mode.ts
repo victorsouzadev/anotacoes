@@ -33,6 +33,9 @@ import { SocialTemplateGalleryComponent, preload as preloadLook } from './social
 import { SocialCaptionPanelComponent, presetCaptions } from './social-caption-panel';
 import { AiPost, SocialAiPostPanelComponent, dataUrlToFile, planToPost } from './social-ai-post-panel';
 import { SocialTemplatesService } from './social-templates.service';
+import { heicToJpeg, isHeicFile } from './heic';
+
+export { isHeicFile };
 import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
 import { emptyPlaceholders, isPlaceholder } from './social-photo-slots';
@@ -234,22 +237,6 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
     src: canvas.toDataURL(png ? 'image/png' : 'image/jpeg', png ? undefined : 0.88),
     aspect: src0.width / src0.height,
   };
-}
-
-/** Foto de iPhone. O `type` vem vazio em vários sistemas (o navegador não
- * conhece o formato), então a extensão também conta. */
-export function isHeicFile(file: { name: string; type: string }): boolean {
-  const type = file.type.toLowerCase();
-  if (type === 'image/heic' || type === 'image/heif' || type === 'image/heic-sequence') return true;
-  return /\.hei[cf]$/i.test(file.name);
-}
-
-/** Converte HEIC em JPEG. O decodificador (libheif em WebAssembly) é pesado e
- * nenhum navegador fora do Safari abre HEIC sozinho, então ele entra por import
- * dinâmico: só baixa quando alguém realmente solta uma foto de iPhone. */
-async function heicToJpeg(file: File): Promise<Blob> {
-  const { heicTo } = await import('heic-to');
-  return heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 });
 }
 
 @Component({
