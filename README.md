@@ -161,6 +161,32 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
   últimos 6 meses), parcelas já comprometidas nos próximos 12 meses e, na aba
   Orçamento, o método AUVP (Custos Fixos, Conforto, Metas…) como está lá.
 
+#### Planejamento (aba própria)
+
+Metodologias de organização financeira calculadas sobre os lançamentos; cada seção
+tem um "Como funciona" com a explicação do método. Nas métricas de planejamento,
+investimento e pagamento de fatura não contam como consumo (investir é poupar; a
+fatura só acerta compras já lançadas).
+
+- **Saúde financeira**: taxa de poupança (mês e média de 6 meses), reserva de
+  emergência (gasto essencial médio × meses de cobertura, acompanhada por uma meta),
+  pague-se primeiro (% da renda a separar × o que foi guardado), orçamento base zero
+  (renda sem destino) e independência financeira (regra dos 4%: 25× o gasto anual,
+  com projeção em anos).
+- **Divisão da renda**: 50/30/20, método AUVP ou 6 Potes — planejado × realizado por fatia.
+- **Fluxo de caixa**: saldo previsto dia a dia (30/60/90 dias) a partir do saldo das
+  contas na AUVP, com recorrentes, lançamentos futuros e faturas no vencimento; avisa
+  o primeiro dia negativo.
+- **Dívidas**: cadastro e simulação bola de neve × avalanche (prazo, juros e ordem).
+- **Gastos anuais** (sinking funds): IPVA, IPTU, seguros divididos por 12, com
+  situação em dia/atrasada.
+- **Envelopes**: saldo acumulado por categoria do orçamento, mês a mês.
+- **Fechamento do mês** (Kakeibo): números do mês, comparação por categoria e as
+  respostas do usuário (meta, o que funcionou, compromisso).
+
+A primeira visita abre um **tutorial guiado** pela ferramenta; o botão "?" no topo
+reabre quando quiser.
+
 ### Tarefas
 
 Web (`frontend/src/app/features/tasks`) **e** [app Android nativo](mobile/) — as

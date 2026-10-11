@@ -15,6 +15,7 @@ import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { OrcamentoAuvpComponent } from './components/orcamento-auvp/orcamento-auvp.component';
 import { PlanejamentoComponent } from './components/planejamento/planejamento.component';
+import { PassoTutorial, TutorialComponent } from './components/tutorial/tutorial.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
 import {
   CategoriaResumo,
@@ -57,6 +58,7 @@ type Aba = 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
     OrcamentoComponent,
     OrcamentoAuvpComponent,
     PlanejamentoComponent,
+    TutorialComponent,
     MetasComponent,
     HistoricoComponent,
   ],
@@ -75,6 +77,10 @@ export class FinancasPageComponent {
   readonly categorias = CATEGORIAS;
 
   readonly aba = signal<Aba>('lancamentos');
+
+  // ------------------------------------------------------------ tutorial
+  readonly tutorialAberto = signal(false);
+  readonly passosTutorial: PassoTutorial[] = PASSOS_TUTORIAL;
 
   private readonly hoje = new Date();
   readonly ano = signal(this.hoje.getFullYear());
@@ -146,8 +152,28 @@ export class FinancasPageComponent {
   constructor() {
     this.carregarTudo();
     this.carregarAuvp();
+    // Primeira visita: o tutorial abre sozinho.
+    try {
+      if (!localStorage.getItem(CHAVE_TUTORIAL)) this.tutorialAberto.set(true);
+    } catch {
+      // Modo privado: não insiste.
+    }
     // Busca enquanto digita, sem uma requisição por tecla.
     this.busca$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => this.carregarTransacoes());
+  }
+
+  abrirTutorial(): void {
+    this.tutorialAberto.set(true);
+  }
+
+  fecharTutorial(): void {
+    this.tutorialAberto.set(false);
+    this.aba.set('lancamentos');
+    try {
+      localStorage.setItem(CHAVE_TUTORIAL, '1');
+    } catch {
+      // Sem armazenamento, o tutorial aparece de novo na próxima visita.
+    }
   }
 
   buscar(texto: string): void {
@@ -357,3 +383,102 @@ export class FinancasPageComponent {
     }
   }
 }
+
+const CHAVE_TUTORIAL = 'financas.tutorial.visto';
+
+const PASSOS_TUTORIAL: PassoTutorial[] = [
+  {
+    aba: 'lancamentos',
+    titulo: 'Bem-vindo às Finanças',
+    texto:
+      'Um tour rápido pelo que dá para fazer aqui: registrar gastos, acompanhar o mês e planejar com métodos ' +
+      'conhecidos (50/30/20, reserva de emergência, dívidas…). Use as setas do teclado ou os botões. Dá para rever ' +
+      'quando quiser pelo botão "?" no topo.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="abas"]',
+    titulo: 'As abas',
+    texto:
+      'Lançamentos é o dia a dia; Planejamento reúne as metodologias; Orçamento define quanto vai para cada ' +
+      'categoria; Metas acompanha o que você está juntando; Histórico mostra os meses anteriores. As setas ao lado ' +
+      'trocam o mês de todas elas.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="lancamento"]',
+    titulo: 'Lançar um gasto',
+    texto:
+      'Escreva como falaria — "gastei 45 no mercado hoje no pix" — e o app entende valor, categoria, data e forma ' +
+      'de pagamento. Também dá para importar foto de cupom, PDF de extrato ou planilha.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="auvp"]',
+    titulo: 'Seus bancos, automático',
+    texto:
+      'Com a chave da AUVP, as transações das suas contas e cartões chegam sozinhas a cada 6 horas. Corrigir algo ' +
+      'aqui (categoria, tags, orçamento) também atualiza na AUVP.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="dashboard"]',
+    titulo: 'O mês num olhar',
+    texto:
+      'Saldo, receitas, despesas, gasto por dia e projeção do mês, gráficos por categoria, contas e cartões ao vivo, ' +
+      'recorrentes e parcelas já comprometidas. Clique numa tag ou conta para filtrar a lista.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="filtros"]',
+    titulo: 'Buscar e filtrar',
+    texto: 'Busque por texto ("uber", "mercado") e filtre por tipo, categoria, tag ou conta.',
+  },
+  {
+    aba: 'lancamentos',
+    alvo: '[data-tour="lista"]',
+    titulo: 'Corrigir lançamentos',
+    texto:
+      'O lápis edita; o olho tira o lançamento dos totais (transferência, reembolso). Marque vários para mudar de uma ' +
+      'vez. Corrigiu a categoria de uma loja? O app aprende e acerta as próximas.',
+  },
+  {
+    aba: 'planejamento',
+    alvo: '[data-tour="planejamento-secoes"]',
+    titulo: 'Planejamento',
+    texto:
+      'Cada botão é uma metodologia: saúde financeira, divisão da renda, fluxo de caixa, quitação de dívidas, gastos ' +
+      'anuais, envelopes e o fechamento do mês. Toda seção tem um "Como funciona".',
+  },
+  {
+    aba: 'planejamento',
+    alvo: '[data-tour="taxa-poupanca"]',
+    titulo: 'Comece pela taxa de poupança',
+    texto:
+      'Quanto da renda sobrou no mês. A referência é chegar a 20%. Ao lado ficam a reserva de emergência, o ' +
+      '"pague-se primeiro", o orçamento base zero e a projeção de independência financeira.',
+  },
+  {
+    aba: 'orcamento',
+    alvo: '[data-tour="orcamento"]',
+    titulo: 'Orçamento do mês',
+    texto:
+      'Defina a renda prevista e quanto vai para cada categoria — ou parta de um modelo pronto. O app avisa quando ' +
+      'uma categoria passa de 80% e quando estoura.',
+  },
+  {
+    aba: 'metas',
+    alvo: '[data-tour="metas"]',
+    titulo: 'Metas',
+    texto:
+      'Crie metas (reserva de emergência, viagem) e registre aportes. Escolha uma delas como reserva no ' +
+      'Planejamento para acompanhar quantos meses ela cobre.',
+  },
+  {
+    aba: 'lancamentos',
+    titulo: 'Pronto!',
+    texto:
+      'Uma rotina que funciona: lance ou sincronize durante o mês, confira o Planejamento toda semana e faça o ' +
+      'Fechamento do mês no último dia. Bom planejamento!',
+  },
+];

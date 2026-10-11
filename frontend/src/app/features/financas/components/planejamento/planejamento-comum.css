@@ -152,3 +152,6 @@ details.ajuda.card { gap: 0; }
 .provisao .topo { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .acoes { display: flex; flex-wrap: wrap; gap: 6px; }
 .sugestoes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+
+/* Dentro de uma coluna, o flex-basis do campo viraria altura. */
+.pilha > .campo { flex: none; }

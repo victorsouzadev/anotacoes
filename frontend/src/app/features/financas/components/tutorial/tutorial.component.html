@@ -1,0 +1,18 @@
+<div class="fundo" [class.sem-alvo]="!caixa()" (click)="fechar.emit()"></div>
+@if (caixa(); as c) {
+  <div class="destaque" [style.top.px]="c.top" [style.left.px]="c.left" [style.width.px]="c.width"
+       [style.height.px]="c.height"></div>
+}
+@if (passo(); as p) {
+  <div class="balao" role="dialog" aria-modal="true" aria-labelledby="tutorial-titulo" [style]="posicaoBalao()">
+    <span class="progresso">{{ indice() + 1 }} de {{ passos().length }}</span>
+    <h2 id="tutorial-titulo">{{ p.titulo }}</h2>
+    <p>{{ p.texto }}</p>
+    <div class="botoes">
+      <button type="button" class="pular" (click)="fechar.emit()">{{ ultimo() ? 'Fechar' : 'Pular tutorial' }}</button>
+      <span class="espaco"></span>
+      @if (indice() > 0) { <button type="button" class="secundario" (click)="anterior()">Voltar</button> }
+      <button type="button" class="primario" (click)="proximo()">{{ ultimo() ? 'Começar a usar' : 'Próximo' }}</button>
+    </div>
+  </div>
+}

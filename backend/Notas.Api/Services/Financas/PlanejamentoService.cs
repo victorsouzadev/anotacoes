@@ -76,6 +76,16 @@ public class PlanejamentoService(AppDbContext db, FinancasClock clock)
         await db.PreferenciasFinancas.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct)
         ?? new PreferenciasFinancas { UserId = userId };
 
+    /// <summary>
+    /// Consumo: o que de fato foi gasto. Investir é poupar, não gastar; e pagar a
+    /// fatura do cartão só acerta compras que já entraram uma a uma — contar as
+    /// duas coisas dobraria o gasto (e jogaria a poupança para negativo no mês de
+    /// uma aplicação grande).
+    /// </summary>
+    public static bool EhConsumo(Transacao t) =>
+        t.Tipo == TipoTransacao.Despesa && t.Categoria != Categoria.Investimentos
+        && !t.Descricao.Contains("fatura", StringComparison.OrdinalIgnoreCase);
+
     private Task<List<Transacao>> DoPeriodoAsync(string userId, DateOnly de, DateOnly ate, CancellationToken ct) =>
         db.Transacoes.AsNoTracking()
             .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Competencia >= de && t.Competencia <= ate)
@@ -101,7 +111,7 @@ public class PlanejamentoService(AppDbContext db, FinancasClock clock)
 
         var doMes = transacoes.Where(t => t.Competencia == competencia).ToList();
         var receitas = doMes.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor);
-        var despesas = doMes.Where(t => t.Tipo == TipoTransacao.Despesa).Sum(t => t.Valor);
+        var despesas = doMes.Where(EhConsumo).Sum(t => t.Valor);
 
         // Só os meses com algum lançamento entram na média — um mês vazio no começo
         // do histórico puxaria tudo para baixo.
@@ -109,8 +119,8 @@ public class PlanejamentoService(AppDbContext db, FinancasClock clock)
             .Select(g => new
             {
                 Receitas = g.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor),
-                Despesas = g.Where(t => t.Tipo == TipoTransacao.Despesa).Sum(t => t.Valor),
-                Essenciais = g.Where(t => t.Tipo == TipoTransacao.Despesa
+                Despesas = g.Where(EhConsumo).Sum(t => t.Valor),
+                Essenciais = g.Where(t => EhConsumo(t)
                                           && CategoriaInfo.Grupo(t.Categoria) == GrupoCategoria.Essenciais)
                     .Sum(t => t.Valor),
             })
@@ -476,7 +486,7 @@ public class PlanejamentoService(AppDbContext db, FinancasClock clock)
                 var valor = eventos.Any(e => e.Origem == "fatura" && e.Descricao.EndsWith(nome))
                     ? parcelas.FirstOrDefault(p => p.Key == Transacao.CompetenciaDe(venc))?.Total ?? 0
                     : aberta;
-                if (valor > 0) eventos.Add(new EventoFluxo(venc, $"Fatura {nome}", -valor, "fatura"));
+                if (valor > 0) eventos.Add(new EventoFluxo(venc, $"Fatura {nome}", -Arred(valor), "fatura"));
             }
         }
 
@@ -533,14 +543,16 @@ public class PlanejamentoService(AppDbContext db, FinancasClock clock)
         var doMes = transacoes.Where(t => t.Competencia == competencia).ToList();
         var anterior = transacoes.Where(t => t.Competencia != competencia).ToList();
 
+        // Mesma régua da saúde financeira: investimento e pagamento de fatura não
+        // são consumo, senão a taxa de poupança do fechamento e a do painel divergem.
         var receitas = doMes.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor);
-        var despesas = doMes.Where(t => t.Tipo == TipoTransacao.Despesa).Sum(t => t.Valor);
+        var despesas = doMes.Where(EhConsumo).Sum(t => t.Valor);
 
-        var categorias = doMes.Concat(anterior).Where(t => t.Tipo == TipoTransacao.Despesa)
+        var categorias = doMes.Concat(anterior).Where(EhConsumo)
             .Select(t => t.Categoria).Distinct()
             .Select(c => new CategoriaVariacao(c.ToString(), CategoriaInfo.Rotulo(c),
-                doMes.Where(t => t.Tipo == TipoTransacao.Despesa && t.Categoria == c).Sum(t => t.Valor),
-                anterior.Where(t => t.Tipo == TipoTransacao.Despesa && t.Categoria == c).Sum(t => t.Valor)))
+                doMes.Where(t => EhConsumo(t) && t.Categoria == c).Sum(t => t.Valor),
+                anterior.Where(t => EhConsumo(t) && t.Categoria == c).Sum(t => t.Valor)))
             .OrderByDescending(c => c.Valor)
             .ToList();
 

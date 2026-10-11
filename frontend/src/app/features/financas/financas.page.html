@@ -5,6 +5,8 @@
       <h1><span class="brand-mark"><app-icon name="wallet" [size]="14" /></span> Finanças</h1>
     </div>
     <div class="top-bar-actions">
+      <button type="button" class="ajuda-btn" (click)="abrirTutorial()" title="Tutorial: como usar Finanças"
+              aria-label="Abrir tutorial">?</button>
       <a class="config-link" routerLink="/configuracoes" title="Configurar IA e chave de API">
         <app-icon name="more" [size]="16" />
       </a>
@@ -32,7 +34,7 @@
         }
       </div>
 
-      <nav class="abas" role="tablist">
+      <nav class="abas" role="tablist" data-tour="abas">
         <button type="button" role="tab" [attr.aria-selected]="aba() === 'lancamentos'"
                 [class.ativa]="aba() === 'lancamentos'" (click)="trocarAba('lancamentos')">
           Lançamentos
@@ -81,7 +83,7 @@
     }
 
     @if (aba() === 'lancamentos') {
-      <app-lancamento-form (lancamentoCriado)="recarregar()" />
+      <app-lancamento-form data-tour="lancamento" (lancamentoCriado)="recarregar()" />
 
       <div class="linha-importar">
         <button type="button" class="alternar-importacao" (click)="alternarImportacao()">
@@ -95,12 +97,12 @@
                       (irParaMes)="abrirMesNoOrcamento($event); trocarAba('lancamentos')" />
       }
 
-      <app-auvp-sync (sincronizado)="aoSincronizar()" />
+      <app-auvp-sync data-tour="auvp" (sincronizado)="aoSincronizar()" />
 
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
       } @else {
-        <app-financas-dashboard
+        <app-financas-dashboard data-tour="dashboard"
           [resumo]="resumo()"
           [categorias]="resumoCategorias()"
           [tendencias]="tendencias()"
@@ -111,7 +113,7 @@
           [contas]="contasAuvp()"
           (filtrar)="filtrarPor($event)" />
 
-        <div class="filtros">
+        <div class="filtros" data-tour="filtros">
           <input type="search" class="busca" placeholder="Buscar (ex.: mercado, uber)" aria-label="Buscar lançamentos"
                  [ngModel]="filtroBusca()" (ngModelChange)="buscar($event)" />
           <select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event); aplicarFiltros()" aria-label="Filtrar por tipo">
@@ -157,20 +159,24 @@
           </button>
         </div>
 
-        <app-transacoes-lista [transacoes]="transacoes()" [tagsDisponiveis]="tagsAuvp()"
+        <app-transacoes-lista data-tour="lista" [transacoes]="transacoes()" [tagsDisponiveis]="tagsAuvp()"
                               [orcamentos]="orcamentosAuvp()" (alterado)="recarregar()" />
       }
     } @else if (aba() === 'orcamento') {
       @if (orcamentosAuvp().length > 0) {
         <app-orcamento-auvp [ano]="ano()" [mes]="mes()" />
       }
-      <app-orcamento [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+      <app-orcamento data-tour="orcamento" [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
     } @else if (aba() === 'planejamento') {
       <app-planejamento [ano]="ano()" [mes]="mes()" />
     } @else if (aba() === 'metas') {
-      <app-metas />
+      <app-metas data-tour="metas" />
     } @else {
       <app-historico-orcamentos (mesEscolhido)="abrirMesNoOrcamento($event)" />
     }
   </main>
 </div>
+
+@if (tutorialAberto()) {
+  <app-tutorial [passos]="passosTutorial" (trocarAba)="trocarAba($any($event))" (fechar)="fecharTutorial()" />
+}

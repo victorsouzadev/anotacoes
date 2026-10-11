@@ -63,14 +63,15 @@ public class PlanejamentoTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
             new { mesesReserva = 6, percentualPagueSePrimeiro = 20, patrimonioInvestido = 50000 })).EnsureSuccessStatusCode();
 
         var s = await _client.GetFromJsonAsync<JsonElement>("/api/financas/planejamento/saude?ano=2026&mes=9");
-        Assert.Equal(60m, s.GetProperty("taxaPoupanca").GetDecimal());          // (10000-4000)/10000
-        Assert.Equal(55m, s.GetProperty("taxaPoupancaMedia").GetDecimal());     // (20000-9000)/20000
+        // O CDB é poupança, não consumo: setembro consumiu 3.000 de 10.000.
+        Assert.Equal(70m, s.GetProperty("taxaPoupanca").GetDecimal());
+        Assert.Equal(60m, s.GetProperty("taxaPoupancaMedia").GetDecimal());     // (20000-8000)/20000
         Assert.Equal(3000m, s.GetProperty("gastoEssencialMedio").GetDecimal());
         Assert.Equal(18000m, s.GetProperty("reservaAlvo").GetDecimal());
         Assert.Equal(2000m, s.GetProperty("valorPagueSePrimeiro").GetDecimal());
         Assert.Equal(1000m, s.GetProperty("guardadoNoMes").GetDecimal());
-        // Gasto médio 4.500/mês → 54.000/ano → alvo 1,35 milhão (25×).
-        Assert.Equal(1350000m, s.GetProperty("patrimonioAlvo").GetDecimal());
+        // Consumo médio 4.000/mês → 48.000/ano → alvo 1,2 milhão (25×).
+        Assert.Equal(1200000m, s.GetProperty("patrimonioAlvo").GetDecimal());
         Assert.True(s.GetProperty("anosParaIndependencia").GetDecimal() > 0);
     }
 

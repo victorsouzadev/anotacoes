@@ -1,0 +1,49 @@
+:host { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+
+.fundo { position: fixed; inset: 0; pointer-events: auto; }
+.fundo.sem-alvo { background: rgba(10, 10, 20, 0.55); }
+
+/* O destaque escurece tudo ao redor com uma sombra gigante: o "buraco" fica
+   sobre o elemento, sem precisar recortar o fundo. */
+.destaque {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(10, 10, 20, 0.55);
+  outline: 2px solid var(--accent);
+  transition: top 0.25s, left 0.25s, width 0.25s, height 0.25s;
+  pointer-events: none;
+}
+
+.balao {
+  position: fixed;
+  pointer-events: auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+.progresso { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+h2 { font-size: 15px; margin: 0; }
+p { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text-muted); }
+.botoes { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.espaco { flex: 1; }
+button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+button.primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+button.pular { border: none; padding-left: 0; color: var(--text-muted); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
