@@ -4,6 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, extname, resolve } from 'node:path';
+import convertHeic from 'heic-convert';
 import sharp from 'sharp';
 
 export interface Foto {
@@ -38,18 +39,34 @@ export async function lerFoto(ref: string): Promise<Foto> {
   return { nome: basename(caminho), bytes };
 }
 
+export function ehHeic(nome: string): boolean {
+  return /\.hei[cf]$/i.test(nome);
+}
+
+/** Bytes que o sharp abre: o sharp que vem do npm não decodifica o HEIC do
+ * iPhone (só AVIF), então HEIC passa antes por um conversor em JS. */
+async function decodificavel(foto: Foto): Promise<Buffer> {
+  if (!ehHeic(foto.nome)) return foto.bytes;
+  try {
+    return Buffer.from(await convertHeic({ buffer: foto.bytes, format: 'JPEG', quality: 0.92 }));
+  } catch {
+    throw new Error(`Não consegui converter ${foto.nome} (HEIC). Exporte como JPEG e tente de novo.`);
+  }
+}
+
 /** JPEG com o lado maior em `lado` px (sem ampliar), como data URL. Gira
  * conforme o EXIF, que é como o celular grava foto em pé. */
 export async function reduzir(foto: Foto, lado: number, qualidade: number): Promise<string> {
+  const bytes = await decodificavel(foto);
   try {
-    const jpeg = await sharp(foto.bytes).rotate()
+    const jpeg = await sharp(bytes).rotate()
       .resize({ width: lado, height: lado, fit: 'inside', withoutEnlargement: true })
       .flatten({ background: '#ffffff' })
       .jpeg({ quality: qualidade, mozjpeg: true })
       .toBuffer();
     return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
   } catch {
-    throw new Error(`Não consegui abrir ${foto.nome}. Se for HEIC, exporte como JPEG e tente de novo.`);
+    throw new Error(`Não consegui abrir ${foto.nome}. O arquivo pode estar corrompido ou num formato que não reconheço.`);
   }
 }
 
