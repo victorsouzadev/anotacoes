@@ -14,9 +14,12 @@ public class AuvpOptions
     /// <summary>URL base da API AUVP Financeiro. Vazia = integração desligada no servidor.</summary>
     public string BaseUrl { get; set; } = "";
 
-    /// <summary>Header onde a chave vai; a AUVP usa "x-api-key" sem prefixo.</summary>
-    public string HeaderChave { get; set; } = "x-api-key";
-    public string PrefixoChave { get; set; } = "";
+    /// <summary>
+    /// Header onde a chave vai. A API REST só lê "Authorization: Bearer auvp_...";
+    /// o "x-api-key" vale apenas no endpoint /mcp.
+    /// </summary>
+    public string HeaderChave { get; set; } = "Authorization";
+    public string PrefixoChave { get; set; } = "Bearer ";
 
     public int TimeoutSegundos { get; set; } = 30;
 
