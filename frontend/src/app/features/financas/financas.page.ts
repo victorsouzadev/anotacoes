@@ -11,6 +11,7 @@ import { HistoricoComponent } from './components/historico/historico.component';
 import { ImportarComponent } from './components/importar/importar.component';
 import { AuvpSyncComponent } from './components/auvp/auvp-sync.component';
 import { LancamentoFormComponent } from './components/lancamento-form/lancamento-form.component';
+import { ChatFinanceiroComponent } from './components/chat/chat.component';
 import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { OrcamentoAuvpComponent } from './components/orcamento-auvp/orcamento-auvp.component';
@@ -42,7 +43,7 @@ import {
   mensagemDoAlerta,
 } from './alertas-orcamento';
 
-type Aba = 'painel' | 'lancamentos' | 'categorizar' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
+type Aba = 'painel' | 'lancamentos' | 'categorizar' | 'chat' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
@@ -61,6 +62,7 @@ type Aba = 'painel' | 'lancamentos' | 'categorizar' | 'planejamento' | 'orcament
     PlanejamentoComponent,
     TutorialComponent,
     CategorizarComponent,
+    ChatFinanceiroComponent,
     MetasComponent,
     HistoricoComponent,
   ],
@@ -457,6 +459,14 @@ const PASSOS_TUTORIAL: PassoTutorial[] = [
     texto:
       'Aqui ficam os lançamentos que ainda estão sem categoria, agrupados por loja. Um clique categoriza o grupo ' +
       'inteiro — use a sugestão ou escolha outra — e o app aprende para as próximas. O número na aba mostra quantos faltam.',
+  },
+  {
+    aba: 'chat',
+    alvo: '[data-tour="chat"]',
+    titulo: 'Pergunte ao assistente',
+    texto:
+      'Faça perguntas em português — "quanto gastei com mercado este mês?", "onde posso cortar?" — e o assistente ' +
+      'consulta seus dados para responder. Precisa de uma chave de IA configurada.',
   },
   {
     aba: 'planejamento',

@@ -161,6 +161,12 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
   últimos 6 meses), parcelas já comprometidas nos próximos 12 meses e, na aba
   Orçamento, o método AUVP (Custos Fixos, Conforto, Metas…) como está lá.
 
+#### Chat (aba própria)
+
+Perguntas em português sobre as suas finanças ("quanto gastei com iFood nos últimos 3 meses?", "quantos meses minha reserva cobre?"). O modelo não recebe os dados de antemão: recebe uma lista de consultas somente leitura — resumo do mês, busca de lançamentos (texto, categoria, conta, tag, período, ordenação por valor), evolução mensal, saúde financeira, metas, dívidas, gastos recorrentes e parcelas futuras — e pede as que precisa; o backend executa cada uma sobre os dados do usuário logado e devolve o resultado até o modelo responder (`POST /api/financas/chat`, limitado pela política `financas-ia`).
+
+Usa o provedor e o modelo das Configurações de IA (Anthropic ou OpenRouter, com chamada de ferramentas). Com o heurístico, o chat pede para configurar uma chave. A conversa fica só no navegador.
+
 #### Categorizar (aba própria)
 
 Fila de tudo que ainda está sem categoria (em "Outros" sem confirmação), agrupado

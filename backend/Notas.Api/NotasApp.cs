@@ -10,6 +10,7 @@ using Notas.Api.Data;
 using Notas.Api.Endpoints;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
+using Notas.Api.Services.Financas.Chat;
 using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Moldes;
 using Notas.Api.Services.Seguranca;
@@ -160,6 +161,12 @@ public static class NotasApp
         builder.Services.AddScoped<OrcamentoService>();
         builder.Services.AddScoped<MetaService>();
         builder.Services.AddScoped<PlanejamentoService>();
+        builder.Services.AddScoped<FerramentasFinanceiras>();
+        builder.Services.AddScoped<ChatFinanceiro>();
+        builder.Services.AddScoped<IChatModeloCliente, ChatModeloCliente>();
+        // Uma resposta do chat pode encadear várias consultas; cada chamada ao
+        // modelo tem folga bem maior que a extração de um lançamento.
+        builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -266,6 +273,7 @@ public static class NotasApp
         app.MapAuvpEndpoints();
         app.MapFinancasAnaliseEndpoints();
         app.MapPlanejamentoEndpoints();
+        app.MapChatFinanceiroEndpoints();
         app.MapOrcamentoEndpoints();
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();

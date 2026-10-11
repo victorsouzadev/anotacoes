@@ -48,6 +48,10 @@
           Categorizar
           @if (semCategoria() > 0) { <span class="badge" [attr.aria-label]="semCategoria() + ' sem categoria'">{{ semCategoria() }}</span> }
         </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'chat'"
+                [class.ativa]="aba() === 'chat'" (click)="trocarAba('chat')">
+          Chat
+        </button>
         <button type="button" role="tab" [attr.aria-selected]="aba() === 'planejamento'"
                 [class.ativa]="aba() === 'planejamento'" (click)="trocarAba('planejamento')">
           Planejamento
@@ -194,6 +198,8 @@
       <app-orcamento data-tour="orcamento" [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
     } @else if (aba() === 'categorizar') {
       <app-categorizar [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+    } @else if (aba() === 'chat') {
+      <app-chat-financeiro />
     } @else if (aba() === 'planejamento') {
       <app-planejamento [ano]="ano()" [mes]="mes()" />
     } @else if (aba() === 'metas') {

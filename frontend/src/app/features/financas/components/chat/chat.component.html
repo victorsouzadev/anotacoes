@@ -1,0 +1,47 @@
+<section class="card chat" data-tour="chat">
+  <header class="topo">
+    <div>
+      <h2>Pergunte sobre suas finanças</h2>
+      <p class="muted">O assistente consulta seus lançamentos, orçamento, metas e dívidas para responder.</p>
+    </div>
+    @if (mensagens().length > 0) {
+      <button type="button" class="limpar" (click)="limpar()" [disabled]="enviando()">Nova conversa</button>
+    }
+  </header>
+
+  <div class="lista" #lista aria-live="polite">
+    @if (mensagens().length === 0) {
+      <div class="vazio">
+        <p class="muted">Experimente:</p>
+        <div class="sugestoes">
+          @for (s of sugestoes; track s) {
+            <button type="button" (click)="enviar(s)">{{ s }}</button>
+          }
+        </div>
+      </div>
+    }
+    @for (m of mensagens(); track $index) {
+      <div class="msg" [class.usuario]="m.papel === 'usuario'" [class.erro]="m.erro">
+        @if (m.papel === 'usuario') {
+          <p>{{ m.texto }}</p>
+        } @else {
+          <div class="md" [innerHTML]="html(m.texto)"></div>
+          @if (m.consultas?.length) {
+            <span class="consultas">Consultou: {{ rotulos(m.consultas!) }}</span>
+          }
+        }
+      </div>
+    }
+    @if (enviando()) {
+      <div class="msg pensando" aria-label="Respondendo"><span></span><span></span><span></span></div>
+    }
+  </div>
+
+  <form class="entrada" (ngSubmit)="enviar()">
+    <textarea rows="2" name="pergunta" placeholder="Ex.: quanto gastei com mercado este mês?"
+              [ngModel]="pergunta()" (ngModelChange)="pergunta.set($event)" (keydown)="teclado($event)"
+              aria-label="Sua pergunta"></textarea>
+    <button type="submit" class="enviar" [disabled]="enviando() || !pergunta().trim()">Enviar</button>
+  </form>
+  <p class="muted nota">As respostas são geradas por IA a partir dos seus dados; confira os números importantes.</p>
+</section>
