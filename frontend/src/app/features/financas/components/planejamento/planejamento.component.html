@@ -1,0 +1,20 @@
+<div class="planejamento">
+  <nav class="secoes" aria-label="Seções do planejamento" data-tour="planejamento-secoes">
+    @for (s of secoes; track s.id) {
+      <button type="button" [class.ativa]="secao() === s.id" [attr.aria-current]="secao() === s.id ? 'page' : null"
+              [title]="s.dica" (click)="escolher(s.id)">
+        {{ s.nome }}
+      </button>
+    }
+  </nav>
+
+  @switch (secao()) {
+    @case ('saude') { <app-plan-saude [ano]="ano()" [mes]="mes()" /> }
+    @case ('metodo') { <app-plan-metodo [ano]="ano()" [mes]="mes()" /> }
+    @case ('fluxo') { <app-plan-fluxo /> }
+    @case ('dividas') { <app-plan-dividas /> }
+    @case ('provisoes') { <app-plan-provisoes /> }
+    @case ('envelopes') { <app-plan-envelopes [ano]="ano()" [mes]="mes()" /> }
+    @case ('fechamento') { <app-plan-fechamento [ano]="ano()" [mes]="mes()" /> }
+  }
+</div>

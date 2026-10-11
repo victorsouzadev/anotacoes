@@ -25,8 +25,8 @@ public static class FinancasAnaliseEndpoints
     {
         var grupo = app.MapGroup("/api/financas/dashboard").RequireAuthorization();
 
-        // Gastos que aparecem em pelo menos 3 dos últimos 6 meses com valor parecido —
-        // assinaturas, contas, mensalidades. Parcelas ficam de fora: repetem, mas acabam.
+        // Gastos que aparecem em pelo menos 3 dos últimos 6 meses com valor parecido
+        // (ver Recorrencias): assinaturas, contas, mensalidades.
         grupo.MapGet("/recorrentes", async (ClaimsPrincipal user, AppDbContext db, FinancasClock clock,
             CancellationToken ct) =>
         {
@@ -39,30 +39,10 @@ public static class FinancasAnaliseEndpoints
                             && t.Parcela == null && t.Competencia >= inicio && t.Competencia <= mesAtual)
                 .ToListAsync(ct);
 
-            var resultado = despesas
-                // Pagar a fatura se repete todo mês, mas não é um gasto recorrente:
-                // é o acerto das compras do cartão, que já aparecem uma a uma.
-                .Where(t => !t.Descricao.Contains("fatura", StringComparison.OrdinalIgnoreCase))
-                .GroupBy(t => RegrasCategoria.ChaveDeDescricao(t.Descricao))
-                .Where(g => g.Key.Length >= 3)
-                .Select(g => new { Itens = g.OrderBy(t => t.Data).ToList(), Meses = g.Select(t => t.Competencia).Distinct().Count() })
-                .Where(g => g.Meses >= 3)
-                .Select(g =>
-                {
-                    // Um valor por mês (o maior, se houver mais de um no mesmo mês).
-                    var porMes = g.Itens.GroupBy(t => t.Competencia).Select(m => m.Sum(t => t.Valor)).ToList();
-                    return new { g.Itens, g.Meses, PorMes = porMes };
-                })
-                // Valor estável: o maior mês não passa de 1,5× o menor.
-                .Where(g => g.PorMes.Min() > 0 && g.PorMes.Max() <= g.PorMes.Min() * 1.5m)
-                .Select(g =>
-                {
-                    var ultimo = g.Itens[^1];
-                    return new RecorrenteResponse(ultimo.Descricao, ultimo.Categoria.ToString(),
-                        CategoriaInfo.Rotulo(ultimo.Categoria),
-                        Math.Round(g.PorMes.Average(), 2), ultimo.Valor, ultimo.Data, g.Meses, ultimo.Conta);
-                })
-                .OrderByDescending(r => r.ValorMedio)
+            var resultado = Recorrencias.Detectar(despesas)
+                .Select(r => new RecorrenteResponse(r.Ultimo.Descricao, r.Ultimo.Categoria.ToString(),
+                    CategoriaInfo.Rotulo(r.Ultimo.Categoria), r.ValorMedio, r.Ultimo.Valor, r.Ultimo.Data, r.Meses,
+                    r.Ultimo.Conta))
                 .ToList();
 
             return Results.Ok(resultado);

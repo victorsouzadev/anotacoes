@@ -1,0 +1,164 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+@if (saude(); as s) {
+  <div class="grade">
+    <!-- Taxa de poupança -->
+    <section class="card" data-tour="taxa-poupanca">
+      <span class="rotulo">Taxa de poupança</span>
+      @if (s.taxaPoupanca !== null) {
+        <span class="numero" [class]="leituraTaxa()?.classe">{{ s.taxaPoupanca | number: '1.0-1' }}%</span>
+        <p class="muted">{{ leituraTaxa()?.texto }}</p>
+      } @else {
+        <span class="numero medio">—</span>
+        <p class="muted">Sem receitas neste mês.</p>
+      }
+      <dl class="valores">
+        <dt>Receitas</dt><dd>{{ s.receitas | currency }}</dd>
+        <dt>Despesas</dt><dd>{{ s.despesas | currency }}</dd>
+        @if (s.taxaPoupancaMedia !== null) {
+          <dt>Média dos últimos 6 meses</dt><dd>{{ s.taxaPoupancaMedia | number: '1.0-1' }}%</dd>
+        }
+      </dl>
+      <details class="ajuda">
+        <summary>Como funciona</summary>
+        <p>É a parte da renda que não foi gasta: (receitas − despesas) ÷ receitas. É o indicador que mais
+          prevê saúde financeira, porque junta o quanto você ganha e o quanto gasta num número só.</p>
+        <p>Referências usuais: 10% é o mínimo, 20% é o recomendado (regra 50/30/20) e acima de 30% acelera a
+          independência financeira.</p>
+      </details>
+    </section>
+
+    <!-- Reserva de emergência -->
+    <section class="card" data-tour="reserva">
+      <span class="rotulo">Reserva de emergência</span>
+      <span class="numero medio">
+        @if (s.mesesCobertos !== null) { {{ s.mesesCobertos | number: '1.0-1' }} de {{ s.mesesReservaAlvo }} meses }
+        @else { — }
+      </span>
+      <div class="barra" role="progressbar" [attr.aria-valuenow]="percentualReserva()" aria-valuemin="0" aria-valuemax="100">
+        <span [style.width.%]="percentualReserva()" [class.atencao]="percentualReserva() < 50"></span>
+      </div>
+      <dl class="valores">
+        <dt>Gasto essencial médio</dt><dd>{{ s.gastoEssencialMedio | currency }}/mês</dd>
+        <dt>Alvo ({{ s.mesesReservaAlvo }} meses)</dt><dd>{{ s.reservaAlvo | currency }}</dd>
+        <dt>Guardado</dt><dd>{{ s.reservaAtual | currency }}</dd>
+        @if (s.reservaAlvo > s.reservaAtual) {
+          <dt>Falta</dt><dd>{{ s.reservaAlvo - s.reservaAtual | currency }}</dd>
+        }
+      </dl>
+      <div class="form">
+        <div class="campo">
+          <label for="meses-reserva">Meses de cobertura</label>
+          <select id="meses-reserva" [ngModel]="prefs()?.mesesReserva" (ngModelChange)="salvar({ mesesReserva: +$event })">
+            @for (m of [3, 6, 9, 12]; track m) { <option [ngValue]="m">{{ m }} meses</option> }
+          </select>
+        </div>
+        <div class="campo">
+          <label for="meta-reserva">Meta que é a reserva</label>
+          <select id="meta-reserva" [ngModel]="prefs()?.metaReservaId ?? ''" (ngModelChange)="escolherMetaReserva($event)">
+            <option value="">— nenhuma —</option>
+            @for (m of metas(); track m.id) { <option [value]="m.id">{{ m.nome }}</option> }
+          </select>
+        </div>
+      </div>
+      @if (metas().length === 0) {
+        <p class="muted">Crie uma meta na aba <strong>Metas</strong> (ex.: "Reserva de emergência") e registre os
+          aportes nela para acompanhar aqui.</p>
+      }
+      <details class="ajuda">
+        <summary>Como funciona</summary>
+        <p>Dinheiro para imprevistos (perda de renda, saúde, conserto), guardado em aplicação de liquidez
+          diária. O alvo é o seu gasto <em>essencial</em> médio (moradia, contas, mercado, transporte, saúde,
+          educação) dos últimos 6 meses multiplicado pelos meses de cobertura.</p>
+        <p>CLT costuma mirar 6 meses; autônomo ou renda variável, 12.</p>
+      </details>
+    </section>
+
+    <!-- Pague-se primeiro -->
+    <section class="card" data-tour="pague-se">
+      <span class="rotulo">Pague-se primeiro</span>
+      <span class="numero medio">{{ s.guardadoNoMes | currency }} <span class="sub">de {{ s.valorPagueSePrimeiro | currency }}</span></span>
+      <div class="barra"><span class="neutra" [style.width.%]="percentualPagueSe()"></span></div>
+      <p class="muted">
+        @if (s.guardadoNoMes >= s.valorPagueSePrimeiro && s.valorPagueSePrimeiro > 0) {
+          Meta do mês cumprida.
+        } @else if (s.valorPagueSePrimeiro > 0) {
+          Faltam {{ s.valorPagueSePrimeiro - s.guardadoNoMes | currency }} para separar {{ s.percentualPagueSePrimeiro }}% da renda.
+        } @else {
+          Sem receitas no mês para calcular.
+        }
+      </p>
+      <div class="form">
+        <div class="campo">
+          <label for="pct-pague">Separar da renda (%)</label>
+          <input id="pct-pague" type="number" min="0" max="90" step="1" [ngModel]="prefs()?.percentualPagueSePrimeiro"
+                 (change)="numero($any($event.target).value) !== null && salvar({ percentualPagueSePrimeiro: numero($any($event.target).value)! })" />
+        </div>
+      </div>
+      <details class="ajuda">
+        <summary>Como funciona</summary>
+        <p>Assim que a renda cai, separe a parte da poupança <em>antes</em> de pagar qualquer outra coisa — o
+          resto é o que dá para gastar. Conta como guardado: lançamentos na categoria Investimentos e aportes
+          em metas no mês.</p>
+      </details>
+    </section>
+
+    <!-- Base zero -->
+    <section class="card" data-tour="base-zero">
+      <span class="rotulo">Orçamento base zero</span>
+      <span class="numero medio" [class.atencao]="s.aDistribuir > 0" [class.negativo]="s.aDistribuir < 0"
+            [class.positivo]="s.aDistribuir === 0 && s.rendaDoMes > 0">
+        {{ s.aDistribuir | currency }}
+      </span>
+      <p class="muted">
+        @if (s.rendaDoMes === 0) { Sem renda prevista nem recebida neste mês. }
+        @else if (s.aDistribuir > 0) { da renda ainda não têm destino. Distribua na aba <strong>Orçamento</strong>. }
+        @else if (s.aDistribuir < 0) { a mais do que a renda foi comprometido. Reveja o orçamento. }
+        @else { Todo real da renda tem uma função. }
+      </p>
+      <dl class="valores">
+        <dt>Renda do mês</dt><dd>{{ s.rendaDoMes | currency }}</dd>
+        <dt>Com destino</dt><dd>{{ s.comDestino | currency }}</dd>
+      </dl>
+      <details class="ajuda">
+        <summary>Como funciona</summary>
+        <p>Método do YNAB: cada real que entra recebe uma função antes de ser gasto, até sobrar zero. "Com
+          destino" soma o que foi distribuído no orçamento do mês e 1/12 dos gastos anuais cadastrados.</p>
+      </details>
+    </section>
+
+    <!-- Independência financeira -->
+    <section class="card" data-tour="independencia">
+      <span class="rotulo">Independência financeira</span>
+      <span class="numero medio">
+        @if (s.anosParaIndependencia === 0) { Atingida }
+        @else if (s.anosParaIndependencia !== null) { ≈ {{ s.anosParaIndependencia | number: '1.0-1' }} anos }
+        @else { — }
+      </span>
+      <div class="barra"><span class="neutra" [style.width.%]="percentualIndependencia()"></span></div>
+      <dl class="valores">
+        <dt>Gasto anual (média)</dt><dd>{{ s.gastoAnual | currency }}</dd>
+        <dt>Patrimônio necessário (25×)</dt><dd>{{ s.patrimonioAlvo | currency }}</dd>
+        <dt>Poupança média/mês</dt><dd [class.negativo]="s.poupancaMensalMedia < 0">{{ s.poupancaMensalMedia | currency }}</dd>
+      </dl>
+      <div class="form">
+        <div class="campo">
+          <label for="patrimonio">Patrimônio investido hoje (R$)</label>
+          <input id="patrimonio" type="number" min="0" step="100" [ngModel]="prefs()?.patrimonioInvestido"
+                 (change)="numero($any($event.target).value) !== null && salvar({ patrimonioInvestido: numero($any($event.target).value)! })" />
+        </div>
+      </div>
+      @if (s.anosParaIndependencia === null && s.poupancaMensalMedia <= 0) {
+        <p class="muted">Com poupança média zero ou negativa, não há como projetar.</p>
+      }
+      <details class="ajuda">
+        <summary>Como funciona</summary>
+        <p>Regra dos 4% (estudo Trinity): com 25 vezes o gasto anual investido, dá para retirar 4% ao ano
+          corrigidos pela inflação com baixo risco de acabar. A projeção supõe que você continue poupando a
+          média dos últimos 6 meses com rendimento real de 4% ao ano.</p>
+      </details>
+    </section>
+  </div>
+} @else if (!erro()) {
+  <p class="vazio">Calculando…</p>
+}

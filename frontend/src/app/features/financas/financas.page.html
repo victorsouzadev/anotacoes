@@ -37,6 +37,10 @@
                 [class.ativa]="aba() === 'lancamentos'" (click)="trocarAba('lancamentos')">
           Lançamentos
         </button>
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'planejamento'"
+                [class.ativa]="aba() === 'planejamento'" (click)="trocarAba('planejamento')">
+          Planejamento
+        </button>
         <button type="button" role="tab" [attr.aria-selected]="aba() === 'orcamento'"
                 [class.ativa]="aba() === 'orcamento'" (click)="trocarAba('orcamento')">
           Orçamento
@@ -161,6 +165,8 @@
         <app-orcamento-auvp [ano]="ano()" [mes]="mes()" />
       }
       <app-orcamento [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
+    } @else if (aba() === 'planejamento') {
+      <app-planejamento [ano]="ano()" [mes]="mes()" />
     } @else if (aba() === 'metas') {
       <app-metas />
     } @else {

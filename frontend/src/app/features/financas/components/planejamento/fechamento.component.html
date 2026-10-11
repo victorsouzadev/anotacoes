@@ -1,0 +1,74 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+@if (dados(); as f) {
+  <div class="grade">
+    <section class="card" data-tour="fechamento">
+      <h2>1. Quanto entrou e quanto saiu?</h2>
+      <dl class="valores">
+        <dt>Receitas</dt><dd class="positivo">{{ f.receitas | currency }}</dd>
+        <dt>Despesas</dt><dd class="negativo">{{ f.despesas | currency }}</dd>
+        <dt>Sobrou</dt><dd [class.positivo]="f.saldo >= 0" [class.negativo]="f.saldo < 0">{{ f.saldo | currency }}</dd>
+        @if (f.taxaPoupanca !== null) { <dt>Taxa de poupança</dt><dd>{{ f.taxaPoupanca | number: '1.0-1' }}%</dd> }
+        @if (f.orcamentoUtilizado !== null) { <dt>Orçamento usado</dt><dd>{{ f.orcamentoUtilizado | number: '1.0-0' }}%</dd> }
+      </dl>
+      @if (f.metaPoupanca !== null) {
+        <p class="alerta" [class.ok]="f.saldo >= f.metaPoupanca" [class.atencao]="f.saldo < f.metaPoupanca">
+          @if (f.saldo >= f.metaPoupanca) { Meta de poupança de {{ f.metaPoupanca | currency }} cumprida. }
+          @else { Faltaram {{ f.metaPoupanca - f.saldo | currency }} para a meta de {{ f.metaPoupanca | currency }}. }
+        </p>
+      }
+    </section>
+
+    <section class="card">
+      <h2>2. Em que gastou? <span class="sub">comparado ao mês anterior</span></h2>
+      @if (f.categorias.length === 0) {
+        <p class="muted">Sem despesas no mês.</p>
+      } @else {
+        <ul class="lista">
+          @for (c of f.categorias.slice(0, 8); track c.categoria) {
+            <li>
+              <span class="nome">{{ c.rotulo }}</span>
+              <strong>{{ c.valor | currency }}</strong>
+              @if (variacao(c.valor, c.valorMesAnterior); as v) {
+                <span class="selo" [class.ruim]="v > 10" [class.ok]="v < -10">{{ v > 0 ? '▲' : '▼' }} {{ (v < 0 ? -v : v) | number: '1.0-0' }}%</span>
+              } @else if (c.valorMesAnterior === 0 && c.valor > 0) {
+                <span class="selo">novo</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>3. Quanto quer guardar e 4. como vai melhorar?</h2>
+    <form class="pilha" (ngSubmit)="salvar()">
+      <div class="campo">
+        <label for="meta">Meta de poupança do mês (R$)</label>
+        <input id="meta" name="meta" type="number" min="0" step="50" [(ngModel)]="metaPoupanca" />
+      </div>
+      <div class="campo">
+        <label for="reflexao">O que funcionou e o que não funcionou?</label>
+        <textarea id="reflexao" name="reflexao" maxlength="2000" [(ngModel)]="reflexao"
+                  placeholder="Ex.: gastei muito com delivery nas semanas corridas."></textarea>
+      </div>
+      <div class="campo">
+        <label for="compromisso">O que vou fazer diferente no próximo mês?</label>
+        <textarea id="compromisso" name="compromisso" maxlength="2000" [(ngModel)]="compromisso"
+                  placeholder="Ex.: cozinhar aos domingos e levar marmita."></textarea>
+      </div>
+      <div class="acoes">
+        <button type="submit" [disabled]="salvando()">{{ salvando() ? 'Salvando…' : 'Salvar fechamento' }}</button>
+        @if (salvo()) { <span class="muted positivo">Salvo.</span> }
+        @else if (f.atualizadoEm) { <span class="muted">Salvo em {{ f.atualizadoEm | date: 'dd/MM/yyyy HH:mm' }}</span> }
+      </div>
+    </form>
+    <details class="ajuda">
+      <summary>Como funciona</summary>
+      <p>Kakeibo é o caderno de contas japonês (Hani Motoko, 1904). No fim de cada mês você responde: quanto
+        entrou? quanto quer guardar? quanto gastou? como pode melhorar? Os números o app já traz — o valor está
+        em parar para pensar e escrever o compromisso do mês seguinte.</p>
+    </details>
+  </section>
+}

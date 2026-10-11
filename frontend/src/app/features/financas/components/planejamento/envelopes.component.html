@@ -1,0 +1,39 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+<section class="card" data-tour="envelopes">
+  <h2>Envelopes
+    @if (envelopes()?.length) {
+      <span class="sub">saldo somado: <strong [class.negativo]="total() < 0" [class.positivo]="total() >= 0">{{ total() | currency }}</strong></span>
+    }
+  </h2>
+
+  @if (envelopes(); as lista) {
+    @if (lista.length === 0) {
+      <p class="vazio">Os envelopes saem do orçamento. Monte o orçamento do mês na aba <strong>Orçamento</strong>
+        — a partir daí, o que não for gasto em cada categoria aparece aqui acumulado.</p>
+    } @else {
+      <ul class="lista">
+        @for (e of lista; track e.categoria) {
+          <li>
+            <span class="nome">{{ e.categoriaRotulo }}
+              <span class="detalhe">· este mês {{ e.gastoMes | currency }} de {{ e.planejadoMes | currency }}</span>
+            </span>
+            <strong [class.positivo]="e.saldoAcumulado > 0" [class.negativo]="e.saldoAcumulado < 0">
+              {{ e.saldoAcumulado >= 0 ? 'sobra' : 'falta' }} {{ (e.saldoAcumulado < 0 ? -e.saldoAcumulado : e.saldoAcumulado) | currency }}
+            </strong>
+          </li>
+        }
+      </ul>
+      <p class="muted">Acumulado em {{ lista[0].mesesConsiderados }} {{ lista[0].mesesConsiderados === 1 ? 'mês' : 'meses' }},
+        desde o primeiro orçamento dos últimos 12 meses.</p>
+    }
+  }
+
+  <details class="ajuda">
+    <summary>Como funciona</summary>
+    <p>Método dos envelopes (cash stuffing): cada categoria do orçamento é um envelope. O que você não gasta
+      num mês continua no envelope e se soma ao do mês seguinte; o que passa do limite é descontado.</p>
+    <p>É útil para gastos irregulares (roupas, presentes, manutenção do carro): em vez de "estourar" o mês em
+      que acontecem, você vê que o dinheiro foi se acumulando nos meses tranquilos.</p>
+  </details>
+</section>

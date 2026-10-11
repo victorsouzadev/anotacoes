@@ -1,0 +1,89 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+<div class="pilha">
+  <section class="card" data-tour="dividas">
+    <h2>Dívidas
+      @if (dividas().length) { <span class="sub">{{ totalSaldo() | currency }} no total</span> }
+    </h2>
+
+    @if (dividas().length === 0 && !formAberto()) {
+      <p class="vazio">Nenhuma dívida cadastrada. Cadastre cartão no rotativo, empréstimos e financiamentos
+        para ver em quanto tempo e por quanto você quita tudo.</p>
+    }
+
+    <ul class="lista">
+      @for (d of dividas(); track d.id) {
+        <li>
+          <span class="nome">{{ d.nome }}
+            <span class="detalhe">· {{ d.jurosMensal | number: '1.0-2' }}% a.m. · mínimo {{ d.parcelaMinima | currency }}</span>
+          </span>
+          <strong>{{ d.saldo | currency }}</strong>
+          <button type="button" class="secundario icone" (click)="editar(d)" aria-label="Editar">Editar</button>
+          <button type="button" class="perigo icone" (click)="remover(d)" aria-label="Remover">Remover</button>
+        </li>
+      }
+    </ul>
+
+    @if (formAberto()) {
+      <form class="form" (ngSubmit)="salvar()">
+        <div class="campo"><label for="d-nome">Nome</label>
+          <input id="d-nome" name="nome" [(ngModel)]="form.nome" placeholder="Ex.: Cartão Nubank" required /></div>
+        <div class="campo"><label for="d-saldo">Saldo devedor (R$)</label>
+          <input id="d-saldo" name="saldo" type="number" min="0.01" step="0.01" [(ngModel)]="form.saldo" required /></div>
+        <div class="campo"><label for="d-juros">Juros ao mês (%)</label>
+          <input id="d-juros" name="juros" type="number" min="0" max="100" step="0.01" [(ngModel)]="form.jurosMensal" placeholder="Ex.: 12,5" /></div>
+        <div class="campo"><label for="d-min">Parcela mínima (R$)</label>
+          <input id="d-min" name="minima" type="number" min="0" step="0.01" [(ngModel)]="form.parcelaMinima" /></div>
+        <button type="submit">{{ editandoId() ? 'Salvar' : 'Adicionar' }}</button>
+        <button type="button" class="secundario" (click)="formAberto.set(false)">Cancelar</button>
+      </form>
+    } @else {
+      <div><button type="button" (click)="novo()">+ Adicionar dívida</button></div>
+    }
+  </section>
+
+  @if (simulacao(); as s) {
+    <section class="card">
+      <h2>Plano de quitação <span class="sub">pagando {{ s.pagamentoMensal | currency }} por mês</span></h2>
+      <div class="form">
+        <div class="campo">
+          <label for="extra">A mais, além dos mínimos (R$/mês)</label>
+          <input id="extra" name="extra" type="number" min="0" step="50" [(ngModel)]="extra" (change)="simular()" />
+        </div>
+      </div>
+
+      <div class="grade">
+        @for (e of [s.bolaDeNeve, s.avalanche]; track e.estrategia) {
+          <div class="estrategia">
+            <h3>{{ e.estrategia === 'avalanche' ? 'Avalanche' : 'Bola de neve' }}
+              <span class="sub">{{ e.estrategia === 'avalanche' ? 'maior juros primeiro' : 'menor saldo primeiro' }}</span></h3>
+            @if (e.viavel) {
+              <span class="numero medio">{{ anos(e.meses) }}</span>
+              <dl class="valores">
+                <dt>Juros pagos</dt><dd class="negativo">{{ e.jurosTotais | currency }}</dd>
+                <dt>Total pago</dt><dd>{{ e.totalPago | currency }}</dd>
+              </dl>
+              <ol class="ordem">
+                @for (p of e.ordem; track p.nome) { <li>{{ p.nome }} <span class="detalhe">— mês {{ p.mesQuitacao }}</span></li> }
+              </ol>
+            } @else {
+              <p class="alerta ruim">Não quita: os juros crescem mais que o pagamento.</p>
+            }
+          </div>
+        }
+      </div>
+      <p class="alerta" [class.ok]="s.avalanche.viavel" [class.ruim]="!s.avalanche.viavel">{{ s.recomendacao }}</p>
+    </section>
+  }
+
+  <details class="ajuda card">
+    <summary>Como funciona</summary>
+    <p>As duas estratégias pagam o mínimo de todas as dívidas e jogam todo o dinheiro extra numa só; quando ela
+      acaba, o valor que ia para ela passa para a próxima.</p>
+    <p><strong>Bola de neve</strong> (Dave Ramsey): ataca a de menor saldo primeiro. Você vê dívidas sumindo
+      cedo, o que ajuda a manter o plano. <strong>Avalanche</strong>: ataca a de maior juros. É a que paga menos
+      juros no total.</p>
+    <p>Prioridade costuma ser: rotativo e cheque especial (juros acima de 10% a.m.) antes de tudo. Vale também
+      tentar renegociar ou trocar por um empréstimo mais barato.</p>
+  </details>
+</div>

@@ -1,0 +1,79 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+<section class="card" data-tour="fluxo">
+  <h2>Fluxo de caixa projetado <span class="sub">estimativa a partir de hoje</span></h2>
+
+  <div class="form">
+    <div class="campo">
+      <label for="dias">Período</label>
+      <select id="dias" [ngModel]="dias()" (ngModelChange)="dias.set(+$event); carregar()">
+        <option [ngValue]="30">30 dias</option>
+        <option [ngValue]="60">60 dias</option>
+        <option [ngValue]="90">90 dias</option>
+      </select>
+    </div>
+    @if (fluxo(); as f) {
+      @if (f.origemSaldo !== 'auvp') {
+        <div class="campo">
+          <label for="saldo-inicial">Saldo em conta hoje (R$)</label>
+          <input id="saldo-inicial" type="number" step="10" [value]="f.saldoInicial"
+                 (change)="salvarSaldo($any($event.target).value)" />
+        </div>
+      }
+    }
+  </div>
+
+  @if (fluxo(); as f) {
+    @if (f.primeiroDiaNegativo) {
+      <p class="alerta ruim" role="alert">O saldo deve ficar negativo em <strong>{{ f.primeiroDiaNegativo | date: 'dd/MM' }}</strong>
+        e chega a {{ f.menorSaldo | currency }} em {{ f.dataMenorSaldo | date: 'dd/MM' }}. Antecipe uma receita, adie um
+        gasto ou separe o valor antes.</p>
+    } @else {
+      <p class="alerta ok">O saldo fica positivo no período. Menor saldo previsto: {{ f.menorSaldo | currency }} em
+        {{ f.dataMenorSaldo | date: 'dd/MM' }}.</p>
+    }
+
+    <dl class="valores">
+      <dt>Saldo de partida
+        @switch (f.origemSaldo) {
+          @case ('auvp') { (contas na AUVP, ao vivo) }
+          @case ('informado') { (informado por você) }
+          @default { (informe acima) }
+        }
+      </dt>
+      <dd>{{ f.saldoInicial | currency }}</dd>
+      <dt>Saldo ao fim do período</dt><dd [class.negativo]="f.saldoFinal < 0">{{ f.saldoFinal | currency }}</dd>
+    </dl>
+
+    <div class="grafico"><canvas #grafico aria-label="Gráfico do saldo previsto dia a dia" role="img"></canvas></div>
+
+    <h3>Próximos movimentos</h3>
+    @if (f.eventos.length === 0) {
+      <p class="muted">Nada previsto: sem recorrentes detectados nem lançamentos futuros.</p>
+    } @else {
+      <ul class="lista">
+        @for (e of eventosVisiveis(); track $index) {
+          <li>
+            <span class="detalhe data">{{ e.data | date: 'dd/MM' }}</span>
+            <span class="nome">{{ e.descricao }} <span class="selo">{{ e.origem }}</span></span>
+            <strong [class.positivo]="e.valor > 0" [class.negativo]="e.valor < 0">{{ e.valor | currency }}</strong>
+          </li>
+        }
+      </ul>
+      @if (f.eventos.length > 12) {
+        <button type="button" class="secundario" (click)="mostrarTodos.set(!mostrarTodos())">
+          {{ mostrarTodos() ? 'Mostrar menos' : 'Ver todos os ' + f.eventos.length }}
+        </button>
+      }
+    }
+  }
+
+  <details class="ajuda">
+    <summary>Como funciona</summary>
+    <p>Parte do saldo das suas contas correntes (ao vivo da AUVP, ou o que você informar) e soma, dia a dia:
+      lançamentos já agendados, gastos e receitas recorrentes (salário, contas, assinaturas) no dia em que
+      costumam cair e as faturas dos cartões no vencimento.</p>
+    <p>Compras no cartão não saem da conta na hora: entram na fatura. É uma estimativa — confira os
+      recorrentes detectados na lista acima.</p>
+  </details>
+</section>

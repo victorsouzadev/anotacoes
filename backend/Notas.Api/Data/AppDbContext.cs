@@ -58,6 +58,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ConfiguracaoAuvp> ConfiguracoesAuvp => Set<ConfiguracaoAuvp>();
     public DbSet<TransacaoExcluida> TransacoesExcluidas => Set<TransacaoExcluida>();
     public DbSet<RegraCategoria> RegrasCategoria => Set<RegraCategoria>();
+    public DbSet<PreferenciasFinancas> PreferenciasFinancas => Set<PreferenciasFinancas>();
+    public DbSet<Divida> Dividas => Set<Divida>();
+    public DbSet<ProvisaoAnual> ProvisoesAnuais => Set<ProvisaoAnual>();
+    public DbSet<FechamentoMes> FechamentosMes => Set<FechamentoMes>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -249,6 +253,48 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Chave).HasMaxLength(120);
             e.Property(x => x.Categoria).HasConversion<string>().HasMaxLength(30);
             e.HasIndex(x => new { x.UserId, x.Chave }).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<PreferenciasFinancas>(e =>
+        {
+            e.ToTable("financas_preferencias");
+            e.Property(x => x.Metodo).HasMaxLength(20);
+            e.Property(x => x.PercentualPagueSePrimeiro).HasColumnType("decimal(5,2)");
+            e.Property(x => x.PatrimonioInvestido).HasColumnType("decimal(14,2)");
+            e.Property(x => x.SaldoInicialFluxo).HasColumnType("decimal(14,2)");
+            e.HasIndex(x => x.UserId).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<Divida>(e =>
+        {
+            e.ToTable("financas_dividas");
+            e.Property(x => x.Nome).HasMaxLength(120);
+            e.Property(x => x.Saldo).HasColumnType("decimal(14,2)");
+            e.Property(x => x.JurosMensal).HasColumnType("decimal(6,3)");
+            e.Property(x => x.ParcelaMinima).HasColumnType("decimal(14,2)");
+            e.HasIndex(x => x.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ProvisaoAnual>(e =>
+        {
+            e.ToTable("financas_provisoes");
+            e.Property(x => x.Nome).HasMaxLength(120);
+            e.Property(x => x.Valor).HasColumnType("decimal(14,2)");
+            e.Property(x => x.ValorReservado).HasColumnType("decimal(14,2)");
+            e.HasIndex(x => x.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<FechamentoMes>(e =>
+        {
+            e.ToTable("financas_fechamentos");
+            e.Property(x => x.MetaPoupanca).HasColumnType("decimal(14,2)");
+            e.Property(x => x.Reflexao).HasMaxLength(2000);
+            e.Property(x => x.Compromisso).HasMaxLength(2000);
+            e.HasIndex(x => new { x.UserId, x.Ano, x.Mes }).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 

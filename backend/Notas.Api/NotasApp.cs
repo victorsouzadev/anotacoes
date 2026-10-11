@@ -159,6 +159,7 @@ public static class NotasApp
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();
         builder.Services.AddScoped<MetaService>();
+        builder.Services.AddScoped<PlanejamentoService>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -264,6 +265,7 @@ public static class NotasApp
         app.MapFinancasEndpoints();
         app.MapAuvpEndpoints();
         app.MapFinancasAnaliseEndpoints();
+        app.MapPlanejamentoEndpoints();
         app.MapOrcamentoEndpoints();
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();

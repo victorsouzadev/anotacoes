@@ -1,0 +1,27 @@
+.planejamento { display: flex; flex-direction: column; gap: 14px; }
+
+/* Pílulas roláveis: no celular cabem numa linha só, sem quebrar a página. */
+.secoes {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.secoes button {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+}
+.secoes button:hover { color: var(--text); border-color: var(--accent); }
+.secoes button.ativa { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.secoes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

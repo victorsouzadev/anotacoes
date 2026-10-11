@@ -1,0 +1,75 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+<section class="card" data-tour="provisoes">
+  <h2>Gastos anuais
+    @if (dados(); as d) { @if (d.itens.length) { <span class="sub">guarde {{ d.totalMensal | currency }} por mês · {{ d.totalAnual | currency }} no ano</span> } }
+  </h2>
+
+  @if (dados(); as d) {
+    @if (d.itens.length === 0 && !formAberto()) {
+      <p class="vazio">Cadastre os gastos que vêm uma vez por ano. O app divide por 12 e mostra se você está
+        guardando no ritmo certo.</p>
+      <div class="sugestoes">
+        @for (s of sugestoes; track s) { <button type="button" class="secundario" (click)="novo(s)">+ {{ s }}</button> }
+      </div>
+    }
+
+    <ul class="lista">
+      @for (p of d.itens; track p.id) {
+        <li class="provisao">
+          <div class="topo">
+            <span class="nome">{{ p.nome }}
+              <span class="detalhe">· {{ p.valor | currency }} em {{ meses[p.mesVencimento - 1] }}
+                ({{ p.proximoVencimento | date: 'MM/yyyy' }})</span>
+            </span>
+            <span class="selo" [class]="classeSituacao(p.situacao)">{{ rotuloSituacao(p.situacao) }}</span>
+          </div>
+          <div class="barra"><span [style.width.%]="p.valor ? (p.valorReservado / p.valor) * 100 : 0"
+                                   [class.atencao]="p.situacao === 'atrasada'"></span></div>
+          <span class="detalhe">
+            Guardado {{ p.valorReservado | currency }} de {{ p.valor | currency }}
+            @if (p.situacao !== 'completa') {
+              · guarde {{ p.necessarioPorMes | currency }}/mês nos próximos {{ p.mesesRestantes }} {{ p.mesesRestantes === 1 ? 'mês' : 'meses' }}
+            }
+          </span>
+          <div class="acoes">
+            @if (p.situacao !== 'completa') {
+              <button type="button" class="secundario icone" (click)="ajustarReserva(p, p.valorReservado + p.necessarioPorMes)">
+                + Guardei {{ p.necessarioPorMes | currency }}</button>
+            }
+            <button type="button" class="secundario icone" (click)="ajustarReserva(p, 0)" title="Depois de pagar, recomeça o ciclo">Paguei</button>
+            <button type="button" class="secundario icone" (click)="editar(p)">Editar</button>
+            <button type="button" class="perigo icone" (click)="remover(p)">Remover</button>
+          </div>
+        </li>
+      }
+    </ul>
+
+    @if (formAberto()) {
+      <form class="form" (ngSubmit)="salvar()">
+        <div class="campo"><label for="p-nome">Nome</label>
+          <input id="p-nome" name="nome" [(ngModel)]="form.nome" required /></div>
+        <div class="campo"><label for="p-valor">Valor anual (R$)</label>
+          <input id="p-valor" name="valor" type="number" min="0.01" step="0.01" [(ngModel)]="form.valor" required /></div>
+        <div class="campo"><label for="p-mes">Vence em</label>
+          <select id="p-mes" name="mes" [(ngModel)]="form.mesVencimento">
+            @for (m of meses; track m; let i = $index) { <option [ngValue]="i + 1">{{ m }}</option> }
+          </select></div>
+        <div class="campo"><label for="p-res">Já guardado (R$)</label>
+          <input id="p-res" name="reservado" type="number" min="0" step="0.01" [(ngModel)]="form.valorReservado" /></div>
+        <button type="submit">{{ editandoId() ? 'Salvar' : 'Adicionar' }}</button>
+        <button type="button" class="secundario" (click)="formAberto.set(false)">Cancelar</button>
+      </form>
+    } @else if (d.itens.length) {
+      <div><button type="button" (click)="novo()">+ Adicionar gasto anual</button></div>
+    }
+  }
+
+  <details class="ajuda">
+    <summary>Como funciona</summary>
+    <p>Gastos grandes e previsíveis (IPVA, IPTU, seguro, matrícula) estouram o mês em que vencem. A provisão
+      divide o valor por 12 e você guarda um pouco todo mês — quando vence, o dinheiro já está lá.</p>
+    <p>"Em dia" significa que o guardado acompanha o calendário. Use "Guardei" a cada depósito e "Paguei" depois
+      de quitar, para recomeçar o ciclo do ano seguinte. O total mensal entra no orçamento base zero.</p>
+  </details>
+</section>

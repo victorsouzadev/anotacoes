@@ -14,6 +14,7 @@ import { LancamentoFormComponent } from './components/lancamento-form/lancamento
 import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
 import { OrcamentoAuvpComponent } from './components/orcamento-auvp/orcamento-auvp.component';
+import { PlanejamentoComponent } from './components/planejamento/planejamento.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
 import {
   CategoriaResumo,
@@ -39,7 +40,7 @@ import {
   mensagemDoAlerta,
 } from './alertas-orcamento';
 
-type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
+type Aba = 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
@@ -55,6 +56,7 @@ type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
     TransacoesListaComponent,
     OrcamentoComponent,
     OrcamentoAuvpComponent,
+    PlanejamentoComponent,
     MetasComponent,
     HistoricoComponent,
   ],

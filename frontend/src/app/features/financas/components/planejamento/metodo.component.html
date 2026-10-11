@@ -1,0 +1,52 @@
+@if (erro(); as e) { <p class="erro" role="alert">{{ e }}</p> }
+
+<section class="card" data-tour="metodo">
+  <h2>Divisão da renda
+    @if (dados(); as d) { <span class="sub">renda do mês {{ d.renda | currency }}</span> }
+  </h2>
+
+  <div class="form">
+    <div class="campo">
+      <label for="metodo">Método</label>
+      <select id="metodo" [ngModel]="dados()?.metodo" (ngModelChange)="trocar($event)">
+        @for (m of metodos; track m.valor) { <option [value]="m.valor">{{ m.nome }}</option> }
+      </select>
+    </div>
+  </div>
+
+  @if (dados(); as d) {
+    @if (d.renda === 0) {
+      <p class="alerta atencao">Sem receitas lançadas neste mês: as fatias ficam zeradas. Sincronize a AUVP ou
+        lance o salário para ver a divisão.</p>
+    }
+    <ul class="lista">
+      @for (f of d.fatias; track f.chave) {
+        <li class="fatia">
+          <div class="topo">
+            <span class="nome">{{ f.nome }} <span class="sub">{{ f.percentual | number: '1.0-0' }}%</span></span>
+            <span class="quanto" [class]="classe(f.chave, f.utilizado)">
+              {{ f.realizado | currency }} <span class="sub">de {{ f.planejado | currency }}</span>
+            </span>
+          </div>
+          <div class="barra"><span [style.width.%]="f.utilizado > 100 ? 100 : f.utilizado"
+                                   [class]="classe(f.chave, f.utilizado) || 'neutra'"></span></div>
+          <span class="detalhe">{{ f.descricao }}@if (f.categorias.length) { · {{ f.categorias.join(', ') }} }</span>
+        </li>
+      }
+    </ul>
+    @if (d.semFatia > 0) {
+      <p class="muted">{{ d.semFatia | currency }} em despesas não se encaixam em nenhuma fatia deste método.</p>
+    }
+  }
+
+  <details class="ajuda">
+    <summary>Como funciona</summary>
+    <p><strong>50/30/20</strong> (Elizabeth Warren): metade da renda para o essencial, 30% para o que é
+      desejo e 20% para poupar ou quitar dívidas.</p>
+    <p><strong>Método AUVP</strong>: seis fatias — Custos Fixos 50%, Conforto 20%, Metas 10%, Prazeres 10%,
+      Conhecimento 5% e Liberdade Financeira 5%. Lançamentos com orçamento marcado na AUVP vão direto para a fatia.</p>
+    <p><strong>6 Potes</strong> (T. Harv Eker): Necessidades 55%, Liberdade financeira 10%, Poupança de longo
+      prazo 10%, Educação 10%, Diversão 10% e Doações 5% (lançamentos com tag de doação).</p>
+    <p>Nas fatias de poupança, o objetivo é <em>chegar</em> ao valor; nas de gasto, <em>não passar</em> dele.</p>
+  </details>
+</section>
