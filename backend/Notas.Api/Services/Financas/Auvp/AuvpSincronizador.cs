@@ -1,16 +1,20 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Notas.Api.Data;
 
 namespace Notas.Api.Services.Financas.Auvp;
 
-public record ResultadoSincronizacaoAuvp(int Importadas, int JaExistentes, int ForaDosTotais, DateTime SincronizadoEm);
+public record ResultadoSincronizacaoAuvp(int Importadas, int JaExistentes, int Atualizadas, int ForaDosTotais,
+    DateTime SincronizadoEm);
 
 // Traz as transações da AUVP para os lançamentos do usuário.
 //
-// Uma transação já importada nunca é sobrescrita: o usuário pode ter corrigido a
-// categoria ou o valor aqui, e a próxima sincronização apagaria a correção.
-public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<AuvpOptions> opcoes)
+// Uma transação já importada não tem descrição, valor nem categoria sobrescritos:
+// o usuário pode ter corrigido aqui (e a correção já foi mandada para a AUVP). O
+// que só o banco sabe — mês da fatura, parcelas, tags, orçamento — é atualizado.
+public partial class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<AuvpOptions> opcoes)
 {
     public const string Origem = "auvp";
     private const int TamanhoPagina = 100;
@@ -24,13 +28,21 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
     {
         de ??= ultimaSincronizacao is { } u ? DateOnly.FromDateTime(u - Sobreposicao) : null;
 
-        var existentes = (await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && t.OrigemExterna == Origem && t.IdExterno != null)
-                .Select(t => t.IdExterno!)
+        var existentes = await db.Transacoes
+            .Where(t => t.UserId == userId && t.OrigemExterna == Origem && t.IdExterno != null)
+            .ToDictionaryAsync(t => t.IdExterno!, ct);
+
+        // Apagado aqui pelo usuário = não volta.
+        var excluidas = (await db.TransacoesExcluidas.AsNoTracking()
+                .Where(x => x.UserId == userId && x.Origem == Origem)
+                .Select(x => x.IdExterno)
                 .ToListAsync(ct))
             .ToHashSet();
 
-        int importadas = 0, jaExistentes = 0, foraDosTotais = 0;
+        var regras = await RegrasCategoria.CarregarAsync(db, userId, ct);
+        var vistos = new HashSet<string>();
+
+        int importadas = 0, jaExistentes = 0, atualizadas = 0, foraDosTotais = 0;
         var maxPaginas = Math.Max(1, opcoes.Value.MaxPaginas);
 
         for (var pagina = 1; pagina <= maxPaginas; pagina++)
@@ -39,16 +51,19 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
 
             foreach (var item in resposta.Transactions)
             {
-                var idExterno = item.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                if (!existentes.Add(idExterno))
+                var idExterno = item.Id.ToString(CultureInfo.InvariantCulture);
+                if (!vistos.Add(idExterno) || excluidas.Contains(idExterno)) continue;
+
+                var novo = Converter(item, userId, regras);
+                if (existentes.TryGetValue(idExterno, out var atual))
                 {
                     jaExistentes++;
+                    if (AtualizarDoBanco(atual, novo)) atualizadas++;
                     continue;
                 }
 
-                var transacao = Converter(item, userId);
-                if (transacao.ForaDosTotais) foraDosTotais++;
-                db.Transacoes.Add(transacao);
+                if (novo.ForaDosTotais) foraDosTotais++;
+                db.Transacoes.Add(novo);
                 importadas++;
             }
 
@@ -58,10 +73,37 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
 
         var agora = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
-        return new ResultadoSincronizacaoAuvp(importadas, jaExistentes, foraDosTotais, agora);
+        return new ResultadoSincronizacaoAuvp(importadas, jaExistentes, atualizadas, foraDosTotais, agora);
     }
 
-    public static Transacao Converter(AuvpTransacao item, string userId)
+    // Só o que é do banco. Fora dos totais só liga: desligar é decisão do usuário,
+    // e uma transferência que ele tirou da conta aqui não volta sozinha.
+    private static bool AtualizarDoBanco(Transacao atual, Transacao doBanco)
+    {
+        var mudou = false;
+        void Trocar<T>(T antes, T depois, Action<T> gravar)
+        {
+            if (EqualityComparer<T>.Default.Equals(antes, depois)) return;
+            gravar(depois);
+            mudou = true;
+        }
+
+        Trocar(atual.Competencia, doBanco.Competencia, v => atual.Competencia = v);
+        Trocar(atual.Parcela, doBanco.Parcela, v => atual.Parcela = v);
+        Trocar(atual.TotalParcelas, doBanco.TotalParcelas, v => atual.TotalParcelas = v);
+        Trocar(atual.Conta, doBanco.Conta, v => atual.Conta = v);
+        Trocar(atual.Tags, doBanco.Tags, v => atual.Tags = v);
+        Trocar(atual.OrcamentoAuvp, doBanco.OrcamentoAuvp, v => atual.OrcamentoAuvp = v);
+        if (doBanco.ForaDosTotais && !atual.ForaDosTotais)
+        {
+            atual.ForaDosTotais = true;
+            mudou = true;
+        }
+        return mudou;
+    }
+
+    public static Transacao Converter(AuvpTransacao item, string userId,
+        IReadOnlyDictionary<string, Categoria>? regras = null)
     {
         var tipo = item.Type?.Equals("CREDIT", StringComparison.OrdinalIgnoreCase) == true
             || (item.Type is null && item.Amount > 0)
@@ -75,9 +117,12 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
         // Ignoradas e transferências entre contas próprias entram (o usuário pediu
         // tudo), mas fora dos totais — é o mesmo critério do painel da AUVP, e
         // somadas inflariam o mês: em set/2026 eram R$ 19 mil a mais de cada lado.
+        // Transferência de mesma titularidade (id 23–26) também: é dinheiro indo
+        // para outra conta do usuário que a AUVP não conectou, não gasto.
         var avisos = new List<string>();
         if (item.Ignore) avisos.Add("marcada como ignorada na AUVP");
         if (item.IsInternalTransfer) avisos.Add("transferência entre contas próprias");
+        else if (item.CategoryId is >= 23 and <= 26) avisos.Add("transferência para conta de mesma titularidade");
 
         var observacoes = string.Join(" · ", new[]
         {
@@ -85,18 +130,41 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
             string.IsNullOrWhiteSpace(item.Observations) ? null : item.Observations.Trim(),
         }.Where(x => x is not null));
 
+        var tags = item.TransactionTags?
+            .Select(t => t.Tag?.Name?.Trim())
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => n!.Replace("|", "/"))
+            .Distinct()
+            .ToList() ?? [];
+
+        var (parcela, totalParcelas) = LerParcela(descricao);
+        var data = DateOnly.FromDateTime(item.Date.ToOffset(TimeSpan.FromHours(-3)).DateTime);
+
         return new Transacao
         {
             UserId = userId,
             Descricao = descricao,
             Valor = Math.Abs(item.Amount),
             Tipo = tipo,
-            // A tag é escolha do usuário; a categoria do open banking, um palpite
-            // do banco. Quando a tag diz algo, ela vence.
-            Categoria = AuvpCategorias.DaTag(item.TransactionTags?.Select(t => t.Tag?.Name))
+            // Ordem de confiança: regra que o próprio usuário ensinou aqui, tag que
+            // ele pôs na AUVP, e só então o palpite do banco.
+            Categoria = (regras is not null
+                         && regras.TryGetValue(RegrasCategoria.ChaveDeDescricao(descricao), out var daRegra)
+                    ? daRegra
+                    : (Categoria?)null)
+                ?? AuvpCategorias.DaTag(tags)
                 ?? AuvpCategorias.Mapear(item.CategoryId, tipo),
             // A AUVP grava a data em UTC à meia-noite de Brasília (03:00Z).
-            Data = DateOnly.FromDateTime(item.Date.ToOffset(TimeSpan.FromHours(-3)).DateTime),
+            Data = data,
+            // O mês de referência vem como dia 1 em UTC; sem ele, o mês da data.
+            Competencia = item.ReferenceMonth is { } r
+                ? new DateOnly(r.UtcDateTime.Year, r.UtcDateTime.Month, 1)
+                : Transacao.CompetenciaDe(data),
+            Parcela = parcela,
+            TotalParcelas = totalParcelas,
+            Conta = conta is null ? null : conta.Length > 120 ? conta[..120] : conta,
+            Tags = tags.Count == 0 ? null : Limitar(string.Join('|', tags), 500),
+            OrcamentoAuvp = item.Budget?.Key,
             FormaPagamento = item.UserAccount?.Subtype?.Equals("CREDIT_CARD", StringComparison.OrdinalIgnoreCase) == true
                 ? FormaPagamento.Cartao
                 : null,
@@ -106,9 +174,24 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
             ForaDosTotais = avisos.Count > 0,
             Observacoes = observacoes.Length == 0 ? null : observacoes,
             OrigemExterna = Origem,
-            IdExterno = item.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            IdExterno = item.Id.ToString(CultureInfo.InvariantCulture),
         };
     }
+
+    /// <summary>"GOLDMEN HOTEL VILA DO 8/10" → (8, 10). Data no fim ("10/09/2026") não conta.</summary>
+    public static (int? Parcela, int? Total) LerParcela(string descricao)
+    {
+        var m = ParcelaNoFim().Match(descricao);
+        if (!m.Success) return (null, null);
+        var p = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+        var t = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+        return p >= 1 && t >= 2 && p <= t ? (p, t) : (null, null);
+    }
+
+    private static string Limitar(string s, int max) => s.Length > max ? s[..max] : s;
+
+    [GeneratedRegex(@"(?<![\d/])(\d{1,2})/(\d{1,2})\s*$")]
+    private static partial Regex ParcelaNoFim();
 }
 
 // O catálogo de categorias da AUVP é o do open banking (Pluggy): global, fixo, com
@@ -133,6 +216,9 @@ public static class AuvpCategorias
         ["salario"] = Categoria.Salario, ["investimentos"] = Categoria.Investimentos,
     };
 
+    public static Categoria? DaTag(string? tag) =>
+        string.IsNullOrWhiteSpace(tag) ? null : PorTag.TryGetValue(Normalizar(tag), out var c) ? c : null;
+
     public static Categoria? DaTag(IEnumerable<string?>? tags)
     {
         if (tags is null) return null;
@@ -144,7 +230,7 @@ public static class AuvpCategorias
         return null;
     }
 
-    private static string Normalizar(string texto)
+    public static string Normalizar(string texto)
     {
         var decomposto = texto.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
         return new string(decomposto

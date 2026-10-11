@@ -10,14 +10,20 @@ public record CriarTransacaoRequest(string Texto);
 public record TransacaoResponse(
     Guid Id, string Descricao, decimal Valor, string Tipo, string Categoria, string CategoriaRotulo,
     DateOnly Data, string? FormaPagamento, string TextoOriginal, float ConfiancaIa,
-    string Status, string? Observacoes, DateTime CriadoEm, bool ForaDosTotais, string? Origem)
+    string Status, string? Observacoes, DateTime CriadoEm, bool ForaDosTotais, string? Origem,
+    DateOnly Competencia, int? Parcela, int? TotalParcelas, string? Conta, IReadOnlyList<string> Tags,
+    string? OrcamentoAuvp,
+    // Só no PATCH: por que a AUVP não recebeu a mudança, e quantos lançamentos
+    // parecidos ainda estão em outra categoria (para oferecer "aplicar a todos").
+    string? AvisoAuvp = null, int? Semelhantes = null)
 {
     public static TransacaoResponse FromEntity(Transacao t) => new(
         t.Id, t.Descricao, t.Valor, t.Tipo.ToString().ToLowerInvariant(), t.Categoria.ToString(),
         CategoriaInfo.Rotulo(t.Categoria),
         t.Data, t.FormaPagamento?.ToString(), t.TextoOriginal, t.ConfiancaIa,
         t.Status == StatusTransacao.PendenteRevisao ? "pendente_revisao" : "confirmado",
-        t.Observacoes, t.CriadoEm, t.ForaDosTotais, t.OrigemExterna);
+        t.Observacoes, t.CriadoEm, t.ForaDosTotais, t.OrigemExterna,
+        t.Competencia, t.Parcela, t.TotalParcelas, t.Conta, t.ListaDeTags(), t.OrcamentoAuvp);
 }
 
 // Corpo de entrada do PATCH /api/financas/transacoes/{id}: qualquer campo pode ser corrigido pelo usuário.
@@ -26,7 +32,18 @@ public record TransacaoResponse(
 public record AtualizarTransacaoRequest(
     string? Descricao, decimal? Valor, TipoTransacao? Tipo, Categoria? Categoria,
     DateOnly? Data, FormaPagamento? FormaPagamento, string? Observacoes, StatusTransacao? Status,
-    bool? LimparFormaPagamento, bool? ForaDosTotais = null);
+    bool? LimparFormaPagamento, bool? ForaDosTotais = null,
+    // Tags: lista completa desejada (null = não mexer). Orçamento AUVP: chave
+    // (CUSTOS_FIXOS…); LimparOrcamento tira o que houver.
+    List<string>? Tags = null, string? OrcamentoAuvp = null, bool? LimparOrcamento = null);
+
+// PATCH /api/financas/transacoes/lote — mesma mudança em vários lançamentos.
+public record AtualizarLoteRequest(
+    List<Guid> Ids, Categoria? Categoria = null, bool? ForaDosTotais = null,
+    List<string>? AdicionarTags = null, List<string>? RemoverTags = null,
+    string? OrcamentoAuvp = null, bool? LimparOrcamento = null);
+
+public record AtualizarLoteResponse(int Atualizados, int FalhasAuvp, string? PrimeiraFalhaAuvp);
 
 // Resposta do POST /api/financas/transacoes/importar: os lançamentos criados a
 // partir de um ou mais arquivos, e o que não pôde ser aproveitado.

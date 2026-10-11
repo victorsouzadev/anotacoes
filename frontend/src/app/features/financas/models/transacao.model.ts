@@ -36,6 +36,19 @@ export interface Transacao {
   foraDosTotais: boolean;
   /** De onde veio, quando não foi digitado aqui (ex.: 'auvp'). */
   origem: string | null;
+  /** Mês em que conta (AAAA-MM-01): o da fatura, numa compra no cartão. */
+  competencia: string;
+  parcela: number | null;
+  totalParcelas: number | null;
+  /** Conta ou cartão de origem, quando veio do banco. */
+  conta: string | null;
+  tags: string[];
+  /** Chave do orçamento da AUVP (CUSTOS_FIXOS, CONFORTO…). */
+  orcamentoAuvp: string | null;
+  /** Só na resposta de uma edição: por que a AUVP não recebeu a mudança. */
+  avisoAuvp?: string | null;
+  /** Só na resposta de uma troca de categoria: quantos parecidos estão em outra. */
+  semelhantes?: number | null;
 }
 
 export interface CriarTransacaoRequest {
@@ -54,6 +67,26 @@ export interface AtualizarTransacaoRequest {
   /** `null` significa "não alterar", então limpar a forma de pagamento precisa de flag. */
   limparFormaPagamento?: boolean;
   foraDosTotais?: boolean;
+  /** Lista completa de tags desejada. */
+  tags?: string[];
+  orcamentoAuvp?: string;
+  limparOrcamento?: boolean;
+}
+
+export interface AtualizarLoteRequest {
+  ids: string[];
+  categoria?: Categoria;
+  foraDosTotais?: boolean;
+  adicionarTags?: string[];
+  removerTags?: string[];
+  orcamentoAuvp?: string;
+  limparOrcamento?: boolean;
+}
+
+export interface AtualizarLoteResponse {
+  atualizados: number;
+  falhasAuvp: number;
+  primeiraFalhaAuvp: string | null;
 }
 
 export interface ListarTransacoesFiltro {
@@ -64,6 +97,10 @@ export interface ListarTransacoesFiltro {
   status?: 'Confirmado' | 'PendenteRevisao';
   ano?: number;
   mes?: number;
+  /** Busca na descrição e nas observações. */
+  q?: string;
+  tag?: string;
+  conta?: string;
 }
 
 export const CATEGORIAS: { valor: Categoria; rotulo: string }[] = [

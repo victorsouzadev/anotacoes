@@ -75,6 +75,8 @@ public static class NotasApp
                 Math.Clamp(builder.Configuration.GetValue("Auvp:TimeoutSegundos", 30), 5, 120)));
         builder.Services.AddScoped<IAuvpCliente, AuvpCliente>();
         builder.Services.AddScoped<AuvpSincronizador>();
+        builder.Services.AddScoped<AuvpEscrita>();
+        builder.Services.AddHostedService<AuvpSincronizacaoAutomatica>();
 
         // Provedor de LLM: OpenRouter (o único que lê imagem/PDF), Anthropic direto, ou o
         // extrator heurístico local. O usuário pode cadastrar a própria chave e o próprio
@@ -253,6 +255,7 @@ public static class NotasApp
         app.MapFoldersEndpoints();
         app.MapFinancasEndpoints();
         app.MapAuvpEndpoints();
+        app.MapFinancasAnaliseEndpoints();
         app.MapOrcamentoEndpoints();
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();

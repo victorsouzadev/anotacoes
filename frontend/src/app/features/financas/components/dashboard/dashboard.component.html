@@ -37,7 +37,7 @@
 
       @if (ritmo(); as rt) {
         <div class="card resumo-card">
-          <span class="label">Gasto por dia</span>
+          <span class="label" title="Sem contar parcelas, que já têm valor certo no mês">Gasto por dia</span>
           <span class="valor texto">{{ rt.porDia | currency }}</span>
           @if (rt.projecao !== null) {
             <span class="comparativo" [class.negativo]="rt.projecao > r.totalReceitas"
@@ -79,6 +79,39 @@
     </div>
   </div>
 
+  @if (cartoes().length > 0 || contasCorrentes().length > 0) {
+    <div class="card grafico-card">
+      <h2>Contas e cartões <span class="sub">ao vivo da AUVP</span></h2>
+      <div class="contas">
+        @if (contasCorrentes().length > 0) {
+          <div class="conta-bloco">
+            <span class="label">Em conta</span>
+            <span class="valor texto" [class.negativo]="saldoEmConta() < 0">{{ saldoEmConta() | currency }}</span>
+            <ul class="mini">
+              @for (c of contasCorrentes(); track c.id) {
+                @if (c.saldo !== 0) {
+                  <li><span class="nome" [title]="c.nome">{{ c.nome }}</span><span>{{ c.saldo | currency }}</span></li>
+                }
+              }
+            </ul>
+          </div>
+        }
+        @for (c of cartoes(); track c.id) {
+          <div class="conta-bloco">
+            <span class="label" [title]="c.nome">{{ c.nome }}@if (c.numero) { · {{ c.numero }} }</span>
+            <span class="valor texto">{{ (c.faturaAberta ?? 0) | currency }}</span>
+            <span class="detalhe">fatura aberta@if (c.mesDaFatura) { de {{ c.mesDaFatura | date: 'MMM' }} }</span>
+            @if (c.limiteTotal) {
+              <div class="barra" [title]="'Limite usado: ' + (c.usado | currency)"><span [style.width.%]="c.percentualUsado"
+                   [class.alto]="c.percentualUsado > 80"></span></div>
+              <span class="detalhe">{{ (c.limiteDisponivel ?? 0) | currency }} livres de {{ c.limiteTotal | currency }}</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
   @if (maioresDespesas().length > 0) {
     <div class="graficos">
       <div class="card grafico-card">
@@ -100,7 +133,7 @@
           @for (c of gastosPorConta(); track c.conta) {
             <li>
               <div class="barra-topo">
-                <span class="nome" [title]="c.conta">{{ c.conta }}</span>
+                <button type="button" class="nome link" [title]="'Ver só ' + c.conta" (click)="filtrar.emit({ conta: c.conta })">{{ c.conta }}</button>
                 <span class="quanto">{{ c.total | currency }}</span>
               </div>
               <div class="barra" role="presentation"><span [style.width.%]="c.percentual"></span></div>
@@ -109,6 +142,69 @@
           }
         </ul>
       </div>
+    </div>
+  }
+
+  @if (gastosPorTag().length > 1 || recorrentes().length > 0) {
+    <div class="graficos">
+      @if (gastosPorTag().length > 1) {
+        <div class="card grafico-card">
+          <h2>Gastos por tag</h2>
+          <ul class="barras">
+            @for (t of gastosPorTag(); track t.tag) {
+              <li>
+                <div class="barra-topo">
+                  <button type="button" class="nome link" [title]="'Ver só ' + t.tag" (click)="filtrar.emit({ tag: t.tag })">{{ t.tag }}</button>
+                  <span class="quanto">{{ t.total | currency }}</span>
+                </div>
+                <div class="barra" role="presentation"><span [style.width.%]="t.percentual"></span></div>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (recorrentes().length > 0) {
+        <div class="card grafico-card">
+          <h2>Recorrentes <span class="sub">≈ {{ totalRecorrente() | currency }}/mês</span></h2>
+          <ul class="lista-simples">
+            @for (r of recorrentes().slice(0, 8); track r.descricao) {
+              <li>
+                <span class="nome" [title]="r.descricao">{{ r.descricao }}</span>
+                <span class="quanto">{{ r.valorMedio | currency }}</span>
+                <span class="detalhe">{{ r.categoriaRotulo }} · em {{ r.meses }} dos últimos 6 meses</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  }
+
+  @if (mesesComprometidos().length > 0) {
+    <div class="card grafico-card">
+      <h2>Já comprometido nos próximos meses <span class="sub">parcelas que o banco já lançou</span></h2>
+      <div class="colunas" role="list">
+        @for (m of mesesComprometidos(); track m.mes + '-' + m.ano) {
+          <div class="coluna" role="listitem" [title]="m.quantidade + ' lançamentos'">
+            <span class="quanto">{{ m.total | currency: 'BRL' : 'symbol' : '1.0-0' }}</span>
+            <div class="coluna-barra"><span [style.height.%]="m.altura"></span></div>
+            <span class="detalhe">{{ m.rotulo }}</span>
+          </div>
+        }
+      </div>
+      @if ((compromissos()?.parcelados ?? []).length > 0) {
+        <ul class="lista-simples">
+          @for (p of compromissos()!.parcelados.slice(0, 6); track p.descricao + p.valorParcela) {
+            <li>
+              <span class="nome" [title]="p.descricao">{{ p.descricao }}</span>
+              <span class="quanto">{{ p.restante | currency }}</span>
+              <span class="detalhe">{{ p.valorParcela | currency }} × faltam {{ p.totalParcelas - p.parcelaAtual }} de {{ p.totalParcelas }}
+                @if (p.conta) { · {{ p.conta }} }</span>
+            </li>
+          }
+        </ul>
+      }
     </div>
   }
 </div>

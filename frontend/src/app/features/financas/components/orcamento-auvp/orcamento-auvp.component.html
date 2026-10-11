@@ -1,0 +1,34 @@
+<section class="card">
+  <h2>Método AUVP <span class="sub">como está na AUVP, pelo mês da fatura</span></h2>
+
+  @if (erro(); as e) {
+    <p class="erro">{{ e }}</p>
+  } @else if (dados(); as d) {
+    <p class="resumo">
+      {{ d.totalGasto | currency }} de {{ d.totalPlanejado | currency }} distribuídos
+      @if (d.semOrcamento > 0) {
+        · <span class="alerta">{{ d.semOrcamento | currency }} sem orçamento</span> — dá para atribuir na lista de lançamentos
+      }
+    </p>
+    <ul>
+      @for (i of d.itens; track i.nome) {
+        <li [class]="situacao(i.utilizado)">
+          <div class="topo">
+            <strong>{{ i.nome }}</strong>
+            <span class="meta">{{ i.meta | number: '1.0-0' }}%</span>
+            <span class="valores">{{ i.gasto | currency }} <span class="de">de {{ i.planejado | currency }}</span></span>
+          </div>
+          <div class="barra"><span [style.width.%]="i.utilizado > 100 ? 100 : i.utilizado"></span></div>
+          <span class="detalhe">
+            {{ i.utilizado | number: '1.0-0' }}% usado ·
+            <!-- A AUVP devolve o restante cortado em zero; o quanto passou sai da conta. -->
+            @if (i.gasto <= i.planejado) { restam {{ i.planejado - i.gasto | currency }} }
+            @else { passou {{ i.gasto - i.planejado | currency }} }
+          </span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <p class="detalhe">Carregando…</p>
+  }
+</section>

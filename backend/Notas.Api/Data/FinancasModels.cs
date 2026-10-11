@@ -65,6 +65,56 @@ public class Transacao
     /// entre contas do próprio usuário, ou algo que ele marcou como "não é gasto".
     /// </summary>
     public bool ForaDosTotais { get; set; }
+
+    /// <summary>
+    /// Mês em que o lançamento conta (sempre dia 1). Para quase tudo é o mês da
+    /// data; numa compra no cartão é o mês da fatura, que o banco informa — é por
+    /// ele que o painel da AUVP soma, e é por ele que os totais daqui somam.
+    /// Preenchido sozinho a partir da data quando não informado (ver AppDbContext).
+    /// </summary>
+    public DateOnly Competencia { get; set; }
+
+    /// <summary>Compra parcelada: "3/10" vira Parcela 3, TotalParcelas 10.</summary>
+    public int? Parcela { get; set; }
+    public int? TotalParcelas { get; set; }
+
+    /// <summary>Conta ou cartão de origem, quando importado do banco.</summary>
+    public string? Conta { get; set; }
+
+    /// <summary>Tags do usuário (na AUVP), separadas por "|".</summary>
+    public string? Tags { get; set; }
+
+    /// <summary>Chave do orçamento da AUVP (CUSTOS_FIXOS, CONFORTO…), quando houver.</summary>
+    public string? OrcamentoAuvp { get; set; }
+
+    public IReadOnlyList<string> ListaDeTags() =>
+        string.IsNullOrEmpty(Tags) ? [] : Tags.Split('|', StringSplitOptions.RemoveEmptyEntries);
+
+    public static DateOnly CompetenciaDe(DateOnly data) => new(data.Year, data.Month, 1);
+}
+
+// Lançamento importado que o usuário excluiu: a próxima sincronização não o traz
+// de volta. Só a identificação na origem fica guardada.
+public class TransacaoExcluida
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string UserId { get; set; } = "";
+    public string Origem { get; set; } = "";
+    public string IdExterno { get; set; } = "";
+    public DateTime ExcluidaEm { get; set; } = DateTime.UtcNow;
+}
+
+// "Tudo que tiver essa cara é dessa categoria": aprendida quando o usuário corrige
+// a categoria de um lançamento, aplicada aos que entram depois.
+public class RegraCategoria
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string UserId { get; set; } = "";
+
+    /// <summary>Descrição normalizada (ver ChaveDeDescricao).</summary>
+    public string Chave { get; set; } = "";
+    public Categoria Categoria { get; set; }
+    public DateTime AtualizadaEm { get; set; } = DateTime.UtcNow;
 }
 
 // Conexão com a API da AUVP Financeiro (open banking): a chave do usuário, cifrada

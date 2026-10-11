@@ -2,6 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AtualizarLoteRequest,
+  AtualizarLoteResponse,
   AtualizarTransacaoRequest,
   CriarTransacaoRequest,
   ListarTransacoesFiltro,
@@ -46,6 +48,15 @@ export class TransacaoService {
 
   atualizar(id: string, request: AtualizarTransacaoRequest): Observable<Transacao> {
     return this.http.patch<Transacao>(`${this.baseUrl}/${id}`, request);
+  }
+
+  atualizarLote(request: AtualizarLoteRequest): Observable<AtualizarLoteResponse> {
+    return this.http.patch<AtualizarLoteResponse>(`${this.baseUrl}/lote`, request);
+  }
+
+  /** Leva a categoria deste lançamento aos parecidos (mesma loja). */
+  aplicarCategoriaAosParecidos(id: string): Observable<AtualizarLoteResponse> {
+    return this.http.post<AtualizarLoteResponse>(`${this.baseUrl}/${id}/aplicar-categoria`, {});
   }
 
   remover(id: string): Observable<void> {

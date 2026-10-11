@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { forkJoin } from 'rxjs';
+import { Subject, catchError, debounceTime, forkJoin, of } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
@@ -12,8 +13,17 @@ import { AuvpSyncComponent } from './components/auvp/auvp-sync.component';
 import { LancamentoFormComponent } from './components/lancamento-form/lancamento-form.component';
 import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
+import { OrcamentoAuvpComponent } from './components/orcamento-auvp/orcamento-auvp.component';
 import { TransacoesListaComponent } from './components/transacoes-lista/transacoes-lista.component';
-import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from './models/dashboard.model';
+import {
+  CategoriaResumo,
+  Compromissos,
+  Recorrente,
+  ResumoResponse,
+  TagResumo,
+  TendenciaPeriodo,
+} from './models/dashboard.model';
+import { AuvpConta, AuvpOrcamento, AuvpService } from './services/auvp.service';
 import { CATEGORIAS, Categoria, TipoTransacao, Transacao } from './models/transacao.model';
 import { DashboardService } from './services/dashboard.service';
 import { OrcamentoService } from './services/orcamento.service';
@@ -44,6 +54,7 @@ type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
     DashboardComponent,
     TransacoesListaComponent,
     OrcamentoComponent,
+    OrcamentoAuvpComponent,
     MetasComponent,
     HistoricoComponent,
   ],
@@ -55,6 +66,7 @@ export class FinancasPageComponent {
   private readonly transacaoService = inject(TransacaoService);
   private readonly dashboardService = inject(DashboardService);
   private readonly orcamentoService = inject(OrcamentoService);
+  private readonly auvpService = inject(AuvpService);
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
 
@@ -85,6 +97,29 @@ export class FinancasPageComponent {
   readonly filtroCategoria = signal<Categoria | ''>('');
   readonly filtroTipo = signal<TipoTransacao | ''>('');
   readonly filtroStatus = signal<'' | 'PendenteRevisao'>('');
+  readonly filtroBusca = signal('');
+  readonly filtroTag = signal('');
+  readonly filtroConta = signal('');
+  private readonly busca$ = new Subject<void>();
+
+  /** O mês inteiro, sem os filtros da lista — base do dashboard. */
+  readonly transacoesDoMes = signal<Transacao[]>([]);
+  readonly recorrentes = signal<Recorrente[]>([]);
+  readonly compromissos = signal<Compromissos | null>(null);
+  readonly gastosPorTag = signal<TagResumo[]>([]);
+
+  // Da AUVP, quando há chave: o que existe lá para escolher na edição.
+  readonly tagsAuvp = signal<string[]>([]);
+  readonly orcamentosAuvp = signal<AuvpOrcamento[]>([]);
+  readonly contasAuvp = signal<AuvpConta[]>([]);
+
+  /** Tags e contas que aparecem no mês, para os filtros. */
+  readonly tagsDoMes = computed(() =>
+    [...new Set(this.transacoesDoMes().flatMap((t) => t.tags))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+  );
+  readonly contasDoMes = computed(() =>
+    [...new Set(this.transacoesDoMes().map((t) => (t.origem === 'auvp' ? t.conta ?? 'Banco' : 'Manual')))].sort(),
+  );
 
   readonly nomeDoMes = computed(() =>
     new Date(this.ano(), this.mes() - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
@@ -94,10 +129,53 @@ export class FinancasPageComponent {
     this.ano() === this.hoje.getFullYear() && this.mes() === this.hoje.getMonth() + 1,
   );
 
-  readonly temFiltro = computed(() => !!(this.filtroCategoria() || this.filtroTipo() || this.filtroStatus()));
+  readonly temFiltro = computed(
+    () =>
+      !!(
+        this.filtroCategoria() ||
+        this.filtroTipo() ||
+        this.filtroStatus() ||
+        this.filtroBusca().trim() ||
+        this.filtroTag() ||
+        this.filtroConta()
+      ),
+  );
 
   constructor() {
     this.carregarTudo();
+    this.carregarAuvp();
+    // Busca enquanto digita, sem uma requisição por tecla.
+    this.busca$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => this.carregarTransacoes());
+  }
+
+  buscar(texto: string): void {
+    this.filtroBusca.set(texto);
+    this.busca$.next();
+  }
+
+  /** Clicar numa tag ou conta do dashboard filtra a lista por ela. */
+  filtrarPor(filtro: { tag?: string; conta?: string }): void {
+    if (filtro.tag !== undefined) this.filtroTag.set(filtro.tag);
+    if (filtro.conta !== undefined) this.filtroConta.set(filtro.conta);
+    this.carregarTransacoes();
+  }
+
+  private carregarAuvp(): void {
+    // Sem chave ou sem integração, cada chamada falha e a tela segue sem esses extras.
+    this.auvpService.obter().subscribe({
+      next: (c) => {
+        if (!c.habilitado || !c.chaveConfigurada) return;
+        this.auvpService.tags().pipe(catchError(() => of([]))).subscribe((t) => this.tagsAuvp.set(t.map((x) => x.nome)));
+        this.auvpService.orcamentos().pipe(catchError(() => of([]))).subscribe((o) => this.orcamentosAuvp.set(o));
+        this.auvpService.contas().pipe(catchError(() => of([]))).subscribe((c2) => this.contasAuvp.set(c2));
+      },
+      error: () => {},
+    });
+  }
+
+  aoSincronizar(): void {
+    this.recarregar();
+    this.carregarAuvp();
   }
 
   // ------------------------------------------------------------ navegação
@@ -189,6 +267,9 @@ export class FinancasPageComponent {
     this.filtroCategoria.set('');
     this.filtroTipo.set('');
     this.filtroStatus.set('');
+    this.filtroBusca.set('');
+    this.filtroTag.set('');
+    this.filtroConta.set('');
     this.carregarTransacoes();
   }
 
@@ -211,6 +292,9 @@ export class FinancasPageComponent {
       categoria: this.filtroCategoria() || undefined,
       tipo: this.filtroTipo() || undefined,
       status: this.filtroStatus() || undefined,
+      q: this.filtroBusca().trim() || undefined,
+      tag: this.filtroTag() || undefined,
+      conta: this.filtroConta() || undefined,
     };
   }
 
@@ -218,14 +302,24 @@ export class FinancasPageComponent {
     this.carregando.set(true);
     this.erro.set(null);
 
+    const doMes = this.transacaoService.listar({ ano: this.ano(), mes: this.mes() });
     forkJoin({
-      transacoes: this.transacaoService.listar(this.filtroAtual()),
+      doMes,
+      transacoes: this.temFiltro() ? this.transacaoService.listar(this.filtroAtual()) : of(null),
       resumo: this.dashboardService.resumo(this.ano(), this.mes()),
       categorias: this.dashboardService.categorias(this.ano(), this.mes()),
       tendencias: this.dashboardService.tendencias(),
+      // Extras: se falharem, o dashboard só não mostra o cartão deles.
+      recorrentes: this.dashboardService.recorrentes().pipe(catchError(() => of([]))),
+      compromissos: this.dashboardService.compromissos().pipe(catchError(() => of(null))),
+      tags: this.dashboardService.tags(this.ano(), this.mes()).pipe(catchError(() => of([]))),
     }).subscribe({
-      next: ({ transacoes, resumo, categorias, tendencias }) => {
-        this.transacoes.set(transacoes);
+      next: ({ doMes, transacoes, resumo, categorias, tendencias, recorrentes, compromissos, tags }) => {
+        this.transacoesDoMes.set(doMes);
+        this.transacoes.set(transacoes ?? doMes);
+        this.recorrentes.set(recorrentes);
+        this.compromissos.set(compromissos);
+        this.gastosPorTag.set(tags);
         this.resumo.set(resumo);
         this.resumoCategorias.set(categorias);
         this.tendencias.set(tendencias);

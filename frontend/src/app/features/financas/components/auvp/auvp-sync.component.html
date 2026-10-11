@@ -31,7 +31,7 @@
 
       @if (resultado(); as r) {
         <p class="resultado" role="status">
-          {{ r.importadas }} {{ r.importadas === 1 ? 'lançamento importado' : 'lançamentos importados' }}@if (r.jaExistentes > 0) {, {{ r.jaExistentes }} já existiam}.
+          {{ r.importadas }} {{ r.importadas === 1 ? 'lançamento novo' : 'lançamentos novos' }}@if (r.atualizadas > 0) {, {{ r.atualizadas }} {{ r.atualizadas === 1 ? 'atualizado' : 'atualizados' }}}.
           @if (r.foraDosTotais > 0) {
             {{ r.foraDosTotais }} {{ r.foraDosTotais === 1 ? 'ficou' : 'ficaram' }} fora dos totais (ignoradas na AUVP ou transferências entre suas contas).
           }

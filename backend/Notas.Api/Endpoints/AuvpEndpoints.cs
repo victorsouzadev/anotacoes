@@ -13,7 +13,22 @@ public record SalvarAuvpRequest(string? Chave);
 
 public record SincronizarAuvpRequest(DateOnly? De, DateOnly? Ate);
 
-public record SincronizarAuvpResponse(int Importadas, int JaExistentes, int ForaDosTotais, DateTime SincronizadoEm);
+public record SincronizarAuvpResponse(int Importadas, int JaExistentes, int Atualizadas, int ForaDosTotais,
+    DateTime SincronizadoEm);
+
+public record AuvpTagResponse(long Id, string Nome, string? Cor);
+
+public record AuvpOrcamentoResponse(string Chave, string Nome);
+
+public record AuvpOrcamentoMesItem(string Nome, decimal Meta, decimal Planejado, decimal Gasto, decimal Restante,
+    decimal Utilizado);
+
+public record AuvpOrcamentoMesResponse(int Ano, int Mes, decimal TotalPlanejado, decimal TotalGasto,
+    decimal SemOrcamento, List<AuvpOrcamentoMesItem> Itens);
+
+public record AuvpContaResponse(long Id, string Nome, string Tipo, decimal Saldo, string? Numero,
+    DateTimeOffset? AtualizadaEm, decimal? LimiteTotal, decimal? LimiteDisponivel, decimal? FaturaAberta,
+    DateOnly? MesDaFatura);
 
 // Importação de transações da AUVP Financeiro (open banking). A chave é do
 // usuário, guardada cifrada; a URL da API é do servidor (Auvp__BaseUrl).
@@ -108,8 +123,83 @@ public static class AuvpEndpoints
             }
 
             return Results.Ok(new SincronizarAuvpResponse(resultado.Importadas, resultado.JaExistentes,
-                resultado.ForaDosTotais, resultado.SincronizadoEm));
+                resultado.Atualizadas, resultado.ForaDosTotais, resultado.SincronizadoEm));
         }).RequireRateLimiting("financas-importacao");
+
+        // Leituras ao vivo da AUVP — o que não faz sentido copiar para cá porque
+        // muda a toda hora (saldo, limite, fatura aberta) ou é configuração de lá.
+
+        grupo.MapGet("/tags", (ClaimsPrincipal user, AuvpEscrita escrita, IAuvpCliente cliente, CancellationToken ct) =>
+            ComChave(user, escrita, async chave => (await cliente.ListarTagsAsync(chave, ct))
+                .Where(t => t.Status is null or "ACTIVE" && !string.IsNullOrWhiteSpace(t.Name))
+                .OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(t => new AuvpTagResponse(t.Id, t.Name!, t.Color))
+                .ToList(), ct));
+
+        grupo.MapGet("/orcamentos", (ClaimsPrincipal user, AuvpEscrita escrita, IAuvpCliente cliente, CancellationToken ct) =>
+            ComChave(user, escrita, async chave => (await cliente.ListarOrcamentosAsync(chave, ct))
+                .Where(o => o.Key is not null)
+                .Select(o => new AuvpOrcamentoResponse(o.Key!, o.Name ?? o.Key!))
+                .ToList(), ct));
+
+        grupo.MapGet("/orcamento-mensal", (int ano, int mes, ClaimsPrincipal user, AuvpEscrita escrita,
+            IAuvpCliente cliente, CancellationToken ct) =>
+        {
+            if (mes is < 1 or > 12) return Task.FromResult(Results.BadRequest(new { erro = "Mês inválido." }));
+            return ComChave(user, escrita, async chave =>
+            {
+                var r = await cliente.OrcamentoMensalAsync(chave, new DateOnly(ano, mes, 1), ct);
+                return new AuvpOrcamentoMesResponse(ano, mes,
+                    Math.Round(r.Totals?.TotalToSpend ?? 0, 2), Math.Round(r.Totals?.TotalSpent ?? 0, 2),
+                    Math.Round(r.Totals?.Uncategorized ?? 0, 2),
+                    r.Resume.Select(i => new AuvpOrcamentoMesItem(i.Name ?? "", i.Goal,
+                        Math.Round(i.AmountToSpend, 2), Math.Round(i.AmountSpent, 2), Math.Round(i.Remaining, 2),
+                        Math.Round(i.Utilized, 2))).ToList());
+            }, ct);
+        });
+
+        grupo.MapGet("/contas", (ClaimsPrincipal user, AuvpEscrita escrita, IAuvpCliente cliente, CancellationToken ct) =>
+            ComChave(user, escrita, async chave =>
+            {
+                var contas = await cliente.ListarContasAsync(chave, ct);
+                var resposta = new List<AuvpContaResponse>();
+                foreach (var c in contas)
+                {
+                    var cartao = string.Equals(c.Subtype, "CREDIT_CARD", StringComparison.OrdinalIgnoreCase);
+                    AuvpFaturaEstimada? fatura = null;
+                    if (cartao && c.ExternalId is { Length: > 0 } ext)
+                        fatura = await cliente.FaturaEstimadaAsync(chave, ext, ct);
+                    resposta.Add(new AuvpContaResponse(c.Id, c.Name ?? "Conta", cartao ? "cartao" : "conta",
+                        c.Balance, c.Number, c.LastSyncedAt,
+                        Decimal(c.CreditAccountData?.TotalLimit), Decimal(c.CreditAccountData?.AvailableLimit),
+                        fatura is null ? null : Math.Round(fatura.ProjectedTotal, 2),
+                        fatura?.ReferenceMonth is { } m
+                            ? new DateOnly(m.ToOffset(TimeSpan.FromHours(-3)).Year, m.ToOffset(TimeSpan.FromHours(-3)).Month, 1)
+                            : null));
+                }
+                return resposta.OrderBy(c => c.Tipo).ThenByDescending(c => Math.Abs(c.Saldo)).ToList();
+            }, ct));
+    }
+
+    private static decimal? Decimal(string? s) =>
+        decimal.TryParse(s, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? v : null;
+
+    private static async Task<IResult> ComChave<T>(ClaimsPrincipal user, AuvpEscrita escrita,
+        Func<string, Task<T>> acao, CancellationToken ct)
+    {
+        var chave = await escrita.ChaveAsync(user.UserId(), ct);
+        if (chave is null)
+            return Results.BadRequest(new { erro = "Cadastre a chave de API da AUVP primeiro." });
+        try
+        {
+            return Results.Ok(await acao(chave));
+        }
+        catch (AuvpIndisponivelException ex)
+        {
+            return Results.Problem(title: "AUVP indisponível", detail: ex.Message,
+                statusCode: StatusCodes.Status502BadGateway);
+        }
     }
 
     private static AuvpConfiguracaoResponse Montar(ConfiguracaoAuvp? config, IAuvpCliente cliente) => new(

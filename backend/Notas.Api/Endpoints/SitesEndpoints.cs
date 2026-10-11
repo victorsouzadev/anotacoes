@@ -152,7 +152,16 @@ public static partial class SitesEndpoints
         });
 
         group.MapGet("/{id}", async (string id, ClaimsPrincipal user, AppDbContext db, IOptions<SitesOptions> opt) =>
-            await DoUsuario(id, user, db) is { } site ? Results.Ok(await Detalhe(site, db, opt.Value)) : Results.NotFound());
+        {
+            // Site e versões são lidos em consultas separadas; sem uma transação, a
+            // fila pode publicar entre as duas e a resposta sai com a versão "NoAr"
+            // e o site ainda sem versão atual. No SQLite (WAL) a transação de
+            // leitura vê um retrato só do banco.
+            await using var tx = await db.Database.BeginTransactionAsync();
+            return await DoUsuario(id, user, db) is { } site
+                ? Results.Ok(await Detalhe(site, db, opt.Value))
+                : Results.NotFound();
+        });
 
         // Corpo = o ZIP cru (Content-Type application/zip), sem multipart: o front manda o Blob direto.
         group.MapPost("/{id}/deployments", async (string id, HttpContext http, ClaimsPrincipal user, AppDbContext db,

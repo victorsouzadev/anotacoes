@@ -1,11 +1,63 @@
 <div class="card lista">
   <header class="cabecalho">
+    @if (total() > 0) {
+      <input type="checkbox" class="selecionar" [checked]="todosSelecionados()" (change)="alternarTodos()"
+             aria-label="Selecionar todos" title="Selecionar todos" />
+    }
     <h2>Lançamentos</h2>
     @if (total() > 0) { <span class="contagem">{{ total() }}</span> }
   </header>
 
+  @if (quantidadeSelecionada() > 0) {
+    <!-- Ações em lote: a mesma mudança em todos os selecionados (e na AUVP). -->
+    <div class="lote" role="toolbar" aria-label="Ações nos selecionados">
+      <strong>{{ quantidadeSelecionada() }} {{ quantidadeSelecionada() === 1 ? 'selecionado' : 'selecionados' }}</strong>
+
+      <select [(ngModel)]="loteCategoria" (ngModelChange)="aplicarCategoriaEmLote()" aria-label="Mudar categoria"
+              [disabled]="aplicandoLote()">
+        <option value="">Categoria…</option>
+        @for (c of categorias; track c.valor) { <option [value]="c.valor">{{ c.rotulo }}</option> }
+      </select>
+
+      @if (orcamentos().length > 0) {
+        <select [(ngModel)]="loteOrcamento" (ngModelChange)="aplicarOrcamentoEmLote()" aria-label="Mudar orçamento"
+                [disabled]="aplicandoLote()">
+          <option value="">Orçamento…</option>
+          @for (o of orcamentos(); track o.chave) { <option [value]="o.chave">{{ o.nome }}</option> }
+          <option value="-">Sem orçamento</option>
+        </select>
+      }
+
+      @if (tagsDisponiveis().length > 0) {
+        <select [(ngModel)]="loteTag" (ngModelChange)="adicionarTagEmLote()" aria-label="Adicionar tag"
+                [disabled]="aplicandoLote()">
+          <option value="">+ Tag…</option>
+          @for (tag of tagsDisponiveis(); track tag) { <option [value]="tag">{{ tag }}</option> }
+        </select>
+      }
+
+      <button type="button" (click)="aplicarLote({ foraDosTotais: true })" [disabled]="aplicandoLote()">Tirar dos totais</button>
+      <button type="button" (click)="aplicarLote({ foraDosTotais: false })" [disabled]="aplicandoLote()">Contar nos totais</button>
+      <button type="button" class="secundario" (click)="limparSelecao()">Cancelar</button>
+    </div>
+  }
+
   @if (erro(); as e) {
     <p class="erro" role="alert">{{ e }}</p>
+  }
+  @if (avisoAuvp(); as a) {
+    <p class="aviso" role="status">
+      Salvo aqui, mas não atualizou na AUVP: {{ a }}
+      <button type="button" class="fechar" (click)="avisoAuvp.set(null)" aria-label="Dispensar">×</button>
+    </p>
+  }
+  @if (sugestao(); as s) {
+    <p class="sugestao" role="status">
+      {{ s.quantidade }} {{ s.quantidade === 1 ? 'lançamento parecido está' : 'lançamentos parecidos estão' }}
+      em outra categoria. Os próximos dessa loja já entram em <strong>{{ s.categoriaRotulo }}</strong>.
+      <button type="button" (click)="aplicarAosParecidos()">Mudar {{ s.quantidade === 1 ? 'ele' : 'todos' }} também</button>
+      <button type="button" class="fechar" (click)="sugestao.set(null)" aria-label="Dispensar">×</button>
+    </p>
   }
 
   @if (total() === 0) {
@@ -67,6 +119,35 @@
               <input [id]="'obs-' + t.id" [(ngModel)]="rascunho.observacoes" name="observacoes" maxlength="500" />
             </div>
 
+            @if (orcamentos().length > 0 && rascunho.tipo === 'despesa') {
+              <div class="campo">
+                <label [attr.for]="'orc-' + t.id">Orçamento (AUVP)</label>
+                <select [id]="'orc-' + t.id" [(ngModel)]="rascunho.orcamentoAuvp" name="orcamentoAuvp">
+                  <option value="">—</option>
+                  @for (o of orcamentos(); track o.chave) { <option [value]="o.chave">{{ o.nome }}</option> }
+                </select>
+              </div>
+            }
+
+            @if (tagsDisponiveis().length > 0 || t.tags.length > 0) {
+              <div class="campo largo">
+                <span class="rotulo">Tags</span>
+                <div class="tags-escolha">
+                  @for (tag of (tagsDisponiveis().length > 0 ? tagsDisponiveis() : t.tags); track tag) {
+                    <button type="button" class="tag" [class.ativa]="rascunho.tags.includes(tag)"
+                            [attr.aria-pressed]="rascunho.tags.includes(tag)" (click)="alternarTagRascunho(tag)">
+                      {{ tag }}
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (t.origem === 'auvp') {
+              <p class="nota-auvp">Categoria, tags, orçamento, descrição, observações e "fora dos totais" também
+                são atualizados na AUVP. Valor, tipo e data são do banco e só mudam aqui.</p>
+            }
+
             <div class="acoes-edicao">
               <button type="button" class="secundario" (click)="cancelarEdicao()">Cancelar</button>
               <button type="submit" class="primario" [disabled]="salvandoId() === t.id">
@@ -85,13 +166,22 @@
             </div>
           </div>
         } @else {
+          <input type="checkbox" class="selecionar" [checked]="selecionados().has(t.id)"
+                 (change)="alternarSelecao(t.id)" [attr.aria-label]="'Selecionar ' + t.descricao" />
           <div class="info">
             <span class="descricao">{{ t.descricao }}</span>
             <span class="meta">
               {{ t.data | date: 'dd/MM/yyyy' }} · {{ t.categoriaRotulo }}
               @if (t.formaPagamento) { · {{ t.formaPagamento }} }
-              @if (t.origem === 'auvp') { · <span class="origem" [title]="t.textoOriginal">banco</span> }
+              @if (t.totalParcelas) { · {{ t.parcela }}/{{ t.totalParcelas }} }
+              @if (t.origem === 'auvp') { · <span class="origem" [title]="t.textoOriginal">{{ t.conta ?? 'banco' }}</span> }
             </span>
+            @if (t.tags.length > 0 || t.orcamentoAuvp) {
+              <span class="etiquetas">
+                @if (nomeOrcamento(t.orcamentoAuvp); as orc) { <span class="orcamento">{{ orc }}</span> }
+                @for (tag of t.tags; track tag) { <span class="tag">{{ tag }}</span> }
+              </span>
+            }
             @if (t.observacoes) { <span class="observacoes">{{ t.observacoes }}</span> }
           </div>
 

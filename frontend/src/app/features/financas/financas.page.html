@@ -91,7 +91,7 @@
                       (irParaMes)="abrirMesNoOrcamento($event); trocarAba('lancamentos')" />
       }
 
-      <app-auvp-sync (sincronizado)="recarregar()" />
+      <app-auvp-sync (sincronizado)="aoSincronizar()" />
 
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
@@ -100,9 +100,16 @@
           [resumo]="resumo()"
           [categorias]="resumoCategorias()"
           [tendencias]="tendencias()"
-          [transacoes]="transacoes()" />
+          [transacoes]="transacoesDoMes()"
+          [recorrentes]="recorrentes()"
+          [compromissos]="compromissos()"
+          [gastosPorTag]="gastosPorTag()"
+          [contas]="contasAuvp()"
+          (filtrar)="filtrarPor($event)" />
 
         <div class="filtros">
+          <input type="search" class="busca" placeholder="Buscar (ex.: mercado, uber)" aria-label="Buscar lançamentos"
+                 [ngModel]="filtroBusca()" (ngModelChange)="buscar($event)" />
           <select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event); aplicarFiltros()" aria-label="Filtrar por tipo">
             <option value="">Todos os tipos</option>
             <option value="despesa">Despesas</option>
@@ -121,6 +128,21 @@
             <option value="PendenteRevisao">Só os que precisam de revisão</option>
           </select>
 
+          @if (tagsDoMes().length > 0) {
+            <select [ngModel]="filtroTag()" (ngModelChange)="filtroTag.set($event); aplicarFiltros()" aria-label="Filtrar por tag">
+              <option value="">Todas as tags</option>
+              @for (t of tagsDoMes(); track t) { <option [value]="t">{{ t }}</option> }
+              <option value="Sem tag">Sem tag</option>
+            </select>
+          }
+
+          @if (contasDoMes().length > 1) {
+            <select [ngModel]="filtroConta()" (ngModelChange)="filtroConta.set($event); aplicarFiltros()" aria-label="Filtrar por conta">
+              <option value="">Todas as contas</option>
+              @for (c of contasDoMes(); track c) { <option [value]="c">{{ c }}</option> }
+            </select>
+          }
+
           @if (temFiltro()) {
             <button type="button" class="limpar" (click)="limparFiltros()">Limpar filtros</button>
           }
@@ -131,9 +153,13 @@
           </button>
         </div>
 
-        <app-transacoes-lista [transacoes]="transacoes()" (alterado)="recarregar()" />
+        <app-transacoes-lista [transacoes]="transacoes()" [tagsDisponiveis]="tagsAuvp()"
+                              [orcamentos]="orcamentosAuvp()" (alterado)="recarregar()" />
       }
     } @else if (aba() === 'orcamento') {
+      @if (orcamentosAuvp().length > 0) {
+        <app-orcamento-auvp [ano]="ano()" [mes]="mes()" />
+      }
       <app-orcamento [ano]="ano()" [mes]="mes()" (alterado)="recarregar()" />
     } @else if (aba() === 'metas') {
       <app-metas />

@@ -155,11 +155,11 @@ public class OrcamentoService
 
         var despesas = await _db.Transacoes.AsNoTracking()
             .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa && !t.ForaDosTotais
-                        && t.Data >= primeiroMes && t.Data <= ultimoDia)
+                        && t.Competencia >= primeiroMes && t.Competencia <= ultimoDia)
             .ToListAsync(ct);
 
         var realizadoPorMes = despesas
-            .GroupBy(t => (t.Data.Year, t.Data.Month))
+            .GroupBy(t => (t.Competencia.Year, t.Competencia.Month))
             .ToDictionary(g => g.Key, g => g.Sum(t => t.Valor));
 
         var resultado = new List<HistoricoMesResponse>(quantidade);
@@ -196,7 +196,7 @@ public class OrcamentoService
 
         var despesas = await _db.Transacoes.AsNoTracking()
             .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa && !t.ForaDosTotais
-                        && t.Data >= inicio && t.Data <= fim)
+                        && t.Competencia == inicio)
             .ToListAsync(ct);
 
         var realizadoPorCategoria = despesas

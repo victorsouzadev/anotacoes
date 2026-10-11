@@ -573,6 +573,37 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("refresh_tokens", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.RegraCategoria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AtualizadaEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Categoria")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Chave")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Chave")
+                        .IsUnique();
+
+                    b.ToTable("financas_regras_categoria", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Site", b =>
                 {
                     b.Property<string>("Id")
@@ -915,8 +946,15 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly>("Competencia")
+                        .HasColumnType("TEXT");
+
                     b.Property<float>("ConfiancaIa")
                         .HasColumnType("REAL");
+
+                    b.Property<string>("Conta")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CriadoEm")
                         .HasColumnType("TEXT");
@@ -943,13 +981,24 @@ namespace Notas.Api.Data.Migrations
                     b.Property<string>("Observacoes")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OrcamentoAuvp")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("OrigemExterna")
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("Parcela")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tags")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TextoOriginal")
@@ -962,6 +1011,9 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("TotalParcelas")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -971,12 +1023,45 @@ namespace Notas.Api.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId", "Competencia");
+
                     b.HasIndex("UserId", "Data");
 
                     b.HasIndex("UserId", "OrigemExterna", "IdExterno")
                         .IsUnique();
 
                     b.ToTable("financas_transacoes", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.TransacaoExcluida", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExcluidaEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IdExterno")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Origem")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Origem", "IdExterno")
+                        .IsUnique();
+
+                    b.ToTable("financas_transacoes_excluidas", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.User", b =>
@@ -1155,6 +1240,15 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.RegraCategoria", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Site", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
@@ -1257,6 +1351,15 @@ namespace Notas.Api.Data.Migrations
                 });
 
             modelBuilder.Entity("Notas.Api.Data.Transacao", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.TransacaoExcluida", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
                         .WithMany()

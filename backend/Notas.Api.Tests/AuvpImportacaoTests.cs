@@ -160,11 +160,159 @@ public class AuvpImportacaoTests : IClassFixture<TasksApiFactory>, IAsyncLifetim
     public void Mapeia_categorias_do_open_banking(int? id, Categoria esperada) =>
         Assert.Equal(esperada, AuvpCategorias.Mapear(id, TipoTransacao.Despesa));
 
+    private async Task<JsonElement> Listar(string query = "")
+    {
+        var lista = await _client.GetFromJsonAsync<JsonElement>($"/api/financas/transacoes{query}");
+        return lista.ValueKind == JsonValueKind.Array ? lista : lista.GetProperty("itens");
+    }
+
+    private static JsonElement PorDescricao(JsonElement itens, string descricao) =>
+        itens.EnumerateArray().Single(t => t.GetProperty("descricao").GetString() == descricao);
+
+    [Fact]
+    public async Task Compra_no_cartao_conta_no_mes_da_fatura_e_le_parcelas()
+    {
+        // Comprada em 05/10, mas a fatura é de novembro.
+        _auvp.Paginas = [[Item(30, -300m) with
+        {
+            Description = "LOJA BOA 2/5",
+            ReferenceMonth = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero),
+            Budget = new AuvpOrcamentoRef(3, "Conforto", "CONFORTO"),
+            TransactionTags = [new AuvpTransacaoTag(new AuvpTag("Pai", 1))],
+        }]];
+        await CadastrarChave();
+        await Sincronizar();
+
+        var outubro = await _client.GetFromJsonAsync<JsonElement>("/api/financas/dashboard/resumo?ano=2026&mes=10");
+        var novembro = await _client.GetFromJsonAsync<JsonElement>("/api/financas/dashboard/resumo?ano=2026&mes=11");
+        Assert.Equal(0m, outubro.GetProperty("totalDespesas").GetDecimal());
+        Assert.Equal(300m, novembro.GetProperty("totalDespesas").GetDecimal());
+
+        var t = PorDescricao(await Listar("?ano=2026&mes=11"), "LOJA BOA 2/5");
+        Assert.Equal(2, t.GetProperty("parcela").GetInt32());
+        Assert.Equal(5, t.GetProperty("totalParcelas").GetInt32());
+        Assert.Equal("CONFORTO", t.GetProperty("orcamentoAuvp").GetString());
+        Assert.Equal("Cartão X", t.GetProperty("conta").GetString());
+        Assert.Equal("Pai", t.GetProperty("tags")[0].GetString());
+    }
+
+    [Fact]
+    public async Task Excluido_aqui_nao_volta_na_proxima_sincronizacao()
+    {
+        _auvp.Paginas = [[Item(40, -10m), Item(41, -20m)]];
+        await CadastrarChave();
+        await Sincronizar();
+
+        var alvo = PorDescricao(await Listar(), "Compra 40");
+        (await _client.DeleteAsync($"/api/financas/transacoes/{alvo.GetProperty("id").GetString()}")).EnsureSuccessStatusCode();
+
+        var r = await Sincronizar();
+        Assert.Equal(0, r.GetProperty("importadas").GetInt32());
+        Assert.Single((await Listar()).EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Correcao_de_categoria_vai_para_a_auvp_vira_regra_e_se_aplica_aos_parecidos()
+    {
+        _auvp.Tags = [new AuvpTag("Alimentação", 100, Status: "ACTIVE"), new AuvpTag("Pai", 101, Status: "ACTIVE")];
+        _auvp.Paginas = [[
+            Item(50, -40m, categoria: 64) with { Description = "LIDER MARABA MARABA BRA",
+                TransactionTags = [new AuvpTransacaoTag(new AuvpTag("Pai", 101))] },
+            Item(51, -60m, categoria: 64) with { Description = "LIDER MARABA MARABA BRA" },
+        ]];
+        await CadastrarChave();
+        await Sincronizar();
+
+        var alvo = (await Listar()).EnumerateArray().Single(t => t.GetProperty("valor").GetDecimal() == 40m);
+        var id = alvo.GetProperty("id").GetString();
+        var res = await _client.PatchAsJsonAsync($"/api/financas/transacoes/{id}",
+            new { categoria = "Alimentacao", foraDosTotais = true, observacoes = "conferido" });
+        res.EnsureSuccessStatusCode();
+        var corpo = await res.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(JsonValueKind.Null, corpo.GetProperty("avisoAuvp").ValueKind);
+        Assert.Equal(1, corpo.GetProperty("semelhantes").GetInt32());
+
+        // Na AUVP: tag de categoria acrescentada (a "Pai" fica), ignore e observação.
+        Assert.Contains(_auvp.TagsAdicionadas, x => x.TagIds.SequenceEqual([100L]));
+        Assert.DoesNotContain(_auvp.TagsRemovidas, x => x.TagIds.Contains(101L));
+        var alteracao = Assert.Single(_auvp.Alteracoes);
+        Assert.True(alteracao.Alteracao.Ignorar);
+        Assert.Equal("conferido", alteracao.Alteracao.Observacoes);
+
+        // "Aplicar aos parecidos" leva o outro junto, e também para a AUVP.
+        var aplicar = await _client.PostAsync($"/api/financas/transacoes/{id}/aplicar-categoria", null);
+        aplicar.EnsureSuccessStatusCode();
+        Assert.Equal(1, (await aplicar.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("atualizados").GetInt32());
+        Assert.All((await Listar()).EnumerateArray(), t => Assert.Equal("Alimentacao", t.GetProperty("categoria").GetString()));
+
+        // E a próxima compra na mesma loja já chega certa.
+        _auvp.Paginas = [[Item(52, -15m, categoria: 64) with { Description = "LIDER MARABA MARABA BRA 1/2" }]];
+        await _client.PostAsJsonAsync("/api/financas/auvp/sincronizar", new { de = "2026-10-01", ate = "2026-10-31" });
+        var nova = (await Listar()).EnumerateArray().Single(t => t.GetProperty("valor").GetDecimal() == 15m);
+        Assert.Equal("Alimentacao", nova.GetProperty("categoria").GetString());
+    }
+
+    [Fact]
+    public async Task Falha_na_auvp_nao_perde_a_edicao_local()
+    {
+        _auvp.Paginas = [[Item(60, -40m)]];
+        await CadastrarChave();
+        await Sincronizar();
+        _auvp.ErroEscrita = new AuvpIndisponivelException("A AUVP respondeu 400: property ignore should not exist.");
+
+        var alvo = PorDescricao(await Listar(), "Compra 60");
+        var res = await _client.PatchAsJsonAsync($"/api/financas/transacoes/{alvo.GetProperty("id").GetString()}",
+            new { foraDosTotais = true });
+        res.EnsureSuccessStatusCode();
+        var corpo = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("should not exist", corpo.GetProperty("avisoAuvp").GetString());
+        Assert.True(PorDescricao(await Listar(), "Compra 60").GetProperty("foraDosTotais").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Edicao_em_lote_muda_todos_e_escreve_na_auvp()
+    {
+        _auvp.Paginas = [[Item(70, -1m), Item(71, -2m), Item(72, -3m)]];
+        await CadastrarChave();
+        await Sincronizar();
+        var ids = (await Listar()).EnumerateArray()
+            .Where(t => t.GetProperty("valor").GetDecimal() < 3m)
+            .Select(t => t.GetProperty("id").GetString()).ToList();
+
+        var res = await _client.PatchAsJsonAsync("/api/financas/transacoes/lote",
+            new { ids, foraDosTotais = true, orcamentoAuvp = "PRAZERES" });
+        res.EnsureSuccessStatusCode();
+        Assert.Equal(2, (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("atualizados").GetInt32());
+
+        Assert.Equal(2, _auvp.Alteracoes.Count);
+        Assert.All(_auvp.Alteracoes, a => Assert.Equal(5, a.Alteracao.OrcamentoId));
+        var resumo = await _client.GetFromJsonAsync<JsonElement>("/api/financas/dashboard/resumo?ano=2026&mes=10");
+        Assert.Equal(3m, resumo.GetProperty("totalDespesas").GetDecimal());
+    }
+
+    [Theory]
+    [InlineData("GOLDMEN HOTEL VILA DO 8/10", 8, 10)]
+    [InlineData("Mercadolivre*Mercadol 3/10", 3, 10)]
+    [InlineData("TAR MSG Cobrança referente 10/09/2026", null, null)]
+    [InlineData("Pix para fulano", null, null)]
+    public void Le_parcela_do_fim_da_descricao(string descricao, int? parcela, int? total) =>
+        Assert.Equal((parcela, total), AuvpSincronizador.LerParcela(descricao));
+
+    [Fact]
+    public void Transferencia_de_mesma_titularidade_fica_fora_dos_totais() =>
+        Assert.True(AuvpSincronizador.Converter(Item(80, -9000m, categoria: 23), "u").ForaDosTotais);
+
     private class AuvpFalso : IAuvpCliente
     {
         public List<List<AuvpTransacao>> Paginas { get; set; } = [];
         public Exception? Erro { get; set; }
+        public Exception? ErroEscrita { get; set; }
         public string? UltimaChave { get; private set; }
+        public List<AuvpTag> Tags { get; set; } = [];
+        public List<(long Id, AuvpAlteracao Alteracao)> Alteracoes { get; } = [];
+        public List<(long Id, IReadOnlyCollection<long> TagIds)> TagsAdicionadas { get; } = [];
+        public List<(long Id, IReadOnlyCollection<long> TagIds)> TagsRemovidas { get; } = [];
 
         public bool Habilitado => true;
 
@@ -175,6 +323,41 @@ public class AuvpImportacaoTests : IClassFixture<TasksApiFactory>, IAsyncLifetim
             UltimaChave = chave;
             var itens = pagina <= Paginas.Count ? Paginas[pagina - 1] : [];
             return Task.FromResult(new AuvpPagina(itens, new AuvpPaginacao(pagina, Paginas.Count)));
+        }
+
+        public Task<List<AuvpTag>> ListarTagsAsync(string chave, CancellationToken ct) => Task.FromResult(Tags);
+
+        public Task<List<AuvpOrcamento>> ListarOrcamentosAsync(string chave, CancellationToken ct) =>
+            Task.FromResult<List<AuvpOrcamento>>([new(3, "Conforto", "CONFORTO"), new(5, "Prazeres", "PRAZERES")]);
+
+        public Task<AuvpOrcamentoMensal> OrcamentoMensalAsync(string chave, DateOnly mes, CancellationToken ct) =>
+            Task.FromResult(new AuvpOrcamentoMensal(null, []));
+
+        public Task<List<AuvpContaDetalhe>> ListarContasAsync(string chave, CancellationToken ct) =>
+            Task.FromResult<List<AuvpContaDetalhe>>([]);
+
+        public Task<AuvpFaturaEstimada?> FaturaEstimadaAsync(string chave, string contaIdExterno, CancellationToken ct) =>
+            Task.FromResult<AuvpFaturaEstimada?>(null);
+
+        public Task AtualizarTransacaoAsync(string chave, long id, AuvpAlteracao alteracao, CancellationToken ct)
+        {
+            if (ErroEscrita is not null) throw ErroEscrita;
+            Alteracoes.Add((id, alteracao));
+            return Task.CompletedTask;
+        }
+
+        public Task AdicionarTagsAsync(string chave, long id, IReadOnlyCollection<long> tagIds, CancellationToken ct)
+        {
+            if (ErroEscrita is not null) throw ErroEscrita;
+            if (tagIds.Count > 0) TagsAdicionadas.Add((id, tagIds));
+            return Task.CompletedTask;
+        }
+
+        public Task RemoverTagsAsync(string chave, long id, IReadOnlyCollection<long> tagIds, CancellationToken ct)
+        {
+            if (ErroEscrita is not null) throw ErroEscrita;
+            if (tagIds.Count > 0) TagsRemovidas.Add((id, tagIds));
+            return Task.CompletedTask;
         }
     }
 }

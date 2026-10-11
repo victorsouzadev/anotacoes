@@ -1,7 +1,14 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from '../models/dashboard.model';
+import {
+  CategoriaResumo,
+  Compromissos,
+  Recorrente,
+  ResumoResponse,
+  TagResumo,
+  TendenciaPeriodo,
+} from '../models/dashboard.model';
 
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
@@ -17,6 +24,20 @@ export class DashboardService {
   categorias(ano: number, mes: number, tipo: 'receita' | 'despesa' = 'despesa'): Observable<CategoriaResumo[]> {
     return this.http.get<CategoriaResumo[]>(`${this.baseUrl}/categorias`, {
       params: new HttpParams().set('ano', ano).set('mes', mes).set('tipo', tipo),
+    });
+  }
+
+  recorrentes(): Observable<Recorrente[]> {
+    return this.http.get<Recorrente[]>(`${this.baseUrl}/recorrentes`);
+  }
+
+  compromissos(): Observable<Compromissos> {
+    return this.http.get<Compromissos>(`${this.baseUrl}/compromissos`);
+  }
+
+  tags(ano: number, mes: number): Observable<TagResumo[]> {
+    return this.http.get<TagResumo[]>(`${this.baseUrl}/tags`, {
+      params: new HttpParams().set('ano', ano).set('mes', mes),
     });
   }
 

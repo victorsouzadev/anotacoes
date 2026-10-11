@@ -305,9 +305,15 @@ public class SitesTests(SitesApiFactory factory) : IClassFixture<SitesApiFactory
         var v1 = Versao(detalhe, 1).GetProperty("id").GetString();
         var res = await _dono.PostAsJsonAsync($"/api/sites/{id}/deployments/{v1}/ativar", new { restaurarBanco = false });
         Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
-        detalhe = await EsperarFila(id);
-        await Task.Delay(100);
-        detalhe = await _dono.GetFromJsonAsync<JsonElement>($"/api/sites/{id}");
+        // O 202 sai antes de a fila pegar a tarefa: a versão continua "Substituido"
+        // até o worker começar, e esperar só a fila ficar livre passaria direto.
+        // Espera o resultado em si (uma pausa fixa falhava com a máquina carregada).
+        for (var i = 0; i < 100; i++)
+        {
+            detalhe = await EsperarFila(id);
+            if (detalhe.GetProperty("currentDeploymentId").GetString() == v1) break;
+            await Task.Delay(50);
+        }
         Assert.Equal("v1", File.ReadAllText(atual));
         Assert.Equal(v1, detalhe.GetProperty("currentDeploymentId").GetString());
         Assert.Equal("NoAr", Versao(detalhe, 1).GetProperty("status").GetString());

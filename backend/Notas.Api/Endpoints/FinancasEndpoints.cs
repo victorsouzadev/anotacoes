@@ -5,6 +5,7 @@ using Notas.Api.Data;
 using Notas.Api.Dtos;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
+using Notas.Api.Services.Financas.Auvp;
 
 namespace Notas.Api.Endpoints;
 
@@ -66,6 +67,11 @@ public static class FinancasEndpoints
                 return Results.Problem(title: "Serviço de interpretação indisponível", detail: ex.Message,
                     statusCode: StatusCodes.Status502BadGateway);
             }
+
+            // Uma loja que o usuário já corrigiu antes entra direto na categoria dele.
+            var regras = await RegrasCategoria.CarregarAsync(db, transacao.UserId, ct);
+            if (regras.TryGetValue(RegrasCategoria.ChaveDeDescricao(transacao.Descricao), out var daRegra))
+                transacao.Categoria = daRegra;
 
             db.Transacoes.Add(transacao);
             await db.SaveChangesAsync(ct);
@@ -146,9 +152,12 @@ public static class FinancasEndpoints
             var atingiuLimite = resultado.Transacoes.Count > limites.MaxLancamentosPorImportacao;
             var aCriar = resultado.Transacoes.Take(limites.MaxLancamentosPorImportacao).ToList();
 
+            var regrasImportacao = await RegrasCategoria.CarregarAsync(db, user.UserId(), ct);
             foreach (var transacao in aCriar)
             {
                 transacao.Status = StatusTransacao.PendenteRevisao;
+                if (regrasImportacao.TryGetValue(RegrasCategoria.ChaveDeDescricao(transacao.Descricao), out var daRegra))
+                    transacao.Categoria = daRegra;
             }
 
             db.Transacoes.AddRange(aCriar);
@@ -165,7 +174,7 @@ public static class FinancasEndpoints
         // GET /api/financas/transacoes — lista transações com filtros de período, categoria e tipo.
         transacoes.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, CancellationToken ct,
             DateOnly? dataInicio, DateOnly? dataFim, string? categoria, string? tipo,
-            string? status, int? ano, int? mes, int? limite) =>
+            string? status, int? ano, int? mes, int? limite, string? q, string? tag, string? conta) =>
         {
             // Os filtros chegam como texto e são convertidos aqui: o binding de enum
             // da query string é sensível a maiúsculas, então `tipo=despesa` — o mesmo
@@ -190,8 +199,10 @@ public static class FinancasEndpoints
             if (ano.HasValue && mes.HasValue)
             {
                 if (mes is < 1 or > 12) return Results.BadRequest(new { erro = $"Mês inválido: {mes}." });
-                var (inicioMes, fimMes) = FinancasClock.LimitesDoMes(ano.Value, mes.Value);
-                query = query.Where(t => t.Data >= inicioMes && t.Data <= fimMes);
+                // Pelo mês de competência: a compra no cartão aparece no mês da fatura,
+                // o mesmo em que soma no dashboard.
+                var competencia = new DateOnly(ano.Value, mes.Value, 1);
+                query = query.Where(t => t.Competencia == competencia);
             }
 
             if (dataInicio.HasValue) query = query.Where(t => t.Data >= dataInicio.Value);
@@ -199,6 +210,30 @@ public static class FinancasEndpoints
             if (categoriaFiltro.HasValue) query = query.Where(t => t.Categoria == categoriaFiltro.Value);
             if (tipoFiltro.HasValue) query = query.Where(t => t.Tipo == tipoFiltro.Value);
             if (statusFiltro.HasValue) query = query.Where(t => t.Status == statusFiltro.Value);
+
+            // Busca por texto na descrição e nas observações (sem diferenciar caixa).
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var termo = $"%{q.Trim().Replace("%", "").Replace("_", "")}%";
+                query = query.Where(t => EF.Functions.Like(t.Descricao, termo)
+                                         || (t.Observacoes != null && EF.Functions.Like(t.Observacoes, termo)));
+            }
+
+            // Tags ficam numa coluna só, "A|B|C": compara com as bordas para "Pai"
+            // não casar com "Papelaria".
+            if (!string.IsNullOrWhiteSpace(tag))
+            {
+                var t0 = tag.Trim();
+                query = tag.Trim() == "Sem tag"
+                    ? query.Where(t => t.Tags == null)
+                    : query.Where(t => t.Tags != null && ("|" + t.Tags + "|").Contains("|" + t0 + "|"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(conta))
+            {
+                var c0 = conta.Trim();
+                query = c0 == "Manual" ? query.Where(t => t.OrigemExterna == null) : query.Where(t => t.Conta == c0);
+            }
 
             var resultado = await query
                 .OrderByDescending(t => t.Data)
@@ -218,10 +253,12 @@ public static class FinancasEndpoints
 
         // PATCH /api/financas/transacoes/{id} — usuário corrige campos extraídos incorretamente.
         transacoes.MapPatch("/{id:guid}", async (Guid id, AtualizarTransacaoRequest req, ClaimsPrincipal user,
-            AppDbContext db, FinancasClock clock, CancellationToken ct) =>
+            AppDbContext db, FinancasClock clock, AuvpEscrita auvp, CancellationToken ct) =>
         {
             var transacao = await db.Transacoes.FirstOrDefaultAsync(t => t.Id == id && t.UserId == user.UserId(), ct);
             if (transacao is null) return Results.NotFound();
+
+            var antes = new { transacao.Descricao, transacao.Categoria, transacao.Observacoes, transacao.ForaDosTotais };
 
             if (req.Descricao is not null)
             {
@@ -258,6 +295,8 @@ public static class FinancasEndpoints
                 if (req.Data > hoje.AddYears(1) || req.Data < hoje.AddYears(-50))
                     return Results.BadRequest(new { erro = "Data fora do intervalo aceito." });
                 transacao.Data = req.Data.Value;
+                // Lançamento do banco mantém o mês da fatura informado por ele.
+                if (transacao.OrigemExterna is null) transacao.Competencia = Transacao.CompetenciaDe(req.Data.Value);
             }
 
             if (req.FormaPagamento is not null)
@@ -276,12 +315,122 @@ public static class FinancasEndpoints
             if (req.LimparFormaPagamento == true) transacao.FormaPagamento = null;
             if (req.ForaDosTotais is not null) transacao.ForaDosTotais = req.ForaDosTotais.Value;
 
+            List<string>? tags = null;
+            if (req.Tags is not null)
+            {
+                tags = req.Tags.Select(n => n.Trim().Replace("|", "/")).Where(n => n.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (tags.Sum(n => n.Length + 1) > 500) return Results.BadRequest(new { erro = "Tags demais." });
+                // Do banco, as tags são as da AUVP e quem grava é a escrita, depois
+                // de saber quais existem lá.
+                if (transacao.OrigemExterna is null) transacao.Tags = tags.Count == 0 ? null : string.Join('|', tags);
+            }
+
+            if (req.OrcamentoAuvp is not null)
+            {
+                if (transacao.Tipo != TipoTransacao.Despesa)
+                    return Results.BadRequest(new { erro = "Só despesa pode ter orçamento." });
+                transacao.OrcamentoAuvp = req.OrcamentoAuvp.Trim().ToUpperInvariant();
+            }
+            else if (req.LimparOrcamento == true) transacao.OrcamentoAuvp = null;
+
             // Uma correção manual do usuário é, por definição, confirmada — a menos
             // que o cliente explicitamente informe outro status.
             transacao.Status = req.Status ?? StatusTransacao.Confirmado;
 
+            var mudouCategoria = transacao.Categoria != antes.Categoria;
+            if (mudouCategoria)
+                await RegrasCategoria.AprenderAsync(db, transacao.UserId, transacao.Descricao, transacao.Categoria, ct);
+
+            var aviso = await auvp.EnviarAsync(transacao, new MudancaLocal(
+                ForaDosTotais: transacao.ForaDosTotais != antes.ForaDosTotais ? transacao.ForaDosTotais : null,
+                Descricao: transacao.Descricao != antes.Descricao ? transacao.Descricao : null,
+                Observacoes: transacao.Observacoes != antes.Observacoes ? transacao.Observacoes ?? "" : null,
+                Categoria: mudouCategoria ? transacao.Categoria : null,
+                Tags: tags,
+                OrcamentoAuvp: req.OrcamentoAuvp is not null ? transacao.OrcamentoAuvp : null,
+                LimparOrcamento: req.OrcamentoAuvp is null && req.LimparOrcamento == true), ct);
+
             await db.SaveChangesAsync(ct);
-            return Results.Ok(TransacaoResponse.FromEntity(transacao));
+
+            int? semelhantes = null;
+            if (mudouCategoria)
+            {
+                var parecidos = await Semelhantes(db, transacao, ct);
+                semelhantes = parecidos.Count;
+            }
+
+            return Results.Ok(TransacaoResponse.FromEntity(transacao) with { AvisoAuvp = aviso, Semelhantes = semelhantes });
+        });
+
+        // POST /api/financas/transacoes/{id}/aplicar-categoria — leva a categoria deste
+        // lançamento aos parecidos (mesma loja) que ainda estão em outra.
+        transacoes.MapPost("/{id:guid}/aplicar-categoria", async (Guid id, ClaimsPrincipal user, AppDbContext db,
+            AuvpEscrita auvp, CancellationToken ct) =>
+        {
+            var modelo = await db.Transacoes.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id && t.UserId == user.UserId(), ct);
+            if (modelo is null) return Results.NotFound();
+
+            var parecidos = await Semelhantes(db, modelo, ct);
+            var (falhas, primeira) = (0, (string?)null);
+            foreach (var t in parecidos)
+            {
+                t.Categoria = modelo.Categoria;
+                var aviso = await auvp.EnviarAsync(t, new MudancaLocal(Categoria: modelo.Categoria), ct);
+                if (aviso is not null) { falhas++; primeira ??= aviso; }
+            }
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new AtualizarLoteResponse(parecidos.Count, falhas, primeira));
+        });
+
+        // PATCH /api/financas/transacoes/lote — mesma mudança em vários de uma vez.
+        transacoes.MapPatch("/lote", async (AtualizarLoteRequest req, ClaimsPrincipal user, AppDbContext db,
+            AuvpEscrita auvp, CancellationToken ct) =>
+        {
+            if (req.Ids is not { Count: > 0 }) return Results.BadRequest(new { erro = "Nenhum lançamento selecionado." });
+            if (req.Ids.Count > 500) return Results.BadRequest(new { erro = "Selecione no máximo 500 lançamentos." });
+            if (req.Categoria is { } cat && !Enum.IsDefined(cat)) return Results.BadRequest(new { erro = "Categoria inválida." });
+
+            var userId = user.UserId();
+            var lista = await db.Transacoes.Where(t => t.UserId == userId && req.Ids.Contains(t.Id)).ToListAsync(ct);
+            var orcamento = req.OrcamentoAuvp?.Trim().ToUpperInvariant();
+            var (falhas, primeira) = (0, (string?)null);
+
+            foreach (var t in lista)
+            {
+                var mudouCategoria = req.Categoria is { } c && c != t.Categoria;
+                if (mudouCategoria) t.Categoria = req.Categoria!.Value;
+                var mudouFora = req.ForaDosTotais is { } f && f != t.ForaDosTotais;
+                if (mudouFora) t.ForaDosTotais = req.ForaDosTotais!.Value;
+
+                List<string>? tags = null;
+                if (req.AdicionarTags is { Count: > 0 } || req.RemoverTags is { Count: > 0 })
+                {
+                    var remover = (req.RemoverTags ?? []).Select(n => n.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    tags = t.ListaDeTags().Where(n => !remover.Contains(n))
+                        .Concat((req.AdicionarTags ?? []).Select(n => n.Trim().Replace("|", "/")).Where(n => n.Length > 0))
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    if (t.OrigemExterna is null) t.Tags = tags.Count == 0 ? null : string.Join('|', tags);
+                }
+
+                var comOrcamento = orcamento is not null && t.Tipo == TipoTransacao.Despesa;
+                if (comOrcamento) t.OrcamentoAuvp = orcamento;
+                var limpar = orcamento is null && req.LimparOrcamento == true && t.OrcamentoAuvp is not null;
+                if (limpar) t.OrcamentoAuvp = null;
+
+                t.Status = StatusTransacao.Confirmado;
+
+                var aviso = await auvp.EnviarAsync(t, new MudancaLocal(
+                    ForaDosTotais: mudouFora ? t.ForaDosTotais : null,
+                    Categoria: mudouCategoria ? t.Categoria : null,
+                    Tags: tags,
+                    OrcamentoAuvp: comOrcamento ? orcamento : null,
+                    LimparOrcamento: limpar), ct);
+                if (aviso is not null) { falhas++; primeira ??= aviso; }
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new AtualizarLoteResponse(lista.Count, falhas, primeira));
         });
 
         transacoes.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -290,6 +439,12 @@ public static class FinancasEndpoints
             if (transacao is null) return Results.NotFound();
 
             db.Transacoes.Remove(transacao);
+            // Importado: lembra que foi apagado, senão a próxima sincronização traz de volta.
+            if (transacao.OrigemExterna is { } origem && transacao.IdExterno is { } idExterno
+                && !await db.TransacoesExcluidas.AnyAsync(x => x.UserId == transacao.UserId
+                    && x.Origem == origem && x.IdExterno == idExterno, ct))
+                db.TransacoesExcluidas.Add(new TransacaoExcluida
+                    { UserId = transacao.UserId, Origem = origem, IdExterno = idExterno });
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         });
@@ -305,16 +460,15 @@ public static class FinancasEndpoints
             var userId = user.UserId();
             var (anoRef, mesRef) = clock.ResolverMes(ano, mes);
 
-            var (inicio, fim) = FinancasClock.LimitesDoMes(anoRef, mesRef);
-            var (anoAnterior, mesAnterior) = FinancasClock.MesAnterior(anoRef, mesRef);
-            var (inicioAnterior, fimAnterior) = FinancasClock.LimitesDoMes(anoAnterior, mesAnterior);
+            var competencia = new DateOnly(anoRef, mesRef, 1);
+            var competenciaAnterior = competencia.AddMonths(-1);
 
             var transacoesMes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= fim)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Competencia == competencia)
                 .ToListAsync(ct);
 
             var transacoesMesAnterior = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicioAnterior && t.Data <= fimAnterior)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Competencia == competenciaAnterior)
                 .ToListAsync(ct);
 
             var totalReceitas = transacoesMes.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor);
@@ -362,10 +516,10 @@ public static class FinancasEndpoints
             var (anoRef, mesRef) = clock.ResolverMes(ano, mes);
             var tipoRef = tipoFiltro ?? TipoTransacao.Despesa;
 
-            var (inicio, fim) = FinancasClock.LimitesDoMes(anoRef, mesRef);
+            var competencia = new DateOnly(anoRef, mesRef, 1);
 
             var transacoes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= fim && t.Tipo == tipoRef)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Competencia == competencia && t.Tipo == tipoRef)
                 .ToListAsync(ct);
 
             var total = transacoes.Sum(t => t.Valor);
@@ -400,12 +554,18 @@ public static class FinancasEndpoints
                 ? JanelaSemanal(hoje, periodosRef)
                 : JanelaMensal(hoje, periodosRef);
 
+            // Mensal soma por competência, como o resumo; semanal não tem fatura e
+            // segue a data da compra.
+            var mesAtual = Transacao.CompetenciaDe(hoje);
             var transacoes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= hoje)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais)
+                .Where(semanal
+                    ? t => t.Data >= inicio && t.Data <= hoje
+                    : t => t.Competencia >= inicio && t.Competencia <= mesAtual)
                 .ToListAsync(ct);
 
             var porChave = transacoes
-                .GroupBy(t => semanal ? ChaveSemanal(t.Data) : ChaveMensal(t.Data))
+                .GroupBy(t => semanal ? ChaveSemanal(t.Data) : ChaveMensal(t.Competencia))
                 .ToDictionary(g => g.Key, g => (
                     Receitas: g.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor),
                     Despesas: g.Where(t => t.Tipo == TipoTransacao.Despesa).Sum(t => t.Valor)));
@@ -422,6 +582,18 @@ public static class FinancasEndpoints
 
             return Results.Ok(resultado);
         });
+    }
+
+    // Lançamentos da mesma loja (mesma chave de descrição) em outra categoria.
+    private static async Task<List<Transacao>> Semelhantes(AppDbContext db, Transacao modelo, CancellationToken ct)
+    {
+        var chave = RegrasCategoria.ChaveDeDescricao(modelo.Descricao);
+        if (chave.Length < 3) return [];
+        var candidatos = await db.Transacoes
+            .Where(t => t.UserId == modelo.UserId && t.Id != modelo.Id && t.Categoria != modelo.Categoria
+                        && t.Tipo == modelo.Tipo)
+            .ToListAsync(ct);
+        return candidatos.Where(t => RegrasCategoria.ChaveDeDescricao(t.Descricao) == chave).ToList();
     }
 
     // Ausente = sem filtro; presente e inválido = erro para o cliente, em vez de um

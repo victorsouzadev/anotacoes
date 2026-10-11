@@ -9,12 +9,21 @@ import {
   effect,
   inject,
   input,
+  output,
   viewChild,
 } from '@angular/core';
 import { Chart, ChartConfiguration } from 'chart.js';
 import { ThemeService } from '../../../../core/theme.service';
 import { opcoesBase, paletaAtual, registrarChartJs } from '../../chart-theme';
-import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from '../../models/dashboard.model';
+import {
+  CategoriaResumo,
+  Compromissos,
+  Recorrente,
+  ResumoResponse,
+  TagResumo,
+  TendenciaPeriodo,
+} from '../../models/dashboard.model';
+import { AuvpConta } from '../../services/auvp.service';
 import { Transacao } from '../../models/transacao.model';
 
 export interface GastoPorConta {
@@ -38,6 +47,42 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
   readonly tendencias = input<TendenciaPeriodo[]>([]);
   /** Lançamentos do mês exibido — base do ranking e da divisão por conta. */
   readonly transacoes = input<Transacao[]>([]);
+  readonly recorrentes = input<Recorrente[]>([]);
+  readonly compromissos = input<Compromissos | null>(null);
+  readonly gastosPorTag = input<TagResumo[]>([]);
+  /** Saldos, limites e faturas ao vivo da AUVP (vazio sem integração). */
+  readonly contas = input<AuvpConta[]>([]);
+
+  /** Clique numa tag ou conta: a página filtra a lista por ela. */
+  readonly filtrar = output<{ tag?: string; conta?: string }>();
+
+  readonly totalRecorrente = computed(() => this.recorrentes().reduce((s, r) => s + r.valorMedio, 0));
+
+  /** Próximos meses com algo já comprometido; a barra é relativa ao maior. */
+  readonly mesesComprometidos = computed(() => {
+    const meses = (this.compromissos()?.meses ?? []).filter((m) => m.total > 0);
+    const maior = Math.max(0, ...meses.map((m) => m.total));
+    return meses.map((m) => ({
+      ...m,
+      rotulo: new Date(m.ano, m.mes - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+      altura: maior > 0 ? (m.total / maior) * 100 : 0,
+    }));
+  });
+
+  readonly cartoes = computed(() =>
+    this.contas()
+      .filter((c) => c.tipo === 'cartao' && (c.limiteTotal || c.faturaAberta))
+      .map((c) => ({
+        ...c,
+        usado: c.limiteTotal && c.limiteDisponivel !== null ? c.limiteTotal - c.limiteDisponivel : null,
+        percentualUsado:
+          c.limiteTotal && c.limiteDisponivel !== null
+            ? Math.min(100, ((c.limiteTotal - c.limiteDisponivel) / c.limiteTotal) * 100)
+            : 0,
+      })),
+  );
+  readonly contasCorrentes = computed(() => this.contas().filter((c) => c.tipo === 'conta'));
+  readonly saldoEmConta = computed(() => this.contasCorrentes().reduce((s, c) => s + c.saldo, 0));
 
   private readonly pizzaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pizzaCanvas');
   private readonly linhaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('linhaCanvas');
@@ -86,7 +131,9 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
 
   /**
    * Gasto médio por dia no mês e, se for o mês corrente, a projeção para o fim
-   * dele no mesmo ritmo. Mês passado divide pelos dias do mês inteiro.
+   * dele. Parcelas já têm valor certo no mês (o banco lança todas de uma vez),
+   * então entram inteiras na projeção; só o gasto variável é extrapolado pelo
+   * ritmo — senão uma parcela de R$ 800 lançada no dia 1 viraria R$ 24 mil.
    */
   readonly ritmo = computed(() => {
     const r = this.resumo();
@@ -97,8 +144,11 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
     const ehFuturo = new Date(r.ano, r.mes - 1, 1) > hoje;
     if (ehFuturo) return null;
     const dias = ehMesAtual ? hoje.getDate() : diasNoMes;
-    const porDia = r.totalDespesas / dias;
-    return { porDia, projecao: ehMesAtual ? porDia * diasNoMes : null };
+    const despesas = this.despesasQueContam();
+    const parcelas = despesas.filter((t) => t.totalParcelas).reduce((s, t) => s + t.valor, 0);
+    const variavel = Math.max(0, r.totalDespesas - parcelas);
+    const porDia = variavel / dias;
+    return { porDia, projecao: ehMesAtual ? parcelas + porDia * diasNoMes : null };
   });
 
   readonly semTendencias = computed(() => this.tendencias().every((t) => t.receitas === 0 && t.despesas === 0));
@@ -217,7 +267,5 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
 
 function nomeDaConta(t: Transacao): string {
   if (t.origem !== 'auvp') return 'Manual';
-  // O importador grava "AUVP · <nome da conta>" no texto original.
-  const nome = t.textoOriginal.split('·').slice(1).join('·').trim();
-  return nome || 'Banco';
+  return t.conta ?? 'Banco';
 }

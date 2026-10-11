@@ -20,6 +20,12 @@ function transacao(over: Partial<Transacao> = {}): Transacao {
     criadoEm: '2026-08-31T12:00:00Z',
     foraDosTotais: false,
     origem: null,
+    competencia: '2026-08-01',
+    parcela: null,
+    totalParcelas: null,
+    conta: null,
+    tags: [],
+    orcamentoAuvp: null,
     ...over,
   };
 }

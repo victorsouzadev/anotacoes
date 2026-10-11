@@ -56,6 +56,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
     public DbSet<ConfiguracaoAuvp> ConfiguracoesAuvp => Set<ConfiguracaoAuvp>();
+    public DbSet<TransacaoExcluida> TransacoesExcluidas => Set<TransacaoExcluida>();
+    public DbSet<RegraCategoria> RegrasCategoria => Set<RegraCategoria>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -77,6 +79,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // sem "Z" — inconsistência que quebra parsers estritos de ISO 8601 como o do Android
     // (java.time.Instant.parse exige "Z"/offset). Força Kind=Utc em toda leitura, pra todo
     // DateTime/DateTime? do modelo, deixando a serialização sempre consistente.
+    // Competência vazia = mês da data. Fica aqui, e não em cada lugar que cria
+    // lançamento, para nenhum caminho (texto, arquivo, banco, teste) esquecer.
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PreencherCompetencia();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        PreencherCompetencia();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void PreencherCompetencia()
+    {
+        foreach (var entrada in ChangeTracker.Entries<Transacao>())
+        {
+            if (entrada.State is EntityState.Added or EntityState.Modified && entrada.Entity.Competencia == default)
+                entrada.Entity.Competencia = Transacao.CompetenciaDe(entrada.Entity.Data);
+        }
+    }
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
@@ -202,7 +227,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Lançamentos digitados têm origem nula e não entram na unicidade (NULLs
             // são distintos no SQLite); os importados não podem se repetir.
             e.HasIndex(t => new { t.UserId, t.OrigemExterna, t.IdExterno }).IsUnique();
+            e.HasIndex(t => new { t.UserId, t.Competencia });
+            e.Property(t => t.Conta).HasMaxLength(120);
+            e.Property(t => t.Tags).HasMaxLength(500);
+            e.Property(t => t.OrcamentoAuvp).HasMaxLength(40);
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TransacaoExcluida>(e =>
+        {
+            e.ToTable("financas_transacoes_excluidas");
+            e.Property(x => x.Origem).HasMaxLength(20);
+            e.Property(x => x.IdExterno).HasMaxLength(64);
+            e.HasIndex(x => new { x.UserId, x.Origem, x.IdExterno }).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<RegraCategoria>(e =>
+        {
+            e.ToTable("financas_regras_categoria");
+            e.Property(x => x.Chave).HasMaxLength(120);
+            e.Property(x => x.Categoria).HasConversion<string>().HasMaxLength(30);
+            e.HasIndex(x => new { x.UserId, x.Chave }).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Orcamento>(e =>

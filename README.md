@@ -135,6 +135,27 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 - **Fora dos totais**: qualquer lançamento pode ser tirado (ou devolvido) da conta
   pelo botão de olho na lista — útil para reembolso ou transferência que o banco
   não reconheceu como interna.
+- **Mês da fatura (competência)**: os totais somam pelo mês em que o lançamento
+  conta — numa compra no cartão, o da fatura, como no painel da AUVP. Lançamentos
+  digitados contam no mês da própria data.
+- **Sincronização automática**: a cada `AUVP_INTERVALO_HORAS` (padrão 6) o servidor
+  sincroniza sozinho quem tem chave cadastrada; o botão continua para forçar.
+  Um lançamento importado que o usuário apaga não volta.
+- **Escrita na AUVP**: num lançamento que veio de lá, mudar categoria (vira a tag de
+  categoria correspondente, preservando tags de pessoa), tags, orçamento do método
+  AUVP, descrição (como descrição exibida), observações ou "fora dos totais"
+  (ignorar) também atualiza a AUVP. Valor, tipo e data são do banco e só mudam
+  aqui. Se a AUVP recusar, a mudança local fica salva e a tela mostra o motivo.
+- **Regras aprendidas**: corrigir a categoria de um lançamento ensina a regra para
+  aquela loja — os próximos (digitados, de arquivo ou do banco) já entram certos, e
+  a tela oferece mudar os parecidos que já existem.
+- **Lista**: busca por texto, filtros por tag e por conta, seleção de vários para
+  mudar categoria, orçamento, tag ou "fora dos totais" de uma vez; mostra parcela
+  (3/10), conta, tags e orçamento AUVP de cada lançamento.
+- **Análises**: contas e cartões ao vivo (saldo, fatura aberta, limite livre),
+  gastos por tag, gastos recorrentes (assinaturas e contas que se repetem nos
+  últimos 6 meses), parcelas já comprometidas nos próximos 12 meses e, na aba
+  Orçamento, o método AUVP (Custos Fixos, Conforto, Metas…) como está lá.
 
 ### Tarefas
 

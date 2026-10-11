@@ -212,6 +212,17 @@
 /* ------------------------------------------------------------- filtros */
 
 .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filtros .busca {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  flex: 1 1 220px;
+  min-width: 0;
+}
 .filtros select {
   font: inherit;
   font-size: 12.5px;
