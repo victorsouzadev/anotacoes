@@ -11,6 +11,7 @@ import { Overlay } from './social-overlays';
 import { AlignMode, Deltas, FracBox, Guide, alignDelta, alignWithin, anchorForAlign, distribute, groupBox } from './social-align';
 import { uuid } from '../../core/uuid';
 import { SlotPhoto, fillPhotoSlots, placeholders, slideOf } from './social-photo-slots';
+import { Strip } from './social-slides';
 
 export interface SocialProjectData {
   version: number;
@@ -462,6 +463,20 @@ export class SocialStore {
     this.slides.set(r.slides);
     this.commit();
     return { placed: r.placed, added: r.added };
+  }
+
+  /** Mexe nos posts do carrossel (tirar, mover, duplicar, trazer página de
+   * outro modelo) com uma das funções de social-slides. Um passo de histórico. */
+  editStrip(fn: (s: Strip) => Strip): void {
+    const r = fn({ overlays: this.overlays(), slides: this.slides(), slot: this.slot(), guides: this.userGuides() });
+    if (r.overlays === this.overlays() && r.slides === this.slides()) return;
+    this.overlays.set(r.overlays);
+    this.slides.set(r.slides);
+    this.slot.set(r.slot);
+    this.userGuides.set(r.guides);
+    const ids = new Set(r.overlays.map((o) => o.id));
+    this.selection.update((l) => l.filter((x) => ids.has(x)));
+    this.commit();
   }
 
   /** Tira só a foto e mantém o modelo, que continua de pé sem ela. */
