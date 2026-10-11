@@ -55,6 +55,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MetaReserva> MetasReserva => Set<MetaReserva>();
     public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
+    public DbSet<ConfiguracaoAuvp> ConfiguracoesAuvp => Set<ConfiguracaoAuvp>();
     public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
@@ -196,6 +197,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Status).HasConversion<string>().HasMaxLength(30);
             e.Property(t => t.TextoOriginal).HasMaxLength(1000);
             e.HasIndex(t => new { t.UserId, t.Data });
+            e.Property(t => t.OrigemExterna).HasMaxLength(20);
+            e.Property(t => t.IdExterno).HasMaxLength(64);
+            // Lançamentos digitados têm origem nula e não entram na unicidade (NULLs
+            // são distintos no SQLite); os importados não podem se repetir.
+            e.HasIndex(t => new { t.UserId, t.OrigemExterna, t.IdExterno }).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -251,6 +257,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.ChaveApiSufixo).HasMaxLength(8);
             e.Property(c => c.ChaveUpscaleSufixo).HasMaxLength(8);
             // Uma configuração por usuário — o upsert do endpoint depende disso.
+            e.HasIndex(c => c.UserId).IsUnique();
+            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ConfiguracaoAuvp>(e =>
+        {
+            e.ToTable("configuracoes_auvp");
+            e.Property(c => c.ChaveSufixo).HasMaxLength(8);
             e.HasIndex(c => c.UserId).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
         });

@@ -1,0 +1,45 @@
+@if (config(); as c) {
+  @if (c.habilitado) {
+    <section class="auvp">
+      <div class="cabecalho">
+        <app-icon name="refresh" [size]="14" />
+        <strong>Bancos (AUVP)</strong>
+        @if (c.ultimaSincronizacaoEm) {
+          <span class="info">última sincronização {{ quando(c.ultimaSincronizacaoEm) }}</span>
+        }
+      </div>
+
+      @if (!c.chaveConfigurada || editandoChave()) {
+        <form class="linha" (ngSubmit)="salvarChave()">
+          <input type="password" name="chave" autocomplete="off" placeholder="Chave de API da AUVP"
+                 [ngModel]="chave()" (ngModelChange)="chave.set($event)" />
+          <button type="submit" [disabled]="ocupado() || !chave().trim()">Salvar chave</button>
+          @if (editandoChave()) {
+            <button type="button" class="secundario" (click)="editandoChave.set(false)">Cancelar</button>
+          }
+        </form>
+      } @else {
+        <div class="linha">
+          <button type="button" (click)="sincronizar()" [disabled]="ocupado()">
+            {{ ocupado() ? 'Sincronizando…' : 'Sincronizar agora' }}
+          </button>
+          <span class="info">chave {{ c.chaveMascarada }}</span>
+          <button type="button" class="secundario" (click)="editandoChave.set(true)">Trocar</button>
+          <button type="button" class="secundario" (click)="removerChave()">Remover</button>
+        </div>
+      }
+
+      @if (resultado(); as r) {
+        <p class="resultado" role="status">
+          {{ r.importadas }} {{ r.importadas === 1 ? 'lançamento importado' : 'lançamentos importados' }}@if (r.jaExistentes > 0) {, {{ r.jaExistentes }} já existiam}.
+          @if (r.paraRevisao > 0) {
+            {{ r.paraRevisao }} {{ r.paraRevisao === 1 ? 'ficou' : 'ficaram' }} para revisão (ignoradas na AUVP ou transferências entre suas contas).
+          }
+        </p>
+      }
+      @if (erro(); as e) {
+        <p class="erro" role="alert">{{ e }}</p>
+      }
+    </section>
+  }
+}

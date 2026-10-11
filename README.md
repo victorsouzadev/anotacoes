@@ -121,6 +121,14 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
   linha de receitas x despesas ao longo do tempo (Chart.js).
 - **Lista de lançamentos**: mais recentes primeiro, com ação rápida de confirmar
   (lançamentos pendentes) ou remover.
+- **Importação da AUVP (open banking)**: com `AUVP_BASE_URL` configurada no servidor,
+  cada usuário cadastra a própria chave de API da AUVP Financeiro (guardada cifrada)
+  e clica em "Sincronizar agora". Todas as transações vêm, sem duplicar nas
+  sincronizações seguintes (a partir da segunda, relê só os últimos 45 dias).
+  As categorias do open banking são mapeadas para as daqui; as transações marcadas
+  como ignoradas na AUVP e as transferências entre contas próprias entram como
+  "pendente de revisão", para não contarem em dobro. Um lançamento já importado
+  nunca é sobrescrito, então correções feitas aqui ficam.
 
 ### Tarefas
 

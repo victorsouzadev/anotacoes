@@ -14,6 +14,11 @@ services:
       # fica desligado e o botão nem aparece.
       - Upscale__ApiKey=${REPLICATE_API_TOKEN:-}
       - Upscale__Model=${UPSCALE_MODEL:-nightmareai/real-esrgan}
+      # Importação de transações da AUVP Financeiro (Finanças). Sem a URL a
+      # integração fica desligada; a chave é de cada usuário, cadastrada na tela.
+      - Auvp__BaseUrl=${AUVP_BASE_URL:-}
+      - Auvp__HeaderChave=${AUVP_HEADER_CHAVE:-Authorization}
+      - Auvp__PrefixoChave=${AUVP_PREFIXO_CHAVE:-Bearer }
       - Llm__Provider=${LLM_PROVIDER:-}
       # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde

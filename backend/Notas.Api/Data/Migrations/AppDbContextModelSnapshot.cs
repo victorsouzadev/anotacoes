@@ -17,6 +17,37 @@ namespace Notas.Api.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.3");
 
+            modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChaveCifrada")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChaveSufixo")
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimaSincronizacaoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("configuracoes_auvp", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoIa", b =>
                 {
                     b.Property<Guid>("Id")
@@ -902,7 +933,15 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("IdExterno")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Observacoes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OrigemExterna")
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
@@ -931,6 +970,9 @@ namespace Notas.Api.Data.Migrations
 
                     b.HasIndex("UserId", "Data");
 
+                    b.HasIndex("UserId", "OrigemExterna", "IdExterno")
+                        .IsUnique();
+
                     b.ToTable("financas_transacoes", (string)null);
                 });
 
@@ -957,6 +999,15 @@ namespace Notas.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoIa", b =>

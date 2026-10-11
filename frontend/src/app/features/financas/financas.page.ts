@@ -8,6 +8,7 @@ import { IconComponent, IconName } from '../../shared/icon';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { HistoricoComponent } from './components/historico/historico.component';
 import { ImportarComponent } from './components/importar/importar.component';
+import { AuvpSyncComponent } from './components/auvp/auvp-sync.component';
 import { LancamentoFormComponent } from './components/lancamento-form/lancamento-form.component';
 import { MetasComponent } from './components/metas/metas.component';
 import { OrcamentoComponent } from './components/orcamento/orcamento.component';
@@ -39,6 +40,7 @@ type Aba = 'lancamentos' | 'orcamento' | 'metas' | 'historico';
     IconComponent,
     LancamentoFormComponent,
     ImportarComponent,
+    AuvpSyncComponent,
     DashboardComponent,
     TransacoesListaComponent,
     OrcamentoComponent,

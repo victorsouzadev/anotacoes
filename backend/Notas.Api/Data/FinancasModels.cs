@@ -51,6 +51,30 @@ public class Transacao
     public StatusTransacao Status { get; set; }
     public string? Observacoes { get; set; }
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// De onde veio o lançamento quando não foi digitado aqui ("auvp"). Junto com
+    /// <see cref="IdExterno"/> identifica a transação na origem, para uma nova
+    /// sincronização não duplicar o que já foi importado.
+    /// </summary>
+    public string? OrigemExterna { get; set; }
+    public string? IdExterno { get; set; }
+}
+
+// Conexão com a API da AUVP Financeiro (open banking): a chave do usuário, cifrada
+// como as de IA, e quando foi a última sincronização. Uma linha por usuário.
+public class ConfiguracaoAuvp
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string UserId { get; set; } = "";
+
+    public string? ChaveCifrada { get; set; }
+
+    /// <summary>Últimos caracteres da chave, em claro, só para exibição mascarada.</summary>
+    public string? ChaveSufixo { get; set; }
+
+    public DateTime? UltimaSincronizacaoEm { get; set; }
+    public DateTime AtualizadoEm { get; set; } = DateTime.UtcNow;
 }
 
 // Orçamento mensal: um valor total que o usuário distribui entre categorias.

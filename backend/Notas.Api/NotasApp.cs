@@ -1,3 +1,4 @@
+using Notas.Api.Services.Financas.Auvp;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -65,6 +66,15 @@ public static class NotasApp
         builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(ExtracaoOptions.SectionName));
         builder.Services.Configure<FinancasOptions>(builder.Configuration.GetSection(FinancasOptions.SectionName));
         builder.Services.AddSingleton<FinancasClock>();
+
+        // Importação da AUVP Financeiro (open banking). Sem Auvp__BaseUrl a
+        // integração fica desligada e a tela não oferece o botão.
+        builder.Services.Configure<AuvpOptions>(builder.Configuration.GetSection(AuvpOptions.SectionName));
+        builder.Services.AddHttpClient(nameof(AuvpCliente), c =>
+            c.Timeout = TimeSpan.FromSeconds(
+                Math.Clamp(builder.Configuration.GetValue("Auvp:TimeoutSegundos", 30), 5, 120)));
+        builder.Services.AddScoped<IAuvpCliente, AuvpCliente>();
+        builder.Services.AddScoped<AuvpSincronizador>();
 
         // Provedor de LLM: OpenRouter (o único que lê imagem/PDF), Anthropic direto, ou o
         // extrator heurístico local. O usuário pode cadastrar a própria chave e o próprio
@@ -242,6 +252,7 @@ public static class NotasApp
         app.MapNotesEndpoints();
         app.MapFoldersEndpoints();
         app.MapFinancasEndpoints();
+        app.MapAuvpEndpoints();
         app.MapOrcamentoEndpoints();
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();

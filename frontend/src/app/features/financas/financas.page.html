@@ -91,6 +91,8 @@
                       (irParaMes)="abrirMesNoOrcamento($event); trocarAba('lancamentos')" />
       }
 
+      <app-auvp-sync (sincronizado)="recarregar()" />
+
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
       } @else {
