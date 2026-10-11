@@ -59,6 +59,12 @@ public class Transacao
     /// </summary>
     public string? OrigemExterna { get; set; }
     public string? IdExterno { get; set; }
+
+    /// <summary>
+    /// Fica na lista, mas não soma em saldo, gráficos nem orçamento: transferência
+    /// entre contas do próprio usuário, ou algo que ele marcou como "não é gasto".
+    /// </summary>
+    public bool ForaDosTotais { get; set; }
 }
 
 // Conexão com a API da AUVP Financeiro (open banking): a chave do usuário, cifrada

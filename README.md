@@ -116,8 +116,9 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 - **Revisão de baixa confiança**: lançamentos extraídos com confiança abaixo do
   limiar (`Extracao:LimiarConfianca`, padrão 0.6) entram como "pendente de revisão"
   até o usuário confirmar ou corrigir os campos.
-- **Dashboard**: cards de saldo do mês, receitas, despesas, maior categoria de gasto
-  e variação vs. mês anterior; gráfico de pizza de gastos por categoria e gráfico de
+- **Dashboard**: cards de saldo do mês, receitas, despesas, maior categoria de gasto,
+  gasto médio por dia (com projeção para o fim do mês corrente) e variação vs. mês
+  anterior; ranking das 5 maiores despesas e divisão dos gastos por conta/cartão; gráfico de pizza de gastos por categoria e gráfico de
   linha de receitas x despesas ao longo do tempo (Chart.js).
 - **Lista de lançamentos**: mais recentes primeiro, com ação rápida de confirmar
   (lançamentos pendentes) ou remover.
@@ -125,10 +126,15 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
   cada usuário cadastra a própria chave de API da AUVP Financeiro (guardada cifrada)
   e clica em "Sincronizar agora". Todas as transações vêm, sem duplicar nas
   sincronizações seguintes (a partir da segunda, relê só os últimos 45 dias).
-  As categorias do open banking são mapeadas para as daqui; as transações marcadas
-  como ignoradas na AUVP e as transferências entre contas próprias entram como
-  "pendente de revisão", para não contarem em dobro. Um lançamento já importado
+  A categoria vem das tags do usuário na AUVP (Alimentação, Casa, Saúde…) quando
+  houver, senão da categoria do open banking. As transações marcadas como ignoradas
+  na AUVP e as transferências entre contas próprias entram **fora dos totais** —
+  aparecem na lista, riscadas, mas não somam em saldo, gráficos nem orçamento; com
+  isso os totais do mês batem com o painel da AUVP. Um lançamento já importado
   nunca é sobrescrito, então correções feitas aqui ficam.
+- **Fora dos totais**: qualquer lançamento pode ser tirado (ou devolvido) da conta
+  pelo botão de olho na lista — útil para reembolso ou transferência que o banco
+  não reconheceu como interna.
 
 ### Tarefas
 

@@ -18,6 +18,8 @@ function transacao(over: Partial<Transacao> = {}): Transacao {
     status: 'confirmado',
     observacoes: null,
     criadoEm: '2026-08-31T12:00:00Z',
+    foraDosTotais: false,
+    origem: null,
     ...over,
   };
 }

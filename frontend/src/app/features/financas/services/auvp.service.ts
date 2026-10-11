@@ -12,7 +12,7 @@ export interface AuvpConfiguracao {
 export interface AuvpSincronizacao {
   importadas: number;
   jaExistentes: number;
-  paraRevisao: number;
+  foraDosTotais: number;
   sincronizadoEm: string;
 }
 

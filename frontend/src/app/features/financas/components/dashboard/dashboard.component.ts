@@ -1,4 +1,4 @@
-import { CurrencyPipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -15,11 +15,19 @@ import { Chart, ChartConfiguration } from 'chart.js';
 import { ThemeService } from '../../../../core/theme.service';
 import { opcoesBase, paletaAtual, registrarChartJs } from '../../chart-theme';
 import { CategoriaResumo, ResumoResponse, TendenciaPeriodo } from '../../models/dashboard.model';
+import { Transacao } from '../../models/transacao.model';
+
+export interface GastoPorConta {
+  conta: string;
+  total: number;
+  percentual: number;
+  quantidade: number;
+}
 
 @Component({
   selector: 'app-financas-dashboard',
   standalone: true,
-  imports: [CurrencyPipe, DecimalPipe],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,6 +36,8 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
   readonly resumo = input<ResumoResponse | null>(null);
   readonly categorias = input<CategoriaResumo[]>([]);
   readonly tendencias = input<TendenciaPeriodo[]>([]);
+  /** Lançamentos do mês exibido — base do ranking e da divisão por conta. */
+  readonly transacoes = input<Transacao[]>([]);
 
   private readonly pizzaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pizzaCanvas');
   private readonly linhaCanvas = viewChild<ElementRef<HTMLCanvasElement>>('linhaCanvas');
@@ -44,6 +54,53 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
   private readonly aoTrocarTemaDoSistema = () => this.renderizar();
 
   readonly semDespesas = computed(() => this.categorias().length === 0);
+  private readonly despesasQueContam = computed(() =>
+    this.transacoes().filter((t) => t.tipo === 'despesa' && !t.foraDosTotais),
+  );
+
+  readonly maioresDespesas = computed(() =>
+    [...this.despesasQueContam()].sort((a, b) => b.valor - a.valor).slice(0, 5),
+  );
+
+  /** Despesas agrupadas pela conta/cartão de origem; lançamentos digitados aqui ficam em "Manual". */
+  readonly gastosPorConta = computed<GastoPorConta[]>(() => {
+    const despesas = this.despesasQueContam();
+    const total = despesas.reduce((s, t) => s + t.valor, 0);
+    const grupos = new Map<string, { total: number; quantidade: number }>();
+    for (const t of despesas) {
+      const conta = nomeDaConta(t);
+      const g = grupos.get(conta) ?? { total: 0, quantidade: 0 };
+      g.total += t.valor;
+      g.quantidade++;
+      grupos.set(conta, g);
+    }
+    return [...grupos.entries()]
+      .map(([conta, g]) => ({
+        conta,
+        total: g.total,
+        quantidade: g.quantidade,
+        percentual: total > 0 ? (g.total / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  });
+
+  /**
+   * Gasto médio por dia no mês e, se for o mês corrente, a projeção para o fim
+   * dele no mesmo ritmo. Mês passado divide pelos dias do mês inteiro.
+   */
+  readonly ritmo = computed(() => {
+    const r = this.resumo();
+    if (!r || r.totalDespesas <= 0) return null;
+    const hoje = new Date();
+    const diasNoMes = new Date(r.ano, r.mes, 0).getDate();
+    const ehMesAtual = hoje.getFullYear() === r.ano && hoje.getMonth() + 1 === r.mes;
+    const ehFuturo = new Date(r.ano, r.mes - 1, 1) > hoje;
+    if (ehFuturo) return null;
+    const dias = ehMesAtual ? hoje.getDate() : diasNoMes;
+    const porDia = r.totalDespesas / dias;
+    return { porDia, projecao: ehMesAtual ? porDia * diasNoMes : null };
+  });
+
   readonly semTendencias = computed(() => this.tendencias().every((t) => t.receitas === 0 && t.despesas === 0));
 
   constructor() {
@@ -156,4 +213,11 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
 
     this.linhaChart = new Chart(canvas, config);
   }
+}
+
+function nomeDaConta(t: Transacao): string {
+  if (t.origem !== 'auvp') return 'Manual';
+  // O importador grava "AUVP · <nome da conta>" no texto original.
+  const nome = t.textoOriginal.split('·').slice(1).join('·').trim();
+  return nome || 'Banco';
 }

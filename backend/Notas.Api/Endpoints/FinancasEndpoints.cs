@@ -274,6 +274,7 @@ public static class FinancasEndpoints
                 transacao.Observacoes = obs.Length == 0 ? null : obs[..Math.Min(obs.Length, 500)];
             }
             if (req.LimparFormaPagamento == true) transacao.FormaPagamento = null;
+            if (req.ForaDosTotais is not null) transacao.ForaDosTotais = req.ForaDosTotais.Value;
 
             // Uma correção manual do usuário é, por definição, confirmada — a menos
             // que o cliente explicitamente informe outro status.
@@ -309,11 +310,11 @@ public static class FinancasEndpoints
             var (inicioAnterior, fimAnterior) = FinancasClock.LimitesDoMes(anoAnterior, mesAnterior);
 
             var transacoesMes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && t.Data >= inicio && t.Data <= fim)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= fim)
                 .ToListAsync(ct);
 
             var transacoesMesAnterior = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && t.Data >= inicioAnterior && t.Data <= fimAnterior)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicioAnterior && t.Data <= fimAnterior)
                 .ToListAsync(ct);
 
             var totalReceitas = transacoesMes.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor);
@@ -364,7 +365,7 @@ public static class FinancasEndpoints
             var (inicio, fim) = FinancasClock.LimitesDoMes(anoRef, mesRef);
 
             var transacoes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && t.Data >= inicio && t.Data <= fim && t.Tipo == tipoRef)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= fim && t.Tipo == tipoRef)
                 .ToListAsync(ct);
 
             var total = transacoes.Sum(t => t.Valor);
@@ -400,7 +401,7 @@ public static class FinancasEndpoints
                 : JanelaMensal(hoje, periodosRef);
 
             var transacoes = await db.Transacoes.AsNoTracking()
-                .Where(t => t.UserId == userId && t.Data >= inicio && t.Data <= hoje)
+                .Where(t => t.UserId == userId && !t.ForaDosTotais && t.Data >= inicio && t.Data <= hoje)
                 .ToListAsync(ct);
 
             var porChave = transacoes

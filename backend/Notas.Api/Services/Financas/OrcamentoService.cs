@@ -154,7 +154,7 @@ public class OrcamentoService
             .ToListAsync(ct);
 
         var despesas = await _db.Transacoes.AsNoTracking()
-            .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa
+            .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa && !t.ForaDosTotais
                         && t.Data >= primeiroMes && t.Data <= ultimoDia)
             .ToListAsync(ct);
 
@@ -195,7 +195,8 @@ public class OrcamentoService
         var (inicio, fim) = FinancasClock.LimitesDoMes(ano, mes);
 
         var despesas = await _db.Transacoes.AsNoTracking()
-            .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa && t.Data >= inicio && t.Data <= fim)
+            .Where(t => t.UserId == userId && t.Tipo == TipoTransacao.Despesa && !t.ForaDosTotais
+                        && t.Data >= inicio && t.Data <= fim)
             .ToListAsync(ct);
 
         var realizadoPorCategoria = despesas

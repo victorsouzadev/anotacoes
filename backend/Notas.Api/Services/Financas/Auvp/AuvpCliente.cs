@@ -44,7 +44,12 @@ public record AuvpTransacao(
     [property: JsonPropertyName("observations")] string? Observations,
     [property: JsonPropertyName("ignore")] bool Ignore,
     [property: JsonPropertyName("is_internal_transfer")] bool IsInternalTransfer,
-    [property: JsonPropertyName("user_account")] AuvpConta? UserAccount);
+    [property: JsonPropertyName("user_account")] AuvpConta? UserAccount,
+    [property: JsonPropertyName("transaction_tags")] List<AuvpTransacaoTag>? TransactionTags = null);
+
+public record AuvpTransacaoTag([property: JsonPropertyName("tag")] AuvpTag? Tag);
+
+public record AuvpTag([property: JsonPropertyName("name")] string? Name);
 
 public record AuvpConta(
     [property: JsonPropertyName("name")] string? Name,

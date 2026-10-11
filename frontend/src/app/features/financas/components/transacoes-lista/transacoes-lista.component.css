@@ -42,6 +42,13 @@ li {
 li:last-child { border-bottom: none; }
 li.pendente { border-left: 2px solid var(--atencao); padding-left: 10px; }
 li.ocupado { opacity: 0.55; }
+li.fora .descricao, li.fora .valor { opacity: 0.55; }
+li.fora .valor { text-decoration: line-through; }
+.origem {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
 
 .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .descricao { font-size: 13.5px; font-weight: 500; overflow-wrap: anywhere; }
@@ -63,6 +70,7 @@ li.ocupado { opacity: 0.55; }
   padding: 2px 8px;
   white-space: nowrap;
 }
+.status-badge.fora { color: var(--text-muted); border: 1px dashed var(--border); background: transparent; }
 .status-badge.pendente {
   color: var(--atencao);
   background: color-mix(in srgb, var(--atencao) 14%, transparent);
@@ -83,6 +91,7 @@ li.ocupado { opacity: 0.55; }
 }
 .acoes button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .acoes button.excluir:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.acoes button.ativo { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .acoes button:disabled { opacity: 0.5; cursor: default; }
 
 /* ---------------------------------------------------------------- edição */

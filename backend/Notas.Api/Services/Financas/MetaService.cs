@@ -56,6 +56,7 @@ public class MetaService
             .Where(t => t.UserId == userId
                         && t.Categoria == Categoria.Investimentos
                         && t.Tipo == TipoTransacao.Despesa
+                        && !t.ForaDosTotais
                         && !vinculadas.Contains(t.Id))
             .OrderByDescending(t => t.Data)
             .Take(50)

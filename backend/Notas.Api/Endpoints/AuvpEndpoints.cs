@@ -13,7 +13,7 @@ public record SalvarAuvpRequest(string? Chave);
 
 public record SincronizarAuvpRequest(DateOnly? De, DateOnly? Ate);
 
-public record SincronizarAuvpResponse(int Importadas, int JaExistentes, int ParaRevisao, DateTime SincronizadoEm);
+public record SincronizarAuvpResponse(int Importadas, int JaExistentes, int ForaDosTotais, DateTime SincronizadoEm);
 
 // Importação de transações da AUVP Financeiro (open banking). A chave é do
 // usuário, guardada cifrada; a URL da API é do servidor (Auvp__BaseUrl).
@@ -108,7 +108,7 @@ public static class AuvpEndpoints
             }
 
             return Results.Ok(new SincronizarAuvpResponse(resultado.Importadas, resultado.JaExistentes,
-                resultado.ParaRevisao, resultado.SincronizadoEm));
+                resultado.ForaDosTotais, resultado.SincronizadoEm));
         }).RequireRateLimiting("financas-importacao");
     }
 

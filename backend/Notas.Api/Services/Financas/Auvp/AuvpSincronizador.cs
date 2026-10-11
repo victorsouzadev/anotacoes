@@ -4,7 +4,7 @@ using Notas.Api.Data;
 
 namespace Notas.Api.Services.Financas.Auvp;
 
-public record ResultadoSincronizacaoAuvp(int Importadas, int JaExistentes, int ParaRevisao, DateTime SincronizadoEm);
+public record ResultadoSincronizacaoAuvp(int Importadas, int JaExistentes, int ForaDosTotais, DateTime SincronizadoEm);
 
 // Traz as transações da AUVP para os lançamentos do usuário.
 //
@@ -30,7 +30,7 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
                 .ToListAsync(ct))
             .ToHashSet();
 
-        int importadas = 0, jaExistentes = 0, paraRevisao = 0;
+        int importadas = 0, jaExistentes = 0, foraDosTotais = 0;
         var maxPaginas = Math.Max(1, opcoes.Value.MaxPaginas);
 
         for (var pagina = 1; pagina <= maxPaginas; pagina++)
@@ -47,7 +47,7 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
                 }
 
                 var transacao = Converter(item, userId);
-                if (transacao.Status == StatusTransacao.PendenteRevisao) paraRevisao++;
+                if (transacao.ForaDosTotais) foraDosTotais++;
                 db.Transacoes.Add(transacao);
                 importadas++;
             }
@@ -58,7 +58,7 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
 
         var agora = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
-        return new ResultadoSincronizacaoAuvp(importadas, jaExistentes, paraRevisao, agora);
+        return new ResultadoSincronizacaoAuvp(importadas, jaExistentes, foraDosTotais, agora);
     }
 
     public static Transacao Converter(AuvpTransacao item, string userId)
@@ -73,7 +73,8 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
         if (descricao.Length > 500) descricao = descricao[..500];
 
         // Ignoradas e transferências entre contas próprias entram (o usuário pediu
-        // tudo), mas pendentes: contadas como gasto, inflariam o mês em dobro.
+        // tudo), mas fora dos totais — é o mesmo critério do painel da AUVP, e
+        // somadas inflariam o mês: em set/2026 eram R$ 19 mil a mais de cada lado.
         var avisos = new List<string>();
         if (item.Ignore) avisos.Add("marcada como ignorada na AUVP");
         if (item.IsInternalTransfer) avisos.Add("transferência entre contas próprias");
@@ -90,7 +91,10 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
             Descricao = descricao,
             Valor = Math.Abs(item.Amount),
             Tipo = tipo,
-            Categoria = AuvpCategorias.Mapear(item.CategoryId, tipo),
+            // A tag é escolha do usuário; a categoria do open banking, um palpite
+            // do banco. Quando a tag diz algo, ela vence.
+            Categoria = AuvpCategorias.DaTag(item.TransactionTags?.Select(t => t.Tag?.Name))
+                ?? AuvpCategorias.Mapear(item.CategoryId, tipo),
             // A AUVP grava a data em UTC à meia-noite de Brasília (03:00Z).
             Data = DateOnly.FromDateTime(item.Date.ToOffset(TimeSpan.FromHours(-3)).DateTime),
             FormaPagamento = item.UserAccount?.Subtype?.Equals("CREDIT_CARD", StringComparison.OrdinalIgnoreCase) == true
@@ -98,7 +102,8 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
                 : null,
             TextoOriginal = conta is null ? "AUVP" : $"AUVP · {conta}",
             ConfiancaIa = 1f,
-            Status = avisos.Count > 0 ? StatusTransacao.PendenteRevisao : StatusTransacao.Confirmado,
+            Status = StatusTransacao.Confirmado,
+            ForaDosTotais = avisos.Count > 0,
             Observacoes = observacoes.Length == 0 ? null : observacoes,
             OrigemExterna = Origem,
             IdExterno = item.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -110,6 +115,44 @@ public class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IOptions<A
 // ~130 entradas agrupadas em faixas de id. Cada faixa cai numa categoria daqui.
 public static class AuvpCategorias
 {
+    // Tags que o usuário cria na AUVP, comparadas sem acento e sem caixa. Tags de
+    // pessoa ("Pai", "Manu") ou de método ("Conforto") não dizem a categoria.
+    private static readonly Dictionary<string, Categoria> PorTag = new()
+    {
+        ["alimentacao"] = Categoria.Alimentacao, ["mercado"] = Categoria.Alimentacao,
+        ["restaurante"] = Categoria.Alimentacao, ["comida"] = Categoria.Alimentacao,
+        ["transporte"] = Categoria.Transporte, ["combustivel"] = Categoria.Transporte,
+        ["carro"] = Categoria.Transporte, ["uber"] = Categoria.Transporte,
+        ["casa"] = Categoria.Moradia, ["moradia"] = Categoria.Moradia, ["aluguel"] = Categoria.Moradia,
+        ["saude"] = Categoria.Saude, ["farmacia"] = Categoria.Saude,
+        ["educacao"] = Categoria.Educacao, ["cursos"] = Categoria.Educacao,
+        ["lazer"] = Categoria.Lazer, ["viagem"] = Categoria.Lazer,
+        ["vestuario"] = Categoria.Compras, ["roupas"] = Categoria.Compras, ["beleza"] = Categoria.Compras,
+        ["papelaria"] = Categoria.Compras, ["compras"] = Categoria.Compras,
+        ["contas"] = Categoria.ContasServicos, ["assinaturas"] = Categoria.ContasServicos,
+        ["salario"] = Categoria.Salario, ["investimentos"] = Categoria.Investimentos,
+    };
+
+    public static Categoria? DaTag(IEnumerable<string?>? tags)
+    {
+        if (tags is null) return null;
+        foreach (var tag in tags)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) continue;
+            if (PorTag.TryGetValue(Normalizar(tag), out var categoria)) return categoria;
+        }
+        return null;
+    }
+
+    private static string Normalizar(string texto)
+    {
+        var decomposto = texto.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        return new string(decomposto
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                        != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .ToArray());
+    }
+
     public static Categoria Mapear(int? id, TipoTransacao tipo) => id switch
     {
         null => Categoria.Outros,

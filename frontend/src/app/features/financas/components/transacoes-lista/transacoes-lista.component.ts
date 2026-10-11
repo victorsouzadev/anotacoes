@@ -126,6 +126,21 @@ export class TransacoesListaComponent {
     });
   }
 
+  alternarTotais(t: Transacao): void {
+    this.salvandoId.set(t.id);
+    this.erro.set(null);
+    this.service.atualizar(t.id, { foraDosTotais: !t.foraDosTotais }).subscribe({
+      next: () => {
+        this.salvandoId.set(null);
+        this.alterado.emit();
+      },
+      error: () => {
+        this.salvandoId.set(null);
+        this.erro.set('Não foi possível alterar o lançamento.');
+      },
+    });
+  }
+
   pedirConfirmacaoExclusao(t: Transacao): void {
     this.erro.set(null);
     this.confirmandoExclusaoId.set(t.id);

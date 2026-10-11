@@ -32,6 +32,10 @@ export interface Transacao {
   status: StatusTransacao;
   observacoes: string | null;
   criadoEm: string;
+  /** Aparece na lista, mas não soma em saldo, gráficos nem orçamento. */
+  foraDosTotais: boolean;
+  /** De onde veio, quando não foi digitado aqui (ex.: 'auvp'). */
+  origem: string | null;
 }
 
 export interface CriarTransacaoRequest {
@@ -49,6 +53,7 @@ export interface AtualizarTransacaoRequest {
   status?: 'Confirmado' | 'PendenteRevisao';
   /** `null` significa "não alterar", então limpar a forma de pagamento precisa de flag. */
   limparFormaPagamento?: boolean;
+  foraDosTotais?: boolean;
 }
 
 export interface ListarTransacoesFiltro {

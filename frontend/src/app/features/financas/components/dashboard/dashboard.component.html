@@ -35,6 +35,20 @@
         }
       </div>
 
+      @if (ritmo(); as rt) {
+        <div class="card resumo-card">
+          <span class="label">Gasto por dia</span>
+          <span class="valor texto">{{ rt.porDia | currency }}</span>
+          @if (rt.projecao !== null) {
+            <span class="comparativo" [class.negativo]="rt.projecao > r.totalReceitas"
+                  [class.neutro]="rt.projecao <= r.totalReceitas"
+                  title="Projeção para o fim do mês, mantendo o ritmo atual">
+              ≈ {{ rt.projecao | currency }} no mês
+            </span>
+          }
+        </div>
+      }
+
       <div class="card resumo-card">
         <span class="label">Lançamentos</span>
         <span class="valor texto">{{ r.quantidadeLancamentos }}</span>
@@ -64,4 +78,37 @@
       }
     </div>
   </div>
+
+  @if (maioresDespesas().length > 0) {
+    <div class="graficos">
+      <div class="card grafico-card">
+        <h2>Maiores despesas</h2>
+        <ol class="ranking">
+          @for (t of maioresDespesas(); track t.id) {
+            <li>
+              <span class="nome" [title]="t.descricao">{{ t.descricao }}</span>
+              <span class="detalhe">{{ t.data | date: 'dd/MM' }} · {{ t.categoriaRotulo }}</span>
+              <span class="quanto">{{ t.valor | currency }}</span>
+            </li>
+          }
+        </ol>
+      </div>
+
+      <div class="card grafico-card">
+        <h2>Gastos por conta</h2>
+        <ul class="barras">
+          @for (c of gastosPorConta(); track c.conta) {
+            <li>
+              <div class="barra-topo">
+                <span class="nome" [title]="c.conta">{{ c.conta }}</span>
+                <span class="quanto">{{ c.total | currency }}</span>
+              </div>
+              <div class="barra" role="presentation"><span [style.width.%]="c.percentual"></span></div>
+              <span class="detalhe">{{ c.percentual | number: '1.0-0' }}% · {{ c.quantidade }} {{ c.quantidade === 1 ? 'lançamento' : 'lançamentos' }}</span>
+            </li>
+          }
+        </ul>
+      </div>
+    </div>
+  }
 </div>

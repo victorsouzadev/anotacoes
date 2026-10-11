@@ -99,7 +99,8 @@
         <app-financas-dashboard
           [resumo]="resumo()"
           [categorias]="resumoCategorias()"
-          [tendencias]="tendencias()" />
+          [tendencias]="tendencias()"
+          [transacoes]="transacoes()" />
 
         <div class="filtros">
           <select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event); aplicarFiltros()" aria-label="Filtrar por tipo">

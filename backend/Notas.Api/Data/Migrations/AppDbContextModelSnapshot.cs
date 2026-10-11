@@ -929,6 +929,9 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("ForaDosTotais")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("FormaPagamento")
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");

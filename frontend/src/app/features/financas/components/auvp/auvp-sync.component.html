@@ -32,8 +32,8 @@
       @if (resultado(); as r) {
         <p class="resultado" role="status">
           {{ r.importadas }} {{ r.importadas === 1 ? 'lançamento importado' : 'lançamentos importados' }}@if (r.jaExistentes > 0) {, {{ r.jaExistentes }} já existiam}.
-          @if (r.paraRevisao > 0) {
-            {{ r.paraRevisao }} {{ r.paraRevisao === 1 ? 'ficou' : 'ficaram' }} para revisão (ignoradas na AUVP ou transferências entre suas contas).
+          @if (r.foraDosTotais > 0) {
+            {{ r.foraDosTotais }} {{ r.foraDosTotais === 1 ? 'ficou' : 'ficaram' }} fora dos totais (ignoradas na AUVP ou transferências entre suas contas).
           }
         </p>
       }

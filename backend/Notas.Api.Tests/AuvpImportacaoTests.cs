@@ -97,14 +97,46 @@ public class AuvpImportacaoTests : IClassFixture<TasksApiFactory>, IAsyncLifetim
     }
 
     [Fact]
-    public async Task Ignoradas_e_transferencias_entram_pendentes_de_revisao()
+    public async Task Ignoradas_e_transferencias_entram_fora_dos_totais()
     {
-        _auvp.Paginas = [[Item(10, -100m, ignorada: true), Item(11, -500m, categoria: 23, transferencia: true)]];
+        _auvp.Paginas = [[Item(10, -100m, ignorada: true), Item(11, -500m, categoria: 23, transferencia: true),
+            Item(12, -30m)]];
         await CadastrarChave();
 
         var r = await Sincronizar();
-        Assert.Equal(2, r.GetProperty("importadas").GetInt32());
-        Assert.Equal(2, r.GetProperty("paraRevisao").GetInt32());
+        Assert.Equal(3, r.GetProperty("importadas").GetInt32());
+        Assert.Equal(2, r.GetProperty("foraDosTotais").GetInt32());
+
+        // Aparecem na lista, mas o mês soma só a compra de verdade — como no painel da AUVP.
+        var lista = await _client.GetFromJsonAsync<JsonElement>("/api/financas/transacoes?ano=2026&mes=10");
+        var itens = lista.ValueKind == JsonValueKind.Array ? lista : lista.GetProperty("itens");
+        Assert.Equal(3, itens.GetArrayLength());
+        Assert.Equal(2, itens.EnumerateArray().Count(t => t.GetProperty("foraDosTotais").GetBoolean()));
+
+        var resumo = await _client.GetFromJsonAsync<JsonElement>("/api/financas/dashboard/resumo?ano=2026&mes=10");
+        Assert.Equal(30m, resumo.GetProperty("totalDespesas").GetDecimal());
+        Assert.Equal(0, resumo.GetProperty("quantidadePendentes").GetInt32());
+
+        // O usuário pode trazer uma de volta para a conta.
+        var ignorada = itens.EnumerateArray().Single(t => t.GetProperty("descricao").GetString() == "Compra 10");
+        var patch = await _client.PatchAsJsonAsync($"/api/financas/transacoes/{ignorada.GetProperty("id").GetString()}",
+            new { foraDosTotais = false });
+        patch.EnsureSuccessStatusCode();
+        resumo = await _client.GetFromJsonAsync<JsonElement>("/api/financas/dashboard/resumo?ano=2026&mes=10");
+        Assert.Equal(130m, resumo.GetProperty("totalDespesas").GetDecimal());
+    }
+
+    [Fact]
+    public void Tag_do_usuario_vence_a_categoria_do_banco()
+    {
+        var item = Item(20, -50m, categoria: 64) with
+        {
+            TransactionTags = [new AuvpTransacaoTag(new AuvpTag("Pai")), new AuvpTransacaoTag(new AuvpTag("Alimentação"))],
+        };
+        Assert.Equal(Categoria.Alimentacao, AuvpSincronizador.Converter(item, "u").Categoria);
+
+        var semTagUtil = Item(21, -50m, categoria: 64) with { TransactionTags = [new AuvpTransacaoTag(new AuvpTag("Manu"))] };
+        Assert.Equal(Categoria.Compras, AuvpSincronizador.Converter(semTagUtil, "u").Categoria);
     }
 
     [Fact]

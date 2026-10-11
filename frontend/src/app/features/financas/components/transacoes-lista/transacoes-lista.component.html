@@ -14,7 +14,7 @@
 
   <ul>
     @for (t of transacoes(); track t.id) {
-      <li [class.pendente]="t.status === 'pendente_revisao'" [class.ocupado]="salvandoId() === t.id">
+      <li [class.pendente]="t.status === 'pendente_revisao'" [class.fora]="t.foraDosTotais" [class.ocupado]="salvandoId() === t.id">
         @if (editandoId() === t.id && rascunho) {
           <!-- Edição inline: sem isso, um valor extraído errado só podia ser
                confirmado como está ou excluído. -->
@@ -90,6 +90,7 @@
             <span class="meta">
               {{ t.data | date: 'dd/MM/yyyy' }} · {{ t.categoriaRotulo }}
               @if (t.formaPagamento) { · {{ t.formaPagamento }} }
+              @if (t.origem === 'auvp') { · <span class="origem" [title]="t.textoOriginal">banco</span> }
             </span>
             @if (t.observacoes) { <span class="observacoes">{{ t.observacoes }}</span> }
           </div>
@@ -98,7 +99,9 @@
             {{ t.tipo === 'receita' ? '+' : '−' }} {{ t.valor | currency }}
           </div>
 
-          @if (t.status === 'pendente_revisao') {
+          @if (t.foraDosTotais) {
+            <div class="status-badge fora" title="Não entra no saldo, nos gráficos nem no orçamento">fora</div>
+          } @else if (t.status === 'pendente_revisao') {
             <div class="status-badge pendente"
                  [title]="'Confiança da extração: ' + rotuloConfianca(t.confiancaIa)">
               revisar
@@ -114,6 +117,12 @@
                 <app-icon name="check" [size]="14" />
               </button>
             }
+            <button type="button" (click)="alternarTotais(t)" [disabled]="salvandoId() === t.id"
+                    [class.ativo]="t.foraDosTotais"
+                    [title]="t.foraDosTotais ? 'Voltar a contar nos totais' : 'Não contar nos totais (transferência entre contas, reembolso…)'"
+                    [attr.aria-label]="t.foraDosTotais ? 'Voltar a contar nos totais' : 'Não contar nos totais'">
+              <app-icon name="eye" [size]="14" />
+            </button>
             <button type="button" (click)="editar(t)" title="Editar lançamento" aria-label="Editar lançamento">
               <app-icon name="edit" [size]="14" />
             </button>
