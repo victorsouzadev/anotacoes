@@ -62,8 +62,37 @@ export interface AiPost {
   explicacao: string;
 }
 
+/** O que a IA devolve — igual no painel e no rascunho que o MCP salva. */
+export interface AiPostPlan {
+  modeloId: string;
+  textos: { indice: number; texto: string }[];
+  ordemFotos: number[];
+  filtro: string | null;
+  explicacao: string;
+}
+
+/** Junta o plano da IA com o modelo e as fotos. `null` se o modelo sumiu. */
+export function planToPost(entries: GalleryEntry[], plan: AiPostPlan, files: File[]): AiPost | null {
+  const entry = entries.find((e) => e.id === plan.modeloId);
+  if (!entry) return null;
+  const order = [...plan.ordemFotos, ...files.map((_, i) => i)].filter((i, k, l) => i >= 0 && i < files.length && l.indexOf(i) === k);
+  return {
+    entry,
+    look: rewriteTexts(entry.build(), plan.textos ?? []),
+    files: order.map((i) => files[i]),
+    preset: plan.filtro,
+    explicacao: plan.explicacao ?? '',
+  };
+}
+
+/** data URL → File, pra reaproveitar o caminho de abrir foto do modo. */
+export async function dataUrlToFile(src: string, name: string): Promise<File> {
+  const blob = await (await fetch(src)).blob();
+  return new File([blob], name, { type: blob.type || 'image/jpeg' });
+}
+
 interface PostIaResponse {
-  post: { modeloId: string; textos: { indice: number; texto: string }[]; ordemFotos: number[]; filtro: string | null; explicacao: string } | null;
+  post: AiPostPlan | null;
   usouIa: boolean;
   motivo: string | null;
 }
@@ -177,20 +206,13 @@ export class SocialAiPostPanelComponent {
         filtros: FILTER_PRESETS.map((p) => p.id),
         tipo: this.type(), tom: this.tone(), contexto: this.context(), marca: readBrand(),
       }));
-      const entry = r.post && entries.find((e) => e.id === r.post!.modeloId);
-      if (!r.usouIa || !r.post || !entry) {
+      const post = r.usouIa && r.post ? planToPost(entries, r.post, this.files()) : null;
+      if (!post) {
         this.error.set(r.motivo || 'A IA não montou o post. Tente de novo.');
         return;
       }
-      const files = this.files();
-      this.generated.emit({
-        entry,
-        look: rewriteTexts(entry.build(), r.post.textos),
-        files: r.post.ordemFotos.map((i) => files[i]).filter(Boolean),
-        preset: r.post.filtro,
-        explicacao: r.post.explicacao,
-      });
-      this.done.set(`${entry.group} "${entry.label}". ${r.post.explicacao} Gere de novo pra outra versão.`);
+      this.generated.emit(post);
+      this.done.set(`${post.entry.group} "${post.entry.label}". ${post.explicacao} Gere de novo pra outra versão.`);
     } catch (e) {
       const err = e as { error?: { erro?: string } };
       this.error.set(err?.error?.erro ?? 'Não consegui falar com o servidor agora.');

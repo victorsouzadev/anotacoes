@@ -62,6 +62,11 @@ export function readBrand(): string {
 // As opções sobrevivem à troca de aba: gerar custa, e perder o resultado por
 // ter ido olhar os filtros seria desperdício.
 const lastOptions = signal<string[]>([]);
+
+/** Legendas que chegaram prontas (rascunho do MCP) aparecem no painel. */
+export function presetCaptions(list: string[]): void {
+  lastOptions.set(list);
+}
 const lastContext = signal('');
 const lastTone = signal<string>('carinhoso');
 

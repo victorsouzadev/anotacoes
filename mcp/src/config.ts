@@ -10,6 +10,8 @@ function required(name: string): string {
 
 export const config = {
   apiUrl: (process.env.HUB_API_URL ?? 'http://191.252.177.244:8090').replace(/\/+$/, ''),
+  /** Onde o app web abre (link do rascunho no editor). Padrão: o mesmo host da API. */
+  webUrl: (process.env.HUB_WEB_URL ?? process.env.HUB_API_URL ?? 'http://191.252.177.244:8090').replace(/\/+$/, ''),
   email: required('HUB_EMAIL'),
   password: required('HUB_PASSWORD'),
 };

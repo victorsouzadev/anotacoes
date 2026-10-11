@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
@@ -24,7 +24,7 @@ import {
 } from './raster';
 import { ImageProjectMetaDto, ImageProjectsService } from './image-projects.service';
 import { SocialModeComponent } from './social-mode';
-import { SocialProjectData, SocialStore } from './social-store';
+import { AiDraft, SocialProjectData, SocialStore } from './social-store';
 import { SplitElement, SplitOptions, SplitPlan, planSplit } from './split';
 import { TemplateModeComponent } from './template-mode';
 import { ElementNamingService } from './element-naming.service';
@@ -62,6 +62,8 @@ interface ProjectData {
   images?: (Partial<ImportedImage> & { original: string })[];
   molde?: TemplateProjectData | null;
   social?: SocialProjectData | null;
+  /** Post montado pela IA fora do editor (MCP): o modo social aplica ao abrir. */
+  rascunhoIa?: AiDraft | null;
   ilustracao?: IllustrationProjectData | null;
 }
 
@@ -1035,6 +1037,9 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public materials: CutMaterialsService,
   ) {
     this.bridge.register((target, payload) => void this.receive(target, payload));
+    // Link direto pra um projeto (/imagens?projeto=id) — é o que o MCP devolve.
+    const linked = inject(ActivatedRoute).snapshot.queryParamMap.get('projeto');
+    if (linked) setTimeout(() => void this.openProject(linked));
     effect(() => {
       const items = this.images();
       this.pcHistory.observe({ items, selectedId: untracked(() => this.selectedId()) });
@@ -3231,6 +3236,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
         if (!data.images?.length && !data.molde?.svg && !temSocial) this.setModo('ilustracao');
       } else {
         this.illustration.clear();
+      }
+      if (data.rascunhoIa?.fotos?.length) {
+        this.social.clear();
+        this.setModo('social');
+        this.social.pendingAiDraft.set(data.rascunhoIa);
       }
       this.resetPcHistory();
     } finally {

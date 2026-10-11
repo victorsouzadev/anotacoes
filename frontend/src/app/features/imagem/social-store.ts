@@ -48,6 +48,20 @@ export interface SocialProjectData {
   guias?: Guide[];
 }
 
+/** Rascunho de post com IA salvo como projeto: as fotos e o plano da IA
+ * (modelo, textos, ordem, filtro). Quem monta é o modo, ao abrir. */
+export interface AiDraft {
+  fotos: { nome: string; src: string }[];
+  post: {
+    modeloId: string;
+    textos: { indice: number; texto: string }[];
+    ordemFotos: number[];
+    filtro: string | null;
+    explicacao: string;
+  };
+  legendas?: string[];
+}
+
 /** O que um modelo pronto escreve no post. */
 export interface TemplateLook {
   templateId: string;
@@ -106,6 +120,8 @@ export class SocialStore {
    * a exportação ainda ia querer. */
   /** Foto mandada por outro modo ("Enviar para…"), esperando o modo abrir. */
   readonly pendingImport = signal<File | null>(null);
+  /** Post montado fora do editor (pelo MCP), esperando o modo aplicar. */
+  readonly pendingAiDraft = signal<AiDraft | null>(null);
   readonly image = signal<PhotoSource | null>(null);
   /** Data URL de origem. Pode ser grande: a versão que vai pro projeto salvo é
    * reduzida na hora de salvar, não na hora de importar. */

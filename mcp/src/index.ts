@@ -7,6 +7,7 @@ import type { TaskItem } from './tasksApi.js';
 import { normalizePriority } from './priority.js';
 import { findCategoryByName, findLaneByName, findTaskMatch } from './taskMatch.js';
 import { searchTasks } from './taskSearch.js';
+import { registrarFerramentasViih } from './viih/ferramentas.js';
 
 // `fetch` global só existe a partir do Node 18. Sem essa checagem, a primeira tool chamada falha
 // com "fetch is not defined" — mensagem que não indica a causa real (Node do cliente MCP é antigo).
@@ -21,7 +22,7 @@ if (typeof fetch === 'undefined') {
 
 const server = new McpServer({
   name: 'anotacoes-tasks',
-  version: '2.2.0',
+  version: '3.0.0',
 });
 
 function text(value: unknown) {
@@ -426,6 +427,8 @@ server.tool(
     return text(comments);
   }),
 );
+
+registrarFerramentasViih(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

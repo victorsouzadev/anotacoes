@@ -23,15 +23,16 @@ import { FrameOptions, PhotoSource, Source, paintFrame, sourceOf, stepDownscale 
 import { sharpenRgba } from './sharpen';
 import { melhorarAutomaticamente } from './auto';
 import { aplicarRazaoDeLuz, razaoDeLuz, tamanhoDaRazao } from './light';
-import { SocialStore } from './social-store';
+import { AiDraft, SocialStore } from './social-store';
 import { ImageUpscaleService } from './image-upscale.service';
 import { aiCutout } from './ai-cutout';
 import { downloadBlob, loadImageElement } from './svg-template';
 import { Overlay, OverlayBox, PhotoOverlay, PHOTO_ZOOM_MAX, PHOTO_ZOOM_MIN, drawOverlays, ensureOverlayAssets, ensureOverlayFonts, hitOverlay, photoPanDelta, preloadPhotos } from './social-overlays';
 import { SocialOverlaysPanelComponent } from './social-overlays-panel';
 import { SocialTemplateGalleryComponent, preload as preloadLook } from './social-template-gallery';
-import { SocialCaptionPanelComponent } from './social-caption-panel';
-import { AiPost, SocialAiPostPanelComponent } from './social-ai-post-panel';
+import { SocialCaptionPanelComponent, presetCaptions } from './social-caption-panel';
+import { AiPost, SocialAiPostPanelComponent, dataUrlToFile, planToPost } from './social-ai-post-panel';
+import { SocialTemplatesService } from './social-templates.service';
 import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
 import { emptyPlaceholders, isPlaceholder } from './social-photo-slots';
@@ -992,6 +993,7 @@ export class SocialModeComponent {
   private boxes: OverlayBox[] = [];
   private readonly fontTick = signal(0);
   private readonly fonts = inject(FontLibrary);
+  private readonly aiTemplates = inject(SocialTemplatesService);
   readonly slidesMax = 10;
   batching = signal('');
   /** Dedos (ou ponteiros) em cima do palco agora. Dois viram pinça. */
@@ -1044,6 +1046,13 @@ export class SocialModeComponent {
     effect(() => {
       const pattern = this.store.bgPattern();
       if (pattern) void ensureBrandAssets([pattern]).then(() => this.fontTick.update((v) => v + 1));
+    });
+    // Rascunho de post com IA (feito pelo MCP), aberto como projeto.
+    effect(() => {
+      const draft = this.store.pendingAiDraft();
+      if (!draft) return;
+      this.store.pendingAiDraft.set(null);
+      untracked(() => void this.applyAiDraft(draft));
     });
     // Foto mandada por outro modo ("Enviar para…").
     effect(() => {
@@ -1882,6 +1891,19 @@ export class SocialModeComponent {
     this.tab.set('modelos');
     this.status.set(`Post com IA: "${p.entry.label}". Clique num texto pra ajustar; Ctrl+Z desfaz.`
       + (files.length && !this.hasPhotoSpots() ? ` ${files.length} foto(s) não couberam neste modelo.` : ''));
+  }
+
+  private async applyAiDraft(draft: AiDraft): Promise<void> {
+    this.status.set('Montando o post da IA…');
+    await this.aiTemplates.load();
+    const files = await Promise.all(draft.fotos.map((f, i) => dataUrlToFile(f.src, f.nome || `foto-${i + 1}.jpg`)));
+    const post = planToPost(this.aiTemplates.entries(), draft.post, files);
+    if (!post) {
+      this.status.set(`O modelo "${draft.post.modeloId}" não existe mais. Escolha outro na aba Modelos.`);
+      return;
+    }
+    if (draft.legendas?.length) presetCaptions(draft.legendas);
+    await this.applyAiPost(post);
   }
 
   /** Volta a um post comum: sem espaço de foto, sem padrão e sem as camadas
