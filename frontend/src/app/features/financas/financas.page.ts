@@ -41,7 +41,7 @@ import {
   mensagemDoAlerta,
 } from './alertas-orcamento';
 
-type Aba = 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
+type Aba = 'painel' | 'lancamentos' | 'planejamento' | 'orcamento' | 'metas' | 'historico';
 
 @Component({
   selector: 'app-financas-page',
@@ -76,7 +76,7 @@ export class FinancasPageComponent {
 
   readonly categorias = CATEGORIAS;
 
-  readonly aba = signal<Aba>('lancamentos');
+  readonly aba = signal<Aba>('painel');
 
   // ------------------------------------------------------------ tutorial
   readonly tutorialAberto = signal(false);
@@ -168,7 +168,7 @@ export class FinancasPageComponent {
 
   fecharTutorial(): void {
     this.tutorialAberto.set(false);
-    this.aba.set('lancamentos');
+    this.aba.set('painel');
     try {
       localStorage.setItem(CHAVE_TUTORIAL, '1');
     } catch {
@@ -185,6 +185,8 @@ export class FinancasPageComponent {
   filtrarPor(filtro: { tag?: string; conta?: string }): void {
     if (filtro.tag !== undefined) this.filtroTag.set(filtro.tag);
     if (filtro.conta !== undefined) this.filtroConta.set(filtro.conta);
+    // O filtro vale para a lista, que mora na aba Lançamentos.
+    this.aba.set('lancamentos');
     this.carregarTransacoes();
   }
 
@@ -388,7 +390,7 @@ const CHAVE_TUTORIAL = 'financas.tutorial.visto';
 
 const PASSOS_TUTORIAL: PassoTutorial[] = [
   {
-    aba: 'lancamentos',
+    aba: 'painel',
     titulo: 'Bem-vindo às Finanças',
     texto:
       'Um tour rápido pelo que dá para fazer aqui: registrar gastos, acompanhar o mês e planejar com métodos ' +
@@ -396,11 +398,11 @@ const PASSOS_TUTORIAL: PassoTutorial[] = [
       'quando quiser pelo botão "?" no topo.',
   },
   {
-    aba: 'lancamentos',
+    aba: 'painel',
     alvo: '[data-tour="abas"]',
     titulo: 'As abas',
     texto:
-      'Lançamentos é o dia a dia; Planejamento reúne as metodologias; Orçamento define quanto vai para cada ' +
+      'Painel resume o mês; Lançamentos é o dia a dia (registrar, importar, corrigir); Planejamento reúne as metodologias; Orçamento define quanto vai para cada ' +
       'categoria; Metas acompanha o que você está juntando; Histórico mostra os meses anteriores. As setas ao lado ' +
       'trocam o mês de todas elas.',
   },
@@ -421,7 +423,7 @@ const PASSOS_TUTORIAL: PassoTutorial[] = [
       'aqui (categoria, tags, orçamento) também atualiza na AUVP.',
   },
   {
-    aba: 'lancamentos',
+    aba: 'painel',
     alvo: '[data-tour="dashboard"]',
     titulo: 'O mês num olhar',
     texto:
@@ -475,7 +477,7 @@ const PASSOS_TUTORIAL: PassoTutorial[] = [
       'Planejamento para acompanhar quantos meses ela cobre.',
   },
   {
-    aba: 'lancamentos',
+    aba: 'painel',
     titulo: 'Pronto!',
     texto:
       'Uma rotina que funciona: lance ou sincronize durante o mês, confira o Planejamento toda semana e faça o ' +

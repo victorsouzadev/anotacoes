@@ -116,7 +116,7 @@ Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md]
 - **Revisão de baixa confiança**: lançamentos extraídos com confiança abaixo do
   limiar (`Extracao:LimiarConfianca`, padrão 0.6) entram como "pendente de revisão"
   até o usuário confirmar ou corrigir os campos.
-- **Dashboard**: cards de saldo do mês, receitas, despesas, maior categoria de gasto,
+- **Painel** (aba própria, a primeira): cards de saldo do mês, receitas, despesas, maior categoria de gasto,
   gasto médio por dia (com projeção para o fim do mês corrente) e variação vs. mês
   anterior; ranking das 5 maiores despesas e divisão dos gastos por conta/cartão; gráfico de pizza de gastos por categoria e gráfico de
   linha de receitas x despesas ao longo do tempo (Chart.js).

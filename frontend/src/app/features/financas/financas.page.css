@@ -300,3 +300,21 @@
 /* Componentes são inline por padrão: o tutorial mede a caixa deles para o destaque. */
 app-lancamento-form, app-auvp-sync, app-financas-dashboard, app-transacoes-lista,
 app-orcamento, app-metas, app-planejamento, app-orcamento-auvp { display: block; }
+
+.atalhos-painel { display: flex; gap: 8px; flex-wrap: wrap; }
+.atalho {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+.atalho.secundario { background: var(--surface); color: var(--text); border-color: var(--border); }
+.atalho.secundario:hover { border-color: var(--accent); color: var(--accent); }

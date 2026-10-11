@@ -35,6 +35,10 @@
       </div>
 
       <nav class="abas" role="tablist" data-tour="abas">
+        <button type="button" role="tab" [attr.aria-selected]="aba() === 'painel'"
+                [class.ativa]="aba() === 'painel'" (click)="trocarAba('painel')">
+          Painel
+        </button>
         <button type="button" role="tab" [attr.aria-selected]="aba() === 'lancamentos'"
                 [class.ativa]="aba() === 'lancamentos'" (click)="trocarAba('lancamentos')">
           Lançamentos
@@ -82,7 +86,28 @@
       </div>
     }
 
-    @if (aba() === 'lancamentos') {
+    @if (aba() === 'painel') {
+      <div class="atalhos-painel">
+        <button type="button" class="atalho" (click)="trocarAba('lancamentos')">
+          <app-icon name="plus" [size]="14" /> Novo lançamento
+        </button>
+        <button type="button" class="atalho secundario" (click)="trocarAba('planejamento')">Ver planejamento</button>
+      </div>
+      @if (carregando()) {
+        <p class="carregando">Carregando...</p>
+      } @else {
+        <app-financas-dashboard data-tour="dashboard"
+          [resumo]="resumo()"
+          [categorias]="resumoCategorias()"
+          [tendencias]="tendencias()"
+          [transacoes]="transacoesDoMes()"
+          [recorrentes]="recorrentes()"
+          [compromissos]="compromissos()"
+          [gastosPorTag]="gastosPorTag()"
+          [contas]="contasAuvp()"
+          (filtrar)="filtrarPor($event)" />
+      }
+    } @else if (aba() === 'lancamentos') {
       <app-lancamento-form data-tour="lancamento" (lancamentoCriado)="recarregar()" />
 
       <div class="linha-importar">
@@ -102,17 +127,6 @@
       @if (carregando()) {
         <p class="carregando">Carregando...</p>
       } @else {
-        <app-financas-dashboard data-tour="dashboard"
-          [resumo]="resumo()"
-          [categorias]="resumoCategorias()"
-          [tendencias]="tendencias()"
-          [transacoes]="transacoesDoMes()"
-          [recorrentes]="recorrentes()"
-          [compromissos]="compromissos()"
-          [gastosPorTag]="gastosPorTag()"
-          [contas]="contasAuvp()"
-          (filtrar)="filtrarPor($event)" />
-
         <div class="filtros" data-tour="filtros">
           <input type="search" class="busca" placeholder="Buscar (ex.: mercado, uber)" aria-label="Buscar lançamentos"
                  [ngModel]="filtroBusca()" (ngModelChange)="buscar($event)" />
