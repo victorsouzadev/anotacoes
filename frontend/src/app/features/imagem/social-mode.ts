@@ -33,12 +33,13 @@ import { SocialTemplateGalleryComponent, preload as preloadLook } from './social
 import { SocialCaptionPanelComponent, presetCaptions } from './social-caption-panel';
 import { AiPost, SocialAiPostPanelComponent, dataUrlToFile, planToPost } from './social-ai-post-panel';
 import { SocialTemplatesService } from './social-templates.service';
+import { clearSlidePhotos, duplicateSlide, insertBlank, insertForeignPage, moveSlide, removeSlide } from './social-slides';
 import { heicToJpeg, isHeicFile } from './heic';
 
 export { isHeicFile };
 import { FracBox, Guide, gridLines, groupBox, slideRange, snapBox } from './social-align';
 import { GalleryEntry } from './social-templates.service';
-import { emptyPlaceholders, isPlaceholder } from './social-photo-slots';
+import { emptyPlaceholders, isPlaceholder, placeholders, slideOf } from './social-photo-slots';
 import { BRAND_COLORS, BRAND_PATTERNS, ensureBrandAssets } from './brand-assets';
 import { FontLibrary } from './fonts';
 import { ZipEntry, zipStore } from './zip';
@@ -384,6 +385,45 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
       <div class="il-tab-body">
         @switch (tab()) {
           @case ('modelos') {
+            @if (store.hasContent()) {
+              <section class="il-sec">
+                <div class="il-sec-head il-sec-static"><il-icon name="panels" [size]="13" /> Posts {{ store.slides() > 1 ? 'do carrossel (' + store.slides() + ')' : '' }}</div>
+                <div class="il-sec-body">
+                  <div class="sm-slides" role="listbox" aria-label="Posts">
+                    @for (p of slideIndexes(); track p) {
+                      <button type="button" role="option" class="sm-slide" [class.il-on]="p === activeSlide()" [attr.aria-selected]="p === activeSlide()" [title]="'Post ' + (p + 1)" (click)="activeSlide.set(p)">
+                        <canvas #slideThumb [attr.data-slide]="p"></canvas><span>{{ p + 1 }}</span>
+                      </button>
+                    }
+                  </div>
+                  <div class="il-row sm-slide-actions">
+                    <button type="button" class="il-ib" aria-label="Mover pra esquerda" data-tip="Mover pra esquerda" [disabled]="activeSlide() === 0" (click)="moveActive(-1)"><il-icon name="chevron" [size]="13" class="sm-rot90" /></button>
+                    <button type="button" class="il-ib" aria-label="Mover pra direita" data-tip="Mover pra direita" [disabled]="activeSlide() >= store.slides() - 1" (click)="moveActive(1)"><il-icon name="chevron" [size]="13" class="sm-rot-90" /></button>
+                    <button type="button" class="il-btn il-grow" [disabled]="store.slides() >= slidesMax" (click)="duplicateActive(true)">Duplicar</button>
+                    <button type="button" class="il-btn il-grow" [disabled]="store.slides() <= 1" (click)="removeActive()">Excluir post</button>
+                  </div>
+                  @if (activePhoto(); as ph) {
+                    <div class="il-row">
+                      <button type="button" class="il-btn il-grow" (click)="pickActivePhoto()"><il-icon name="photo-add" [size]="13" /> {{ ph.filled ? 'Trocar foto' : 'Pôr foto' }}</button>
+                      @if (ph.filled) { <button type="button" class="il-btn il-grow" (click)="clearActivePhoto()">Tirar foto</button> }
+                    </div>
+                  }
+                  <div class="il-row">
+                    <button type="button" class="il-btn il-grow" [disabled]="store.slides() >= slidesMax" (click)="addBlank()">+ Em branco</button>
+                    @if (activePhoto()?.spot) {
+                      <button type="button" class="il-btn il-grow" [disabled]="store.slides() >= slidesMax" data-tip="Mesmo post, com o espaço vazio pra outra foto" (click)="duplicateActive(false)">+ Outro com foto</button>
+                    }
+                  </div>
+                  @if (foreignPages().length) {
+                    <select class="il-select il-wide" aria-label="Trazer post de outro modelo" [disabled]="store.slides() >= slidesMax" (change)="addForeign($any($event.target))">
+                      <option value="">+ Post de outro modelo…</option>
+                      @for (f of foreignPages(); track f.key) { <option [value]="f.key">{{ f.label }}</option> }
+                    </select>
+                  }
+                  <p class="il-note">Os posts novos entram depois do {{ activeSlide() + 1 }}. Até {{ slidesMax }} posts; Ctrl+Z desfaz.</p>
+                </div>
+              </section>
+            }
             <sm-ai-post-panel (generated)="applyAiPost($event)" />
             <sm-template-gallery (applied)="onTemplateApplied($event)" />
           }
@@ -690,6 +730,14 @@ async function preparePhotoLayer(file: File): Promise<{ src: string; aspect: num
       font-size: 11px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.65); pointer-events: none;
     }
     .sm-pad { margin: 10px; }
+    .sm-slides { display: flex; flex-wrap: wrap; gap: 6px; }
+    .sm-slide { position: relative; flex: 0 0 auto; padding: 0; border: 2px solid transparent; border-radius: 6px; background: var(--il-field); cursor: pointer; line-height: 0; }
+    .sm-slide.il-on { border-color: var(--accent, #E7548C); }
+    .sm-slide canvas { width: 54px; border-radius: 4px; }
+    .sm-slide span { position: absolute; left: 3px; top: 3px; line-height: 1; font-size: 10px; font-weight: 700; padding: 2px 4px; border-radius: 3px; background: rgba(0,0,0,.55); color: #fff; }
+    .sm-slide-actions { margin-top: 4px; }
+    .sm-rot90 { transform: rotate(90deg); }
+    .sm-rot-90 { transform: rotate(-90deg); }
     .sm-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     .sm-preset { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 3px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text); }
     .sm-preset:hover { background: var(--il-hover); }
@@ -776,6 +824,7 @@ export class SocialModeComponent {
   } | null>(null);
 
   private readonly presetRefs = viewChildren<ElementRef<HTMLCanvasElement>>('presetCanvas');
+  private readonly slideThumbRefs = viewChildren<ElementRef<HTMLCanvasElement>>('slideThumb');
 
   readonly formats = SOCIAL_FORMATS;
   readonly tabs: { id: TabId; label: string }[] = [
@@ -1033,6 +1082,22 @@ export class SocialModeComponent {
     effect(() => {
       const pattern = this.store.bgPattern();
       if (pattern) void ensureBrandAssets([pattern]).then(() => this.fontTick.update((v) => v + 1));
+    });
+    // Miniaturas dos posts (aba Modelos), redesenhadas com um respiro depois
+    // de cada mudança — arrastar um texto não pode desenhar a faixa toda a
+    // cada movimento.
+    let thumbTimer: ReturnType<typeof setTimeout> | undefined;
+    effect(() => {
+      const refs = this.slideThumbRefs();
+      this.store.overlays(); this.store.slides(); this.store.slot(); this.image(); this.adjust(); this.fontTick();
+      this.bgColor(); this.store.bgPattern(); this.format();
+      clearTimeout(thumbTimer);
+      thumbTimer = setTimeout(() => untracked(() => this.paintSlideThumbs(refs)), 250);
+    });
+    // O post escolhido continua válido quando o carrossel encolhe.
+    effect(() => {
+      const n = this.store.slides();
+      if (untracked(() => this.activeSlide()) > n - 1) this.activeSlide.set(n - 1);
     });
     // Rascunho de post com IA (feito pelo MCP), aberto como projeto.
     effect(() => {
@@ -1697,9 +1762,12 @@ export class SocialModeComponent {
   pickPhotos(perSlide: boolean, startSpot?: string): void {
     this.photosPerSlide = perSlide;
     this.photosStartSpot = startSpot;
+    this.replaceSlide = null;
     this.photosInputRef()?.nativeElement.click();
   }
   photosPerSlide = false;
+  /** Post cuja foto vai ser trocada pelas fotos escolhidas. */
+  private replaceSlide: number | null = null;
   /** Espaço de foto clicado no palco: as fotos escolhidas começam por ele. */
   private photosStartSpot: string | undefined;
 
@@ -1756,6 +1824,11 @@ export class SocialModeComponent {
     if (this.hasPhotoSpots()) {
       const start = this.photosStartSpot;
       this.photosStartSpot = undefined;
+      if (this.replaceSlide !== null) {
+        const page = this.replaceSlide;
+        this.store.overlays.update((l) => clearSlidePhotos(l, this.store.slides(), page));
+      }
+      this.replaceSlide = null;
       await preloadPhotos(prepared.map((p) => p.src));
       const { placed, added } = this.store.fillPhotoSlots(prepared, slidesMax, start);
       this.store.select(null);
@@ -2827,6 +2900,125 @@ export class SocialModeComponent {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // --- posts do carrossel -------------------------------------------------
+
+  /** Post escolhido no painel de posts: é nele que as ações agem. */
+  readonly activeSlide = signal(0);
+  readonly slideIndexes = computed(() => Array.from({ length: this.store.slides() }, (_, i) => i));
+
+  /** O post escolhido tem lugar pra foto? Espaço tracejado ou o espaço
+   * principal do modelo — e se já está com foto. */
+  readonly activePhoto = computed(() => {
+    const n = this.store.slides(), p = this.activeSlide();
+    const overlays = this.store.overlays();
+    const spot = placeholders(overlays, n).find((o) => slideOf(o, n) === p);
+    if (spot) return { spot, filled: overlays.some((o) => o.kind === 'foto' && o.slotId === spot.id) };
+    const slot = this.store.slot();
+    if (slot && Math.min(n - 1, Math.floor((slot.x + slot.w / 2) * n)) === p) return { spot: null, filled: !!this.image() };
+    return null;
+  });
+
+  /** Posts de outros modelos do mesmo formato, pra trazer pro carrossel. */
+  readonly foreignPages = computed(() => {
+    const formatId = this.store.format().id;
+    const out: { key: string; label: string }[] = [];
+    for (const e of this.aiTemplates.entries()) {
+      const look = e.build();
+      if (look.formatId !== formatId) continue;
+      for (let k = 0; k < look.slides; k++) {
+        out.push({ key: `${e.id}|${k}`, label: look.slides > 1 ? `${e.group} ${e.label} · post ${k + 1}` : `${e.group} ${e.label}` });
+      }
+    }
+    return out;
+  });
+
+  private get ratio(): number { return this.store.format().ratio; }
+
+  private strip(fn: Parameters<SocialStore['editStrip']>[0], nextActive: number): void {
+    this.store.editStrip(fn);
+    this.activeSlide.set(Math.max(0, Math.min(this.store.slides() - 1, nextActive)));
+  }
+
+  moveActive(dir: -1 | 1): void {
+    const p = this.activeSlide();
+    this.strip((s) => moveSlide(s, p, dir, this.ratio), p + dir);
+  }
+
+  duplicateActive(withPhotos: boolean): void {
+    const p = this.activeSlide();
+    this.strip((s) => duplicateSlide(s, p, this.ratio, withPhotos), p + 1);
+    this.status.set(withPhotos ? `Post ${p + 1} duplicado.` : `Post novo com o espaço vazio: clique em "Pôr foto".`);
+  }
+
+  removeActive(): void {
+    const p = this.activeSlide();
+    const hadSlot = !!this.store.slot();
+    this.strip((s) => removeSlide(s, p, this.ratio), p);
+    this.status.set(`Post ${p + 1} excluído.${hadSlot && !this.store.slot() ? ' Era o post da foto principal: ela saiu junto.' : ''} Ctrl+Z desfaz.`);
+  }
+
+  addBlank(): void {
+    const p = this.activeSlide();
+    this.strip((s) => insertBlank(s, p, 1, this.ratio), p + 1);
+  }
+
+  async addForeign(select: HTMLSelectElement): Promise<void> {
+    const [id, k] = select.value.split('|');
+    select.value = '';
+    const entry = this.aiTemplates.entries().find((e) => e.id === id);
+    if (!entry) return;
+    const look = entry.build();
+    await preloadLook(look, this.fonts);
+    const p = this.activeSlide();
+    this.strip((s) => insertForeignPage(s, p, look, Number(k), this.ratio), p + 1);
+    this.status.set(`Post de "${entry.label}" adicionado. Clique num texto pra trocar.`);
+  }
+
+  pickActivePhoto(): void {
+    const ph = this.activePhoto();
+    if (!ph) return;
+    if (!ph.spot) {
+      this.fileInputRef()?.nativeElement.click();
+      return;
+    }
+    // Trocar = tirar a de agora e pôr a nova no mesmo espaço — só depois de a
+    // pessoa escolher a foto, pra cancelar não sumir com a que estava.
+    this.pickPhotos(false, ph.spot.id);
+    this.replaceSlide = ph.filled ? this.activeSlide() : null;
+  }
+
+  clearActivePhoto(): void {
+    const ph = this.activePhoto();
+    if (!ph) return;
+    if (!ph.spot) {
+      this.removeImage();
+      return;
+    }
+    this.store.overlays.update((l) => clearSlidePhotos(l, this.store.slides(), this.activeSlide()));
+    this.commit();
+  }
+
+  /** Miniaturas dos posts: um desenho pequeno da faixa, fatiado por post. */
+  private paintSlideThumbs(refs: readonly ElementRef<HTMLCanvasElement>[]): void {
+    if (!refs.length) return;
+    const n = this.store.slides();
+    const postW = 108;
+    const postH = Math.round(postW / this.ratio);
+    const strip = document.createElement('canvas');
+    strip.width = postW * n;
+    strip.height = postH;
+    const source = this.store.photoVisible() ? this.currentSource() : null;
+    paintFrame(strip, source, { ...this.frameOptions(this.adjust()), placeholder: true });
+    drawOverlays(strip.getContext('2d')!, strip.width, strip.height, this.store.overlays(), this.fonts, null);
+    for (const r of refs) {
+      const c = r.nativeElement;
+      const p = Number(c.dataset['slide']);
+      c.width = postW;
+      c.height = postH;
+      c.getContext('2d')!.drawImage(strip, p * postW, 0, postW, postH, 0, 0, postW, postH);
+    }
   }
 
   setSlides(n: number): void {
