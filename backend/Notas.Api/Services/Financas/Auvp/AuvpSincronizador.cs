@@ -63,6 +63,8 @@ public partial class AuvpSincronizador(AppDbContext db, IAuvpCliente cliente, IO
                 }
 
                 if (novo.ForaDosTotais) foraDosTotais++;
+                // Toda transação nova passa pela fila de categorização, mesmo com categoria sugerida.
+                novo.RevisarCategoria = true;
                 db.Transacoes.Add(novo);
                 importadas++;
             }

@@ -97,6 +97,33 @@ public class AuvpImportacaoTests : IClassFixture<TasksApiFactory>, IAsyncLifetim
     }
 
     [Fact]
+    public async Task Novas_sincronizadas_passam_pela_fila_de_categorizacao()
+    {
+        _auvp.Paginas = [[Item(20, -45.9m), Item(21, -60m, categoria: null)]];
+        await CadastrarChave();
+        await Sincronizar();
+
+        // As duas entram na fila, mesmo a que já veio categorizada da AUVP. A
+        // descrição é a mesma loja ("Compra"), então viram um grupo só.
+        var fila = await _client.GetFromJsonAsync<JsonElement>("/api/financas/transacoes/categorizar");
+        Assert.Equal(2, fila.GetProperty("pendentesHistorico").GetInt32());
+        var grupo = Assert.Single(fila.GetProperty("grupos").EnumerateArray());
+        Assert.NotNull(grupo.GetProperty("sugestao").GetString());
+
+        // Confirmar tira da fila.
+        var ids = grupo.GetProperty("ids").EnumerateArray().Select(i => i.GetGuid()).ToList();
+        (await _client.PatchAsJsonAsync("/api/financas/transacoes/lote", new { ids, categoria = "Alimentacao" }))
+            .EnsureSuccessStatusCode();
+        fila = await _client.GetFromJsonAsync<JsonElement>("/api/financas/transacoes/categorizar");
+        Assert.Equal(0, fila.GetProperty("pendentesHistorico").GetInt32());
+
+        // Sincronizar de novo não devolve à fila o que já foi confirmado.
+        await Sincronizar();
+        fila = await _client.GetFromJsonAsync<JsonElement>("/api/financas/transacoes/categorizar");
+        Assert.Equal(0, fila.GetProperty("pendentesHistorico").GetInt32());
+    }
+
+    [Fact]
     public async Task Ignoradas_e_transferencias_entram_fora_dos_totais()
     {
         _auvp.Paginas = [[Item(10, -100m, ignorada: true), Item(11, -500m, categoria: 23, transferencia: true),

@@ -12,13 +12,14 @@ public record GrupoPendente(string Chave, string Descricao, string Tipo, int Qua
 public record CategorizacaoResponse(int Total, int Pendentes, decimal Percentual, int TotalHistorico,
     int PendentesHistorico, List<GrupoPendente> Grupos);
 
-// Fila de categorização: lançamentos ainda em "Outros" sem confirmação, agrupados
-// por loja, cada grupo com uma sugestão de categoria.
+// Fila de categorização: lançamentos ainda em "Outros" ou recém-sincronizados, sem
+// confirmação, agrupados por loja, cada grupo com uma sugestão de categoria.
 public static class Categorizacao
 {
-    /// <summary>Ainda sem categoria de verdade: em Outros, sem o usuário ter confirmado.</summary>
+    /// <summary>Ainda sem categoria confirmada: em Outros, ou recém-sincronizado
+    /// (com a categoria que veio de fora), sem o usuário ter confirmado.</summary>
     public static bool Pendente(Transacao t) =>
-        !t.ForaDosTotais && t.Categoria == Categoria.Outros && !t.CategoriaConfirmada;
+        !t.ForaDosTotais && !t.CategoriaConfirmada && (t.Categoria == Categoria.Outros || t.RevisarCategoria);
 
     // Pedaços de nome de estabelecimento como aparecem no extrato (sem acento, em
     // maiúsculas, muitas vezes cortados): "CARRO CHEFE SUPERMERCA", "DROGASIL 123".
@@ -69,7 +70,7 @@ public static class Categorizacao
 
         // O que o usuário já categorizou, por loja: a sugestão mais forte.
         var historico = todas
-            .Where(t => t.Categoria != Categoria.Outros)
+            .Where(t => t.Categoria != Categoria.Outros && !Pendente(t))
             // Receita e despesa da mesma origem são coisas diferentes ("Pix de" × "Pix para").
             .GroupBy(t => (RegrasCategoria.ChaveDeDescricao(t.Descricao), t.Tipo))
             .ToDictionary(g => g.Key, g => g.GroupBy(t => t.Categoria).OrderByDescending(c => c.Count()).First().Key);
@@ -105,6 +106,8 @@ public static class Categorizacao
     {
         if (chave.Length >= 3 && historico.TryGetValue((chave, exemplo.Tipo), out var anterior))
             return (anterior, "como você já categorizou esta loja");
+        // Sincronizado já com categoria (da AUVP ou de uma regra): sugere confirmar a mesma.
+        if (exemplo.Categoria != Categoria.Outros) return (exemplo.Categoria, "categoria recebida na sincronização");
         if (exemplo.Tipo == TipoTransacao.Receita)
             return exemplo.Descricao.Contains("salar", StringComparison.OrdinalIgnoreCase)
                 ? (Categoria.Salario, "pelo nome")

@@ -80,6 +80,12 @@ public class Transacao
     /// </summary>
     public bool CategoriaConfirmada { get; set; }
 
+    /// <summary>
+    /// Chegou pela sincronização e precisa passar pela fila de categorização,
+    /// mesmo já vindo com categoria (da AUVP ou de uma regra), até o usuário confirmar.
+    /// </summary>
+    public bool RevisarCategoria { get; set; }
+
     /// <summary>Compra parcelada: "3/10" vira Parcela 3, TotalParcelas 10.</summary>
     public int? Parcela { get; set; }
     public int? TotalParcelas { get; set; }

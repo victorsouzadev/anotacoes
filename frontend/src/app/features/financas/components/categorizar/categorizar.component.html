@@ -9,7 +9,7 @@
     @if (fila(); as f) {
       <span class="contagem">
         @if (f.pendentes === 0) { Tudo categorizado }
-        @else { <strong>{{ f.pendentes }}</strong> {{ f.pendentes === 1 ? 'lançamento sem categoria' : 'lançamentos sem categoria' }} }
+        @else { <strong>{{ f.pendentes }}</strong> {{ f.pendentes === 1 ? 'lançamento para categorizar' : 'lançamentos para categorizar' }} }
       </span>
     }
   </div>
@@ -37,7 +37,7 @@
     <div class="vazio card">
       <strong>Tudo categorizado.</strong>
       <span>Cada lançamento está numa categoria de verdade — o painel, o orçamento e o planejamento ficam certos.
-        Os novos que chegarem sem categoria aparecem aqui.</span>
+        Os novos que chegarem da sincronização ou sem categoria aparecem aqui para você confirmar.</span>
     </div>
   } @else {
     <ul class="grupos">

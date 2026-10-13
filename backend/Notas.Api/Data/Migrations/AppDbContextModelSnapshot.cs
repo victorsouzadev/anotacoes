@@ -1142,6 +1142,9 @@ namespace Notas.Api.Data.Migrations
                     b.Property<int?>("Parcela")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("RevisarCategoria")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)

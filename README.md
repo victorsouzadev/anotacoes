@@ -169,6 +169,8 @@ Usa o provedor e o modelo das Configurações de IA (Anthropic ou OpenRouter, co
 
 #### Categorizar (aba própria)
 
+Toda transação nova que chega pela sincronização da AUVP entra na fila, mesmo que já venha com categoria (da AUVP ou de uma regra aprendida): a categoria recebida aparece como sugestão e só sai da fila quando você confirma ou troca. O que já existia antes desta mudança continua como estava.
+
 Fila de tudo que ainda está sem categoria (em "Outros" sem confirmação), agrupado
 por loja — PIX e transferências agrupam pelo destinatário. Cada grupo traz uma
 sugestão (o que você já escolheu para aquela loja, o nome do estabelecimento ou
