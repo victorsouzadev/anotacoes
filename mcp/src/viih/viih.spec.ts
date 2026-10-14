@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// postApi importa auth → config, que exige as credenciais já no import. vi.hoisted
+// roda antes dos imports abaixo; os testes daqui não fazem chamadas de rede.
+vi.hoisted(() => {
+  process.env.HUB_EMAIL ??= 'teste@example.com';
+  process.env.HUB_PASSWORD ??= 'teste';
+});
 import { descreverSalvo, montarCatalogo } from './catalogo.js';
 import { MODELOS_DO_EDITOR } from './modelos.js';
 import { ordemCompleta, textosFinais } from './postApi.js';
