@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
 
+# Um deploy por vez: dois merges seguidos rodavam "up -d" ao mesmo tempo na VPS e
+# o segundo falhava com conflito de nome de container. O próximo espera na fila
+# (sem cancelar o que está rodando, para não interromper um deploy no meio).
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
 jobs:
   build-backend:
     runs-on: ubuntu-latest
