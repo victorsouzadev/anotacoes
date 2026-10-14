@@ -247,6 +247,34 @@ docker logs --tail 100 site-<slug>                           # o mesmo que "Logs
 - **Parar tudo** de emergência: `docker rm -f $(docker ps -q --filter label=notas.site)`. Os sites
   voltam pelo botão "Iniciar" na tela.
 
+## Ferramenta "Segundo Cérebro" (vault do Obsidian)
+
+Serviços `cerebro` (API, MCP, worker) e `cerebro-webdav` (rclone), atrás do profile `cerebro`.
+O Caddy do hub publica `/cerebro/*` e `/dav/*`, **só por HTTPS**: pelo IP:8090 eles respondem 403.
+Detalhes de uso em [cerebro/README.md](cerebro/README.md).
+
+### Ligar pela primeira vez
+
+1. DNS: registro A de um subdomínio (ex.: `cerebro.seudominio.com.br`) para `191.252.177.244`.
+2. NPM: Proxy Host desse subdomínio → `notas-caddy` porta `8080`, "Websockets support" ligado,
+   certificado Let's Encrypt com "Force SSL". O container já está na rede `proxy`. O IP:8090 continua
+   funcionando para as outras ferramentas.
+3. `.env` em `/opt/notas-vps`: `COMPOSE_PROFILES=publicar,cerebro` (ou só `cerebro`), `CEREBRO_USUARIOS`
+   com o seu e-mail do hub e os segredos `CEREBRO_*` (`openssl rand -hex 32`). Ver `.env.example`.
+4. Faça push na `main` (ou rode o deploy). Ele cria `data/cerebro/` com o dono `CEREBRO_PUID:CEREBRO_PGID`
+   (padrão 1000) e builda o serviço.
+5. Abra o hub pelo subdomínio HTTPS: o card "Segundo Cérebro" aparece para os e-mails liberados.
+6. Configure o Remotely Save em cada aparelho (endereço `https://<subdomínio>/dav`). Faça o primeiro
+   sync a partir do aparelho que já tem as notas, depois de um backup.
+
+### Operação
+
+- Saúde: `curl http://127.0.0.1:8090/cerebro/health` na VPS (única rota liberada sem HTTPS).
+- Logs: `docker compose -f docker-compose.yml -f docker-compose.vps.yml logs -f cerebro`.
+- Histórico do vault: `git --git-dir data/cerebro/hub/vault.git --work-tree data/cerebro/webdav/Cerebro log --oneline`.
+- Memória: os dois containers têm teto de 256 MB e 128 MB.
+- O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.

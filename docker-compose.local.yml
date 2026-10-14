@@ -8,6 +8,8 @@ services:
       - "8080:8080"
     environment:
       - SITES_DOMINIO=127-0-0-1.sslip.io
+      # Teste local sem TLS: libera /cerebro e /dav por HTTP (na VPS exigem HTTPS).
+      - CEREBRO_PERMITIR_HTTP=sim
 
   api:
     environment:

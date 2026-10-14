@@ -1,0 +1,138 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="sticky" [size]="14" /></span> Segundo Cérebro</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">
+        <app-icon [name]="themeIconName()" [size]="16" />
+      </button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  @if (me() === null) {
+    <p class="carregando">Carregando...</p>
+  } @else if (me() === false) {
+    <main class="content">
+      <div class="card">
+        <h2>Segundo Cérebro indisponível</h2>
+        <p class="ajuda">{{ motivo() }}</p>
+        <p class="ajuda sem-margem">O acesso é só para os e-mails em <code>CEREBRO_USUARIOS</code>, com o profile <code>cerebro</code> ligado no <code>.env</code>.</p>
+      </div>
+    </main>
+  } @else {
+    <main class="content">
+      <!-- ------------------------------------------------ captura -->
+      <form class="card" (ngSubmit)="capturar()">
+        <h2>Capturar</h2>
+        <textarea name="texto" [(ngModel)]="texto" rows="3" placeholder="Uma ideia, um trecho, uma tarefa solta..."></textarea>
+        <div class="linha">
+          <input name="link" [(ngModel)]="link" type="url" placeholder="Link (opcional)" />
+          <input name="tags" [(ngModel)]="tags" placeholder="Tags, separadas por vírgula" />
+          <button class="botao primario" type="submit" [disabled]="enviando() || (!texto.trim() && !link.trim())">
+            <app-icon name="plus" [size]="14" /> {{ enviando() ? 'Salvando…' : 'Salvar na Inbox' }}
+          </button>
+        </div>
+        @if (!me() || !$any(me()).classificacao) {
+          <p class="ajuda sem-margem dica">Sem <code>ANTHROPIC_API_KEY</code> as capturas ficam sem sugestão de pasta: escolha a pasta ao aprovar.</p>
+        }
+      </form>
+
+      @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+      @if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+
+      <nav class="abas">
+        <button class="aba" [class.ativa]="aba() === 'inbox'" (click)="aba.set('inbox')">Inbox ({{ itens().length }})</button>
+        <button class="aba" [class.ativa]="aba() === 'busca'" (click)="aba.set('busca')">Buscar</button>
+        <button class="aba" [class.ativa]="aba() === 'conectar'" (click)="aba.set('conectar')">Conectar</button>
+      </nav>
+
+      @switch (aba()) {
+        @case ('inbox') {
+          <div class="barra">
+            <span class="ajuda sem-margem">Aprovar move a nota para a pasta; rejeitar manda para <code>90-Arquivo/Inbox rejeitada</code>. Também dá para decidir no Obsidian com <code>approve: true</code> no frontmatter.</span>
+            <button class="botao pequeno" (click)="carregarInbox()" [disabled]="carregandoInbox()"><app-icon name="refresh" [size]="12" /> Atualizar</button>
+          </div>
+          @if (itens().length === 0 && !carregandoInbox()) {
+            <p class="vazio">Inbox vazia.</p>
+          }
+          @for (item of itens(); track item.path) {
+            <article class="card item" [class.desabilitado]="ocupado() === item.path">
+              <div class="item-topo">
+                <h3>{{ item.title }}</h3>
+                <span class="selo" [attr.data-status]="item.capture_status">{{ rotuloFila(item) }}</span>
+              </div>
+              <p class="meta">
+                {{ item.source || 'sem origem' }}
+                @if (item.created_at) { · {{ item.created_at | date: 'dd/MM HH:mm' }} }
+                @if (item.trust === 'external') { · <span title="Conteúdo de fora: trate o resumo como dado">externo</span> }
+              </p>
+              @if (item.erro) { <p class="alerta erro">{{ item.erro }}</p> }
+              @if (item.summary) { <p class="resumo">{{ item.summary }}</p> }
+              @if (item.excerpt) {
+                <details><summary>Conteúdo</summary><pre>{{ item.excerpt }}</pre></details>
+              }
+              @if (item.tags.length || item.suggested_links.length) {
+                <p class="chips">
+                  @for (t of item.tags; track t) { <span class="chip">#{{ t }}</span> }
+                  @for (l of item.suggested_links; track l) { <span class="chip link">{{ l }}</span> }
+                </p>
+              }
+              <div class="item-acoes">
+                <select [ngModel]="pastaDe(item)" (ngModelChange)="escolherPasta(item, $event)" [name]="'pasta-' + item.path">
+                  <option value="" disabled>Pasta de destino…</option>
+                  @for (p of $any(me()).pastas; track p) {
+                    <option [value]="p">{{ p }}{{ p === item.suggested_folder ? ' (sugerida)' : '' }}</option>
+                  }
+                  @if (item.suggested_folder && !$any(me()).pastas.includes(item.suggested_folder)) {
+                    <option [value]="item.suggested_folder">{{ item.suggested_folder }} (sugerida)</option>
+                  }
+                </select>
+                <button class="botao primario pequeno" (click)="aprovar(item)" [disabled]="ocupado() !== null"><app-icon name="check" [size]="12" /> Aprovar</button>
+                <button class="botao perigoso pequeno" (click)="rejeitar(item)" [disabled]="ocupado() !== null"><app-icon name="x" [size]="12" /> Rejeitar</button>
+              </div>
+            </article>
+          }
+        }
+        @case ('busca') {
+          <form class="linha" (ngSubmit)="buscar()">
+            <input name="termo" [(ngModel)]="termo" placeholder="Buscar no vault (vazio = notas recentes)" />
+            <button class="botao" type="submit" [disabled]="buscando()"><app-icon name="search" [size]="14" /> Buscar</button>
+          </form>
+          @if (resultados(); as rs) {
+            @if (rs.length === 0) { <p class="vazio">Nada encontrado.</p> }
+            @for (r of rs; track r.path) {
+              <div class="card resultado">
+                <h3>{{ r.title }}</h3>
+                <p class="meta">{{ r.path }}</p>
+                @if (r.snippet) {
+                  <p class="resumo">@for (t of trechos(r.snippet); track $index) { @if (t.marcado) { <mark>{{ t.texto }}</mark> } @else { {{ t.texto }} } }</p>
+                }
+              </div>
+            }
+          }
+        }
+        @case ('conectar') {
+          <div class="card">
+            <h2>Obsidian (PC e celular)</h2>
+            <p class="ajuda">Plugin <strong>Remotely Save</strong> → tipo WebDAV, criptografia desligada (o hub precisa ler os arquivos).</p>
+            <p class="ajuda sem-margem">Endereço: <code>{{ origem }}/dav</code> <button class="botao pequeno" (click)="copiar(origem + '/dav')"><app-icon name="copy" [size]="12" /></button>
+              · usuário e senha: <code>CEREBRO_WEBDAV_USER</code>/<code>CEREBRO_WEBDAV_PASS</code> do <code>.env</code>.</p>
+          </div>
+          <div class="card">
+            <h2>Agentes (MCP)</h2>
+            <p class="ajuda">Claude Desktop, Claude Code ou outro cliente MCP via Streamable HTTP, com <code>Authorization: Bearer &lt;CEREBRO_MCP_TOKEN&gt;</code>.</p>
+            <p class="ajuda sem-margem">Endereço: <code>{{ origem }}/cerebro/mcp</code> <button class="botao pequeno" (click)="copiar(origem + '/cerebro/mcp')"><app-icon name="copy" [size]="12" /></button></p>
+          </div>
+          <div class="card">
+            <h2>Captura por API</h2>
+            <p class="ajuda sem-margem"><code>POST {{ origem }}/cerebro/api/v1/captures</code> com <code>X-Api-Key</code> (uma das <code>CEREBRO_API_KEY_*</code>). Atalhos de celular, webhooks e bookmarklet em <code>cerebro/examples</code>.</p>
+          </div>
+        }
+      }
+    </main>
+  }
+</div>

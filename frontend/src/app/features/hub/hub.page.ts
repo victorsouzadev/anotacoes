@@ -5,6 +5,7 @@ import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { WindowsDownloadService } from '../../core/windows-download';
 import { PublicarService } from '../publicar/publicar.service';
+import { CerebroService } from '../cerebro/cerebro.service';
 
 interface ToolCard {
   path: string;
@@ -24,6 +25,14 @@ const PUBLICAR: ToolCard = {
   icon: 'globe',
   title: 'Publicar',
   description: 'Envie um ZIP com front e API C# e ganhe uma URL própria, com banco SQLite, versões e volta para a anterior.',
+};
+
+/** Só aparece para quem está em CEREBRO_USUARIOS, com o serviço no ar e o hub aberto por HTTPS. */
+const CEREBRO: ToolCard = {
+  path: '/cerebro',
+  icon: 'sticky',
+  title: 'Segundo Cérebro',
+  description: 'Vault do Obsidian na VPS: capture ideias e links, revise a Inbox classificada pelo Claude e busque nas notas.',
 };
 
 const TOOLS: ToolCard[] = [
@@ -200,16 +209,23 @@ const TOOLS: ToolCard[] = [
 })
 export class HubPageComponent {
   private readonly podePublicar = signal(false);
-  readonly tools = computed(() => (this.podePublicar() ? [...TOOLS, PUBLICAR] : TOOLS));
+  private readonly temCerebro = signal(false);
+  readonly tools = computed(() => [
+    ...TOOLS,
+    ...(this.temCerebro() ? [CEREBRO] : []),
+    ...(this.podePublicar() ? [PUBLICAR] : []),
+  ]);
 
   constructor(
     public auth: AuthService,
     public theme: ThemeService,
     public windows: WindowsDownloadService,
     publicar: PublicarService,
+    cerebro: CerebroService,
   ) {
     windows.check();
     void publicar.permissao().then((r) => this.podePublicar.set(r.podePublicar));
+    void cerebro.disponivel().then((ok) => this.temCerebro.set(ok));
   }
 
   themeIconName(): IconName {
