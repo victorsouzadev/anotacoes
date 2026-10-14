@@ -38,6 +38,9 @@ inicial, sem exigir outro login nem outro deploy.
   cola, espessura do papel, distribuição na folha com cópias, export SVG/DXF/PNG. E a
   partir de imagem: caixa no formato de um desenho, molde decalcado de uma foto/scan de
   molde em papel e reconhecimento de embalagem pronta por IA.
+- **Segundo Cérebro** — o vault do Obsidian na VPS: captura por API (celular, WhatsApp,
+  navegador), Inbox classificada pelo Claude com aprovação na tela ou no frontmatter, busca
+  e MCP para agentes. Sync com o Obsidian por WebDAV. Ver [cerebro/README.md](cerebro/README.md).
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
 
@@ -525,6 +528,20 @@ O contrato do app e um exemplo completo (Recados) estão em
 [`exemplos/publicar/recados`](exemplos/publicar/recados/README.md). A operação na VPS
 está no [DEPLOY.md](DEPLOY.md).
 
+### Segundo Cérebro
+
+Centraliza o vault do Obsidian na VPS, que continua sendo a interface no PC e no celular (plugin
+**Remotely Save**, WebDAV em `/dav`). Os `.md` são a fonte da verdade; busca (SQLite FTS5), fila e
+histórico git ficam em `data/cerebro/hub` e podem ser recriados.
+
+- **Captura**: tela do hub, `POST /cerebro/api/v1/captures` com API key por fonte, webhooks e bookmarklet.
+- **Inbox**: o Claude sugere título, resumo, tags, pasta e links; nada sai da Inbox sem você aprovar
+  (na tela, ou com `approve: true` no frontmatter). O serviço nunca edita notas suas.
+- **MCP** em `/cerebro/mcp`: `search`, `read_note`, `list_notes`, `get_daily`, `list_inbox`, `capture`,
+  `create_note`, `append_daily`, `process_inbox_item`.
+- **Serviço próprio** (`cerebro/`, .NET 10) no profile `cerebro` do compose, com o mesmo login do hub
+  (JWT) e acesso só para `CEREBRO_USUARIOS`. Exige HTTPS: ver [DEPLOY.md](DEPLOY.md).
+
 ## Modelo de dados (visão geral)
 
 Uma **nota** (`NoteRecord`) tem metadados (`título`, `pasta`, datas) e uma lista de
@@ -549,6 +566,7 @@ desenhar. Uma linha sem esse prefixo é texto comum, exatamente como antes.
 
 ```
 notas-vps/
+├── cerebro/                          # Segundo Cérebro: serviço .NET 10 (API, MCP, worker), ver cerebro/README.md
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # só sobe o NotasApp
 │   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta); o desktop hospeda a mesma

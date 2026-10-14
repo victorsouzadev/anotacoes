@@ -6,6 +6,46 @@
 :8080 {
     encode zstd gzip
 
+    # Ferramenta "Segundo Cérebro" (cerebro/README.md). Só por HTTPS: a senha do WebDAV,
+    # o token do MCP e as notas não podem passar em texto puro. O HTTPS vem do
+    # nginx-proxy-manager (subdomínio → notas-caddy:8080), que manda X-Forwarded-Proto.
+    # No teste local, CEREBRO_PERMITIR_HTTP=sim libera o HTTP.
+    @cerebro_sem_tls {
+        path /cerebro /cerebro/* /dav /dav/*
+        not path /cerebro/health
+        expression `{http.request.header.X-Forwarded-Proto} != "https" && "{$CEREBRO_PERMITIR_HTTP:nao}" != "sim"`
+    }
+    handle @cerebro_sem_tls {
+        respond "Use o endereço HTTPS do Segundo Cérebro." 403
+    }
+
+    # API, MCP (/cerebro/mcp) e bookmarklet. O prefixo sai antes de chegar ao serviço.
+    handle_path /cerebro/* {
+        reverse_proxy cerebro:8080 {
+            flush_interval -1
+        }
+    }
+
+    # WebDAV do Obsidian (Remotely Save). O Obsidian roda num webview: desktop usa
+    # app://obsidian.md, iPhone capacitor://localhost e Android http://localhost.
+    handle /dav* {
+        @obsidian header_regexp Origin ^(app://obsidian\.md|capacitor://localhost|http://localhost)$
+        header @obsidian {
+            Access-Control-Allow-Origin {http.request.header.Origin}
+            Access-Control-Allow-Methods "GET, HEAD, PUT, POST, DELETE, OPTIONS, PROPFIND, PROPPATCH, MKCOL, COPY, MOVE, LOCK, UNLOCK"
+            Access-Control-Allow-Headers "Authorization, Content-Type, Depth, Destination, Overwrite, If, If-Match, If-None-Match, Lock-Token, Timeout, Cache-Control, X-Requested-With"
+            Access-Control-Expose-Headers "DAV, ETag, Content-Length, Content-Type, Last-Modified, Location"
+            Access-Control-Max-Age "86400"
+            Vary Origin
+        }
+        @preflight {
+            method OPTIONS
+            header Access-Control-Request-Method *
+        }
+        respond @preflight 204
+        reverse_proxy cerebro-webdav:8080
+    }
+
     handle /api/* {
         reverse_proxy api:8080 {
             flush_interval -1
