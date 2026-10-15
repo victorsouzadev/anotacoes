@@ -57,6 +57,47 @@ export interface Acessos {
   api_keys: { nome: string; origem: 'tela' | 'servidor'; mascarada: string }[];
 }
 
+export interface ResumoNota {
+  path: string;
+  title: string;
+  folder: string;
+  tags: string[];
+  status: string | null;
+  modified: string;
+}
+
+export interface ListaNotas {
+  pastas: { pasta: string; total: number }[];
+  notas: ResumoNota[];
+}
+
+export interface Nota {
+  path: string;
+  title: string;
+  folder: string;
+  tags: string[];
+  summary: string | null;
+  source: string | null;
+  url: string | null;
+  trust: string | null;
+  modified: string;
+  body: string;
+  /** Alvo do [[wikilink]] → caminho da nota, ou null se ela não existe. */
+  links: Record<string, string | null>;
+  backlinks: { path: string; title: string }[];
+}
+
+export interface Decisao {
+  path: string;
+  title: string;
+  status: 'aprovada' | 'rejeitada';
+  folder: string;
+  source: string;
+  decided_at: string;
+  /** false = a nota foi movida ou apagada depois (no Obsidian). */
+  exists: boolean;
+}
+
 /** mcp | ops | webdav | api:<nome> */
 export type ItemAcesso = string;
 
@@ -169,6 +210,18 @@ export class CerebroService {
 
   apagarApiKey(nome: string): Promise<unknown> {
     return firstValueFrom(this.http.delete(`${BASE}/acessos/api-keys/${encodeURIComponent(nome)}`));
+  }
+
+  notas(pasta: string | null): Promise<ListaNotas> {
+    return firstValueFrom(this.http.get<ListaNotas>(`${BASE}/notas`, { params: pasta ? { pasta } : {} }));
+  }
+
+  nota(path: string): Promise<Nota> {
+    return firstValueFrom(this.http.get<Nota>(`${BASE}/nota`, { params: { path } }));
+  }
+
+  decisoes(): Promise<Decisao[]> {
+    return firstValueFrom(this.http.get<Decisao[]>(`${BASE}/decisoes`));
   }
 
   buscar(q: string): Promise<ResultadoBusca[]> {

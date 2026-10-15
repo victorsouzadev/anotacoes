@@ -241,6 +241,46 @@ public sealed class NoteIndex
         return list;
     }
 
+    /// <summary>Quantas notas há em cada pasta de primeiro nível (ex.: "10-Projetos" → 12). Raiz = "".</summary>
+    public IReadOnlyDictionary<string, int> TopFolderCounts()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT folder, COUNT(*) FROM notes GROUP BY folder";
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            var folder = r.GetString(0);
+            var top = folder.Split('/')[0];
+            counts[top] = counts.GetValueOrDefault(top) + r.GetInt32(1);
+        }
+        return counts;
+    }
+
+    /// <summary>
+    /// Caminho da nota que um [[wikilink]] aponta: caminho exato ou nome de arquivo (como o Obsidian
+    /// resolve). Null se não existir.
+    /// </summary>
+    public string? ResolveLink(string target)
+    {
+        var t = target.Split('|')[0].Split('#')[0].Trim();
+        if (t.Length == 0) return null;
+        var withExt = t.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? t : t + ".md";
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+            SELECT path FROM notes
+            WHERE lower(path) = lower($p) OR lower(path) LIKE lower($suffix) ESCAPE '\' OR lower(title) = lower($t)
+            ORDER BY (lower(path) = lower($p)) DESC, length(path)
+            LIMIT 1
+            """;
+        cmd.Parameters.AddWithValue("$p", withExt);
+        cmd.Parameters.AddWithValue("$suffix", "%/" + EscapeLike(withExt));
+        cmd.Parameters.AddWithValue("$t", t);
+        return cmd.ExecuteScalar() as string;
+    }
+
     /// <summary>Notas que apontam para esta (por nome de arquivo ou caminho).</summary>
     public IReadOnlyList<string> Backlinks(string relative)
     {

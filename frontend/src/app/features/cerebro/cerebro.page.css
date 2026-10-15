@@ -84,3 +84,4 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 
 
 .link { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
 .abas { overflow-x: auto; }
+.content.larga { max-width: 1240px; }

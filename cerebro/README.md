@@ -33,6 +33,14 @@ Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, capt
 > `Microsoft.Data.Sqlite` 10.0.13, versões fixadas). Passam os testes (`dotnet test`, incluindo os da
 > autenticação web) e o `smoke-test.sh` (22 verificações, MCP incluso), e o roteamento pelo Caddy do hub.
 
+## Ler o vault pela tela (aba Notas)
+
+A aba **Notas** mostra o que já saiu da Inbox e tudo que você escreve no Obsidian: pastas com contagem,
+notas mais recentes primeiro, busca em todo o vault e leitura da nota com Markdown, callouts,
+checklists, `[[ligações]]` clicáveis e "notas que apontam para esta". A lateral lista as decisões
+recentes da Inbox (aprovadas e rejeitadas). Depois de aprovar, o aviso traz **Ver nota**. É só leitura:
+editar continua sendo no Obsidian.
+
 ## Gerenciado pela tela (aba Conectar e Configurações)
 
 Tudo que dá acesso ao Cérebro pode ser criado, mostrado, copiado e trocado na tela `/cerebro` do hub,

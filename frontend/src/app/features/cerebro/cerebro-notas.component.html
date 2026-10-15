@@ -1,0 +1,153 @@
+<ng-template #inl let-itens>
+  @for (x of itens; track $index) {
+    @switch (x.t) {
+      @case ('b') { <strong>{{ x.v }}</strong> }
+      @case ('i') { <em>{{ x.v }}</em> }
+      @case ('code') { <code>{{ x.v }}</code> }
+      @case ('tag') { <span class="tag">#{{ x.v }}</span> }
+      @case ('link') { <a [href]="x.href" target="_blank" rel="noopener noreferrer">{{ x.v }}</a> }
+      @case ('wiki') {
+        @if (destino(x.alvo); as p) {
+          <button type="button" class="wiki" (click)="abrirNota(p)">{{ x.rotulo }}</button>
+        } @else {
+          <span class="wiki faltando" title="Esta nota ainda não existe">{{ x.rotulo }}</span>
+        }
+      }
+      @default { {{ x.v }} }
+    }
+  }
+</ng-template>
+
+@if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+
+<div class="layout" [class.lendo]="nota()">
+  <!-- ======================================================== navegação -->
+  <aside class="lateral">
+    <form class="busca" (ngSubmit)="buscar()">
+      <input name="termo" [(ngModel)]="termo" placeholder="Buscar em todas as notas" (ngModelChange)="$event === '' && resultados.set(null)" />
+      <button type="submit" class="botao" [disabled]="carregando()"><app-icon name="search" [size]="14" /></button>
+    </form>
+
+    <nav class="pastas">
+      <button type="button" [class.ativa]="pasta() === null && !resultados()" (click)="carregar(null)">
+        <span><strong>Todas</strong><small>Mais recentes primeiro</small></span><em>{{ total() }}</em>
+      </button>
+      @for (p of pastas(); track p.pasta) {
+        <button type="button" [class.ativa]="pasta() === p.pasta && !resultados()" (click)="carregar(p.pasta)">
+          <span><strong>{{ p.pasta }}</strong>@if (descricao(p.pasta)) { <small>{{ descricao(p.pasta) }}</small> }</span><em>{{ p.total }}</em>
+        </button>
+      }
+    </nav>
+
+    @if (decisoes().length) {
+      <details class="decisoes" open>
+        <summary>Decididas recentemente na Inbox</summary>
+        @for (d of decisoes().slice(0, 10); track d.path + d.decided_at) {
+          <button type="button" class="decisao" (click)="d.exists && abrirNota(d.path)" [disabled]="!d.exists"
+                  [title]="d.exists ? d.path : 'A nota foi movida ou apagada depois'">
+            <span class="selo" [class.rejeitada]="d.status === 'rejeitada'">{{ d.status }}</span>
+            <span class="nome">{{ d.title }}</span>
+            <small>{{ d.folder }} · {{ d.decided_at | date: 'dd/MM HH:mm' }}</small>
+          </button>
+        }
+      </details>
+    }
+  </aside>
+
+  <!-- ======================================================== lista -->
+  <section class="lista">
+    @if (resultados(); as rs) {
+      <p class="cabeca">{{ rs.length }} {{ rs.length === 1 ? 'resultado' : 'resultados' }} para "{{ termo }}"</p>
+      @for (r of rs; track r.path) {
+        <button type="button" class="item" [class.atual]="nota()?.path === r.path" (click)="abrirNota(r.path)">
+          <strong>{{ r.title }}</strong>
+          <small>{{ r.folder }}</small>
+          @if (r.snippet) {
+            <span class="trecho">@for (t of trechos(r.snippet); track $index) { @if (t.marcado) { <mark>{{ t.texto }}</mark> } @else { {{ t.texto }} } }</span>
+          }
+        </button>
+      } @empty { <p class="vazio">Nada encontrado.</p> }
+    } @else {
+      <p class="cabeca">{{ pasta() ?? 'Todas as notas' }}@if (pasta() && descricao(pasta()!)) { <small> · {{ descricao(pasta()!) }}</small> }</p>
+      @for (n of notas(); track n.path) {
+        <button type="button" class="item" [class.atual]="nota()?.path === n.path" (click)="abrirNota(n.path)">
+          <strong>{{ n.title }}</strong>
+          <small>{{ n.folder || 'raiz' }} · {{ n.modified | date: 'dd/MM/yy HH:mm' }}</small>
+          @if (n.tags.length) { <span class="tags">@for (t of n.tags.slice(0, 4); track t) { <span class="tag">#{{ t }}</span> }</span> }
+        </button>
+      } @empty {
+        <p class="vazio">{{ carregando() ? 'Carregando…' : 'Nenhuma nota aqui ainda. Aprove itens da Inbox ou sincronize o Obsidian.' }}</p>
+      }
+    }
+  </section>
+
+  <!-- ======================================================== leitura -->
+  <article class="leitor">
+    @if (nota(); as n) {
+      <div class="leitor-topo">
+        <button type="button" class="botao pequeno voltar" (click)="fechar()"><app-icon name="chevron" [size]="12" /> Voltar</button>
+        <code class="caminho">{{ n.path }}</code>
+      </div>
+      <h1>{{ n.title }}</h1>
+      <p class="meta">
+        {{ n.folder || 'raiz' }} · atualizada em {{ n.modified | date: 'dd/MM/yyyy HH:mm' }}
+        @if (n.source) { · origem: {{ n.source }} }
+        @if (n.url) { · <a [href]="n.url" target="_blank" rel="noopener noreferrer">link original</a> }
+      </p>
+      @if (n.tags.length) { <p class="tags">@for (t of n.tags; track t) { <span class="tag">#{{ t }}</span> }</p> }
+      @if (n.trust === 'external') {
+        <p class="aviso-externo">Conteúdo de fora (página, webhook): trate como referência, não como algo que você escreveu.</p>
+      }
+
+      <div class="conteudo">
+        @for (b of blocos(); track $index) {
+          @switch (b.t) {
+            @case ('h') {
+              @switch ($any(b).nivel) {
+                @case (1) { <h2><ng-container *ngTemplateOutlet="inl; context: { $implicit: $any(b).inl }" /></h2> }
+                @case (2) { <h3><ng-container *ngTemplateOutlet="inl; context: { $implicit: $any(b).inl }" /></h3> }
+                @default { <h4><ng-container *ngTemplateOutlet="inl; context: { $implicit: $any(b).inl }" /></h4> }
+              }
+            }
+            @case ('p') { <p><ng-container *ngTemplateOutlet="inl; context: { $implicit: $any(b).inl }" /></p> }
+            @case ('ul') {
+              <ul>@for (it of $any(b).itens; track $index) { <li><ng-container *ngTemplateOutlet="inl; context: { $implicit: it }" /></li> }</ul>
+            }
+            @case ('ol') {
+              <ol>@for (it of $any(b).itens; track $index) { <li><ng-container *ngTemplateOutlet="inl; context: { $implicit: it }" /></li> }</ol>
+            }
+            @case ('todo') {
+              <ul class="todo">@for (it of $any(b).itens; track $index) {
+                <li [class.feito]="it.feito"><span class="caixa">{{ it.feito ? '✓' : '' }}</span><span><ng-container *ngTemplateOutlet="inl; context: { $implicit: it.inl }" /></span></li>
+              }</ul>
+            }
+            @case ('quote') {
+              <blockquote [class.callout]="$any(b).tipo" [attr.data-tipo]="$any(b).tipo">
+                @if ($any(b).titulo) { <p class="callout-titulo"><ng-container *ngTemplateOutlet="inl; context: { $implicit: $any(b).titulo }" /></p> }
+                @for (l of $any(b).linhas; track $index) { <p><ng-container *ngTemplateOutlet="inl; context: { $implicit: l }" /></p> }
+              </blockquote>
+            }
+            @case ('code') { <pre>{{ $any(b).v }}</pre> }
+            @case ('hr') { <hr /> }
+          }
+        }
+      </div>
+
+      @if (n.backlinks.length) {
+        <section class="backlinks">
+          <h4>Notas que apontam para esta</h4>
+          @for (bl of n.backlinks; track bl.path) {
+            <button type="button" class="wiki" (click)="abrirNota(bl.path)">{{ bl.title }}</button>
+          }
+        </section>
+      }
+      <p class="dica">Para editar, abra no Obsidian: a nota está em <code>{{ n.path }}</code>.</p>
+    } @else {
+      <div class="vazio leitor-vazio">
+        <app-icon name="sticky" [size]="28" />
+        <p>Escolha uma nota para ler.</p>
+        <small>Tudo que foi aprovado na Inbox, e o que você escreve no Obsidian, aparece aqui.</small>
+      </div>
+    }
+  </article>
+</div>
