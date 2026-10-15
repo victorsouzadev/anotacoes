@@ -1,9 +1,7 @@
-# Deploy na VPS: exposição SÓ pelo IP, sem SSL (decisão do usuário — a porta 80/443
-# do host já pertence ao nginx-proxy-manager, que atende o convite-vps).
-# Publica a porta 8090 do host diretamente no Caddy desta app (sem passar pelo NPM).
-# O container entra também na rede "proxy" para manter o padrão dos demais apps e
-# facilitar uma migração futura para subdomínio + NPM + Let's Encrypt (bastaria
-# remover o "ports" abaixo e criar um Proxy Host apontando para "notas-caddy:8080").
+# Deploy na VPS. Endereço público: https://cerebro.vsitefy.com.br, servido pelo
+# nginx-proxy-manager (dono das portas 80/443 do host), com Let's Encrypt, num Proxy Host
+# apontando para "notas-caddy:8080" pela rede "proxy". O Caddy desta app não publica porta
+# no host: o acesso direto pelo IP (antes http://191.252.177.244:8090) foi fechado.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
 #
@@ -22,8 +20,6 @@ services:
     build:
       context: .
       dockerfile: caddy/Dockerfile.vps
-    ports:
-      - "8090:8080"
     networks:
       - default
       - sites

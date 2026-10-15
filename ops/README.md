@@ -13,7 +13,7 @@ no host, logs e restart de qualquer container e leitura e escrita de arquivos.
 - Roda com `pid: host` e `privileged: true`. Cada comando entra nos namespaces do PID 1 com `nsenter`,
   então executa **no host** como root, e não dentro do container.
 - Publicado pelo Caddy do hub em `/ops/*`, **só por HTTPS** (o mesmo subdomínio do Segundo Cérebro).
-  Pelo IP:8090 responde 403. Só `/ops/health` fica liberado.
+  Sem HTTPS (cabeçalho X-Forwarded-Proto do NPM) responde 403. Só `/ops/health` fica liberado.
 - Token obrigatório (`Authorization: Bearer` ou `?key=`), com no mínimo 32 caracteres. Com token mais
   curto o serviço nem sobe; sem token, o `/mcp` responde 503.
 - Toda chamada vai para `data/ops/audit.log` (uma linha JSON com a ferramenta, os argumentos, o código

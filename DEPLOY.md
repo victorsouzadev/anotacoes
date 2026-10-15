@@ -1,7 +1,8 @@
 # Deploy — notas-vps
 
-Exposição: **só IP, sem SSL**, na porta **8090** do host (`http://191.252.177.244:8090`).
-A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo convite-vps.
+Endereço: **https://cerebro.vsitefy.com.br**, com HTTPS do nginx-proxy-manager (NPM), que é dono das portas 80/443 do
+host. O NPM encaminha para `notas-caddy:8080` pela rede `proxy`; o Caddy do hub não publica porta
+no host (o acesso direto `http://191.252.177.244:8090` foi fechado, ver "Endereço público").
 
 ## Primeira vez
 
@@ -63,18 +64,16 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    ```
    Se o build travar/OOM: build localmente com `docker save | gzip`, enviar a imagem via SFTP e `docker load` na VPS.
 
-4. Abrir a porta no firewall:
-   ```bash
-   ufw allow 8090/tcp
-   ```
+4. Endereço público: Proxy Host no NPM (ver "Endereço público" no fim). Nenhuma porta própria
+   precisa ser aberta no firewall.
 
 5. Verificar:
    ```bash
    docker ps --filter name=notas
    docker exec notas-caddy wget -qO- http://api:8080/api/health
-   curl http://127.0.0.1:8090/api/health
+   curl https://cerebro.vsitefy.com.br/api/health
    ```
-   E no navegador: `http://191.252.177.244:8090` — registrar usuário, criar nota, desenhar.
+   E no navegador: `https://cerebro.vsitefy.com.br` — registrar usuário, criar nota, desenhar.
 
 6. Backup do SQLite (requer `sqlite3` no host):
    ```bash
@@ -120,7 +119,7 @@ docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
 Conferir qual provedor ficou ativo (é preciso estar autenticado):
 
 ```bash
-curl -H "authorization: Bearer <token>" http://127.0.0.1:8090/api/financas/capacidades
+curl -H "authorization: Bearer <token>" https://cerebro.vsitefy.com.br/api/financas/capacidades
 # {"provedor":"openrouter","suportaAnexos":true,...}
 ```
 
@@ -176,6 +175,12 @@ A ferramenta envia um ZIP (front estático e/ou API C# já publicada) e coloca o
 no ar em `http://<slug>.191-252-177-244.sslip.io:8090`. O desenho está em
 [docs/poc-multi-app/DISCOVERY.md](docs/poc-multi-app/DISCOVERY.md) e o app de
 exemplo em [exemplos/publicar/recados](exemplos/publicar/recados/README.md).
+
+> **Pendente com o fechamento da porta 8090.** Os sites chegam ao bloco curinga do Caddy
+> (`http://*.{$SITES_DOMINIO}:8080`) pela porta 8090 do host. Sem ela, ficam fora do ar até ganharem
+> outro endereço, por exemplo um curinga no NPM (`*.sites.vsitefy.com.br` → `notas-caddy:8080`) com
+> `SITES_DOMINIO=sites.vsitefy.com.br` e `SITES_PORTA` vazio. `SITES_PORTA` não roteia nada: só entra
+> na URL que a tela mostra.
 
 As peças:
 - **API**: guarda as versões em `data/sites/<slug>/`. Só publicam os e-mails em `PUBLICADORES`.
@@ -250,15 +255,15 @@ docker logs --tail 100 site-<slug>                           # o mesmo que "Logs
 ## Ferramenta "Segundo Cérebro" (vault do Obsidian)
 
 Serviços `cerebro` (API, MCP, worker) e `cerebro-webdav` (rclone), atrás do profile `cerebro`.
-O Caddy do hub publica `/cerebro/*` e `/dav/*`, **só por HTTPS**: pelo IP:8090 eles respondem 403.
+O Caddy do hub publica `/cerebro/*` e `/dav/*`, **só por HTTPS** (sem o X-Forwarded-Proto do NPM, 403).
 Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 
 ### Ligar pela primeira vez
 
 1. DNS: registro A de um subdomínio (ex.: `cerebro.seudominio.com.br`) para `191.252.177.244`.
 2. NPM: Proxy Host desse subdomínio → `notas-caddy` porta `8080`, "Websockets support" ligado,
-   certificado Let's Encrypt com "Force SSL". O container já está na rede `proxy`. O IP:8090 continua
-   funcionando para as outras ferramentas.
+   certificado Let's Encrypt com "Force SSL". O container já está na rede `proxy`. (Hoje o hub inteiro
+   usa `cerebro.vsitefy.com.br`; ver "Endereço público".)
 3. `.env` em `/opt/notas-vps`: `COMPOSE_PROFILES=publicar,cerebro` (ou só `cerebro`), `CEREBRO_USUARIOS`
    com o seu e-mail do hub e os segredos `CEREBRO_*` (`openssl rand -hex 32`). Ver `.env.example`.
 4. Faça push na `main` (ou rode o deploy). Ele cria `data/cerebro/` com o dono `CEREBRO_PUID:CEREBRO_PGID`
@@ -269,7 +274,8 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 
 ### Operação
 
-- Saúde: `curl http://127.0.0.1:8090/cerebro/health` na VPS (única rota liberada sem HTTPS).
+- Saúde: `curl https://cerebro.vsitefy.com.br/cerebro/health`, ou na VPS sem passar pelo NPM:
+  `docker exec notas-caddy wget -qO- http://cerebro:8080/health`.
 - Logs: `docker compose -f docker-compose.yml -f docker-compose.vps.yml logs -f cerebro`.
 - Histórico do vault: `git --git-dir data/cerebro/hub/vault.git --work-tree data/cerebro/webdav/Cerebro log --oneline`.
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
@@ -282,12 +288,29 @@ arquivos. Quem tem o `OPS_MCP_TOKEN` controla a VPS inteira. Fica atrás do prof
 `https://<subdomínio>/ops/mcp`, só por HTTPS. Como ligar, conectar, auditar e trocar o token:
 [ops/README.md](ops/README.md).
 
-## Migração futura para subdomínio + SSL via NPM
+## Endereço público (subdomínio + NPM) — feito
 
-1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.
-2. Remover a publicação de porta `8090:8080` do `docker-compose.vps.yml` (o container já está na rede `proxy`).
-3. Criar um Proxy Host no NPM apontando para `notas-caddy:8080` e solicitar certificado Let's Encrypt.
-4. `ufw delete allow 8090/tcp`.
+O hub responde em **https://cerebro.vsitefy.com.br**:
+
+- DNS (Hostinger, zona `vsitefy.com.br`): registro A `cerebro` → `191.252.177.244`.
+- NPM (painel em `:81`): Proxy Host `cerebro.vsitefy.com.br` → `notas-caddy:8080`, Websockets,
+  Let's Encrypt com Force SSL e, em Advanced, `client_max_body_size 100m; proxy_read_timeout 300s;
+  proxy_request_buffering off;` (uploads do WebDAV e capturas).
+- `docker-compose.vps.yml` não publica mais `8090:8080`. Depois do primeiro deploy sem a porta, feche
+  também no firewall: `ufw delete allow 8090/tcp`.
+- Health check do deploy, URL de atualização do Editor de Imagens, servidor padrão do app Android e
+  `HUB_API_URL` padrão do MCP de Tarefas apontam para o domínio.
+
+Cuidados ao fechar a porta:
+- **Login e dados do navegador são por endereço.** Quem usava `http://IP:8090` precisa entrar de novo em
+  `https://cerebro.vsitefy.com.br`. As Notas guardam rascunhos offline no navegador (IndexedDB) por endereço: antes de fechar,
+  abra o endereço antigo e espere sincronizar.
+- **Editor de Imagens (Windows):** a versão instalada procura atualizações em `http://IP:8090`. Publique
+  uma versão nova (workflow Desktop) e deixe os PCs atualizarem **antes** de fechar a porta; senão eles
+  param de receber atualizações e precisam reinstalar pelo site.
+- **App Android:** quem salvou o IP em Configurações precisa trocar para o domínio.
+- **Publicar:** os sites (`<slug>.191-252-177-244.sslip.io:8090`) também passam por esta porta. Sem ela
+  ficam fora do ar até ganharem outro endereço (ver a seção do Publicar).
 
 ## Instalador do Editor de Imagens pra Windows
 

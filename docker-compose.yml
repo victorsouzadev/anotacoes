@@ -1,6 +1,6 @@
 # Base do compose. Não expõe porta nenhuma por si só — use um dos overrides:
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build   (teste local, :8080)
-#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build  (produção VPS, :8090)
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build  (produção VPS, via NPM em https://cerebro.vsitefy.com.br)
 services:
   api:
     build: ./backend

@@ -117,7 +117,7 @@ O deploy é o mesmo do hub (`.github/workflows/deploy.yml`); o serviço só sobe
 
 1. **HTTPS (obrigatório).** No nginx-proxy-manager, crie um Proxy Host para um subdomínio (ex.:
    `cerebro.seudominio.com.br`) apontando para `notas-caddy` porta `8080`, com Let's Encrypt e
-   "Websockets support" ligado. Pelo IP:8090, sem TLS, o Caddy recusa `/cerebro/*` e `/dav/*` (403):
+   "Websockets support" ligado. Sem HTTPS (cabeçalho X-Forwarded-Proto do NPM), o Caddy recusa `/cerebro/*` e `/dav/*` (403):
    a senha do WebDAV, o token do MCP e as notas não podem passar em texto puro. O hub inteiro também
    passa a responder nesse subdomínio, e é por ele que o card "Segundo Cérebro" aparece.
 2. **`.env`** (na VPS, em `/opt/notas-vps`): some `cerebro` ao `COMPOSE_PROFILES` e preencha as variáveis
