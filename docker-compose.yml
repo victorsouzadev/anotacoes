@@ -195,6 +195,8 @@ services:
       - Ops__Token=${OPS_MCP_TOKEN:-}
       - Ops__Mode=nsenter
       - Ops__DataPath=/data
+      # Não logar a URL de cada requisição: o token do MCP vai na query (?key=).
+      - Logging__LogLevel__Microsoft.AspNetCore.Hosting.Diagnostics=Warning
     volumes:
       - ./data/ops:/data
       # Hash do token gerado na tela do Segundo Cérebro (substitui o OPS_MCP_TOKEN quando existe).
