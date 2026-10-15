@@ -22,6 +22,14 @@ public sealed record WebWebdavDto(string Usuario, string? Senha);
 
 public sealed record WebNameDto(string Nome);
 
+public sealed record WebNewNoteDto(string? Pasta, string Titulo, string? Conteudo);
+
+public sealed record WebSaveNoteDto(string Path, string Conteudo, string Versao);
+
+public sealed record WebMoveNoteDto(string Path, string? Pasta, string? Nome);
+
+public sealed record WebRestoreDto(string Versao, string? Path);
+
 /// <param name="ChaveApi">null mantém a chave salva; "" apaga; texto substitui.</param>
 public sealed record WebAiDto(string? Provedor, string? Modelo, string? ChaveApi);
 
@@ -76,6 +84,17 @@ public static class WebEndpoints
         web.MapGet("/notas", ListNotes);
         web.MapGet("/nota", ReadNote);
         web.MapGet("/decisoes", RecentDecisions);
+
+        // Edição pela tela (você). Tudo entra no histórico git, que é o log e a fonte de restauração.
+        web.MapGet("/pastas", (VaultStore vault) => Results.Ok(vault.UserFolders()));
+        web.MapPost("/notas", CreateNote);
+        web.MapPut("/nota", SaveNote);
+        web.MapPost("/nota/mover", MoveNote);
+        web.MapPost("/nota/excluir", TrashNote);
+        web.MapGet("/historico", History);
+        web.MapGet("/historico/versao", VersionContent);
+        web.MapPost("/historico/restaurar-nota", RestoreNote);
+        web.MapPost("/historico/restaurar-cerebro", RestoreVault);
         web.MapPost("/inbox/reclassify", Reclassify);
         web.MapGet("/ia", GetAi);
         web.MapPut("/ia", SaveAi);
@@ -396,10 +415,102 @@ public static class WebEndpoints
             trust = fm.GetString("trust"),
             modified = File.GetLastWriteTimeUtc(vault.FullPath(rel)),
             body,
+            // Texto completo (com frontmatter) e versão, para o editor salvar sem atropelar o Obsidian.
+            raw = await vault.ReadRawAsync(rel, ct),
+            versao = vault.Version(rel),
+            editavel = VaultLayout.UserCanEdit(rel),
+            na_lixeira = VaultLayout.IsUnder(rel, VaultLayout.Trash),
             links,
             backlinks = index.Backlinks(rel).Select(b => new { path = b, title = Path.GetFileNameWithoutExtension(b) }),
         });
     }
+
+    private static async Task<IResult> CreateNote(WebNewNoteDto dto, VaultStore vault, NoteIndex index, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Titulo)) return Results.BadRequest(new { error = "Dê um título para a nota." });
+        if (dto.Conteudo?.Length > 1_000_000) return Results.BadRequest(new { error = "Nota grande demais para a tela (1 MB)." });
+        var rel = await vault.UserCreateAsync(dto.Pasta ?? "", dto.Titulo, dto.Conteudo, ct: ct);
+        await index.UpsertAsync(rel, ct);
+        return Results.Ok(new { path = rel, versao = vault.Version(rel) });
+    }
+
+    private static async Task<IResult> SaveNote(WebSaveNoteDto dto, VaultStore vault, NoteIndex index, CancellationToken ct)
+    {
+        if (dto.Conteudo is null || dto.Conteudo.Length > 1_000_000) return Results.BadRequest(new { error = "Conteúdo vazio ou grande demais (1 MB)." });
+        try
+        {
+            var versao = await vault.UserSaveAsync(dto.Path, dto.Conteudo, dto.Versao ?? "", ct: ct);
+            var rel = VaultLayout.NormalizeRelative(dto.Path);
+            await index.UpsertAsync(rel, ct);
+            return Results.Ok(new { path = rel, versao });
+        }
+        catch (NoteConflictException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, versao_atual = ex.CurrentVersion, conteudo_atual = await vault.ReadRawAsync(ex.Path, ct) });
+        }
+    }
+
+    private static async Task<IResult> MoveNote(WebMoveNoteDto dto, VaultStore vault, NoteIndex index, CancellationToken ct)
+    {
+        var from = VaultLayout.NormalizeRelative(dto.Path);
+        var to = await vault.UserMoveAsync(from, dto.Pasta ?? VaultLayout.FolderOf(from), dto.Nome, ct: ct);
+        if (to != from) await index.RemoveAsync(from, ct);
+        await index.UpsertAsync(to, ct);
+        return Results.Ok(new { path = to });
+    }
+
+    private static async Task<IResult> TrashNote(WebPathDto dto, VaultStore vault, NoteIndex index, CancellationToken ct)
+    {
+        var from = VaultLayout.NormalizeRelative(dto.Path);
+        var to = await vault.UserTrashAsync(from, ct: ct);
+        await index.RemoveAsync(from, ct);
+        await index.UpsertAsync(to, ct);
+        return Results.Ok(new { path = to });
+    }
+
+    /// <summary>O log do Cérebro: versões com data, quem mudou (tela, MCP, sync do Obsidian) e arquivos.</summary>
+    private static async Task<IResult> History(string? path, int? limite, int? pular, GitSnapshotter git, CancellationToken ct)
+    {
+        var rel = string.IsNullOrWhiteSpace(path) ? null : VaultLayout.NormalizeRelative(path);
+        var entries = await git.HistoryAsync(rel, limite ?? 50, pular ?? 0, ct);
+        return Results.Ok(new
+        {
+            disponivel = git.Ready,
+            versoes = entries.Select(e => new
+            {
+                versao = e.Commit,
+                curta = e.Commit[..7],
+                data = e.Date,
+                mensagem = e.Message,
+                origem = Origin(e.Message),
+                arquivos = e.Changes.Where(c => !c.Path.Split('/').Any(p => p.StartsWith('.')))
+                    .Select(c => new { status = c.Status, path = c.Path }),
+            }),
+        });
+    }
+
+    /// <summary>Quem fez a mudança, a partir da mensagem do commit.</summary>
+    private static string Origin(string message) =>
+        message.StartsWith("sync:", StringComparison.Ordinal) ? "obsidian"
+        : message.Contains("(MCP)") || message.Contains("pelo Claude") || message.Contains("captura mcp") ? "claude"
+        : message.Contains("pela tela") ? "tela"
+        : "cerebro";
+
+    private static async Task<IResult> VersionContent(string versao, string path, GitSnapshotter git, CancellationToken ct)
+    {
+        var content = await git.ShowAsync(versao, VaultLayout.NormalizeRelative(path), ct);
+        return content is null ? Results.NotFound(new { error = "A nota não existia nessa versão." }) : Results.Ok(new { conteudo = content });
+    }
+
+    private static async Task<IResult> RestoreNote(WebRestoreDto dto, VersionService versions, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Path)) return Results.BadRequest(new { error = "Informe a nota." });
+        var rel = await versions.RestoreNoteAsync(dto.Versao, dto.Path, "pela tela", ct);
+        return Results.Ok(new { path = rel });
+    }
+
+    private static async Task<IResult> RestoreVault(WebRestoreDto dto, VersionService versions, CancellationToken ct) =>
+        Results.Ok(await versions.RestoreVaultAsync(dto.Versao, "pela tela", ct));
 
     /// <summary>O que saiu da Inbox (aprovado ou rejeitado), mais recente primeiro.</summary>
     private static IResult RecentDecisions(HubDb db, VaultStore vault) =>

@@ -85,6 +85,35 @@ export interface Nota {
   /** Alvo do [[wikilink]] → caminho da nota, ou null se ela não existe. */
   links: Record<string, string | null>;
   backlinks: { path: string; title: string }[];
+  /** Texto completo com frontmatter, para o editor. */
+  raw: string;
+  /** Hash do conteúdo: salvar com uma versão velha dá conflito (409) em vez de atropelar. */
+  versao: string;
+  editavel: boolean;
+  na_lixeira: boolean;
+}
+
+export type OrigemVersao = 'tela' | 'claude' | 'obsidian' | 'cerebro';
+
+export interface Versao {
+  versao: string;
+  curta: string;
+  data: string;
+  mensagem: string;
+  origem: OrigemVersao;
+  /** status: A criado, M alterado, D apagado, R renomeado. */
+  arquivos: { status: string; path: string }[];
+}
+
+export interface Historico {
+  disponivel: boolean;
+  versoes: Versao[];
+}
+
+export interface Conflito {
+  error: string;
+  versao_atual: string;
+  conteudo_atual: string;
 }
 
 export interface Decisao {
@@ -222,6 +251,49 @@ export class CerebroService {
 
   decisoes(): Promise<Decisao[]> {
     return firstValueFrom(this.http.get<Decisao[]>(`${BASE}/decisoes`));
+  }
+
+  // ------------------------------------------------------------- edição
+
+  pastasEditaveis(): Promise<string[]> {
+    return firstValueFrom(this.http.get<string[]>(`${BASE}/pastas`));
+  }
+
+  criarNota(pasta: string, titulo: string, conteudo: string): Promise<{ path: string; versao: string }> {
+    return firstValueFrom(this.http.post<{ path: string; versao: string }>(`${BASE}/notas`, { pasta, titulo, conteudo }));
+  }
+
+  /** Rejeita com HttpErrorResponse 409 (corpo: Conflito) se a nota mudou desde `versao`. */
+  salvarNota(path: string, conteudo: string, versao: string): Promise<{ path: string; versao: string }> {
+    return firstValueFrom(this.http.put<{ path: string; versao: string }>(`${BASE}/nota`, { path, conteudo, versao }));
+  }
+
+  moverNota(path: string, pasta: string, nome: string | null): Promise<{ path: string }> {
+    return firstValueFrom(this.http.post<{ path: string }>(`${BASE}/nota/mover`, { path, pasta, nome }));
+  }
+
+  excluirNota(path: string): Promise<{ path: string }> {
+    return firstValueFrom(this.http.post<{ path: string }>(`${BASE}/nota/excluir`, { path }));
+  }
+
+  // ------------------------------------------------------------- histórico
+
+  historico(path: string | null, pular = 0, limite = 30): Promise<Historico> {
+    const params: Record<string, string> = { pular: String(pular), limite: String(limite) };
+    if (path) params['path'] = path;
+    return firstValueFrom(this.http.get<Historico>(`${BASE}/historico`, { params }));
+  }
+
+  conteudoNaVersao(versao: string, path: string): Promise<string> {
+    return firstValueFrom(this.http.get<{ conteudo: string }>(`${BASE}/historico/versao`, { params: { versao, path } })).then((r) => r.conteudo);
+  }
+
+  restaurarNota(versao: string, path: string): Promise<{ path: string }> {
+    return firstValueFrom(this.http.post<{ path: string }>(`${BASE}/historico/restaurar-nota`, { versao, path }));
+  }
+
+  restaurarCerebro(versao: string): Promise<{ restored: number; trashed: number; paths: string[] }> {
+    return firstValueFrom(this.http.post<{ restored: number; trashed: number; paths: string[] }>(`${BASE}/historico/restaurar-cerebro`, { versao }));
   }
 
   buscar(q: string): Promise<ResultadoBusca[]> {

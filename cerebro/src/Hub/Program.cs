@@ -46,6 +46,7 @@ builder.Services.AddSingleton<ClaudeClassifier>();
 
 // Serviços de fundo (singletons para o /health ler o estado deles)
 builder.Services.AddSingleton<GitSnapshotter>();
+builder.Services.AddSingleton<VersionService>();
 builder.Services.AddSingleton<IndexWatcher>();
 builder.Services.AddSingleton<ProcessingWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitSnapshotter>());

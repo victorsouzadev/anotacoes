@@ -179,6 +179,127 @@ public sealed class VaultStore
         return rel;
     }
 
+    // ------------------------------------------------------------------ edição pela tela (você)
+
+    /// <summary>Versão do conteúdo (SHA-256 do arquivo): detecta se a nota mudou desde que foi aberta.</summary>
+    public string Version(string relative) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(FullPath(relative))));
+
+    /// <summary>
+    /// Regrava uma nota com o texto completo vindo do editor da tela. Recusa se ela mudou desde que foi
+    /// aberta (ex.: o Obsidian sincronizou no meio), para não apagar a edição de ninguém.
+    /// </summary>
+    public async Task<string> UserSaveAsync(string relative, string content, string expectedVersion, string by = "pela tela", CancellationToken ct = default)
+    {
+        var rel = VaultLayout.NormalizeRelative(relative);
+        if (!VaultLayout.UserCanEdit(rel)) throw new VaultAccessException($"Esta nota não pode ser editada pela tela: {rel}");
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            if (!File.Exists(FullPath(rel))) throw new FileNotFoundException($"Nota não encontrada: {rel}");
+            var current = Version(rel);
+            if (!string.Equals(current, expectedVersion, StringComparison.OrdinalIgnoreCase))
+                throw new NoteConflictException(rel, current);
+            await WriteAtomicAsync(FullPath(rel), content.Replace("\r\n", "\n"), overwrite: true, ct);
+        }
+        finally { _writeLock.Release(); }
+        OnWritten(rel, $"editada {by}");
+        return Version(rel);
+    }
+
+    /// <summary>Cria uma nota nova numa pasta, com nome a partir do título. Devolve o caminho.</summary>
+    public async Task<string> UserCreateAsync(string folder, string title, string? body, string by = "pela tela", CancellationToken ct = default)
+    {
+        var dir = folder.Trim().Trim('/').Length == 0 ? "" : VaultLayout.NormalizeRelative(folder);
+        if (!VaultLayout.UserCanUseFolder(dir)) throw new VaultAccessException($"Não dá para criar notas em {dir}.");
+        var name = VaultLayout.SafeFileName(title);
+        var text = (body ?? "").Replace("\r\n", "\n").Trim();
+        if (!text.StartsWith("# ", StringComparison.Ordinal)) text = $"# {title.Trim()}\n\n{text}";
+        string rel;
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            rel = dir.Length == 0 ? UniquePath(".", name).TrimStart('.', '/') : UniquePath(dir, name);
+            await WriteAtomicAsync(FullPath(rel), text.TrimEnd() + "\n", overwrite: false, ct);
+        }
+        finally { _writeLock.Release(); }
+        OnWritten(rel, $"criada {by}");
+        return rel;
+    }
+
+    /// <summary>Move e/ou renomeia uma nota (também restaura da lixeira). Devolve o caminho novo.</summary>
+    public async Task<string> UserMoveAsync(string relative, string targetFolder, string? newName, string by = "pela tela", CancellationToken ct = default)
+    {
+        var rel = VaultLayout.NormalizeRelative(relative);
+        if (!rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || VaultLayout.IsUnder(rel, VaultLayout.Attachments))
+            throw new VaultAccessException($"Esta nota não pode ser movida pela tela: {rel}");
+        var dir = targetFolder.Trim().Trim('/').Length == 0 ? "" : VaultLayout.NormalizeRelative(targetFolder);
+        if (!VaultLayout.UserCanUseFolder(dir)) throw new VaultAccessException($"Destino não permitido: {dir}");
+        var name = VaultLayout.SafeFileName(string.IsNullOrWhiteSpace(newName) ? Path.GetFileNameWithoutExtension(rel) : newName);
+
+        string dest;
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            if (!File.Exists(FullPath(rel))) throw new FileNotFoundException($"Nota não encontrada: {rel}");
+            var same = (dir.Length == 0 ? name + ".md" : $"{dir}/{name}.md");
+            if (same == rel) return rel;
+            dest = dir.Length == 0 ? UniquePath(".", name).TrimStart('.', '/') : UniquePath(dir, name);
+            Directory.CreateDirectory(Path.GetDirectoryName(FullPath(dest))!);
+            File.Move(FullPath(rel), FullPath(dest), overwrite: false);
+        }
+        finally { _writeLock.Release(); }
+        OnWritten(rel, $"movida {by}");
+        OnWritten(dest, $"movida {by}");
+        return dest;
+    }
+
+    /// <summary>Exclui pela tela: a nota vai para a lixeira (_sistema/lixeira). Devolve o caminho lá.</summary>
+    public async Task<string> UserTrashAsync(string relative, string by = "pela tela", CancellationToken ct = default)
+    {
+        var rel = VaultLayout.NormalizeRelative(relative);
+        if (!VaultLayout.UserCanEdit(rel)) throw new VaultAccessException($"Esta nota não pode ser excluída pela tela: {rel}");
+        string dest;
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            if (!File.Exists(FullPath(rel))) throw new FileNotFoundException($"Nota não encontrada: {rel}");
+            Directory.CreateDirectory(FullPath(VaultLayout.Trash));
+            dest = UniquePath(VaultLayout.Trash, Path.GetFileNameWithoutExtension(rel));
+            File.Move(FullPath(rel), FullPath(dest), overwrite: false);
+        }
+        finally { _writeLock.Release(); }
+        OnWritten(rel, $"excluída {by}");
+        OnWritten(dest, $"excluída {by}");
+        return dest;
+    }
+
+    /// <summary>
+    /// Grava o conteúdo de uma versão antiga (restauração). Cria a nota se ela não existir mais.
+    /// Não passa pela checagem de versão: restaurar é sobrescrever de propósito (o git guarda o atual).
+    /// </summary>
+    public async Task UserRestoreAsync(string relative, string content, string reason, CancellationToken ct = default)
+    {
+        var rel = VaultLayout.NormalizeRelative(relative);
+        if (VaultLayout.IsUnder(rel, VaultLayout.Attachments) && rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            throw new VaultAccessException($"Não dá para restaurar em {rel}.");
+        await _writeLock.WaitAsync(ct);
+        try { await WriteAtomicAsync(FullPath(rel), content, overwrite: true, ct); }
+        finally { _writeLock.Release(); }
+        OnWritten(rel, reason);
+    }
+
+    /// <summary>Pastas do vault (sem ocultas, anexos e lixeira), para criar e mover pela tela.</summary>
+    public IReadOnlyList<string> UserFolders()
+    {
+        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System, IgnoreInaccessible = true };
+        return Directory.EnumerateDirectories(Root, "*", options)
+            .Select(ToRelative)
+            .Where(r => !r.Split('/').Any(p => p.StartsWith('.')) && VaultLayout.UserCanUseFolder(r) && r != "_sistema")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+    }
+
     /// <summary>Caminho livre em uma pasta: "Nome.md", "Nome 2.md", ...</summary>
     public string UniquePath(string folder, string baseName, string extension = ".md")
     {
@@ -212,4 +333,12 @@ public sealed class VaultStore
         _log.LogInformation("Vault: {Reason} → {Path}", reason, relative);
         Written?.Invoke(relative, reason);
     }
+}
+
+/// <summary>A nota mudou desde que foi aberta no editor (409 na API).</summary>
+public sealed class NoteConflictException(string path, string currentVersion)
+    : Exception($"A nota {path} mudou desde que você abriu (talvez pelo Obsidian). Recarregue antes de salvar.")
+{
+    public string Path { get; } = path;
+    public string CurrentVersion { get; } = currentVersion;
 }

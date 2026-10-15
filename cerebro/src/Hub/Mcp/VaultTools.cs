@@ -11,9 +11,9 @@ using ModelContextProtocol.Server;
 namespace Hub.Mcp;
 
 /// <summary>
-/// Ferramentas MCP do vault. Leitura em qualquer pasta; escrita só onde o hub pode:
-/// Inbox (capture), _sistema/ai (create_note), diário (append_daily) e mover da Inbox.
-/// Nenhuma ferramenta edita ou apaga notas suas.
+/// Ferramentas MCP do vault. Leitura em qualquer pasta. Escrita livre na Inbox (capture),
+/// _sistema/ai (create_note) e diário (append_daily). Editar, mover, excluir e restaurar notas
+/// suas exige user_confirmed=true (o agente precisa perguntar antes); tudo vai para o histórico.
 /// </summary>
 [McpServerToolType]
 public sealed class VaultTools
@@ -27,10 +27,14 @@ public sealed class VaultTools
     private readonly HubDb _db;
     private readonly HubClock _clock;
     private readonly ILogger<VaultTools> _log;
+    private readonly GitSnapshotter _git;
+    private readonly VersionService _versions;
 
     public VaultTools(VaultStore vault, NoteIndex index, IngestService ingest, ApprovalService approval,
-        HubDb db, HubClock clock, ILogger<VaultTools> log)
+        HubDb db, HubClock clock, GitSnapshotter git, VersionService versions, ILogger<VaultTools> log)
     {
+        _git = git;
+        _versions = versions;
         _vault = vault;
         _index = index;
         _ingest = ingest;
@@ -221,6 +225,126 @@ public sealed class VaultTools
             return $"{result.Status}: {result.Path}";
         }
         catch (Exception ex) when (ex is VaultAccessException or ArgumentException or InvalidOperationException or FileNotFoundException)
+        {
+            return $"Não foi possível: {ex.Message}";
+        }
+    }
+
+    // ------------------------------------------------------------------ edição (sempre com confirmação)
+
+    private const string AskFirst =
+        "SEMPRE pergunte ao usuário antes, dizendo exatamente o que vai mudar, e só chame com user_confirmed=true " +
+        "depois que ele disser sim nesta conversa. Tudo fica no histórico e pode ser restaurado.";
+
+    private static string? Refuse(bool userConfirmed) => userConfirmed ? null :
+        "Não executado: pergunte ao usuário primeiro (diga o que vai mudar) e chame de novo com user_confirmed=true depois que ele confirmar.";
+
+    [McpServerTool(Name = "update_note", Destructive = true, OpenWorld = false)]
+    [Description("Substitui o conteúdo completo de uma nota (inclusive o frontmatter). Leia a nota antes com read_note e mande o texto inteiro já alterado. " + AskFirst)]
+    public async Task<string> UpdateNote(
+        [Description("Caminho da nota, ex.: '10-Projetos/Plano.md'.")] string path,
+        [Description("Conteúdo completo novo da nota, em Markdown.")] string content,
+        [Description("true só depois que o usuário confirmou esta alteração na conversa.")] bool user_confirmed,
+        CancellationToken ct = default)
+    {
+        if (Refuse(user_confirmed) is { } no) return no;
+        Log(nameof(UpdateNote), path);
+        try
+        {
+            var rel = NormalizeNotePath(path);
+            await _vault.UserSaveAsync(rel, content, _vault.Version(rel), "pelo Claude (MCP)", ct);
+            await _index.UpsertAsync(rel, ct);
+            return $"Nota atualizada: {rel}. A versão anterior fica no histórico (note_history / restore_note_version).";
+        }
+        catch (Exception ex) when (ex is VaultAccessException or FileNotFoundException or ArgumentException)
+        {
+            return $"Não foi possível: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "move_note", Destructive = true, OpenWorld = false)]
+    [Description("Move e/ou renomeia uma nota (ex.: de 10-Projetos para 90-Arquivo). Também restaura da lixeira (_sistema/lixeira). " + AskFirst)]
+    public async Task<string> MoveNote(
+        [Description("Caminho atual da nota.")] string path,
+        [Description("Pasta de destino, ex.: '90-Arquivo'. Vazio mantém a pasta.")] string? folder,
+        [Description("Opcional: novo nome (sem .md).")] string? new_name,
+        [Description("true só depois que o usuário confirmou.")] bool user_confirmed,
+        CancellationToken ct = default)
+    {
+        if (Refuse(user_confirmed) is { } no) return no;
+        Log(nameof(MoveNote), path);
+        try
+        {
+            var rel = NormalizeNotePath(path);
+            var dest = await _vault.UserMoveAsync(rel, string.IsNullOrWhiteSpace(folder) ? VaultLayout.FolderOf(rel) : folder, new_name, "pelo Claude (MCP)", ct);
+            if (dest != rel) await _index.RemoveAsync(rel, ct);
+            await _index.UpsertAsync(dest, ct);
+            return $"Nota em {dest}.";
+        }
+        catch (Exception ex) when (ex is VaultAccessException or FileNotFoundException or ArgumentException)
+        {
+            return $"Não foi possível: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "delete_note", Destructive = true, OpenWorld = false)]
+    [Description("Exclui uma nota mandando para a lixeira (_sistema/lixeira); nada é apagado de vez. " + AskFirst)]
+    public async Task<string> DeleteNote(
+        [Description("Caminho da nota.")] string path,
+        [Description("true só depois que o usuário confirmou.")] bool user_confirmed,
+        CancellationToken ct = default)
+    {
+        if (Refuse(user_confirmed) is { } no) return no;
+        Log(nameof(DeleteNote), path);
+        try
+        {
+            var rel = NormalizeNotePath(path);
+            var dest = await _vault.UserTrashAsync(rel, "pelo Claude (MCP)", ct);
+            await _index.RemoveAsync(rel, ct);
+            return $"Nota enviada para a lixeira: {dest}. Para desfazer, use move_note de volta.";
+        }
+        catch (Exception ex) when (ex is VaultAccessException or FileNotFoundException or ArgumentException)
+        {
+            return $"Não foi possível: {ex.Message}";
+        }
+    }
+
+    [McpServerTool(Name = "note_history", ReadOnly = true, OpenWorld = false)]
+    [Description("Histórico de versões (o log do Cérebro): data, quem mudou (tela, Claude, sync do Obsidian) e o que mudou. Com path, só daquela nota.")]
+    public async Task<string> NoteHistory(
+        [Description("Opcional: caminho de uma nota.")] string? path = null,
+        [Description("Quantas versões (1 a 50). Padrão: 15.")] int limit = 15,
+        CancellationToken ct = default)
+    {
+        Log(nameof(NoteHistory), path ?? "(tudo)");
+        var entries = await _git.HistoryAsync(string.IsNullOrWhiteSpace(path) ? null : NormalizeNotePath(path), Math.Clamp(limit, 1, 50), 0, ct);
+        if (entries.Count == 0) return _git.Ready ? "Sem histórico ainda." : "Histórico indisponível (git desligado).";
+        var sb = new StringBuilder();
+        foreach (var e in entries)
+        {
+            sb.Append("- ").Append(e.Commit[..7]).Append(" · ").Append(e.Date.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture))
+              .Append(" · ").Append(e.Message).Append('\n');
+            foreach (var c in e.Changes.Take(8)) sb.Append("    ").Append(c.Status).Append(' ').Append(c.Path).Append('\n');
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    [McpServerTool(Name = "restore_note_version", Destructive = true, OpenWorld = false)]
+    [Description("Volta uma nota para o conteúdo de uma versão do note_history (recria se tiver sido apagada). O estado atual fica salvo antes. " + AskFirst)]
+    public async Task<string> RestoreNoteVersion(
+        [Description("Caminho da nota.")] string path,
+        [Description("Versão (hash curto ou longo) vista em note_history.")] string version,
+        [Description("true só depois que o usuário confirmou.")] bool user_confirmed,
+        CancellationToken ct = default)
+    {
+        if (Refuse(user_confirmed) is { } no) return no;
+        Log(nameof(RestoreNoteVersion), $"{path} @ {version}");
+        try
+        {
+            var rel = await _versions.RestoreNoteAsync(version.Trim(), NormalizeNotePath(path), "pelo Claude (MCP)", ct);
+            return $"{rel} restaurada para a versão {version.Trim()[..Math.Min(7, version.Trim().Length)]}.";
+        }
+        catch (Exception ex) when (ex is VaultAccessException or FileNotFoundException or ArgumentException or InvalidOperationException)
         {
             return $"Não foi possível: {ex.Message}";
         }
