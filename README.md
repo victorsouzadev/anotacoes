@@ -566,6 +566,7 @@ desenhar. Uma linha sem esse prefixo é texto comum, exatamente como antes.
 
 ```
 notas-vps/
+├── ops/                              # MCP de operação da VPS (shell de root, containers, arquivos), ver ops/README.md
 ├── cerebro/                          # Segundo Cérebro: serviço .NET 10 (API, MCP, worker), ver cerebro/README.md
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # só sobe o NotasApp

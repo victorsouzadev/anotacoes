@@ -275,6 +275,13 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
 - O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
 
+## MCP de operação da VPS (ops)
+
+Dá a um agente shell de root no host, logs e restart de qualquer container e leitura e escrita de
+arquivos. Quem tem o `OPS_MCP_TOKEN` controla a VPS inteira. Fica atrás do profile `ops`, em
+`https://<subdomínio>/ops/mcp`, só por HTTPS. Como ligar, conectar, auditar e trocar o token:
+[ops/README.md](ops/README.md).
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.
