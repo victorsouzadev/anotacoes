@@ -141,11 +141,17 @@ services:
       - Hub__ApiKeys__navegador=${CEREBRO_API_KEY_NAVEGADOR:-}
       - Hub__Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
       - Hub__Anthropic__Model=${CEREBRO_MODELO:-claude-haiku-5-5}
+      # Classificação pela OpenRouter: a mesma chave das Finanças. A tela do Cérebro pode trocar
+      # provedor, modelo e chave (aba Configurações), sem mexer no .env.
+      - Hub__OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Hub__Transcription__ApiKey=${CEREBRO_OPENAI_API_KEY:-}
       - Hub__AutoMoveLowRisk=${CEREBRO_AUTO_MOVER:-false}
       # Login único do hub: o mesmo JWT_SECRET do serviço "api", e só estes e-mails.
       - Hub__Web__JwtSecret=${JWT_SECRET:-}
       - Hub__Web__Usuarios=${CEREBRO_USUARIOS:-}
+      # Login do WebDAV inicial. A tela (aba Conectar) pode trocar; aí este deixa de valer.
+      - Hub__WebdavUser=${CEREBRO_WEBDAV_USER:-}
+      - Hub__WebdavPass=${CEREBRO_WEBDAV_PASS:-}
     volumes:
       - ./data/cerebro/webdav:/data/webdav
       - ./data/cerebro/hub:/data/hub
@@ -153,6 +159,8 @@ services:
 
   # WebDAV que o plugin Remotely Save do Obsidian usa para sincronizar o vault.
   # O Remotely Save grava em /dav/<CEREBRO_VAULT>, que é a pasta que o "cerebro" lê.
+  # Sem senha própria: o Caddy confere o login no "cerebro" (forward_auth) antes de repassar,
+  # para a senha poder ser trocada pela tela. Não publica porta: só o Caddy o alcança.
   cerebro-webdav:
     image: rclone/rclone:1.71.1
     profiles: ["cerebro"]
@@ -166,8 +174,6 @@ services:
       - /data
       - --addr=:8080
       - --baseurl=/dav
-      - --user=${CEREBRO_WEBDAV_USER:-}
-      - --pass=${CEREBRO_WEBDAV_PASS:-}
       # O "cerebro" também escreve no disco: sem isso o WebDAV demoraria minutos para ver as mudanças.
       - --dir-cache-time=2s
       - --poll-interval=0
@@ -191,6 +197,8 @@ services:
       - Ops__DataPath=/data
     volumes:
       - ./data/ops:/data
+      # Hash do token gerado na tela do Segundo Cérebro (substitui o OPS_MCP_TOKEN quando existe).
+      - ./data/cerebro/hub/access:/access:ro
     mem_limit: 128m
 
 networks:

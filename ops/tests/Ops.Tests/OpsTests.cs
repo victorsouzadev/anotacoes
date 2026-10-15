@@ -161,3 +161,30 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Factory>
         Assert.Single(Directory.GetFiles(dir, "conf.txt.bak-*"));
     }
 }
+
+public class TokenSourceTests
+{
+    [Fact]
+    public void Arquivo_da_tela_substitui_o_token_do_env_e_e_relido()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "ops-token-" + Guid.NewGuid().ToString("N"));
+        var source = new TokenSource(new OpsOptions { Token = new string('e', 40), TokenHashFile = file });
+        Assert.Equal("servidor", source.Origin);
+        var envHash = source.Current();
+
+        static string Hex(string t) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(t)));
+        try
+        {
+            File.WriteAllText(file, Hex("token-da-tela") + "\n");
+            Assert.Equal("tela", source.Origin);
+            Assert.Equal(Hex("token-da-tela"), Convert.ToHexStringLower(source.Current()!));
+            Assert.NotEqual(envHash, source.Current());
+
+            File.WriteAllText(file, Hex("outro") + "\n");
+            File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddSeconds(5));
+            Assert.Equal(Hex("outro"), Convert.ToHexStringLower(source.Current()!));
+        }
+        finally { File.Delete(file); }
+        Assert.Equal("servidor", source.Origin);
+    }
+}

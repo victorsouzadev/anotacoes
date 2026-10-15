@@ -1,0 +1,128 @@
+@if (config(); as c) {
+  <section class="card">
+    <h2>IA que organiza a Inbox</h2>
+    <p class="ajuda">
+      Cada captura (texto, link, áudio) é enviada a um modelo de IA, que sugere <strong>título, resumo, tags, pasta de destino</strong>
+      e <strong>ligações com notas que já existem</strong>. Nada sai da Inbox sem você aprovar. O conteúdo vai como dado: instruções
+      escritas dentro dele são ignoradas.
+    </p>
+
+    <div class="estado" [class.ativo]="c.efetivo.ativo">
+      <app-icon [name]="c.efetivo.ativo ? 'check' : 'x'" [size]="14" />
+      @if (c.efetivo.ativo) {
+        Em uso agora: <strong>{{ nomeProvedor(c.efetivo.provedor) }}</strong> · <code>{{ c.efetivo.modelo }}</code>
+        · chave {{ c.efetivo.origem_da_chave === 'tela' ? 'cadastrada aqui' : 'do servidor (.env)' }}
+      } @else {
+        Classificação desligada: as capturas chegam sem sugestão.
+      }
+    </div>
+    @if (c.chave_invalida) {
+      <p class="alerta erro">A chave salva não abre mais (o JWT_SECRET do servidor mudou). Cadastre a chave de novo.</p>
+    }
+  </section>
+
+  <section class="card">
+    <h3>1. Provedor</h3>
+    <div class="opcoes">
+      @for (p of provedores; track p.valor) {
+        <label class="opcao" [class.marcada]="provedor() === p.valor">
+          <input type="radio" name="provedor" [value]="p.valor" [ngModel]="provedor()" (ngModelChange)="provedor.set($event); teste.set(null)" />
+          <span>
+            <strong>{{ p.rotulo }}</strong>
+            <small>{{ p.descricao }}</small>
+          </span>
+        </label>
+      }
+    </div>
+
+    @if (pedeChave()) {
+      <h3>2. Chave de API</h3>
+      @if (provedor() === 'openrouter') {
+        <ol class="passos">
+          <li>Entre em <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener">openrouter.ai/settings/keys</a> e clique em <strong>Create Key</strong>.</li>
+          <li>Dê um nome (ex.: <code>segundo-cerebro</code>) e, se quiser, um limite de gasto mensal.</li>
+          <li>Copie a chave (começa com <code>sk-or-</code>) e cole abaixo. Ela só aparece uma vez lá.</li>
+          <li>Garanta crédito na conta em <a href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">Credits</a>. Cada captura custa frações de centavo com o modelo padrão.</li>
+        </ol>
+      } @else {
+        <ol class="passos">
+          <li>Entre em <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API Keys</a> e crie uma chave.</li>
+          <li>Copie a chave (começa com <code>sk-ant-</code>) e cole abaixo.</li>
+        </ol>
+      }
+      <label class="campo">
+        <span>Chave
+          @if (c.chave_configurada) { <small>· salva: <code>{{ c.chave_mascarada }}</code> (deixe em branco para manter)</small> }
+          @else if (servidorTemChave()) { <small>· em branco usa a chave do servidor (.env)</small> }
+        </span>
+        <div class="linha">
+          <input [type]="mostrarChave() ? 'text' : 'password'" name="chave" [(ngModel)]="chave" autocomplete="off"
+                 [placeholder]="provedor() === 'openrouter' ? 'sk-or-v1-…' : 'sk-ant-…'" />
+          <button type="button" class="botao" (click)="mostrarChave.set(!mostrarChave())">
+            <app-icon name="eye" [size]="13" /> {{ mostrarChave() ? 'Ocultar' : 'Mostrar' }}
+          </button>
+          @if (c.chave_configurada) {
+            <button type="button" class="botao perigoso" (click)="removerChave()" [disabled]="salvando()">Remover salva</button>
+          }
+        </div>
+        <small>Fica cifrada no servidor e nunca volta inteira para o navegador.</small>
+      </label>
+
+      <h3>3. Modelo</h3>
+      <div class="modelos">
+        @for (m of modelos(); track m.id) {
+          <button type="button" class="modelo" [class.marcada]="(modelo || placeholderModelo()) === m.id" (click)="escolherModelo(m.id)">
+            <strong>{{ m.name }}</strong>
+            <code>{{ m.id }}</code>
+            <small>{{ m.description }}</small>
+          </button>
+        }
+      </div>
+      <label class="campo">
+        <span>Identificador do modelo <small>· em branco usa <code>{{ placeholderModelo() }}</code></small></span>
+        <input name="modelo" [(ngModel)]="modelo" [placeholder]="placeholderModelo()" autocomplete="off" />
+        @if (provedor() === 'openrouter') {
+          <small>Qualquer modelo da <a href="https://openrouter.ai/models?supported_parameters=tools" target="_blank" rel="noopener">lista da OpenRouter com suporte a tools</a> serve.</small>
+        }
+      </label>
+    }
+
+    @if (teste(); as t) {
+      <div class="alerta" [class.ok]="t.ok" [class.erro]="!t.ok">
+        {{ t.mensagem }}
+        @if (t.exemplo; as e) {
+          <div class="exemplo">
+            Exemplo de classificação: <strong>{{ e.titulo }}</strong> → <code>{{ e.pasta }}</code>
+            @if (e.tags.length) { · @for (tag of e.tags; track tag) { <span class="chip">#{{ tag }}</span> } }
+            <br /><em>{{ e.resumo }}</em>
+          </div>
+        }
+      </div>
+    }
+    @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+    @if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+
+    <div class="acoes">
+      @if (provedor() !== 'off') {
+        <button type="button" class="botao" (click)="testar()" [disabled]="testando()">
+          <app-icon name="refresh" [size]="13" /> {{ testando() ? 'Testando…' : 'Testar sem salvar' }}
+        </button>
+      }
+      <button type="button" class="botao primario" (click)="salvar()" [disabled]="salvando()">
+        <app-icon name="check" [size]="13" /> {{ salvando() ? 'Salvando…' : 'Salvar' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Para capturas que chegaram sem sugestão</h3>
+    <p class="ajuda sem-margem">
+      Depois de ligar a IA, abra a aba <strong>Inbox</strong> e use <strong>Classificar</strong> nos itens marcados como
+      "Sem sugestão". O conteúdo já extraído (página do link, transcrição) é reaproveitado.
+    </p>
+  </section>
+} @else if (erro()) {
+  <p class="alerta erro">{{ erro() }}</p>
+} @else {
+  <p class="vazio">Carregando…</p>
+}

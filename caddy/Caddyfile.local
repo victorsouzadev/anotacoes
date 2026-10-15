@@ -19,6 +19,11 @@
         respond "Use o endereço HTTPS do Segundo Cérebro." 403
     }
 
+    # Rotas internas do cerebro (ex.: conferência do login do WebDAV) não saem para a internet.
+    handle /cerebro/internal/* {
+        respond 404
+    }
+
     # API, MCP (/cerebro/mcp) e bookmarklet. O prefixo sai antes de chegar ao serviço.
     handle_path /cerebro/* {
         reverse_proxy cerebro:8080 {
@@ -50,6 +55,11 @@
             header Access-Control-Request-Method *
         }
         respond @preflight 204
+        # O login é conferido no cerebro (a senha pode ser trocada pela tela); o rclone não tem senha.
+        @precisa_login not method OPTIONS
+        forward_auth @precisa_login cerebro:8080 {
+            uri /internal/webdav-auth
+        }
         reverse_proxy cerebro-webdav:8080
     }
 

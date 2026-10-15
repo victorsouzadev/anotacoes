@@ -50,7 +50,7 @@ public sealed class ProcessingWorker : BackgroundService
             _queue.Enqueue(pending.Id);
 
         if (!_classifier.Enabled)
-            _log.LogWarning("Hub:Anthropic:ApiKey vazio: capturas ficam na Inbox sem classificação.");
+            _log.LogWarning("Sem provedor de IA (tela do Cérebro ou .env): capturas ficam na Inbox sem classificação.");
 
         await foreach (var id in _queue.Reader.ReadAllAsync(stoppingToken))
         {

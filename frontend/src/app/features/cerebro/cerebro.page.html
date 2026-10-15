@@ -36,8 +36,13 @@
             <app-icon name="plus" [size]="14" /> {{ enviando() ? 'Salvando…' : 'Salvar na Inbox' }}
           </button>
         </div>
-        @if (!me() || !$any(me()).classificacao) {
-          <p class="ajuda sem-margem dica">Sem <code>ANTHROPIC_API_KEY</code> as capturas ficam sem sugestão de pasta: escolha a pasta ao aprovar.</p>
+        @if (!classificacaoLigada()) {
+          <p class="ajuda sem-margem dica">
+            A IA está desligada: as capturas chegam sem sugestão de título e pasta.
+            <button type="button" class="link" (click)="aba.set('config')">Configurar a IA (OpenRouter ou Anthropic)</button>
+          </p>
+        } @else {
+          <p class="ajuda sem-margem dica">A IA sugere título, resumo, tags, pasta e ligações. Você revisa e aprova na Inbox.</p>
         }
       </form>
 
@@ -48,6 +53,7 @@
         <button class="aba" [class.ativa]="aba() === 'inbox'" (click)="aba.set('inbox')">Inbox ({{ itens().length }})</button>
         <button class="aba" [class.ativa]="aba() === 'busca'" (click)="aba.set('busca')">Buscar</button>
         <button class="aba" [class.ativa]="aba() === 'conectar'" (click)="aba.set('conectar')">Conectar</button>
+        <button class="aba" [class.ativa]="aba() === 'config'" (click)="aba.set('config')">Configurações</button>
       </nav>
 
       @switch (aba()) {
@@ -91,6 +97,9 @@
                     <option [value]="item.suggested_folder">{{ item.suggested_folder }} (sugerida)</option>
                   }
                 </select>
+                @if (!item.suggested_folder && classificacaoLigada() && item.capture_status !== 'queued' && item.capture_status !== 'processing') {
+                  <button class="botao pequeno" (click)="reclassificar(item)" [disabled]="ocupado() !== null" title="Pedir a sugestão da IA para este item"><app-icon name="refresh" [size]="12" /> Classificar</button>
+                }
                 <button class="botao primario pequeno" (click)="aprovar(item)" [disabled]="ocupado() !== null"><app-icon name="check" [size]="12" /> Aprovar</button>
                 <button class="botao perigoso pequeno" (click)="rejeitar(item)" [disabled]="ocupado() !== null"><app-icon name="x" [size]="12" /> Rejeitar</button>
               </div>
@@ -116,21 +125,10 @@
           }
         }
         @case ('conectar') {
-          <div class="card">
-            <h2>Obsidian (PC e celular)</h2>
-            <p class="ajuda">Plugin <strong>Remotely Save</strong> → tipo WebDAV, criptografia desligada (o hub precisa ler os arquivos).</p>
-            <p class="ajuda sem-margem">Endereço: <code>{{ origem }}/dav</code> <button class="botao pequeno" (click)="copiar(origem + '/dav')"><app-icon name="copy" [size]="12" /></button>
-              · usuário e senha: <code>CEREBRO_WEBDAV_USER</code>/<code>CEREBRO_WEBDAV_PASS</code> do <code>.env</code>.</p>
-          </div>
-          <div class="card">
-            <h2>Agentes (MCP)</h2>
-            <p class="ajuda">Claude Desktop, Claude Code ou outro cliente MCP via Streamable HTTP, com <code>Authorization: Bearer &lt;CEREBRO_MCP_TOKEN&gt;</code>.</p>
-            <p class="ajuda sem-margem">Endereço: <code>{{ origem }}/cerebro/mcp</code> <button class="botao pequeno" (click)="copiar(origem + '/cerebro/mcp')"><app-icon name="copy" [size]="12" /></button></p>
-          </div>
-          <div class="card">
-            <h2>Captura por API</h2>
-            <p class="ajuda sem-margem"><code>POST {{ origem }}/cerebro/api/v1/captures</code> com <code>X-Api-Key</code> (uma das <code>CEREBRO_API_KEY_*</code>). Atalhos de celular, webhooks e bookmarklet em <code>cerebro/examples</code>.</p>
-          </div>
+          <app-cerebro-conectar />
+        }
+        @case ('config') {
+          <app-cerebro-ia (mudou)="recarregarMe()" />
         }
       }
     </main>

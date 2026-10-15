@@ -15,6 +15,12 @@ public sealed class OpsOptions
     /// </summary>
     public string Mode { get; set; } = "nsenter";
 
+    /// <summary>
+    /// Arquivo com o SHA-256 (hex) do token gerado pela tela do Segundo Cérebro. Quando existe,
+    /// substitui o Token do .env (gerar outro na tela revoga o anterior). Relido quando muda.
+    /// </summary>
+    public string TokenHashFile { get; set; } = "/access/ops-token.sha256";
+
     /// <summary>Pasta do log de auditoria (audit.log, uma linha JSON por chamada).</summary>
     public string DataPath { get; set; } = "/data";
 

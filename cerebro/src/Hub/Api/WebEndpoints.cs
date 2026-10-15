@@ -14,6 +14,17 @@ public sealed record WebCaptureDto(string? Content, string? Url, List<string>? T
 
 public sealed record WebDecisionDto(string Path, string? Folder);
 
+public sealed record WebPathDto(string Path);
+
+public sealed record WebRevealDto(string Item);
+
+public sealed record WebWebdavDto(string Usuario, string? Senha);
+
+public sealed record WebNameDto(string Nome);
+
+/// <param name="ChaveApi">null mantém a chave salva; "" apaga; texto substitui.</param>
+public sealed record WebAiDto(string? Provedor, string? Modelo, string? ChaveApi);
+
 /// <summary>
 /// API da tela "Segundo Cérebro" do hub. Usa o login único do notas-api (JWT com
 /// issuer/audience "notas-vps"), e não as API keys: quem chama é o navegador.
@@ -62,6 +73,18 @@ public static class WebEndpoints
         web.MapPost("/inbox/approve", Approve);
         web.MapPost("/inbox/reject", Reject);
         web.MapGet("/search", Search);
+        web.MapPost("/inbox/reclassify", Reclassify);
+        web.MapGet("/ia", GetAi);
+        web.MapPut("/ia", SaveAi);
+        web.MapPost("/ia/testar", TestAi);
+
+        web.MapGet("/acessos", GetAccess);
+        web.MapPost("/acessos/revelar", RevealAccess);
+        web.MapPost("/acessos/mcp/gerar", (AccessStore a, ILogger<AccessStore> log) => Rotate("mcp", a.RegenerateMcpToken, a, log));
+        web.MapPost("/acessos/ops/gerar", (AccessStore a, ILogger<AccessStore> log) => Rotate("ops", a.RegenerateOpsToken, a, log));
+        web.MapPut("/acessos/webdav", SetWebdav);
+        web.MapPost("/acessos/api-keys", CreateApiKey);
+        web.MapDelete("/acessos/api-keys/{nome}", DeleteApiKey);
     }
 
     private static async ValueTask<object?> RequireEnabledAndHandleErrors(EndpointFilterInvocationContext ctx, EndpointFilterDelegate next)
@@ -80,12 +103,176 @@ public static class WebEndpoints
         }
     }
 
-    private static IResult Me(HttpContext http, ClaudeClassifier classifier) => Results.Ok(new
+    private static IResult Me(HttpContext http, AiSettings ai, IOptions<HubOptions> options, ApiKeyAuth auth, Transcriber transcriber)
     {
-        email = http.User.FindFirst("email")?.Value,
-        classificacao = classifier.Enabled,
-        pastas = VaultLayout.PermanentFolders,
-    });
+        var effective = ai.Resolve();
+        return Results.Ok(new
+        {
+            email = http.User.FindFirst("email")?.Value,
+            classificacao = effective.Enabled,
+            provedor = effective.Provider,
+            modelo = effective.Model,
+            transcricao = transcriber.Enabled,
+            mcp = auth.McpEnabled,
+            api_keys = options.Value.ApiKeys.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).Select(kv => kv.Key).Order().ToList(),
+            webdav_pasta = Path.GetFileName(options.Value.VaultPath.TrimEnd('/')),
+            pastas = VaultLayout.PermanentFolders,
+        });
+    }
+
+    private static IResult GetAi(AiSettings ai, IOptions<HubOptions> options) => Results.Ok(DescribeAi(ai, options.Value));
+
+    private static object DescribeAi(AiSettings ai, HubOptions options)
+    {
+        var (stored, updatedAt) = ai.Load();
+        var key = ai.StoredKey();
+        var effective = ai.Resolve();
+        return new
+        {
+            provedor = stored.Provider,
+            modelo = stored.Model,
+            chave_configurada = key is not null,
+            chave_mascarada = key is null ? null : AiSettings.Mask(key),
+            // A chave cifrada existe mas não abre: JWT_SECRET mudou desde que foi salva.
+            chave_invalida = stored.EncryptedKey is not null && key is null,
+            servidor = new
+            {
+                anthropic = options.Anthropic.Enabled,
+                openrouter = options.OpenRouter.Enabled,
+                modelo_anthropic = options.Anthropic.Model,
+                modelo_openrouter = options.OpenRouter.Model,
+            },
+            efetivo = new
+            {
+                provedor = effective.Provider,
+                modelo = effective.Model,
+                ativo = effective.Enabled,
+                origem_da_chave = effective.KeySource,
+            },
+            modelos = new
+            {
+                openrouter = AiSettings.OpenRouterModels,
+                anthropic = AiSettings.AnthropicModels,
+            },
+            atualizado_em = updatedAt,
+        };
+    }
+
+    private static IResult SaveAi(WebAiDto dto, AiSettings ai, IOptions<HubOptions> options)
+    {
+        var provider = dto.Provedor ?? AiProvider.Default;
+        if (!AiProvider.IsValid(provider))
+            return Results.BadRequest(new { error = "Provedor deve ser openrouter, anthropic, off ou vazio." });
+        if (dto.Modelo?.Length > 200 || dto.ChaveApi?.Length > 500)
+            return Results.BadRequest(new { error = "Modelo ou chave longos demais." });
+        if (!string.IsNullOrWhiteSpace(dto.ChaveApi) && !ai.CanStoreKeys)
+            return Results.BadRequest(new { error = "Sem JWT_SECRET no servidor não dá para guardar a chave." });
+        ai.Save(provider, dto.Modelo, dto.ChaveApi);
+        return Results.Ok(DescribeAi(ai, options.Value));
+    }
+
+    /// <summary>Classifica um texto de exemplo com a configuração da tela (salva ou ainda não), sem gravar nada no vault.</summary>
+    private static async Task<IResult> TestAi(WebAiDto dto, AiSettings ai, ClaudeClassifier classifier, CancellationToken ct)
+    {
+        if (dto.Provedor is not null && !AiProvider.IsValid(dto.Provedor))
+            return Results.BadRequest(new { error = "Provedor inválido." });
+        var effective = ai.Resolve(dto.Provedor, dto.Modelo, dto.ChaveApi);
+        if (!effective.Enabled)
+            return Results.Ok(new { ok = false, mensagem = "Sem chave para este provedor: cole uma chave ou configure no servidor.", exemplo = (object?)null });
+        try
+        {
+            var r = await classifier.ClassifyAsync(
+                "Teste", "Ideia: usar o Obsidian na VPS para guardar resumos de reuniões e ligar com projetos.",
+                "teste", VaultLayout.PermanentFolders, [], ct, effective);
+            return Results.Ok(new
+            {
+                ok = true,
+                mensagem = $"Funcionou com {(effective.Provider == AiProvider.Anthropic ? "Anthropic" : "OpenRouter")} · {effective.Model}.",
+                exemplo = (object?)new { titulo = r.Title, resumo = r.Summary, tags = r.Tags, pasta = r.Folder },
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return Results.Ok(new { ok = false, mensagem = ex.Message, exemplo = (object?)null });
+        }
+    }
+
+    private static IResult GetAccess(AccessStore access, IOptions<HubOptions> options)
+    {
+        var webdav = access.Webdav;
+        return Results.Ok(new
+        {
+            pode_guardar = access.Available,
+            mcp = new { configurado = access.McpToken is not null, origem = access.McpTokenSource, mascarado = SecretBox.Mask(access.McpToken) },
+            // O token do .env do ops não é conhecido aqui: só o gerado pela tela pode ser mostrado.
+            ops = new { configurado = access.OpsToken is not null, mascarado = SecretBox.Mask(access.OpsToken) },
+            webdav = new
+            {
+                configurado = webdav is not null,
+                origem = access.WebdavSource,
+                usuario = webdav?.User,
+                pasta = Path.GetFileName(options.Value.VaultPath.TrimEnd('/')),
+            },
+            api_keys = access.ApiKeys().Select(k => new { nome = k.Name, origem = k.Source, mascarada = SecretBox.Mask(k.Value) }),
+        });
+    }
+
+    private static IResult RevealAccess(WebRevealDto dto, AccessStore access, HttpContext http, ILogger<AccessStore> log)
+    {
+        string? value = dto.Item switch
+        {
+            "mcp" => access.McpToken,
+            "ops" => access.OpsToken,
+            "webdav" => access.Webdav?.Pass,
+            _ when dto.Item.StartsWith("api:", StringComparison.Ordinal) =>
+                access.ApiKeys().FirstOrDefault(k => k.Name == dto.Item[4..]).Value,
+            _ => null,
+        };
+        if (value is null) return Results.NotFound(new { error = "Acesso não configurado." });
+        log.LogWarning("Acesso revelado na tela: {Item} por {Email}", dto.Item, http.User.FindFirst("email")?.Value);
+        return Results.Ok(new { valor = value });
+    }
+
+    private static IResult Rotate(string item, Func<string> regenerate, AccessStore access, ILogger<AccessStore> log)
+    {
+        if (!access.Available) return Results.BadRequest(new { error = "Sem JWT_SECRET no servidor não dá para guardar tokens." });
+        var value = regenerate();
+        log.LogWarning("Token regenerado na tela: {Item}", item);
+        return Results.Ok(new { valor = value });
+    }
+
+    private static IResult SetWebdav(WebWebdavDto dto, AccessStore access, ILogger<AccessStore> log)
+    {
+        if (!access.Available) return Results.BadRequest(new { error = "Sem JWT_SECRET no servidor não dá para guardar a senha." });
+        var (user, pass) = access.SetWebdav(dto.Usuario ?? "", dto.Senha);
+        log.LogWarning("Login do WebDAV alterado na tela: {User}", user);
+        return Results.Ok(new { usuario = user, senha = pass });
+    }
+
+    private static IResult CreateApiKey(WebNameDto dto, AccessStore access)
+    {
+        if (!access.Available) return Results.BadRequest(new { error = "Sem JWT_SECRET no servidor não dá para guardar chaves." });
+        var value = access.CreateApiKey(dto.Nome ?? "");
+        return Results.Ok(new { nome = dto.Nome!.Trim().ToLowerInvariant(), valor = value });
+    }
+
+    private static IResult DeleteApiKey(string nome, AccessStore access) =>
+        access.DeleteApiKey(nome)
+            ? Results.NoContent()
+            : Results.NotFound(new { error = "Só dá para apagar pela tela as chaves criadas pela tela; as do .env saem editando o .env." });
+
+    /// <summary>Volta a captura para a fila (ex.: chegou antes de haver chave). A extração não se repete.</summary>
+    private static IResult Reclassify(WebPathDto dto, HubDb db, ProcessingQueue queue, AiSettings ai)
+    {
+        if (!ai.Resolve().Enabled)
+            return Results.BadRequest(new { error = "Configure um provedor de IA antes (aba Configurações)." });
+        var capture = db.FindByPath(VaultLayout.NormalizeRelative(dto.Path));
+        if (capture is null || !VaultLayout.IsUnder(capture.Path, VaultLayout.Inbox))
+            return Results.NotFound(new { error = "Item da Inbox não encontrado." });
+        db.Update(capture.Id, status: CaptureStatus.Queued, clearError: true);
+        queue.Enqueue(capture.Id);
+        return Results.Ok(new { id = capture.Id, status = CaptureStatus.Queued });
+    }
 
     private static async Task<IResult> Inbox(VaultStore vault, HubDb db, CancellationToken ct)
     {

@@ -12,8 +12,12 @@ public sealed class HubOptions
     /// <summary>Nome da chave → valor da API key. O nome vira a origem padrão da captura.</summary>
     public Dictionary<string, string> ApiKeys { get; set; } = new();
 
-    /// <summary>Token bearer do endpoint /mcp. Vazio = MCP desligado.</summary>
+    /// <summary>Token bearer do endpoint /mcp. A tela pode gerar outro, que passa a valer no lugar deste.</summary>
     public string McpToken { get; set; } = "";
+
+    /// <summary>Login do WebDAV vindo do .env. A tela pode trocar (aí este deixa de valer).</summary>
+    public string WebdavUser { get; set; } = "";
+    public string WebdavPass { get; set; } = "";
 
     /// <summary>Fontes cujo texto você mesmo escreve (atalho do celular, voz). Recebem trust: self.</summary>
     public List<string> TrustedSources { get; set; } = new() { "celular", "manual", "voz", "mcp" };
@@ -36,6 +40,9 @@ public sealed class HubOptions
     public int RateLimitPerMinute { get; set; } = 60;
 
     public AnthropicOptions Anthropic { get; set; } = new();
+
+    /// <summary>Chave da OpenRouter vinda do servidor (a mesma OPENROUTER_API_KEY do hub). A tela pode trocar.</summary>
+    public OpenRouterOptions OpenRouter { get; set; } = new();
 
     public TranscriptionOptions Transcription { get; set; } = new();
 
@@ -66,6 +73,18 @@ public sealed class AnthropicOptions
     public string ApiKey { get; set; } = "";
     public string Model { get; set; } = "claude-haiku-5-5";
     public string BaseUrl { get; set; } = "https://api.anthropic.com";
+    public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
+}
+
+/// <summary>
+/// OpenRouter: uma chave para modelos de vários fornecedores, pela API compatível com a da OpenAI
+/// (/chat/completions com tools).
+/// </summary>
+public sealed class OpenRouterOptions
+{
+    public string ApiKey { get; set; } = "";
+    public string Model { get; set; } = "anthropic/claude-haiku-4.5";
+    public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1";
     public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
 }
 
