@@ -73,6 +73,9 @@ public static class WebEndpoints
         web.MapPost("/inbox/approve", Approve);
         web.MapPost("/inbox/reject", Reject);
         web.MapGet("/search", Search);
+        web.MapGet("/notas", ListNotes);
+        web.MapGet("/nota", ReadNote);
+        web.MapGet("/decisoes", RecentDecisions);
         web.MapPost("/inbox/reclassify", Reclassify);
         web.MapGet("/ia", GetAi);
         web.MapPut("/ia", SaveAi);
@@ -320,11 +323,99 @@ public static class WebEndpoints
         return Results.Ok(result);
     }
 
-    private static async Task<IResult> Approve(WebDecisionDto dto, ApprovalService approval, CancellationToken ct) =>
-        Results.Ok(await approval.ApproveAsync(dto.Path, dto.Folder, ct));
+    private static async Task<IResult> Approve(WebDecisionDto dto, ApprovalService approval, NoteIndex index, CancellationToken ct)
+    {
+        var from = approval.ResolvePath(dto.Path);
+        var r = await approval.ApproveAsync(dto.Path, dto.Folder, ct);
+        await Reindex(index, from, r.Path, ct);
+        return Results.Ok(r);
+    }
 
-    private static async Task<IResult> Reject(WebDecisionDto dto, ApprovalService approval, CancellationToken ct) =>
-        Results.Ok(await approval.RejectAsync(dto.Path, ct));
+    private static async Task<IResult> Reject(WebDecisionDto dto, ApprovalService approval, NoteIndex index, CancellationToken ct)
+    {
+        var from = approval.ResolvePath(dto.Path);
+        var r = await approval.RejectAsync(dto.Path, ct);
+        await Reindex(index, from, r.Path, ct);
+        return Results.Ok(r);
+    }
+
+    /// <summary>
+    /// Atualiza o índice na hora (o watcher faria o mesmo segundos depois): quem aprova e abre a aba
+    /// Notas logo em seguida já vê a nota no lugar novo.
+    /// </summary>
+    private static async Task Reindex(NoteIndex index, string from, string to, CancellationToken ct)
+    {
+        if (from != to) await index.RemoveAsync(from, ct);
+        await index.UpsertAsync(to, ct);
+    }
+
+    /// <summary>Pastas do vault com contagem e as notas de uma pasta (ou de todas), mais recentes primeiro.</summary>
+    private static IResult ListNotes(string? pasta, int? limite, NoteIndex index)
+    {
+        var counts = index.TopFolderCounts();
+        string? folder = string.IsNullOrWhiteSpace(pasta) ? null : VaultLayout.NormalizeRelative(pasta);
+        var notes = index.List(folder, limit: Math.Clamp(limite ?? 200, 1, 500));
+        return Results.Ok(new
+        {
+            pastas = counts.OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => new { pasta = kv.Key, total = kv.Value }),
+            notas = notes.Select(n => new
+            {
+                path = n.Path,
+                title = n.Title,
+                folder = n.Folder,
+                tags = n.Tags,
+                status = n.Status,
+                modified = n.Modified,
+            }),
+        });
+    }
+
+    /// <summary>Uma nota inteira para leitura na tela, com as ligações já resolvidas para caminhos.</summary>
+    private static async Task<IResult> ReadNote(string path, VaultStore vault, NoteIndex index, CancellationToken ct)
+    {
+        var rel = VaultLayout.NormalizeRelative(path);
+        if (!rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || !vault.Exists(rel))
+            return Results.NotFound(new { error = "Nota não encontrada." });
+
+        var doc = await vault.ReadAsync(rel, ct);
+        var fm = doc.FrontMatter;
+        var body = doc.Body.Length > 200_000 ? doc.Body[..200_000] + "\n\n… (nota cortada na tela; abra no Obsidian para ver tudo)" : doc.Body;
+        var links = doc.ResolveLinks().Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(l => l, l => index.ResolveLink(l), StringComparer.OrdinalIgnoreCase);
+
+        return Results.Ok(new
+        {
+            path = rel,
+            title = VaultLayout.StripCapturePrefix(doc.ResolveTitle(rel)),
+            folder = VaultLayout.FolderOf(rel),
+            tags = doc.ResolveTags(),
+            summary = fm.GetString("summary"),
+            source = fm.GetString("source"),
+            url = fm.GetString("url"),
+            trust = fm.GetString("trust"),
+            modified = File.GetLastWriteTimeUtc(vault.FullPath(rel)),
+            body,
+            links,
+            backlinks = index.Backlinks(rel).Select(b => new { path = b, title = Path.GetFileNameWithoutExtension(b) }),
+        });
+    }
+
+    /// <summary>O que saiu da Inbox (aprovado ou rejeitado), mais recente primeiro.</summary>
+    private static IResult RecentDecisions(HubDb db, VaultStore vault) =>
+        Results.Ok(db.ListByStatus(CaptureStatus.Filed, CaptureStatus.Rejected)
+            .OrderByDescending(c => c.UpdatedAt)
+            .Take(50)
+            .Select(c => new
+            {
+                path = c.Path,
+                title = VaultLayout.StripCapturePrefix(Path.GetFileNameWithoutExtension(c.Path)),
+                status = c.Status == CaptureStatus.Filed ? "aprovada" : "rejeitada",
+                folder = VaultLayout.FolderOf(c.Path),
+                source = c.Source,
+                decided_at = c.UpdatedAt,
+                exists = vault.Exists(c.Path),
+            }));
 
     private static IResult Search(string? q, NoteIndex index) =>
         string.IsNullOrWhiteSpace(q)

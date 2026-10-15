@@ -6,11 +6,12 @@ import { AuthService } from '../../core/auth.service';
 import { mensagemDeErro } from '../../core/erro-http';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
-import { CerebroMe, CerebroService, ItemInbox, ResultadoBusca } from './cerebro.service';
+import { CerebroMe, CerebroService, ItemInbox } from './cerebro.service';
 import { CerebroConectarComponent } from './cerebro-conectar.component';
 import { CerebroIaComponent } from './cerebro-ia.component';
+import { CerebroNotasComponent } from './cerebro-notas.component';
 
-type Aba = 'inbox' | 'busca' | 'conectar' | 'config';
+type Aba = 'inbox' | 'notas' | 'conectar' | 'config';
 
 /** Enquanto houver captura na fila, a lista se atualiza sozinha neste intervalo. */
 const INTERVALO_FILA_MS = 5000;
@@ -18,7 +19,7 @@ const INTERVALO_FILA_MS = 5000;
 @Component({
   selector: 'app-cerebro-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent],
+  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent],
   templateUrl: './cerebro.page.html',
   styleUrls: ['./cerebro-comum.css', './cerebro.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,9 +47,10 @@ export class CerebroPageComponent {
   tags = '';
   readonly enviando = signal(false);
 
-  termo = '';
-  readonly resultados = signal<ResultadoBusca[] | null>(null);
-  readonly buscando = signal(false);
+  /** Nota que a aba Notas deve abrir (ex.: logo depois de aprovar). */
+  readonly notaParaAbrir = signal<string | null>(null);
+  /** Caminho da última nota aprovada, para o link "Ver nota". */
+  readonly ultimaAprovada = signal<string | null>(null);
 
   readonly naFila = computed(() => this.itens().some((i) => i.capture_status === 'queued' || i.capture_status === 'processing'));
 
@@ -137,10 +139,22 @@ export class CerebroPageComponent {
       this.erro.set('Escolha a pasta de destino antes de aprovar.');
       return;
     }
-    await this.decidir(item, () => this.api.aprovar(item.path, pasta), `Movido para ${pasta}.`);
+    this.ultimaAprovada.set(null);
+    await this.decidir(item, async () => {
+      const r = await this.api.aprovar(item.path, pasta);
+      this.ultimaAprovada.set(r.path);
+    }, `Aprovada e movida para ${pasta}.`);
+  }
+
+  verNota(path: string): void {
+    this.notaParaAbrir.set(null);
+    this.aba.set('notas');
+    // Sinal novo a cada clique: a aba reage mesmo se for a mesma nota.
+    queueMicrotask(() => this.notaParaAbrir.set(path));
   }
 
   async rejeitar(item: ItemInbox): Promise<void> {
+    this.ultimaAprovada.set(null);
     await this.decidir(item, () => this.api.rejeitar(item.path), 'Rejeitado (foi para 90-Arquivo/Inbox rejeitada).');
   }
 
@@ -156,23 +170,6 @@ export class CerebroPageComponent {
     } finally {
       this.ocupado.set(null);
     }
-  }
-
-  async buscar(): Promise<void> {
-    this.buscando.set(true);
-    try {
-      this.resultados.set(await this.api.buscar(this.termo.trim()));
-      this.erro.set('');
-    } catch (err) {
-      this.erro.set(mensagemDeErro(err, 'Buscar no vault'));
-    } finally {
-      this.buscando.set(false);
-    }
-  }
-
-  /** O FTS5 marca o trecho achado com **; vira <mark> sem passar HTML do vault adiante. */
-  trechos(snippet: string): { texto: string; marcado: boolean }[] {
-    return snippet.split('**').map((texto, i) => ({ texto, marcado: i % 2 === 1 }));
   }
 
   rotuloFila(item: ItemInbox): string {

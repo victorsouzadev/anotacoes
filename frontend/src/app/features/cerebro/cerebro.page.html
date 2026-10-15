@@ -24,7 +24,7 @@
       </div>
     </main>
   } @else {
-    <main class="content">
+    <main class="content" [class.larga]="aba() === 'notas'">
       <!-- ------------------------------------------------ captura -->
       <form class="card" (ngSubmit)="capturar()">
         <h2>Capturar</h2>
@@ -47,11 +47,16 @@
       </form>
 
       @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
-      @if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+      @if (aviso()) {
+        <p class="alerta ok">
+          {{ aviso() }}
+          @if (ultimaAprovada(); as p) { <button type="button" class="link" (click)="verNota(p)">Ver nota</button> }
+        </p>
+      }
 
       <nav class="abas">
         <button class="aba" [class.ativa]="aba() === 'inbox'" (click)="aba.set('inbox')">Inbox ({{ itens().length }})</button>
-        <button class="aba" [class.ativa]="aba() === 'busca'" (click)="aba.set('busca')">Buscar</button>
+        <button class="aba" [class.ativa]="aba() === 'notas'" (click)="aba.set('notas')">Notas</button>
         <button class="aba" [class.ativa]="aba() === 'conectar'" (click)="aba.set('conectar')">Conectar</button>
         <button class="aba" [class.ativa]="aba() === 'config'" (click)="aba.set('config')">Configurações</button>
       </nav>
@@ -59,7 +64,7 @@
       @switch (aba()) {
         @case ('inbox') {
           <div class="barra">
-            <span class="ajuda sem-margem">Aprovar move a nota para a pasta; rejeitar manda para <code>90-Arquivo/Inbox rejeitada</code>. Também dá para decidir no Obsidian com <code>approve: true</code> no frontmatter.</span>
+            <span class="ajuda sem-margem">Aprovar move a nota para a pasta escolhida (depois ela aparece na aba <strong>Notas</strong>); rejeitar manda para <code>90-Arquivo/Inbox rejeitada</code>. Também dá para decidir no Obsidian com <code>approve: true</code> no frontmatter.</span>
             <button class="botao pequeno" (click)="carregarInbox()" [disabled]="carregandoInbox()"><app-icon name="refresh" [size]="12" /> Atualizar</button>
           </div>
           @if (itens().length === 0 && !carregandoInbox()) {
@@ -106,23 +111,8 @@
             </article>
           }
         }
-        @case ('busca') {
-          <form class="linha" (ngSubmit)="buscar()">
-            <input name="termo" [(ngModel)]="termo" placeholder="Buscar no vault (vazio = notas recentes)" />
-            <button class="botao" type="submit" [disabled]="buscando()"><app-icon name="search" [size]="14" /> Buscar</button>
-          </form>
-          @if (resultados(); as rs) {
-            @if (rs.length === 0) { <p class="vazio">Nada encontrado.</p> }
-            @for (r of rs; track r.path) {
-              <div class="card resultado">
-                <h3>{{ r.title }}</h3>
-                <p class="meta">{{ r.path }}</p>
-                @if (r.snippet) {
-                  <p class="resumo">@for (t of trechos(r.snippet); track $index) { @if (t.marcado) { <mark>{{ t.texto }}</mark> } @else { {{ t.texto }} } }</p>
-                }
-              </div>
-            }
-          }
+        @case ('notas') {
+          <app-cerebro-notas [abrir]="notaParaAbrir()" />
         }
         @case ('conectar') {
           <app-cerebro-conectar />

@@ -134,4 +134,43 @@ public sealed class WebAuthTests : IClassFixture<WebAuthTests.Factory>
         var r = await c.PostAsJsonAsync("/api/v1/web/captures", new { url = "file:///etc/passwd" });
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
+
+    [Fact]
+    public async Task Aprovada_aparece_nas_notas_e_nas_decisoes()
+    {
+        var c = Client(Token("dono@exemplo.com"));
+        var cap = await c.PostAsJsonAsync("/api/v1/web/captures", new { content = "Revisar gastos fixos todo mês. Ver [[Inexistente]]." });
+        var path = (await cap.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("path").GetString()!;
+        var ok = await c.PostAsJsonAsync("/api/v1/web/inbox/approve", new { path, folder = "20-Areas" });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var dest = (await ok.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("path").GetString()!;
+        Assert.StartsWith("20-Areas/", dest);
+
+        var decisoes = await c.GetFromJsonAsync<JsonElement>("/api/v1/web/decisoes");
+        Assert.Contains(decisoes.EnumerateArray(), d => d.GetProperty("path").GetString() == dest && d.GetProperty("status").GetString() == "aprovada");
+
+        // O índice é atualizado pelo watcher: espera a nota aparecer na pasta.
+        JsonElement notas = default;
+        for (var i = 0; i < 50; i++)
+        {
+            notas = await c.GetFromJsonAsync<JsonElement>("/api/v1/web/notas?pasta=20-Areas");
+            if (notas.GetProperty("notas").EnumerateArray().Any(n => n.GetProperty("path").GetString() == dest)) break;
+            await Task.Delay(100);
+        }
+        Assert.Contains(notas.GetProperty("notas").EnumerateArray(), n => n.GetProperty("path").GetString() == dest);
+        Assert.Contains(notas.GetProperty("pastas").EnumerateArray(), p => p.GetProperty("pasta").GetString() == "20-Areas");
+
+        var nota = await c.GetFromJsonAsync<JsonElement>("/api/v1/web/nota?path=" + Uri.EscapeDataString(dest));
+        Assert.Contains("Revisar gastos fixos", nota.GetProperty("body").GetString());
+        Assert.Equal(JsonValueKind.Null, nota.GetProperty("links").GetProperty("Inexistente").ValueKind);
+    }
+
+    [Fact]
+    public async Task Ler_nota_fora_do_vault_400()
+    {
+        var c = Client(Token("dono@exemplo.com"));
+        var r = await c.GetAsync("/api/v1/web/nota?path=" + Uri.EscapeDataString("../../etc/passwd.md"));
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Client(null).GetAsync("/api/v1/web/notas")).StatusCode);
+    }
 }
