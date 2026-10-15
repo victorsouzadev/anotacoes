@@ -228,7 +228,7 @@ public static class Endpoints
         """;
 
     private static IResult Health(NoteIndex index, HubDb db, GitSnapshotter git, IndexWatcher watcher,
-        ClaudeClassifier classifier, Transcriber transcriber, ApiKeyAuth auth) =>
+        AiSettings ai, Transcriber transcriber, ApiKeyAuth auth) =>
         Results.Ok(new
         {
             status = "ok",
@@ -237,7 +237,7 @@ public static class Endpoints
             capturas_com_erro = db.CountByStatus(CaptureStatus.Error),
             ultimo_commit = git.LastCommitAt,
             ultima_mudanca_no_vault = watcher.LastExternalChange,
-            classificacao = classifier.Enabled,
+            classificacao = ai.Resolve().Enabled,
             transcricao = transcriber.Enabled,
             mcp = auth.McpEnabled,
             api_keys = auth.HasKeys

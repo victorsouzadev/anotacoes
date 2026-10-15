@@ -1,0 +1,269 @@
+@if (acessos(); as a) {
+  <p class="ajuda intro">
+    Tudo que dá acesso ao seu Segundo Cérebro fica aqui: a sincronização do Obsidian, os dois servidores MCP (para o Claude
+    ler e escrever no vault e para operar a VPS) e as chaves das fontes de captura. Os valores ficam ocultos até você clicar
+    em <strong>Mostrar</strong> ou <strong>Copiar</strong>. Gerar um valor novo desliga o anterior na hora.
+  </p>
+  @if (!a.pode_guardar) {
+    <p class="alerta erro">O servidor está sem <code>JWT_SECRET</code>: não dá para gerar nem guardar acessos pela tela.</p>
+  }
+  @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+  @if (aviso()) { <p class="alerta ok flutuante">{{ aviso() }}</p> }
+
+  <!-- ============================================================ MCP do Cérebro -->
+  <section class="card secao" [class.aberta]="aberta() === 'mcp'">
+    <button type="button" class="cabecalho" (click)="aberta.set('mcp')">
+      <span class="titulo"><app-icon name="sticky" [size]="16" /> Claude no seu Segundo Cérebro (MCP)</span>
+      <span class="selo" [class.ok]="a.mcp.configurado">{{ a.mcp.configurado ? 'Ativo' : 'Sem token' }}</span>
+    </button>
+    @if (aberta() === 'mcp') {
+      <div class="corpo">
+        <p class="ajuda">
+          Deixa o Claude (no Claude Code do PC ou no Claude web) <strong>buscar e ler</strong> suas notas, ver a Inbox e o diário,
+          e <strong>guardar</strong> coisas novas. Ele foi instruído a avaliar se algo vale ser guardado e, na dúvida,
+          <strong>perguntar antes</strong>. O que ele grava vai para a Inbox (para você aprovar), para <code>_sistema/ai</code>
+          ou para o diário. Ele nunca edita nem apaga notas suas.
+        </p>
+
+        <div class="valor">
+          <span class="rotulo">Token <small>({{ rotuloOrigem(a.mcp.origem) }})</small></span>
+          <code class="segredo">{{ revelado('mcp') ? v('mcp') : (a.mcp.mascarado || '—') }}</code>
+          @if (a.mcp.configurado) {
+            <button type="button" class="botao pequeno" (click)="alternar('mcp')"><app-icon name="eye" [size]="12" /> {{ revelado('mcp') ? 'Ocultar' : 'Mostrar' }}</button>
+            <button type="button" class="botao pequeno" (click)="copiarCom(['mcp'], v.bind(this, 'mcp'))"><app-icon name="copy" [size]="12" /> Copiar</button>
+          }
+          <button type="button" class="botao pequeno" (click)="gerar('mcp')" [disabled]="ocupado() === 'mcp' || !a.pode_guardar">
+            <app-icon name="refresh" [size]="12" /> {{ a.mcp.configurado ? 'Gerar novo' : 'Gerar token' }}
+          </button>
+        </div>
+
+        @if (a.mcp.configurado) {
+          <div class="clientes">
+            <button type="button" [class.ativo]="clienteMcp() === 'code'" (click)="clienteMcp.set('code')">Claude Code (PC)</button>
+            <button type="button" [class.ativo]="clienteMcp() === 'web'" (click)="clienteMcp.set('web')">Claude web / app</button>
+          </div>
+          @if (clienteMcp() === 'code') {
+            <ol class="passos">
+              <li>Abra um terminal no PC (onde o Claude Code está instalado).</li>
+              <li>Cole o comando abaixo. O <code>--scope user</code> deixa o Cérebro disponível em todos os projetos.</li>
+              <li>Confira com <code>claude mcp list</code>: deve aparecer <code>cerebro … ✓ Connected</code>.</li>
+              <li>Peça, por exemplo: <em>"busque no meu cérebro o que anotei sobre o projeto X"</em>.</li>
+            </ol>
+            <div class="bloco">
+              <pre>{{ cmdCodeMcp() }}</pre>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['mcp'], cmdCodeMcp)"><app-icon name="copy" [size]="12" /> Copiar comando</button>
+            </div>
+          } @else {
+            <ol class="passos">
+              <li>Em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>, clique em <strong>Adicionar conector personalizado</strong>.</li>
+              <li>Nome: <code>Segundo Cérebro</code>. URL: a de baixo (o token vai na própria URL, então trate a URL como senha).</li>
+              <li>Deixe <em>OAuth Client ID/Secret</em> em branco, clique em <strong>Adicionar</strong> e depois em <strong>Conectar</strong>.</li>
+              <li>Numa conversa, ligue o conector no ícone de ferramentas, perto da caixa de mensagem. Vale também no app do celular.</li>
+            </ol>
+            <div class="bloco">
+              <pre>{{ urlWebMcp() }}</pre>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['mcp'], urlWebMcp)"><app-icon name="copy" [size]="12" /> Copiar URL</button>
+            </div>
+          }
+          <details class="ferramentas">
+            <summary>O que o Claude pode fazer com este conector</summary>
+            <ul>
+              <li><code>search</code>, <code>read_note</code>, <code>list_notes</code>: buscar e ler notas (só leitura).</li>
+              <li><code>get_daily</code>, <code>list_inbox</code>: ver o diário e o que está esperando revisão.</li>
+              <li><code>capture</code>: mandar algo para a Inbox (você aprova depois).</li>
+              <li><code>create_note</code>: criar nota em <code>_sistema/ai</code> (resumos e análises dele).</li>
+              <li><code>append_daily</code>: anexar uma linha ao diário de hoje.</li>
+              <li><code>process_inbox_item</code>: aprovar ou rejeitar item da Inbox, só quando você pedir.</li>
+            </ul>
+          </details>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- ============================================================ MCP da VPS -->
+  <section class="card secao" [class.aberta]="aberta() === 'ops'">
+    <button type="button" class="cabecalho" (click)="aberta.set('ops')">
+      <span class="titulo"><app-icon name="monitor" [size]="16" /> Claude operando a VPS (MCP de operação)</span>
+      <span class="selo" [class.ok]="a.ops.configurado">{{ a.ops.configurado ? 'Token da tela' : 'Token só no .env' }}</span>
+    </button>
+    @if (aberta() === 'ops') {
+      <div class="corpo">
+        <p class="alerta erro">
+          <strong>Acesso de root.</strong> Este conector executa qualquer comando na VPS, vê e reinicia todos os containers
+          (inclusive o nginx-proxy-manager e os outros sites) e lê e grava qualquer arquivo. Ligue o conector numa conversa só quando for usar,
+          e não abra links ou documentos de terceiros na mesma conversa.
+        </p>
+        <p class="ajuda">
+          Ferramentas: <code>system_status</code>, <code>list_containers</code>, <code>container_logs</code>, <code>container_action</code>,
+          <code>read_file</code>, <code>write_file</code> e <code>run_command</code>. Tudo fica registrado em <code>data/ops/audit.log</code> na VPS.
+          O serviço precisa estar ligado (<code>ops</code> no <code>COMPOSE_PROFILES</code>).
+        </p>
+
+        <div class="valor">
+          <span class="rotulo">Token <small>({{ a.ops.configurado ? 'gerenciado por esta tela' : 'o atual está no .env e não aparece aqui' }})</small></span>
+          <code class="segredo">{{ revelado('ops') ? v('ops') : (a.ops.mascarado || '—') }}</code>
+          @if (a.ops.configurado) {
+            <button type="button" class="botao pequeno" (click)="alternar('ops')"><app-icon name="eye" [size]="12" /> {{ revelado('ops') ? 'Ocultar' : 'Mostrar' }}</button>
+            <button type="button" class="botao pequeno" (click)="copiarCom(['ops'], v.bind(this, 'ops'))"><app-icon name="copy" [size]="12" /> Copiar</button>
+          }
+          <button type="button" class="botao pequeno" (click)="gerar('ops')" [disabled]="ocupado() === 'ops' || !a.pode_guardar">
+            <app-icon name="refresh" [size]="12" /> {{ a.ops.configurado ? 'Gerar novo' : 'Gerar token pela tela' }}
+          </button>
+        </div>
+        @if (!a.ops.configurado) {
+          <p class="ajuda">Gerar o token aqui substitui o <code>OPS_MCP_TOKEN</code> do .env: o antigo para de funcionar e os clientes precisam do novo.</p>
+        }
+
+        @if (a.ops.configurado) {
+          <div class="clientes">
+            <button type="button" [class.ativo]="clienteOps() === 'code'" (click)="clienteOps.set('code')">Claude Code (PC)</button>
+            <button type="button" [class.ativo]="clienteOps() === 'web'" (click)="clienteOps.set('web')">Claude web / app</button>
+          </div>
+          @if (clienteOps() === 'code') {
+            <ol class="passos">
+              <li>Cole o comando no terminal do PC.</li>
+              <li>Confira com <code>claude mcp list</code>: deve aparecer <code>vps … ✓ Connected</code>.</li>
+              <li>O Claude Code pede permissão antes de cada ferramenta. Para <code>run_command</code>, mantenha a aprovação manual.</li>
+            </ol>
+            <div class="bloco">
+              <pre>{{ cmdCodeOps() }}</pre>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['ops'], cmdCodeOps)"><app-icon name="copy" [size]="12" /> Copiar comando</button>
+            </div>
+          } @else {
+            <ol class="passos">
+              <li>Em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a> → <strong>Adicionar conector personalizado</strong>.</li>
+              <li>Nome: <code>VPS</code>. URL: a de baixo. OAuth em branco. <strong>Adicionar</strong> e <strong>Conectar</strong>.</li>
+              <li>Numa conversa, ligue o <strong>VPS</strong> no ícone de ferramentas só quando for usar, e aprove cada execução.</li>
+            </ol>
+            <div class="bloco">
+              <pre>{{ urlWebOps() }}</pre>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['ops'], urlWebOps)"><app-icon name="copy" [size]="12" /> Copiar URL</button>
+            </div>
+          }
+        }
+      </div>
+    }
+  </section>
+
+  <!-- ============================================================ Obsidian -->
+  <section class="card secao" [class.aberta]="aberta() === 'obsidian'">
+    <button type="button" class="cabecalho" (click)="aberta.set('obsidian')">
+      <span class="titulo"><app-icon name="folder" [size]="16" /> Obsidian no PC e no celular (WebDAV)</span>
+      <span class="selo" [class.ok]="a.webdav.configurado">{{ a.webdav.configurado ? 'Ativo' : 'Sem login' }}</span>
+    </button>
+    @if (aberta() === 'obsidian') {
+      <div class="corpo">
+        <p class="ajuda">
+          O vault fica na VPS e o Obsidian de cada aparelho sincroniza com ele pelo plugin <strong>Remotely Save</strong>.
+          É assim que o que você escreve no Obsidian chega ao Cérebro, e o que o Cérebro cria aparece no Obsidian.
+        </p>
+
+        <table class="campos">
+          <tr>
+            <th>Server Address</th>
+            <td><code>{{ urlDav() }}</code></td>
+            <td><button type="button" class="botao pequeno" (click)="copiar(urlDav())"><app-icon name="copy" [size]="12" /></button></td>
+          </tr>
+          <tr>
+            <th>Username</th>
+            <td><code>{{ a.webdav.usuario || '—' }}</code></td>
+            <td>@if (a.webdav.usuario) { <button type="button" class="botao pequeno" (click)="copiar(a.webdav.usuario)"><app-icon name="copy" [size]="12" /></button> }</td>
+          </tr>
+          <tr>
+            <th>Password</th>
+            <td><code class="segredo">{{ revelado('webdav') ? v('webdav') : (a.webdav.configurado ? '••••••••••••' : '—') }}</code></td>
+            <td>
+              @if (a.webdav.configurado) {
+                <button type="button" class="botao pequeno" (click)="alternar('webdav')"><app-icon name="eye" [size]="12" /></button>
+                <button type="button" class="botao pequeno" (click)="copiarCom(['webdav'], v.bind(this, 'webdav'))"><app-icon name="copy" [size]="12" /></button>
+              }
+            </td>
+          </tr>
+          <tr><th>Auth Type</th><td><code>basic</code></td><td></td></tr>
+          <tr><th>Remote Base Directory</th><td><code>{{ a.webdav.pasta }}</code></td><td><button type="button" class="botao pequeno" (click)="copiar(a.webdav.pasta)"><app-icon name="copy" [size]="12" /></button></td></tr>
+          <tr><th>Encryption Password</th><td><strong>deixe vazio</strong> <small>(o Cérebro precisa ler os arquivos)</small></td><td></td></tr>
+          <tr><th>Auto sync</th><td>a cada 5 minutos, com <em>Sync On Save</em> ligado</td><td></td></tr>
+        </table>
+
+        <ol class="passos">
+          <li><strong>Faça backup do vault</strong> antes do primeiro sync (copie a pasta).</li>
+          <li>No Obsidian: <em>Configurações → Plugins da comunidade → Procurar</em> → <strong>Remotely Save</strong> → Instalar → Ativar.</li>
+          <li>Nas opções do plugin, em <em>Choose A Remote Service</em>, escolha <strong>WebDAV</strong> e preencha a tabela acima.</li>
+          <li>Clique em <strong>Check Connectivity</strong>: deve dizer que a conexão funcionou.</li>
+          <li>Faça o primeiro sync <strong>no aparelho que já tem as notas</strong>. Depois configure os outros aparelhos com o vault vazio.</li>
+        </ol>
+        <p class="ajuda">O sync automático só roda com o Obsidian aberto, em qualquer plugin. No celular, abra o app para atualizar.</p>
+
+        <div class="linha editar">
+          <label class="campo sem-margem">
+            <span>Usuário</span>
+            <input name="usuarioWebdav" [(ngModel)]="usuarioWebdav" autocomplete="off" />
+          </label>
+          <button type="button" class="botao" (click)="salvarWebdav()" [disabled]="ocupado() === 'webdav' || !a.pode_guardar || !usuarioWebdav.trim()">
+            <app-icon name="refresh" [size]="13" /> {{ a.webdav.origem === 'tela' ? 'Gerar senha nova' : 'Criar login pela tela' }}
+          </button>
+        </div>
+        <small class="nota">A senha é gerada pelo servidor. O login antigo para de funcionar na hora: atualize o Remotely Save em todos os aparelhos.</small>
+      </div>
+    }
+  </section>
+
+  <!-- ============================================================ API -->
+  <section class="card secao" [class.aberta]="aberta() === 'api'">
+    <button type="button" class="cabecalho" (click)="aberta.set('api')">
+      <span class="titulo"><app-icon name="upload" [size]="16" /> Captura de fora: celular, WhatsApp, navegador (API)</span>
+      <span class="selo" [class.ok]="a.api_keys.length > 0">{{ a.api_keys.length }} {{ a.api_keys.length === 1 ? 'chave' : 'chaves' }}</span>
+    </button>
+    @if (aberta() === 'api') {
+      <div class="corpo">
+        <p class="ajuda">
+          Cada fonte (atalho do celular, automação do WhatsApp, bookmarklet do navegador) tem uma chave própria. O nome da
+          chave vira a origem da captura na Inbox. Apagar uma chave corta só aquela fonte.
+        </p>
+
+        @for (k of a.api_keys; track k.nome) {
+          <div class="fonte">
+            <div class="valor">
+              <span class="rotulo"><strong>{{ k.nome }}</strong> <small>({{ rotuloOrigem(k.origem) }})</small></span>
+              <code class="segredo">{{ revelado('api:' + k.nome) ? v('api:' + k.nome) : k.mascarada }}</code>
+              <button type="button" class="botao pequeno" (click)="alternar('api:' + k.nome)"><app-icon name="eye" [size]="12" /></button>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['api:' + k.nome], v.bind(this, 'api:' + k.nome))"><app-icon name="copy" [size]="12" /></button>
+              @if (k.origem === 'tela') {
+                <button type="button" class="botao pequeno perigoso" (click)="apagarFonte(k.nome)" [disabled]="ocupado() === 'api:' + k.nome"><app-icon name="delete" [size]="12" /></button>
+              }
+            </div>
+            <details>
+              <summary>Como usar a chave "{{ k.nome }}"</summary>
+              <p class="ajuda"><strong>Qualquer programa (curl, n8n, Make, Zapier):</strong> POST com o header <code>X-Api-Key</code>.</p>
+              <div class="bloco"><pre>{{ curl(k.nome) }}</pre>
+                <button type="button" class="botao pequeno" (click)="copiarCom(['api:' + k.nome], curl.bind(this, k.nome))"><app-icon name="copy" [size]="12" /> Copiar</button></div>
+              <p class="ajuda"><strong>Atalho no celular</strong> (Atalhos no iPhone, HTTP Shortcuts no Android): requisição POST para
+                <code>{{ origem }}/cerebro/api/v1/captures</code>, header <code>X-Api-Key</code> com a chave e corpo JSON
+                com <code>content</code> (o texto ditado ou compartilhado). Para áudio e fotos, use <code>/captures/file</code> (multipart, campo <code>file</code>).</p>
+              <p class="ajuda"><strong>Webhook</strong> (WhatsApp por Evolution API/Z-API, e-mail, formulários): aponte para</p>
+              <div class="bloco"><pre>{{ webhook(k.nome) }}</pre></div>
+              <p class="ajuda"><strong>Bookmarklet</strong>: crie um favorito no navegador e cole isto no endereço. Clicar nele salva a página atual (e o texto selecionado) na Inbox.</p>
+              <div class="bloco"><pre>{{ bookmarklet(k.nome) }}</pre>
+                <button type="button" class="botao pequeno" (click)="copiarCom(['api:' + k.nome], bookmarklet.bind(this, k.nome))"><app-icon name="copy" [size]="12" /> Copiar</button></div>
+            </details>
+          </div>
+        } @empty {
+          <p class="vazio">Nenhuma chave ainda.</p>
+        }
+
+        <form class="linha editar" (ngSubmit)="criarFonte()">
+          <label class="campo sem-margem">
+            <span>Nova fonte <small>(ex.: celular, whatsapp, navegador)</small></span>
+            <input name="novaFonte" [(ngModel)]="novaFonte" autocomplete="off" placeholder="nome-da-fonte" />
+          </label>
+          <button type="submit" class="botao primario" [disabled]="!novaFonte.trim() || ocupado() === 'api' || !a.pode_guardar"><app-icon name="plus" [size]="13" /> Criar chave</button>
+        </form>
+      </div>
+    }
+  </section>
+} @else if (erro()) {
+  <p class="alerta erro">{{ erro() }}</p>
+} @else {
+  <p class="vazio">Carregando…</p>
+}

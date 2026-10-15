@@ -73,7 +73,37 @@ public sealed class HubDb
                 ON captures(source, external_id) WHERE external_id IS NOT NULL;
             CREATE INDEX IF NOT EXISTS ix_captures_status ON captures(status);
             CREATE INDEX IF NOT EXISTS ix_captures_path ON captures(path);
+            CREATE TABLE IF NOT EXISTS settings(
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """;
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Configuração guardada pela tela (ex.: provedor de IA). Null se nunca foi salva.</summary>
+    public (string Value, DateTimeOffset UpdatedAt)? GetSetting(string key)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT value, updated_at FROM settings WHERE key = $k";
+        cmd.Parameters.AddWithValue("$k", key);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? (r.GetString(0), DateTimeOffset.Parse(r.GetString(1), System.Globalization.CultureInfo.InvariantCulture)) : null;
+    }
+
+    public void SetSetting(string key, string value)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO settings(key, value, updated_at) VALUES ($k, $v, $t)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;
+            """;
+        cmd.Parameters.AddWithValue("$k", key);
+        cmd.Parameters.AddWithValue("$v", value);
+        cmd.Parameters.AddWithValue("$t", DateTimeOffset.UtcNow.ToString("O"));
         cmd.ExecuteNonQuery();
     }
 

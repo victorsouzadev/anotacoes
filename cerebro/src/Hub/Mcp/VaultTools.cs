@@ -152,7 +152,7 @@ public sealed class VaultTools
     }
 
     [McpServerTool(Name = "capture", Destructive = false, OpenWorld = false)]
-    [Description("Envia um item para a Inbox (mesmo caminho da API de captura). Ele será classificado e esperará aprovação.")]
+    [Description("Envia um item para a Inbox (mesmo caminho da API de captura). Ele será classificado e esperará aprovação. Antes de chamar, avalie se vale guardar (ver instruções do servidor); na dúvida, pergunte ao usuário em vez de gravar.")]
     public async Task<string> Capture(
         [Description("Texto do item.")] string content,
         [Description("Opcional: link relacionado.")] string? url = null,
@@ -168,7 +168,7 @@ public sealed class VaultTools
     }
 
     [McpServerTool(Name = "create_note", Destructive = false, OpenWorld = false)]
-    [Description("Cria uma nota nova em _sistema/ai (resumos, relatórios, análises feitas pelo agente). Não sobrescreve nada.")]
+    [Description("Cria uma nota nova em _sistema/ai (resumos, relatórios, análises feitas pelo agente). Não sobrescreve nada. Antes de chamar, avalie se vale guardar (ver instruções do servidor); na dúvida, pergunte ao usuário em vez de gravar. Procure antes com search: se já existe nota sobre o assunto, prefira capturar um complemento a criar outra.")]
     public async Task<string> CreateNote(
         [Description("Título da nota (vira o nome do arquivo).")] string title,
         [Description("Conteúdo em markdown. Use [[Nome da nota]] para ligar notas existentes.")] string content,
@@ -189,7 +189,7 @@ public sealed class VaultTools
     }
 
     [McpServerTool(Name = "append_daily", Destructive = false, OpenWorld = false)]
-    [Description("Anexa uma linha ao fim da nota diária (cria a nota do dia se não existir).")]
+    [Description("Anexa uma linha ao fim da nota diária (cria a nota do dia se não existir). Antes de chamar, avalie se vale guardar (ver instruções do servidor); na dúvida, pergunte ao usuário em vez de gravar.")]
     public async Task<string> AppendDaily(
         [Description("Texto a anexar.")] string text,
         [Description("Opcional: data AAAA-MM-DD (padrão: hoje).")] string? date = null,

@@ -7,8 +7,10 @@ import { mensagemDeErro } from '../../core/erro-http';
 import { ThemeService } from '../../core/theme.service';
 import { IconComponent, IconName } from '../../shared/icon';
 import { CerebroMe, CerebroService, ItemInbox, ResultadoBusca } from './cerebro.service';
+import { CerebroConectarComponent } from './cerebro-conectar.component';
+import { CerebroIaComponent } from './cerebro-ia.component';
 
-type Aba = 'inbox' | 'busca' | 'conectar';
+type Aba = 'inbox' | 'busca' | 'conectar' | 'config';
 
 /** Enquanto houver captura na fila, a lista se atualiza sozinha neste intervalo. */
 const INTERVALO_FILA_MS = 5000;
@@ -16,9 +18,9 @@ const INTERVALO_FILA_MS = 5000;
 @Component({
   selector: 'app-cerebro-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, IconComponent, DatePipe],
+  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent],
   templateUrl: './cerebro.page.html',
-  styleUrl: './cerebro.page.css',
+  styleUrls: ['./cerebro-comum.css', './cerebro.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CerebroPageComponent {
@@ -49,7 +51,6 @@ export class CerebroPageComponent {
   readonly buscando = signal(false);
 
   readonly naFila = computed(() => this.itens().some((i) => i.capture_status === 'queued' || i.capture_status === 'processing'));
-  readonly origem = location.origin;
 
   private timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -82,6 +83,25 @@ export class CerebroPageComponent {
       this.carregandoInbox.set(false);
     }
     if (this.naFila()) this.timer = setTimeout(() => void this.carregarInbox(), INTERVALO_FILA_MS);
+  }
+
+  /** A aba Configurações mudou a IA: atualiza o aviso de classificação. */
+  async recarregarMe(): Promise<void> {
+    try {
+      this.me.set(await this.api.me());
+    } catch {
+      /* mantém o que já estava na tela */
+    }
+  }
+
+  readonly classificacaoLigada = computed(() => {
+    const m = this.me();
+    return !!m && m.classificacao;
+  });
+
+  async reclassificar(item: ItemInbox): Promise<void> {
+    await this.decidir(item, () => this.api.reclassificar(item.path), 'Voltou para a fila de classificação.', false);
+    await this.carregarInbox();
   }
 
   async capturar(): Promise<void> {
@@ -124,12 +144,12 @@ export class CerebroPageComponent {
     await this.decidir(item, () => this.api.rejeitar(item.path), 'Rejeitado (foi para 90-Arquivo/Inbox rejeitada).');
   }
 
-  private async decidir(item: ItemInbox, acao: () => Promise<unknown>, ok: string): Promise<void> {
+  private async decidir(item: ItemInbox, acao: () => Promise<unknown>, ok: string, sai = true): Promise<void> {
     this.ocupado.set(item.path);
     this.erro.set('');
     try {
       await acao();
-      this.itens.update((l) => l.filter((i) => i.path !== item.path));
+      if (sai) this.itens.update((l) => l.filter((i) => i.path !== item.path));
       this.aviso.set(ok);
     } catch (err) {
       this.erro.set(mensagemDeErro(err, 'Decidir o item'));
@@ -162,11 +182,6 @@ export class CerebroPageComponent {
       case 'error': return 'Erro';
       default: return item.suggested_folder ? 'Pronto para revisar' : 'Sem sugestão';
     }
-  }
-
-  copiar(texto: string): void {
-    void navigator.clipboard?.writeText(texto);
-    this.aviso.set('Copiado.');
   }
 
   themeIconName(): IconName {

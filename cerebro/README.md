@@ -33,6 +33,32 @@ Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, capt
 > `Microsoft.Data.Sqlite` 10.0.13, versões fixadas). Passam os testes (`dotnet test`, incluindo os da
 > autenticação web) e o `smoke-test.sh` (22 verificações, MCP incluso), e o roteamento pelo Caddy do hub.
 
+## Gerenciado pela tela (aba Conectar e Configurações)
+
+Tudo que dá acesso ao Cérebro pode ser criado, mostrado, copiado e trocado na tela `/cerebro` do hub,
+sem editar o `.env` nem reiniciar nada. Os segredos ficam cifrados (AES-GCM, chave derivada do
+`JWT_SECRET`) no `hub.db`.
+
+| Acesso | Onde | Relação com o `.env` |
+| --- | --- | --- |
+| Token do MCP do Cérebro | Conectar → Claude no seu Segundo Cérebro | Gerar na tela substitui `CEREBRO_MCP_TOKEN` |
+| Token do MCP da VPS (`ops`) | Conectar → Claude operando a VPS | Gerar na tela substitui `OPS_MCP_TOKEN` (o `ops` lê só o hash, em `data/cerebro/hub/access/`) |
+| Login do WebDAV | Conectar → Obsidian | Gerar na tela substitui `CEREBRO_WEBDAV_USER/PASS`. O Caddy confere o login no Cérebro (`forward_auth`); o rclone não tem senha |
+| API keys por fonte | Conectar → Captura de fora | As da tela somam com as `CEREBRO_API_KEY_*`; só as da tela podem ser apagadas pela tela |
+| IA da Inbox | Configurações | Provedor (OpenRouter, Anthropic, padrão do servidor ou desligado), modelo e chave. Sem nada salvo, valem `ANTHROPIC_API_KEY` e depois `OPENROUTER_API_KEY` |
+
+Cada acesso traz os comandos prontos para o **Claude Code do PC** (`claude mcp add …`) e a URL para o
+**Claude web/app** (Configurações → Conectores → Adicionar conector personalizado). Trocar o `JWT_SECRET`
+invalida os segredos salvos pela tela (eles precisam ser gerados de novo).
+
+## Como o Claude decide o que guardar
+
+O servidor MCP manda instruções na conexão (`Mcp/McpInstructions.cs`), e as ferramentas de escrita
+(`capture`, `create_note`, `append_daily`) repetem a regra: antes de gravar, o agente avalia se vale
+guardar (decisões, ideias, aprendizados, referências, compromissos, o que você pediu para lembrar) e
+procura com `search` se já existe. Conversa trivial, segredos e resultados intermediários ficam de fora.
+**Na dúvida, ele pergunta antes de gravar** e, depois de gravar, diz o que guardou e onde.
+
 ## Estrutura
 
 ```
@@ -122,11 +148,15 @@ instruções escondidas em e-mails ou páginas.
 ## Fluxo da Inbox
 
 1. Uma captura vira `00-Inbox/2026-10-13 2110 celular - titulo.md` com `status: inbox`.
-2. O worker baixa a página (link) ou transcreve (áudio) e, com `ANTHROPIC_API_KEY`, pede ao Claude título,
+2. O worker baixa a página (link) ou transcreve (áudio) e, com a IA ligada (aba Configurações: OpenRouter ou
+   Anthropic), pede ao modelo título,
    resumo, tags, `suggested_folder` e `suggested_links` (só notas que existem). Fica `status: processed`.
 3. Você revisa na tela **Segundo Cérebro** do hub (escolhe a pasta e aprova ou rejeita) ou no Obsidian, marcando **`approve: true`** (ou `approve: reject`). Pode trocar `suggested_folder`
    antes. O hub detecta a mudança, renomeia pelo título, adiciona "## Relacionadas" e move a nota.
 4. Também dá para aprovar por `POST /api/v1/captures/{id}/approve` ou pela tool `process_inbox_item`.
+
+Itens que chegaram com a IA desligada podem ser classificados depois pelo botão **Classificar** na Inbox
+(a extração já feita é reaproveitada).
 
 Falhas são tentadas 3 vezes; depois a nota fica com `status: error` e `hub_error` explicando. Nada some.
 

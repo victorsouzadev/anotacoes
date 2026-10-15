@@ -129,7 +129,7 @@ jobs:
               # Os containers rodam como CEREBRO_PUID:CEREBRO_PGID (padrão 1000): a pasta precisa ser deles.
               uid=$(grep -oP '^CEREBRO_PUID=\K[0-9]+' .env || echo 1000)
               gid=$(grep -oP '^CEREBRO_PGID=\K[0-9]+' .env || echo 1000)
-              mkdir -p data/cerebro/webdav data/cerebro/hub
+              mkdir -p data/cerebro/webdav data/cerebro/hub/access
               chown -R "$uid:$gid" data/cerebro
               docker compose -f docker-compose.yml -f docker-compose.vps.yml build cerebro
             fi

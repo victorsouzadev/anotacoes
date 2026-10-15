@@ -32,6 +32,13 @@ no host, logs e restart de qualquer container e leitura e escrita de arquivos.
 | `read_file` | Lê um arquivo de texto do host (até 200 KB) |
 | `write_file` | Grava um arquivo, guardando antes uma cópia `<arquivo>.bak-<data>` |
 
+## Token pela tela
+
+Na tela do Segundo Cérebro, aba **Conectar → Claude operando a VPS**, dá para gerar o token, mostrar,
+copiar e copiar os comandos prontos para o Claude Code e o Claude web. O Cérebro grava só o SHA-256 do
+token em `data/cerebro/hub/access/ops-token.sha256` (montado só leitura no `ops`), que passa a valer no
+lugar do `OPS_MCP_TOKEN`. Gerar outro revoga o anterior na hora, sem reiniciar o serviço.
+
 ## Ligar na VPS
 
 ```bash

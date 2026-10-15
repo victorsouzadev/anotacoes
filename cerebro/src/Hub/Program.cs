@@ -31,7 +31,10 @@ builder.Services.AddSingleton<HubClock>();
 builder.Services.AddSingleton<VaultStore>();
 builder.Services.AddSingleton<HubDb>();
 builder.Services.AddSingleton<NoteIndex>();
+builder.Services.AddSingleton<AccessStore>();
 builder.Services.AddSingleton<ApiKeyAuth>();
+builder.Services.AddSingleton<SecretBox>();
+builder.Services.AddSingleton<AiSettings>();
 
 // Pipeline
 builder.Services.AddSingleton<ProcessingQueue>();
@@ -50,6 +53,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexWatcher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessingWorker>());
 
 // HTTP de saída
+// Classificação (Anthropic ou OpenRouter): mesmo cliente, mesmo teto de tempo.
 builder.Services.AddHttpClient("anthropic", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddHttpClient("transcribe", c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddHttpClient("fetch", c =>
@@ -82,13 +86,14 @@ builder.Services.AddHubWebAuth(hubOptions.Web);
 
 // MCP (Streamable HTTP, sem estado de sessão: sobrevive a restarts)
 builder.Services
-    .AddMcpServer()
+    .AddMcpServer(o => o.ServerInstructions = McpInstructions.Text)
     .WithHttpTransport(o => o.Stateless = true)
     .WithTools<VaultTools>();
 
 var app = builder.Build();
 
 app.Services.GetRequiredService<VaultStore>().EnsureLayout();
+app.Services.GetRequiredService<AccessStore>().SyncOpsTokenFile();
 
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -114,6 +119,15 @@ app.Use(async (http, next) =>
     }
     await next(http);
 });
+
+// O Caddy pergunta aqui antes de repassar /dav ao rclone (forward_auth). Login do WebDAV gerenciado
+// pela tela. O Caddy bloqueia /cerebro/internal/* de fora: só ele alcança esta rota.
+app.MapGet("/internal/webdav-auth", (HttpContext http, ApiKeyAuth auth) =>
+{
+    if (auth.AuthenticateWebdav(http)) return Results.NoContent();
+    http.Response.Headers.WWWAuthenticate = "Basic realm=\"Segundo Cerebro\", charset=\"UTF-8\"";
+    return Results.Unauthorized();
+}).RequireRateLimiting("api");
 
 app.MapHubApi();
 app.MapHubWeb();

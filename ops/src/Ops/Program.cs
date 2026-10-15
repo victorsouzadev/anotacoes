@@ -37,17 +37,18 @@ builder.Services
 
 var app = builder.Build();
 
-var tokenHash = options.Token.Length > 0 ? SHA256.HashData(Encoding.UTF8.GetBytes(options.Token)) : null;
+var tokens = new TokenSource(options);
 
 // Authorization: Bearer <token>, ou ?key=<token> para conectores que só aceitam URL.
 app.Use(async (http, next) =>
 {
     if (http.Request.Path.StartsWithSegments("/mcp"))
     {
+        var tokenHash = tokens.Current();
         if (tokenHash is null)
         {
             http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await http.Response.WriteAsync("MCP desativado: defina Ops__Token.");
+            await http.Response.WriteAsync("MCP desativado: gere o token na tela do Segundo Cérebro ou defina Ops__Token.");
             return;
         }
         var auth = http.Request.Headers.Authorization.FirstOrDefault();
@@ -65,7 +66,7 @@ app.Use(async (http, next) =>
 
 app.UseRateLimiter();
 
-app.MapGet("/health", (HostShell shell) => Results.Ok(new { status = "ok", modo = shell.Mode, mcp = tokenHash is not null }));
+app.MapGet("/health", (HostShell shell) => Results.Ok(new { status = "ok", modo = shell.Mode, mcp = tokens.Current() is not null, token = tokens.Origin }));
 app.MapMcp("/mcp").RequireRateLimiting("mcp");
 
 app.Run();
