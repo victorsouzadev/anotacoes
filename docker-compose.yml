@@ -175,6 +175,24 @@ services:
       - ./data/cerebro/webdav:/data
     mem_limit: 128m
 
+  # MCP de operação da VPS (ops/README.md): shell de root no HOST via nsenter, logs e
+  # restart de qualquer container, leitura e escrita de arquivos. Quem tem o token
+  # controla a VPS inteira. Atrás do profile "ops" e de HTTPS (Caddy, /ops/*).
+  ops:
+    build: ./ops
+    profiles: ["ops"]
+    restart: unless-stopped
+    # pid: host + privileged: o nsenter entra nos namespaces do PID 1 do host.
+    pid: host
+    privileged: true
+    environment:
+      - Ops__Token=${OPS_MCP_TOKEN:-}
+      - Ops__Mode=nsenter
+      - Ops__DataPath=/data
+    volumes:
+      - ./data/ops:/data
+    mem_limit: 128m
+
 networks:
   sites:
     name: notas-sites

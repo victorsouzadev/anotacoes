@@ -87,7 +87,8 @@ jobs:
             --exclude=frontend/node_modules --exclude=frontend/dist --exclude=frontend/.angular \
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
-            backend frontend deployer cerebro docker-compose.yml docker-compose.vps.yml caddy
+            --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
+            backend frontend deployer cerebro ops docker-compose.yml docker-compose.vps.yml caddy
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -112,7 +113,7 @@ jobs:
             # sobrevive no disco e volta pro contexto de build do Docker (foi assim que
             # kanban/tasks-kanban.page.ts órfão quebrou o build do frontend depois do
             # rename pra projects/project-board.page.ts). Limpa antes de extrair.
-            rm -rf backend frontend caddy deployer cerebro
+            rm -rf backend frontend caddy deployer cerebro ops
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             mkdir -p data/db data/sites
@@ -131,6 +132,11 @@ jobs:
               mkdir -p data/cerebro/webdav data/cerebro/hub
               chown -R "$uid:$gid" data/cerebro
               docker compose -f docker-compose.yml -f docker-compose.vps.yml build cerebro
+            fi
+            # MCP de operação da VPS: só com o profile "ops" ligado.
+            if grep -q '^COMPOSE_PROFILES=.*ops' .env 2>/dev/null; then
+              mkdir -p data/ops
+              docker compose -f docker-compose.yml -f docker-compose.vps.yml build ops
             fi
             export APP_VERSAO=${{ github.sha }}
             docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d

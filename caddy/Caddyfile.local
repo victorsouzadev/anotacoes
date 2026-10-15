@@ -6,13 +6,13 @@
 :8080 {
     encode zstd gzip
 
-    # Ferramenta "Segundo Cérebro" (cerebro/README.md). Só por HTTPS: a senha do WebDAV,
+    # Ferramenta "Segundo Cérebro" (cerebro/README.md) e MCP de operação (/ops). Só por HTTPS: a senha do WebDAV,
     # o token do MCP e as notas não podem passar em texto puro. O HTTPS vem do
     # nginx-proxy-manager (subdomínio → notas-caddy:8080), que manda X-Forwarded-Proto.
     # No teste local, CEREBRO_PERMITIR_HTTP=sim libera o HTTP.
     @cerebro_sem_tls {
-        path /cerebro /cerebro/* /dav /dav/*
-        not path /cerebro/health
+        path /cerebro /cerebro/* /dav /dav/* /ops /ops/*
+        not path /cerebro/health /ops/health
         expression `{http.request.header.X-Forwarded-Proto} != "https" && "{$CEREBRO_PERMITIR_HTTP:nao}" != "sim"`
     }
     handle @cerebro_sem_tls {
@@ -22,6 +22,13 @@
     # API, MCP (/cerebro/mcp) e bookmarklet. O prefixo sai antes de chegar ao serviço.
     handle_path /cerebro/* {
         reverse_proxy cerebro:8080 {
+            flush_interval -1
+        }
+    }
+
+    # MCP de operação da VPS (ops/README.md), no mesmo HTTPS obrigatório acima.
+    handle_path /ops/* {
+        reverse_proxy ops:8080 {
             flush_interval -1
         }
     }
