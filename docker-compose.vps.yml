@@ -6,12 +6,22 @@
 # remover o "ports" abaixo e criar um Proxy Host apontando para "notas-caddy:8080").
 #
 #   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+#
+# As imagens daqui usam os Dockerfile.vps: o código já chega compilado pelo GitHub Actions
+# (Angular e dotnet publish), e a VPS só monta as imagens de execução. Compilar aqui, com
+# 1.9 GiB de RAM e todos os containers de pé, chegou a travar a máquina (deploy #131).
 services:
   api:
     container_name: notas-api
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.vps
 
   caddy:
     container_name: notas-caddy
+    build:
+      context: .
+      dockerfile: caddy/Dockerfile.vps
     ports:
       - "8090:8080"
     networks:
@@ -24,6 +34,16 @@ services:
     #   ssh -L 5433:127.0.0.1:5433 root@191.252.177.244   → conecte em localhost:5433
     ports:
       - "127.0.0.1:5433:5432"
+
+  cerebro:
+    build:
+      context: ./cerebro
+      dockerfile: Dockerfile.vps
+
+  ops:
+    build:
+      context: ./ops
+      dockerfile: Dockerfile.vps
 
 networks:
   proxy:

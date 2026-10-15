@@ -24,6 +24,47 @@ jobs:
           dotnet-version: 9.0.x
       - run: dotnet restore
       - run: dotnet build --no-restore --configuration Release
+      # A VPS só monta a imagem de execução (backend/Dockerfile.vps): compilar lá trava a máquina.
+      - run: dotnet publish Notas.Api/Notas.Api.csproj -c Release -o publish --no-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-publish
+          path: backend/publish
+          if-no-files-found: error
+
+  build-cerebro:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cerebro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish src/Hub/Hub.csproj -c Release -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cerebro-publish
+          path: cerebro/publish
+          if-no-files-found: error
+
+  build-ops:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ops
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet publish src/Ops/Ops.csproj -c Release -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ops-publish
+          path: ops/publish
+          if-no-files-found: error
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -39,6 +80,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npx ng build --configuration production
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+          if-no-files-found: error
 
   # build-mobile temporariamente desativado — reative removendo os comentários abaixo
   # e devolvendo "build-mobile" pro needs do job deploy (e os dois steps do APK).
@@ -63,10 +109,28 @@ jobs:
   #         if-no-files-found: error
 
   deploy:
-    needs: [build-backend, build-frontend]  # build-mobile removido temporariamente, ver acima
+    needs: [build-backend, build-frontend, build-cerebro, build-ops]  # build-mobile removido temporariamente, ver acima
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # O que foi compilado nos jobs acima vai pronto para a VPS (ver docker-compose.vps.yml).
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/frontend/browser
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-publish
+          path: backend/publish
+      - uses: actions/download-artifact@v4
+        with:
+          name: cerebro-publish
+          path: cerebro/publish
+      - uses: actions/download-artifact@v4
+        with:
+          name: ops-publish
+          path: ops/publish
 
       # Reativar junto com o job build-mobile acima.
       # - name: Baixa o APK do app Android buildado no job anterior
@@ -84,7 +148,7 @@ jobs:
         run: |
           tar -czf deploy.tar.gz \
             --exclude=backend/bin --exclude=backend/obj \
-            --exclude=frontend/node_modules --exclude=frontend/dist --exclude=frontend/.angular \
+            --exclude=frontend/node_modules --exclude=frontend/.angular \
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
             --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
@@ -106,6 +170,9 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          # O padrão (10 min) cortou o deploy #131 no meio; montar imagens prontas leva bem menos,
+          # mas pull de imagem base nova pode demorar.
+          command_timeout: 30m
           script: |
             set -e
             cd /opt/notas-vps

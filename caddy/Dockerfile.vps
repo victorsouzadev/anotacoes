@@ -1,0 +1,6 @@
+# Versão da VPS: o Angular já vem compilado pelo GitHub Actions (job build-frontend), em
+# frontend/dist/frontend/browser. Compilar na VPS (1.9 GiB de RAM, com todos os containers
+# de pé) chegou a travar a máquina inteira. Contexto de build: a RAIZ do repositório.
+FROM caddy:2-alpine
+COPY caddy/Caddyfile.local /etc/caddy/Caddyfile
+COPY frontend/dist/frontend/browser /srv

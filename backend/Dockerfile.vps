@@ -1,0 +1,11 @@
+# Versão da VPS: o dotnet publish roda no GitHub Actions (job build-backend) e chega em
+# backend/publish. Aqui só monta a imagem de execução, sem SDK (ver Dockerfile para o porquê
+# de cada pacote). Contexto de build: a pasta backend/.
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
+RUN apk add --no-cache tzdata icu-libs icu-data-full
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+WORKDIR /app
+COPY publish/ .
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Notas.Api.dll"]
