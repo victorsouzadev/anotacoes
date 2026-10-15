@@ -1,0 +1,11 @@
+# Versão da VPS: o dotnet publish roda no GitHub Actions (job build-ops) e chega em
+# ops/publish. Roda como root e com pid: host (ver Dockerfile). Contexto: a pasta ops/.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends util-linux tzdata ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY publish/ .
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Ops.dll"]
