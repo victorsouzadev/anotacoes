@@ -47,6 +47,9 @@ public sealed class HubOptions
     public TranscriptionOptions Transcription { get; set; } = new();
 
     public WebOptions Web { get; set; } = new();
+
+    /// <summary>Base dos MCPs dos apps do hub pela rede interna do Docker (sem token em URL pública).</summary>
+    public string AppsMcpUrl { get; set; } = "http://api:8080/api/mcp";
 }
 
 /// <summary>

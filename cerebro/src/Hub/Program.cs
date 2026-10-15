@@ -52,6 +52,9 @@ builder.Services.AddSingleton<ProcessingWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitSnapshotter>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexWatcher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessingWorker>());
+// Rotina que traz os dados dos apps do hub (Tarefas, Finanças, Criativo) pelos MCPs deles.
+builder.Services.AddSingleton<AppsSyncService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AppsSyncService>());
 
 // HTTP de saída
 // Classificação (Anthropic ou OpenRouter): mesmo cliente, mesmo teto de tempo.

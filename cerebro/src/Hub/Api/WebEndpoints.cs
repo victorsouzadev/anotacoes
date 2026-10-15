@@ -30,6 +30,8 @@ public sealed record WebMoveNoteDto(string Path, string? Pasta, string? Nome);
 
 public sealed record WebRestoreDto(string Versao, string? Path);
 
+public sealed record WebAppsDto(bool Ativo, List<string>? Horarios, List<string>? Apps);
+
 /// <param name="ChaveApi">null mantém a chave salva; "" apaga; texto substitui.</param>
 public sealed record WebAiDto(string? Provedor, string? Modelo, string? ChaveApi);
 
@@ -104,6 +106,17 @@ public static class WebEndpoints
         web.MapPost("/acessos/revelar", RevealAccess);
         web.MapPost("/acessos/mcp/gerar", (AccessStore a, ILogger<AccessStore> log) => Rotate("mcp", a.RegenerateMcpToken, a, log));
         web.MapPost("/acessos/ops/gerar", (AccessStore a, ILogger<AccessStore> log) => Rotate("ops", a.RegenerateOpsToken, a, log));
+        web.MapPost("/acessos/apps/gerar", (AccessStore a, ILogger<AccessStore> log) => Rotate("apps", a.RegenerateAppsToken, a, log));
+
+        // Rotina dos apps do hub (MCPs de Tarefas, Finanças e Criativo).
+        web.MapGet("/apps", (AppsSyncService sync, AccessStore a) => Results.Ok(DescribeApps(sync.Load(), a)));
+        web.MapPut("/apps", (WebAppsDto dto, AppsSyncService sync, AccessStore a) =>
+            Results.Ok(DescribeApps(sync.Configure(dto.Ativo, dto.Horarios ?? [], dto.Apps ?? []), a)));
+        web.MapPost("/apps/sincronizar", async (AppsSyncService sync, AccessStore a, CancellationToken ct) =>
+        {
+            await sync.RunAsync("manual, pela tela", ct);
+            return Results.Ok(DescribeApps(sync.Load(), a));
+        });
         web.MapPut("/acessos/webdav", SetWebdav);
         web.MapPost("/acessos/api-keys", CreateApiKey);
         web.MapDelete("/acessos/api-keys/{nome}", DeleteApiKey);
@@ -228,6 +241,7 @@ public static class WebEndpoints
             mcp = new { configurado = access.McpToken is not null, origem = access.McpTokenSource, mascarado = SecretBox.Mask(access.McpToken) },
             // O token do .env do ops não é conhecido aqui: só o gerado pela tela pode ser mostrado.
             ops = new { configurado = access.OpsToken is not null, mascarado = SecretBox.Mask(access.OpsToken) },
+            apps = new { configurado = access.AppsToken is not null, mascarado = SecretBox.Mask(access.AppsToken) },
             webdav = new
             {
                 configurado = webdav is not null,
@@ -239,12 +253,34 @@ public static class WebEndpoints
         });
     }
 
+    private static object DescribeApps(AppsSyncService.Settings s, AccessStore access) => new
+    {
+        ativo = s.Enabled,
+        horarios = s.EffectiveTimes,
+        token_configurado = access.AppsToken is not null,
+        apps = AppsSyncService.Apps.Select(a => new
+        {
+            id = a.Id,
+            nome = a.Name,
+            descricao = a.Description,
+            nota = $"{VaultLayout.Apps}/{a.Note}.md",
+            ativo = s.AppEnabled(a.Id),
+        }),
+        ultima = s.Last is null ? null : new
+        {
+            em = s.Last.At,
+            gatilho = s.Last.Trigger,
+            resultados = s.Last.Results.Select(r => new { app = r.App, ok = r.Ok, erro = r.Error, nota = r.Note }),
+        },
+    };
+
     private static IResult RevealAccess(WebRevealDto dto, AccessStore access, HttpContext http, ILogger<AccessStore> log)
     {
         string? value = dto.Item switch
         {
             "mcp" => access.McpToken,
             "ops" => access.OpsToken,
+            "apps" => access.AppsToken,
             "webdav" => access.Webdav?.Pass,
             _ when dto.Item.StartsWith("api:", StringComparison.Ordinal) =>
                 access.ApiKeys().FirstOrDefault(k => k.Name == dto.Item[4..]).Value,

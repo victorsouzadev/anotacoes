@@ -33,6 +33,26 @@ Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, capt
 > `Microsoft.Data.Sqlite` 10.0.13, versões fixadas). Passam os testes (`dotnet test`, incluindo os da
 > autenticação web) e o `smoke-test.sh` (22 verificações, MCP incluso), e o roteamento pelo Caddy do hub.
 
+## Apps do hub: MCPs e rotina de sincronização
+
+O notas-api expõe um MCP **só de leitura** por app, que enxerga os dados da conta do hub com o e-mail
+do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
+
+| MCP | Ferramentas |
+| --- | --- |
+| `/api/mcp/tarefas` | `tarefas_resumo`, `tarefas_listar` |
+| `/api/mcp/financas` | `financas_resumo`, `financas_resumo_mes`, `financas_buscar_transacoes`, `financas_evolucao`, `financas_saude`, `financas_metas`, `financas_recorrentes`, `financas_compromissos` (as mesmas consultas do chat financeiro) |
+| `/api/mcp/criativo` | `criativo_resumo`, `criativo_sites`, `criativo_projetos_imagem` |
+
+- **Token:** gerado em **Conectar → Apps do hub**. O Cérebro grava só o SHA-256 e o e-mail em
+  `data/cerebro/hub/access/apps-token.json`, montado só leitura no `api` (`Mcp__TokenFile`). Sem o
+  arquivo, os MCPs respondem 503. Fora da rede interna, só por HTTPS (o Caddy recusa `/api/mcp` sem TLS).
+- **Rotina:** em **Configurações → Apps do hub**, horários (padrão 08:00 e 20:00, no fuso do Cérebro),
+  quais apps entram e **Sincronizar agora**. A cada execução o Cérebro chama `<app>_resumo` pela rede
+  interna (`http://api:8080/api/mcp`, `Hub__AppsMcpUrl`), regrava `_sistema/apps/<App> (app).md` e anota
+  no diário. Se o serviço estava fora no horário, roda quando voltar (só o horário mais recente).
+- **Claude:** a mesma tela traz os comandos do Claude Code e as URLs do Claude web para cada MCP.
+
 ## Editar pela tela, log e restauração (abas Notas e Histórico)
 
 Na aba **Notas** você cria, edita (Markdown com frontmatter), move, renomeia e exclui notas. Excluir manda

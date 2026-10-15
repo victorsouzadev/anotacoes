@@ -4,7 +4,7 @@ import { mensagemDeErro } from '../../core/erro-http';
 import { IconComponent } from '../../shared/icon';
 import { Acessos, CerebroService, ItemAcesso } from './cerebro.service';
 
-type Secao = 'obsidian' | 'mcp' | 'ops' | 'api';
+type Secao = 'obsidian' | 'mcp' | 'apps' | 'ops' | 'api';
 type Cliente = 'code' | 'web';
 
 /** Aba "Conectar": todos os acessos do Cérebro, com os valores para copiar e como usar cada um. */
@@ -27,6 +27,22 @@ export class CerebroConectarComponent {
   readonly aberta = signal<Secao>('mcp');
   readonly clienteMcp = signal<Cliente>('code');
   readonly clienteOps = signal<Cliente>('code');
+  readonly clienteApps = signal<Cliente>('code');
+
+  /** MCPs dos apps do hub: o mesmo token serve para os três. */
+  readonly mcpsApps = [
+    { id: 'tarefas', nome: 'Tarefas', servidor: 'hub-tarefas', descricao: 'tarefas atrasadas, de hoje e da semana, concluídas e projetos' },
+    { id: 'financas', nome: 'Finanças', servidor: 'hub-financas', descricao: 'resumo do mês, lançamentos, evolução, saúde financeira, metas e recorrentes' },
+    { id: 'criativo', nome: 'Publicar e Imagens', servidor: 'hub-criativo', descricao: 'sites publicados e projetos do Editor de Imagens' },
+  ];
+
+  readonly cmdCodeApps = computed(() =>
+    this.mcpsApps.map((m) =>
+      `claude mcp add --transport http --scope user ${m.servidor} ${this.origem}/api/mcp/${m.id} \\\n  --header "Authorization: Bearer ${this.v('apps')}"`).join('\n\n'));
+
+  urlWebApp(id: string): string {
+    return `${this.origem}/api/mcp/${id}?key=${this.v('apps')}`;
+  }
 
   /** Valores já revelados nesta visita (item → valor). Some ao sair da página. */
   readonly valores = signal<Record<ItemAcesso, string>>({});
@@ -113,9 +129,9 @@ export class CerebroConectarComponent {
       this.erro.set('O navegador bloqueou a cópia: clique em Mostrar e copie à mão.'));
   }
 
-  async gerar(qual: 'mcp' | 'ops'): Promise<void> {
+  async gerar(qual: 'mcp' | 'ops' | 'apps'): Promise<void> {
     const a = this.acessos();
-    const jaTem = qual === 'mcp' ? a?.mcp.configurado : a?.ops.configurado;
+    const jaTem = qual === 'mcp' ? a?.mcp.configurado : qual === 'ops' ? a?.ops.configurado : a?.apps.configurado;
     if (jaTem && !confirm('Gerar um token novo desliga o atual na hora. Os clientes conectados (Claude Code, Claude web) vão precisar do novo. Continuar?')) return;
     await this.executar(qual, async () => {
       this.guardar(qual, await this.api.gerarToken(qual));

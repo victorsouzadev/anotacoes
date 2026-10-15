@@ -275,6 +275,13 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
 - O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
 
+## MCPs dos apps do hub (Tarefas, Finanças, Publicar/Imagens)
+
+O `api` serve `/api/mcp/tarefas`, `/api/mcp/financas` e `/api/mcp/criativo` (só leitura), autenticados pelo
+token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.json`, montado só leitura em
+`/access`). O Cérebro usa esses MCPs na rotina de sincronização. Detalhes em
+[cerebro/README.md](cerebro/README.md#apps-do-hub-mcps-e-rotina-de-sincronização).
+
 ## MCP de operação da VPS (ops)
 
 Dá a um agente shell de root no host, logs e restart de qualquer container e leitura e escrita de

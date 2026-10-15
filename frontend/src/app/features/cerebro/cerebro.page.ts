@@ -11,6 +11,7 @@ import { CerebroConectarComponent } from './cerebro-conectar.component';
 import { CerebroIaComponent } from './cerebro-ia.component';
 import { CerebroNotasComponent } from './cerebro-notas.component';
 import { CerebroHistoricoComponent } from './cerebro-historico.component';
+import { CerebroAppsComponent } from './cerebro-apps.component';
 
 type Aba = 'inbox' | 'notas' | 'historico' | 'conectar' | 'config';
 
@@ -20,7 +21,7 @@ const INTERVALO_FILA_MS = 5000;
 @Component({
   selector: 'app-cerebro-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent, CerebroHistoricoComponent],
+  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent, CerebroHistoricoComponent, CerebroAppsComponent],
   templateUrl: './cerebro.page.html',
   styleUrls: ['./cerebro-comum.css', './cerebro.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

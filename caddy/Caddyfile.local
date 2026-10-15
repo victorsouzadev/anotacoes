@@ -11,7 +11,7 @@
     # nginx-proxy-manager (subdomínio → notas-caddy:8080), que manda X-Forwarded-Proto.
     # No teste local, CEREBRO_PERMITIR_HTTP=sim libera o HTTP.
     @cerebro_sem_tls {
-        path /cerebro /cerebro/* /dav /dav/* /ops /ops/*
+        path /cerebro /cerebro/* /dav /dav/* /ops /ops/* /api/mcp /api/mcp/*
         not path /cerebro/health /ops/health
         expression `{http.request.header.X-Forwarded-Proto} != "https" && "{$CEREBRO_PERMITIR_HTTP:nao}" != "sim"`
     }

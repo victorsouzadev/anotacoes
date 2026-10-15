@@ -37,9 +37,13 @@ services:
       - Sites__Porta=${SITES_PORTA:-8090}
       # Banco Postgres por site (serviço "postgres" abaixo). Sem senha, o recurso fica desligado.
       - Sites__PostgresSenha=${POSTGRES_SENHA:-}
+      # MCPs dos apps (/api/mcp/tarefas, /financas, /criativo) para o Segundo Cérebro e o Claude:
+      # o token é gerado na tela do Cérebro, que grava só o hash e o e-mail do dono neste arquivo.
+      - Mcp__TokenFile=/access/apps-token.json
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites
+      - ./data/cerebro/hub/access:/access:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
