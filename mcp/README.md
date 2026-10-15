@@ -89,7 +89,7 @@ Variáveis de ambiente:
 
 - `HUB_EMAIL` — e-mail da conta no hub (obrigatório).
 - `HUB_PASSWORD` — senha da conta (obrigatório).
-- `HUB_API_URL` — URL do backend. Padrão: `http://191.252.177.244:8090` (produção).
+- `HUB_API_URL` — URL do backend. Padrão: `https://cerebro.vsitefy.com.br` (produção).
 - `HUB_WEB_URL` — onde o app web abre, para o link do rascunho. Padrão: o mesmo de `HUB_API_URL`.
 - `VIIH_PAINEL_URL` — endereço do painel do site da Viih Mimos (ex.: `https://viihmimos.com.br`). Opcional.
 - `VIIH_PAINEL_LOGIN` / `VIIH_PAINEL_SENHA` — login do painel. Opcionais; sem os três, as ferramentas do site respondem que não estão configuradas.

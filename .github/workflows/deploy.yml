@@ -213,7 +213,7 @@ jobs:
       - name: Verifica saúde da API
         run: |
           sleep 5
-          corpo=$(curl -sf http://${{ secrets.VPS_HOST }}:8090/api/health)
+          corpo=$(curl -sf https://cerebro.vsitefy.com.br/api/health)
           echo "$corpo"
           # Confirma que o container em pé é o desta execução, e não um que
           # sobreviveu ao "up -d" — um deploy verde não prova substituição.
