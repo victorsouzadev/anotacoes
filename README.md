@@ -44,7 +44,7 @@ inicial, sem exigir outro login nem outro deploy.
 - **Simulador de Bolo 3D** — monta um bolo em CSS 3D: camadas, sabores, cobertura,
   granulado, cerejas, velas e fotos ("toppers") posicionadas em cm.
 
-Produção: **http://191.252.177.244:8090** (sem SSL — só IP, ver [DEPLOY.md](DEPLOY.md)).
+Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, ver [DEPLOY.md](DEPLOY.md)).
 
 ## Stack
 

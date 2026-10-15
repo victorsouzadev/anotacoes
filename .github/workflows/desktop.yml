@@ -80,7 +80,7 @@ jobs:
         env:
           EDITOR_MODELOS: ${{ github.workspace }}/desktop/src/EditorImagens.Desktop/modelos
       - name: Publicar
-        run: dotnet publish desktop/src/EditorImagens.Desktop -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.versao }} -p:UpdateUrl=http://${{ secrets.VPS_HOST }}:8090/downloads/windows -o publish
+        run: dotnet publish desktop/src/EditorImagens.Desktop -c Release -r win-x64 --self-contained -p:Version=${{ steps.v.outputs.versao }} -p:UpdateUrl=https://cerebro.vsitefy.com.br/downloads/windows -o publish
       - name: Instalador (Velopack)
         run: |
           dotnet tool install -g vpk --version 1.2.158
@@ -151,7 +151,7 @@ jobs:
             rm -rf novo antigo
       - name: Confere o link
         run: |
-          curl -sf http://${{ secrets.VPS_HOST }}:8090/downloads/windows/versao.json | grep -q '"versao":"${{ needs.instalador.outputs.versao }}"' || {
+          curl -sf https://cerebro.vsitefy.com.br/downloads/windows/versao.json | grep -q '"versao":"${{ needs.instalador.outputs.versao }}"' || {
             echo "::error::O site não está servindo /downloads/windows (o container do Caddy precisa do volume ./downloads — faça um deploy da main)."
             exit 1
           }

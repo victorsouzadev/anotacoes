@@ -164,7 +164,7 @@ class SettingsStore(context: Context) {
 
         // Mesma URL pública do hub documentada em DEPLOY.md — funciona pronto pra quem só quer
         // logar; pode ser trocado em Configurações (ex.: pra apontar pra um backend local em dev).
-        const val DEFAULT_SERVER_BASE_URL = "http://191.252.177.244:8090"
+        const val DEFAULT_SERVER_BASE_URL = "https://cerebro.vsitefy.com.br"
 
         private const val PREFS_FILE_NAME = "organizador_secure_prefs"
         private const val KEY_OPENROUTER_API_KEY = "openrouter_api_key"
