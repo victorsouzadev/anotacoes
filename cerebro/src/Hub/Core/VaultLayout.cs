@@ -18,9 +18,11 @@ public static partial class VaultLayout
     public const string Ai = "_sistema/ai";
     public const string Templates = "_sistema/templates";
     public const string RejectedInbox = "90-Arquivo/Inbox rejeitada";
+    /// <summary>Notas excluídas pela tela. Dá para restaurar movendo de volta (e o git guarda tudo).</summary>
+    public const string Trash = "_sistema/lixeira";
 
     public static readonly string[] AllFolders =
-        { Inbox, Daily, Projects, Areas, Resources, People, Archive, Attachments, Ai, Templates };
+        { Inbox, Daily, Projects, Areas, Resources, People, Archive, Attachments, Ai, Templates, Trash };
 
     /// <summary>Destinos possíveis ao aprovar um item da Inbox.</summary>
     public static readonly string[] PermanentFolders = { Projects, Areas, Resources, People, Archive };
@@ -72,6 +74,18 @@ public static partial class VaultLayout
         IsUnder(relative, Inbox) || IsUnder(relative, Ai);
 
     public static bool CanAppend(string relative) => IsUnder(relative, Daily);
+
+    /// <summary>
+    /// O que VOCÊ pode criar e editar pela tela: qualquer nota .md do vault, menos anexos e a lixeira
+    /// (de lá só se restaura). Agentes (MCP) continuam presos às regras acima.
+    /// </summary>
+    public static bool UserCanEdit(string relative) =>
+        relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase) &&
+        !IsUnder(relative, Attachments) && !IsUnder(relative, Trash);
+
+    /// <summary>Pasta onde você pode criar ou para onde pode mover notas pela tela.</summary>
+    public static bool UserCanUseFolder(string folder) =>
+        folder.Length == 0 || (!IsUnder(folder, Attachments) && !IsUnder(folder, Trash));
 
     public static string DailyPath(DateOnly date) =>
         $"{Daily}/{date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.md";

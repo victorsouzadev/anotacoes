@@ -1,0 +1,54 @@
+<p class="ajuda intro">
+  Este é o registro de tudo que mudou no Cérebro: quando, quem mudou e quais notas. Ele é gravado sozinho
+  alguns segundos depois de cada alteração (pela tela, pelo Claude, pelo Obsidian ou pela própria Inbox).
+  Para voltar <strong>uma nota</strong>, abra a nota e use <em>Histórico</em>. Para voltar <strong>o Cérebro inteiro</strong>
+  a um momento, use o botão da versão aqui.
+</p>
+@if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+@if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+@if (!disponivel()) { <p class="alerta erro">O histórico está desligado no servidor (Hub:GitEnabled=false).</p> }
+
+<div class="filtros">
+  @for (f of ['todas', 'tela', 'claude', 'obsidian', 'cerebro']; track f) {
+    <button type="button" [class.ativo]="filtro() === f" (click)="filtro.set($any(f))">{{ f === 'todas' ? 'Todas' : rotuloOrigem(f) }}</button>
+  }
+</div>
+
+<ul class="log">
+  @for (v of visiveis(); track v.versao) {
+    <li class="card">
+      <div class="topo">
+        <div class="quando">
+          <strong>{{ v.data | date: 'dd/MM/yyyy HH:mm' }}</strong>
+          <span class="origem" [attr.data-origem]="v.origem">{{ rotuloOrigem(v.origem) }}</span>
+          <code>{{ v.curta }}</code>
+        </div>
+        @if (!$first || filtro() !== 'todas') {
+          <button type="button" class="botao pequeno" (click)="restaurarCerebro(v)" [disabled]="restaurando()" title="Voltar todas as notas para como estavam neste momento">
+            <app-icon name="refresh" [size]="12" /> Voltar o Cérebro para aqui
+          </button>
+        } @else {
+          <span class="atual">estado atual</span>
+        }
+      </div>
+      <p class="mensagem">{{ v.mensagem }}</p>
+      @if (notas(v).length) {
+        <ul class="arquivos">
+          @for (a of notas(v).slice(0, 12); track a.path) {
+            <li>
+              <span class="st" [attr.data-st]="a.status">{{ rotuloStatus(a.status) }}</span>
+              @if (a.status !== 'D') { <button type="button" class="arquivo" (click)="abrir.emit(a.path)">{{ a.path }}</button> }
+              @else { <span class="arquivo removido">{{ a.path }}</span> }
+            </li>
+          }
+          @if (notas(v).length > 12) { <li class="mais">+ {{ notas(v).length - 12 }} notas</li> }
+        </ul>
+      }
+    </li>
+  } @empty {
+    <p class="vazio">{{ carregando() ? 'Carregando…' : 'Nada registrado ainda.' }}</p>
+  }
+</ul>
+@if (temMais()) {
+  <div class="mais-acoes"><button type="button" class="botao" (click)="carregar(false)" [disabled]="carregando()">Carregar mais antigas</button></div>
+}

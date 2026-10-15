@@ -93,3 +93,36 @@ blockquote.callout { border-left-color: var(--accent); background: var(--accent-
   .voltar { display: inline-flex; }
   .leitor { padding: 16px; }
 }
+
+/* ---------------------------------------------------------- edição */
+.largo { width: 100%; }
+.link { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; margin-left: 6px; }
+.barra-acoes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.botao.ativo { border-color: var(--accent); background: var(--accent-soft); }
+.editor {
+  width: 100%; box-sizing: border-box; min-height: 420px; resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.6;
+}
+.formulario { margin-top: 8px; }
+.formulario select, .formulario input { width: 100%; box-sizing: border-box; }
+.acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.acoes.esquerda { justify-content: flex-start; }
+.conflito { margin-bottom: 10px; }
+.conflito pre { white-space: pre-wrap; font-size: 12px; max-height: 240px; overflow: auto; color: var(--text); }
+
+.versoes { list-style: none; padding: 0; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.versoes li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.versoes li.vista { border-color: var(--accent); background: var(--accent-soft); }
+.versoes li > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.versoes strong { font-size: 12.5px; }
+.versoes small { font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.acoes-linha { display: flex; gap: 6px; align-items: center; }
+.atual { font-size: 11px; color: var(--text-muted); }
+.origem { align-self: flex-start; font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--tag-bg); color: var(--text-muted); }
+.origem[data-origem='tela'] { color: var(--accent); background: var(--accent-soft); }
+.origem[data-origem='claude'] { color: var(--atencao); background: color-mix(in srgb, var(--atencao) 12%, transparent); }
+.origem[data-origem='obsidian'] { color: var(--positivo); background: color-mix(in srgb, var(--positivo) 12%, transparent); }
+.previa-versao pre { white-space: pre-wrap; font-size: 12px; background: var(--tag-bg); padding: 10px 12px; border-radius: var(--radius-sm); max-height: 420px; overflow: auto; }

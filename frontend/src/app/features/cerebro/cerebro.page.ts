@@ -10,8 +10,9 @@ import { CerebroMe, CerebroService, ItemInbox } from './cerebro.service';
 import { CerebroConectarComponent } from './cerebro-conectar.component';
 import { CerebroIaComponent } from './cerebro-ia.component';
 import { CerebroNotasComponent } from './cerebro-notas.component';
+import { CerebroHistoricoComponent } from './cerebro-historico.component';
 
-type Aba = 'inbox' | 'notas' | 'conectar' | 'config';
+type Aba = 'inbox' | 'notas' | 'historico' | 'conectar' | 'config';
 
 /** Enquanto houver captura na fila, a lista se atualiza sozinha neste intervalo. */
 const INTERVALO_FILA_MS = 5000;
@@ -19,7 +20,7 @@ const INTERVALO_FILA_MS = 5000;
 @Component({
   selector: 'app-cerebro-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent],
+  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent, CerebroHistoricoComponent],
   templateUrl: './cerebro.page.html',
   styleUrls: ['./cerebro-comum.css', './cerebro.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

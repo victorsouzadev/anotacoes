@@ -57,6 +57,7 @@
       <nav class="abas">
         <button class="aba" [class.ativa]="aba() === 'inbox'" (click)="aba.set('inbox')">Inbox ({{ itens().length }})</button>
         <button class="aba" [class.ativa]="aba() === 'notas'" (click)="aba.set('notas')">Notas</button>
+        <button class="aba" [class.ativa]="aba() === 'historico'" (click)="aba.set('historico')">Histórico</button>
         <button class="aba" [class.ativa]="aba() === 'conectar'" (click)="aba.set('conectar')">Conectar</button>
         <button class="aba" [class.ativa]="aba() === 'config'" (click)="aba.set('config')">Configurações</button>
       </nav>
@@ -113,6 +114,9 @@
         }
         @case ('notas') {
           <app-cerebro-notas [abrir]="notaParaAbrir()" />
+        }
+        @case ('historico') {
+          <app-cerebro-historico (abrir)="verNota($event)" />
         }
         @case ('conectar') {
           <app-cerebro-conectar />

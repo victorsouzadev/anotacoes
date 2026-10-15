@@ -17,6 +17,11 @@ public sealed class GitSnapshotter : BackgroundService
     private readonly ILogger<GitSnapshotter> _log;
     private readonly Channel<string> _signals = Channel.CreateUnbounded<string>();
     private readonly string _gitDir;
+    private readonly SemaphoreSlim _gitLock = new(1, 1);
+    private volatile bool _ready;
+
+    /// <summary>Repositório pronto para histórico e restauração.</summary>
+    public bool Ready => _ready;
 
     public DateTimeOffset? LastCommitAt { get; private set; }
 
@@ -47,6 +52,7 @@ public sealed class GitSnapshotter : BackgroundService
             return;
         }
 
+        _ready = true;
         await CommitAsync("hub: snapshot inicial", stoppingToken);
 
         var debounce = TimeSpan.FromSeconds(Math.Max(1, _options.GitDebounceSeconds));
@@ -101,8 +107,12 @@ public sealed class GitSnapshotter : BackgroundService
             ".hub-tmp-*\n.trash/\n.obsidian/workspace*.json\n.obsidian/cache\n", ct);
     }
 
+    /// <summary>Commita agora o que estiver pendente (ex.: antes de restaurar, para não perder o estado atual).</summary>
+    public Task SnapshotNowAsync(string message, CancellationToken ct = default) => CommitAsync(message, ct);
+
     private async Task CommitAsync(string message, CancellationToken ct)
     {
+        await _gitLock.WaitAsync(ct);
         try
         {
             await RunWorkTreeAsync(ct, "add", "-A");
@@ -117,6 +127,73 @@ public sealed class GitSnapshotter : BackgroundService
         {
             _log.LogWarning(ex, "Falha no commit git.");
         }
+        finally { _gitLock.Release(); }
+    }
+
+    public sealed record Change(string Status, string Path);
+    public sealed record Entry(string Commit, DateTimeOffset Date, string Message, IReadOnlyList<Change> Changes);
+
+    /// <summary>
+    /// Histórico (o "log" do Cérebro): cada versão com data, motivo (quem mudou: tela, MCP, sync do
+    /// Obsidian) e arquivos alterados. Com path, só as versões daquela nota, seguindo renomeações.
+    /// </summary>
+    public async Task<IReadOnlyList<Entry>> HistoryAsync(string? path, int limit, int skip, CancellationToken ct = default)
+    {
+        if (!_ready) return [];
+        var args = new List<string> { "log", "--format=%x1e%H%x1f%aI%x1f%s", "--name-status", "-n", Math.Clamp(limit, 1, 200).ToString(), "--skip", Math.Max(0, skip).ToString() };
+        if (path is not null) { args.Add("--follow"); args.Add("--"); args.Add(path); }
+
+        string output;
+        await _gitLock.WaitAsync(ct);
+        try { output = await RunWorkTreeAsync(ct, args.ToArray()); }
+        catch (InvalidOperationException) { return []; }  // repositório ainda sem commits
+        finally { _gitLock.Release(); }
+
+        var list = new List<Entry>();
+        foreach (var block in output.Split('\x1e', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var lines = block.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var head = lines[0].Split('\x1f');
+            if (head.Length < 3) continue;
+            var changes = lines.Skip(1)
+                .Select(l => l.Split('\t'))
+                .Where(p => p.Length >= 2)
+                .Select(p => new Change(p[0][..1], p[^1]))
+                .ToList();
+            list.Add(new Entry(head[0], DateTimeOffset.Parse(head[1], System.Globalization.CultureInfo.InvariantCulture), head[2], changes));
+        }
+        return list;
+    }
+
+    /// <summary>Conteúdo de um arquivo numa versão. Null se ele não existia nela.</summary>
+    public async Task<string?> ShowAsync(string commit, string path, CancellationToken ct = default)
+    {
+        RequireCommit(commit);
+        await _gitLock.WaitAsync(ct);
+        try { return await RunWorkTreeAsync(ct, "show", $"{commit}:{path}"); }
+        catch (InvalidOperationException) { return null; }
+        finally { _gitLock.Release(); }
+    }
+
+    /// <summary>Arquivos que mudaram depois de uma versão: (status, caminho) com A = criado depois, M = alterado, D = apagado depois.</summary>
+    public async Task<IReadOnlyList<Change>> ChangedSinceAsync(string commit, CancellationToken ct = default)
+    {
+        RequireCommit(commit);
+        string output;
+        await _gitLock.WaitAsync(ct);
+        try { output = await RunWorkTreeAsync(ct, "diff", "--name-status", "--no-renames", commit, "HEAD"); }
+        finally { _gitLock.Release(); }
+        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Split('\t'))
+            .Where(p => p.Length >= 2)
+            .Select(p => new Change(p[0][..1], p[1]))
+            .ToList();
+    }
+
+    private static void RequireCommit(string commit)
+    {
+        if (commit.Length is < 7 or > 40 || !commit.All(Uri.IsHexDigit))
+            throw new ArgumentException("Versão inválida.");
     }
 
     private Task<string> RunWorkTreeAsync(CancellationToken ct, params string[] args) =>

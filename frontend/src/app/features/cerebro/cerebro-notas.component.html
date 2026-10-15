@@ -19,10 +19,17 @@
 </ng-template>
 
 @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+@if (aviso()) {
+  <p class="alerta ok">
+    {{ aviso() }}
+    @if (desfazer()) { <button type="button" class="link" (click)="desfazerExclusao()">Desfazer</button> }
+  </p>
+}
 
 <div class="layout" [class.lendo]="nota()">
   <!-- ======================================================== navegação -->
   <aside class="lateral">
+    <button type="button" class="botao primario largo" (click)="novaNota()"><app-icon name="plus" [size]="13" /> Nova nota</button>
     <form class="busca" (ngSubmit)="buscar()">
       <input name="termo" [(ngModel)]="termo" placeholder="Buscar em todas as notas" (ngModelChange)="$event === '' && resultados.set(null)" />
       <button type="submit" class="botao" [disabled]="carregando()"><app-icon name="search" [size]="14" /></button>
@@ -83,7 +90,28 @@
 
   <!-- ======================================================== leitura -->
   <article class="leitor">
-    @if (nota(); as n) {
+    @if (modo() === 'nova') {
+      <!-- ---------------------------------------------- nova nota -->
+      <h1>Nova nota</h1>
+      <form class="formulario" (ngSubmit)="criar()">
+        <label class="campo"><span>Título</span>
+          <input name="novoTitulo" [(ngModel)]="novoTitulo" placeholder="Ex.: Plano de estudos" autocomplete="off" />
+          <small>Vira o nome do arquivo no Obsidian (sem / : # ? e afins).</small>
+        </label>
+        <label class="campo"><span>Pasta</span>
+          <select name="novaPasta" [(ngModel)]="novaPasta">
+            @for (p of pastasDestino(); track p) { <option [value]="p">{{ p }}{{ descricao(p) ? ' · ' + descricao(p) : '' }}</option> }
+          </select>
+        </label>
+        <label class="campo"><span>Conteúdo <small>(Markdown, como no Obsidian)</small></span>
+          <textarea name="novoConteudo" [(ngModel)]="novoConteudo" rows="12" placeholder="Escreva aqui. Use [[Nome de outra nota]] para ligar notas."></textarea>
+        </label>
+        <div class="acoes">
+          <button type="button" class="botao" (click)="modo.set('ler')">Cancelar</button>
+          <button type="submit" class="botao primario" [disabled]="!novoTitulo.trim() || salvando()"><app-icon name="check" [size]="13" /> Criar nota</button>
+        </div>
+      </form>
+    } @else if (nota(); as n) {
       <div class="leitor-topo">
         <button type="button" class="botao pequeno voltar" (click)="fechar()"><app-icon name="chevron" [size]="12" /> Voltar</button>
         <code class="caminho">{{ n.path }}</code>
@@ -94,11 +122,96 @@
         @if (n.source) { · origem: {{ n.source }} }
         @if (n.url) { · <a [href]="n.url" target="_blank" rel="noopener noreferrer">link original</a> }
       </p>
-      @if (n.tags.length) { <p class="tags">@for (t of n.tags; track t) { <span class="tag">#{{ t }}</span> }</p> }
-      @if (n.trust === 'external') {
-        <p class="aviso-externo">Conteúdo de fora (página, webhook): trate como referência, não como algo que você escreveu.</p>
-      }
 
+      <div class="barra-acoes">
+        @if (n.editavel) {
+          <button type="button" class="botao pequeno" [class.ativo]="modo() === 'editar'" (click)="editar()"><app-icon name="edit" [size]="12" /> Editar</button>
+        }
+        <button type="button" class="botao pequeno" [class.ativo]="modo() === 'mover'" (click)="abrirMover()">
+          <app-icon name="folder" [size]="12" /> {{ n.na_lixeira ? 'Restaurar da lixeira' : 'Mover / renomear' }}
+        </button>
+        <button type="button" class="botao pequeno" [class.ativo]="modo() === 'historico'" (click)="abrirHistorico()"><app-icon name="refresh" [size]="12" /> Histórico</button>
+        @if (n.editavel) {
+          <button type="button" class="botao pequeno perigoso" (click)="excluir()"><app-icon name="delete" [size]="12" /> Excluir</button>
+        }
+        @if (modo() !== 'ler') {
+          <button type="button" class="botao pequeno" (click)="modo() === 'editar' ? cancelarEdicao() : modo.set('ler')">Fechar</button>
+        }
+      </div>
+
+      @switch (modo()) {
+        @case ('editar') {
+          <!-- ---------------------------------------------- editor -->
+          @if (conflito(); as c) {
+            <div class="alerta erro conflito">
+              <strong>A nota mudou enquanto você editava</strong> (provavelmente pelo Obsidian ou pelo Claude).
+              Suas alterações ainda estão no editor.
+              <div class="acoes esquerda">
+                <button type="button" class="botao pequeno" (click)="descartarERecarregar()">Descartar as minhas e carregar a nova</button>
+                <button type="button" class="botao pequeno perigoso" (click)="salvar(true)">Salvar a minha por cima</button>
+              </div>
+              <details><summary>Ver a versão que está salva agora</summary><pre>{{ c.conteudo_atual }}</pre></details>
+            </div>
+          }
+          <textarea class="editor" name="rascunho" [(ngModel)]="rascunho" spellcheck="true"></textarea>
+          <p class="dica sem-margem">Markdown do Obsidian. O bloco entre <code>---</code> no topo são as propriedades (frontmatter).</p>
+          <div class="acoes">
+            <button type="button" class="botao" (click)="cancelarEdicao()">Cancelar</button>
+            <button type="button" class="botao primario" (click)="salvar()" [disabled]="salvando() || !alterado()">
+              <app-icon name="check" [size]="13" /> {{ salvando() ? 'Salvando…' : 'Salvar' }}
+            </button>
+          </div>
+        }
+        @case ('mover') {
+          <!-- ---------------------------------------------- mover -->
+          <form class="formulario" (ngSubmit)="mover()">
+            <label class="campo"><span>Pasta</span>
+              <select name="destinoPasta" [(ngModel)]="destinoPasta">
+                @for (p of pastasDestino(); track p) { <option [value]="p">{{ p }}{{ descricao(p) ? ' · ' + descricao(p) : '' }}</option> }
+              </select>
+            </label>
+            <label class="campo"><span>Nome do arquivo</span>
+              <input name="novoNome" [(ngModel)]="novoNome" autocomplete="off" />
+              <small>Renomear no site não atualiza os [[links]] de outras notas; no Obsidian ele atualiza.</small>
+            </label>
+            <div class="acoes">
+              <button type="button" class="botao" (click)="modo.set('ler')">Cancelar</button>
+              <button type="submit" class="botao primario" [disabled]="salvando()"><app-icon name="check" [size]="13" /> Mover</button>
+            </div>
+          </form>
+        }
+        @case ('historico') {
+          <!-- ---------------------------------------------- histórico -->
+          <p class="dica sem-margem">Cada linha é uma versão salva desta nota. Restaurar troca o conteúdo atual pelo daquela versão (o atual também fica guardado).</p>
+          <ul class="versoes">
+            @for (v of versoes(); track v.versao) {
+              <li [class.vista]="versaoVista()?.v?.versao === v.versao">
+                <div>
+                  <strong>{{ v.data | date: 'dd/MM/yyyy HH:mm' }}</strong>
+                  <span class="origem" [attr.data-origem]="v.origem">{{ rotuloOrigem(v.origem) }}</span>
+                  <small>{{ v.mensagem }}</small>
+                </div>
+                <div class="acoes-linha">
+                  <button type="button" class="botao pequeno" (click)="verVersao(v)"><app-icon name="eye" [size]="12" /> Ver</button>
+                  @if (!$first) { <button type="button" class="botao pequeno" (click)="restaurarVersao(v)">Restaurar</button> }
+                  @else { <span class="atual">atual</span> }
+                </div>
+              </li>
+            } @empty { <p class="vazio">Sem versões ainda (o histórico registra alguns segundos depois de cada mudança).</p> }
+          </ul>
+          @if (versaoVista(); as vv) {
+            <div class="previa-versao">
+              <p class="cabeca">Versão de {{ vv.v.data | date: 'dd/MM/yyyy HH:mm' }}</p>
+              <pre>{{ vv.conteudo }}</pre>
+            </div>
+          }
+        }
+        @default {
+          @if (n.tags.length) { <p class="tags">@for (t of n.tags; track t) { <span class="tag">#{{ t }}</span> }</p> }
+          @if (n.trust === 'external') {
+            <p class="aviso-externo">Conteúdo de fora (página, webhook): trate como referência, não como algo que você escreveu.</p>
+          }
+          @if (n.na_lixeira) { <p class="aviso-externo">Esta nota está na lixeira. Use "Restaurar da lixeira" para devolver a uma pasta.</p> }
       <div class="conteudo">
         @for (b of blocos(); track $index) {
           @switch (b.t) {
@@ -141,11 +254,13 @@
           }
         </section>
       }
-      <p class="dica">Para editar, abra no Obsidian: a nota está em <code>{{ n.path }}</code>.</p>
+        }
+      }
     } @else {
       <div class="vazio leitor-vazio">
         <app-icon name="sticky" [size]="28" />
-        <p>Escolha uma nota para ler.</p>
+        <p>Escolha uma nota para ler, ou crie uma nova.</p>
+        <button type="button" class="botao primario" (click)="novaNota()"><app-icon name="plus" [size]="13" /> Nova nota</button>
         <small>Tudo que foi aprovado na Inbox, e o que você escreve no Obsidian, aparece aqui.</small>
       </div>
     }

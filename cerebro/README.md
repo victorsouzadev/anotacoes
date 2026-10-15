@@ -33,6 +33,22 @@ Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, capt
 > `Microsoft.Data.Sqlite` 10.0.13, versões fixadas). Passam os testes (`dotnet test`, incluindo os da
 > autenticação web) e o `smoke-test.sh` (22 verificações, MCP incluso), e o roteamento pelo Caddy do hub.
 
+## Editar pela tela, log e restauração (abas Notas e Histórico)
+
+Na aba **Notas** você cria, edita (Markdown com frontmatter), move, renomeia e exclui notas. Excluir manda
+para `_sistema/lixeira` (com **Desfazer**). Se a nota mudar enquanto você edita (sync do Obsidian, Claude),
+a tela avisa e deixa escolher entre recarregar ou salvar por cima, em vez de apagar a edição de alguém.
+
+O **histórico git** do vault é o log do Cérebro: cada versão guarda quando, quem mudou (você pela tela, o
+Claude pelo MCP, o Obsidian pelo sync ou a Inbox) e quais notas. Na aba **Histórico** dá para filtrar por
+origem, abrir as notas e **voltar o Cérebro inteiro** a um momento (notas alteradas ou apagadas depois voltam;
+as criadas depois vão para a lixeira). Em cada nota, **Histórico** mostra as versões dela, com prévia e
+**Restaurar**. Antes de qualquer restauração o estado atual é salvo, então tudo pode ser desfeito.
+
+O Claude (MCP) também edita: `update_note`, `move_note`, `delete_note`, `note_history` e
+`restore_note_version`. As de escrita só rodam com `user_confirmed=true`; as instruções do servidor mandam
+perguntar antes, mostrando o que vai mudar, e cada mudança dele aparece no log como "Claude (MCP)".
+
 ## Ler o vault pela tela (aba Notas)
 
 A aba **Notas** mostra o que já saiu da Inbox e tudo que você escreve no Obsidian: pastas com contagem,
@@ -195,8 +211,9 @@ Tela do hub (`Authorization: Bearer <JWT do login>`; só `CEREBRO_USUARIOS`, sen
 ## Segurança e backup
 
 - Só o Caddy do hub fica exposto; `/cerebro` e `/dav` exigem HTTPS (vindo do nginx-proxy-manager); CORS do WebDAV liberado apenas para as origens do Obsidian. A tela web só aceita o JWT do hub para os e-mails de `CEREBRO_USUARIOS`.
-- O hub valida todo caminho (nada fora do vault, nada em pastas ocultas como `.obsidian`) e só escreve em
-  Inbox, `_sistema`, diário e no destino de uma aprovação.
+- O hub valida todo caminho (nada fora do vault, nada em pastas ocultas como `.obsidian`). Sozinho, só
+  escreve em Inbox, `_sistema`, diário e no destino de uma aprovação; o resto só quando você edita pela
+  tela, ou quando o Claude edita depois de você confirmar.
 - Escrita atômica (arquivo temporário + rename); `.hub-tmp-*` são ignorados pelo índice e pelo git.
 - Downloads de links bloqueiam IPs internos (SSRF), inclusive em redirects.
 - Histórico git em `data/cerebro/hub/vault.git`, fora do vault:
