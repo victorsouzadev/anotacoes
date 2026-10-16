@@ -152,7 +152,8 @@ export class LoginPageComponent {
     this.loading = true;
     try {
       await this.auth.login(this.email, this.password);
-      this.router.navigateByUrl('/');
+      const voltar = new URLSearchParams(location.search).get('voltar');
+      this.router.navigateByUrl(voltar?.startsWith('/') && !voltar.startsWith('//') ? voltar : '/');
     } catch {
       this.error = 'E-mail ou senha incorretos.';
     } finally {

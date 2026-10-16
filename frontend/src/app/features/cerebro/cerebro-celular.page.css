@@ -1,0 +1,33 @@
+:host { display: block; background: var(--bg); color: var(--text); min-height: 100dvh; }
+.app { max-width: 640px; margin: 0 auto; padding: 12px 16px calc(84px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; }
+.topo { display: flex; align-items: center; gap: 8px; }
+.topo h1 { font-size: 17px; margin: 0; flex: 1; display: flex; align-items: center; gap: 6px; }
+.botao { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 13px; padding: 9px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; cursor: pointer; }
+.botao.pequeno { padding: 6px 10px; font-size: 12px; }
+.botao.primario { background: var(--accent); border-color: var(--accent); color: #fff; }
+.botao:disabled { opacity: .5; }
+.link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 12.5px; padding: 0; cursor: pointer; }
+.captura { display: flex; flex-direction: column; gap: 10px; }
+.captura input, .captura textarea { font-size: 16px; width: 100%; box-sizing: border-box; margin: 0; }
+.gravador { display: flex; align-items: center; gap: 14px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.gravador.ativo { border-color: var(--danger); }
+.gravador-texto { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.microfone { width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--danger); display: grid; place-items: center; cursor: pointer; flex: none; }
+.bolinha { width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+.quadrado { width: 18px; height: 18px; border-radius: 3px; background: #fff; }
+.gravador.ativo .microfone { animation: pulso 1.2s infinite; }
+@keyframes pulso { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 25%, transparent); } }
+.anexar { width: 100%; box-sizing: border-box; }
+.anexo { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.anexo img { max-height: 120px; max-width: 70%; border-radius: 6px; }
+.anexo audio { flex: 1; min-width: 0; height: 40px; }
+.anexo .nome { flex: 1; font-size: 13px; overflow-wrap: anywhere; }
+.remover { margin-left: auto; background: none; border: 0; color: var(--text-muted); padding: 6px; cursor: pointer; }
+.enviar { padding: 14px; font-size: 15px; }
+.nota { margin-bottom: 10px; }
+.nota-topo { display: flex; align-items: flex-start; gap: 8px; }
+.nota-topo h2 { flex: 1; margin: 0; }
+.corpo { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; margin-top: 10px; max-height: 40vh; overflow: auto; overflow-wrap: anywhere; }
+.abas-baixo { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
+.abas-baixo button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 0; background: none; border: 0; font: inherit; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+.abas-baixo button.ativa { color: var(--accent); }

@@ -1,0 +1,74 @@
+<div class="app">
+  <header class="topo">
+    <h1><app-icon name="sticky" [size]="16" /> Cérebro</h1>
+    @if (podeInstalar()) {
+      <button class="botao pequeno primario" (click)="instalar()"><app-icon name="download" [size]="12" /> Instalar app</button>
+    }
+    <a class="botao pequeno" routerLink="/cerebro">Site</a>
+  </header>
+
+  @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+  @if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+
+  @if (aba() === 'capturar') {
+    <main class="captura">
+      <textarea [(ngModel)]="texto" rows="5" placeholder="Uma ideia, um recado, algo do WhatsApp…"></textarea>
+      <input [(ngModel)]="link" type="url" inputmode="url" placeholder="Link (opcional)" />
+      <input [(ngModel)]="tags" placeholder="Tags, separadas por vírgula" />
+
+      <div class="gravador" [class.ativo]="gravando()">
+        <button type="button" class="microfone" (click)="gravar()" [attr.aria-label]="gravando() ? 'Parar gravação' : 'Gravar áudio'">
+          @if (gravando()) { <span class="quadrado"></span> } @else { <span class="bolinha"></span> }
+        </button>
+        <div class="gravador-texto">
+          @if (gravando()) {
+            <strong>Gravando {{ tempo() }}</strong>
+            <button type="button" class="link" (click)="cancelarGravacao()">Descartar</button>
+          } @else {
+            <strong>Gravar áudio</strong>
+            <span class="ajuda sem-margem">Vira texto na Inbox (transcrição automática).</span>
+          }
+        </div>
+      </div>
+
+      <label class="botao anexar">
+        <app-icon name="paperclip" [size]="14" /> Anexar foto, áudio ou arquivo
+        <input type="file" multiple accept="audio/*,image/*,video/*,application/pdf,.opus,.ogg,.m4a" (change)="escolher($event)" hidden />
+      </label>
+
+      @for (a of anexos(); track a.url) {
+        <div class="anexo">
+          @if (ehImagem(a)) { <img [src]="a.url" alt="" /> }
+          @else if (ehAudio(a)) { <audio [src]="a.url" controls></audio> }
+          @else { <span class="nome">{{ a.nome }}</span> }
+          <button type="button" class="remover" (click)="remover(a)" aria-label="Remover"><app-icon name="x" [size]="14" /></button>
+        </div>
+      }
+
+      <button class="botao primario enviar" (click)="enviar()"
+        [disabled]="enviando() || (!texto.trim() && !link.trim() && !anexos().length && !gravando())">
+        {{ enviando() ? 'Enviando…' : 'Enviar para a Inbox' }}
+      </button>
+      <p class="ajuda dica">No WhatsApp, toque e segure a mensagem ou o áudio, depois Compartilhar e escolha <strong>Cérebro</strong>. Para aparecer na lista, instale o app.</p>
+    </main>
+  } @else {
+    <main class="grafo">
+      @if (nota(); as n) {
+        <article class="card nota">
+          <div class="nota-topo">
+            <h2>{{ n.title }}</h2>
+            <button class="remover" (click)="nota.set(null)" aria-label="Fechar"><app-icon name="x" [size]="16" /></button>
+          </div>
+          <p class="ajuda sem-margem">{{ n.path }}</p>
+          <div class="corpo">{{ n.body }}</div>
+        </article>
+      }
+      <app-cerebro-grafo (abrir)="abrirNota($event)" />
+    </main>
+  }
+
+  <nav class="abas-baixo">
+    <button [class.ativa]="aba() === 'capturar'" (click)="aba.set('capturar')"><app-icon name="plus" [size]="18" /> Capturar</button>
+    <button [class.ativa]="aba() === 'grafo'" (click)="aba.set('grafo')"><app-icon name="globe" [size]="18" /> Grafo</button>
+  </nav>
+</div>

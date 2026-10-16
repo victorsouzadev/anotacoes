@@ -3,7 +3,7 @@ import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from './auth.service';
 import { isDesktop } from './desktop';
 
-export const authGuard: CanActivateFn = async () => {
+export const authGuard: CanActivateFn = async (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   if (auth.isAuthenticated()) return true;
@@ -16,5 +16,6 @@ export const authGuard: CanActivateFn = async () => {
       return false;
     }
   }
-  return router.createUrlTree(['/login']);
+  // Volta para onde a pessoa ia depois do login (ex.: o app do celular em /capturar).
+  return router.createUrlTree(['/login'], state.url && state.url !== '/' ? { queryParams: { voltar: state.url } } : {});
 };

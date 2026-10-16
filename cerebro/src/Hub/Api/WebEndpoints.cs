@@ -80,6 +80,7 @@ public static class WebEndpoints
         web.MapGet("/me", Me);
         web.MapGet("/inbox", Inbox);
         web.MapPost("/captures", Capture);
+        web.MapPost("/captures/arquivo", CaptureFile);
         web.MapPost("/inbox/approve", Approve);
         web.MapPost("/inbox/reject", Reject);
         web.MapGet("/search", Search);
@@ -384,6 +385,37 @@ public static class WebEndpoints
         var result = await ingest.CaptureAsync(new CaptureRequest(
             "manual", null, string.IsNullOrEmpty(url) ? CaptureKind.Text : CaptureKind.Link,
             dto.Content, string.IsNullOrEmpty(url) ? null : url, null, dto.Tags, null), ct);
+        return Results.Ok(result);
+    }
+
+    /// <summary>
+    /// Captura com arquivo (app do celular): áudio gravado ou recebido do WhatsApp, foto, PDF. Áudio é
+    /// transcrito pelo pipeline; o texto opcional vai junto. Vai para a Inbox como as outras capturas.
+    /// </summary>
+    private static async Task<IResult> CaptureFile(HttpRequest request, IngestService ingest, VaultStore vault, HubClock clock, CancellationToken ct)
+    {
+        if (!request.HasFormContentType)
+            return Results.BadRequest(new { error = "Envie multipart/form-data com o campo arquivo." });
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files.GetFile("arquivo") ?? form.Files.FirstOrDefault();
+        if (file is null || file.Length == 0)
+            return Results.BadRequest(new { error = "Arquivo vazio." });
+        if (file.Length > 25 * 1024 * 1024)
+            return Results.BadRequest(new { error = "Arquivo maior que 25 MB." });
+
+        var origem = form["origem"].FirstOrDefault() is "compartilhado" ? "compartilhado" : "celular";
+        string attachment;
+        await using (var stream = file.OpenReadStream())
+            attachment = await vault.SaveAttachmentAsync(stream, file.FileName, clock.Now, $"anexo {origem}", ct);
+
+        var tags = form["tags"].FirstOrDefault()?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        var texto = form["texto"].FirstOrDefault();
+        if (texto?.Length > 200_000) return Results.BadRequest(new { error = "Texto muito longo." });
+
+        var result = await ingest.CaptureAsync(new CaptureRequest(
+            origem, null, CaptureKind.File, texto, null, null, tags, null, AttachmentPath: attachment), ct);
         return Results.Ok(result);
     }
 
