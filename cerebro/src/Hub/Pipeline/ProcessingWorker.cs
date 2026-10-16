@@ -106,7 +106,7 @@ public sealed class ProcessingWorker : BackgroundService
             }
             else
             {
-                doc.FrontMatter.Set("hub_note", "Transcrição desativada (Hub:Transcription:ApiKey vazio).");
+                doc.FrontMatter.Set("hub_note", "Transcrição desligada: configure a chave em Configurações → Transcrição de áudio.");
             }
         }
 

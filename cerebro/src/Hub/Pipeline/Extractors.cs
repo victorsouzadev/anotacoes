@@ -135,35 +135,37 @@ public sealed class Transcriber
         new(StringComparer.OrdinalIgnoreCase) { ".ogg", ".oga", ".opus", ".mp3", ".m4a", ".wav", ".webm", ".mp4", ".mpeg", ".mpga", ".flac" };
 
     private readonly IHttpClientFactory _http;
-    private readonly TranscriptionOptions _options;
+    private readonly TranscriptionSettings _settings;
 
-    public Transcriber(IHttpClientFactory http, IOptions<HubOptions> options)
+    public Transcriber(IHttpClientFactory http, TranscriptionSettings settings)
     {
         _http = http;
-        _options = options.Value.Transcription;
+        _settings = settings;
     }
 
-    public bool Enabled => _options.Enabled;
+    /// <summary>Lido a cada uso: a chave pode mudar pela tela sem reiniciar.</summary>
+    public bool Enabled => _settings.Resolve().Enabled;
 
     public static bool IsAudio(string path) => AudioExtensions.Contains(Path.GetExtension(path));
 
     public async Task<string> TranscribeAsync(string fullPath, CancellationToken ct)
     {
+        var o = _settings.Resolve();
         var client = _http.CreateClient("transcribe");
         using var form = new MultipartFormDataContent();
         await using var file = File.OpenRead(fullPath);
         var fileContent = new StreamContent(file);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(fileContent, "file", Path.GetFileName(fullPath));
-        form.Add(new StringContent(_options.Model), "model");
-        form.Add(new StringContent(_options.Language), "language");
+        form.Add(new StringContent(o.Model), "model");
+        form.Add(new StringContent(o.Language), "language");
         form.Add(new StringContent("json"), "response_format");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl.TrimEnd('/') + "/audio/transcriptions")
+        using var request = new HttpRequestMessage(HttpMethod.Post, o.BaseUrl.TrimEnd('/') + "/audio/transcriptions")
         {
             Content = form
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", o.ApiKey);
 
         using var response = await client.SendAsync(request, ct);
         var json = await response.Content.ReadAsStringAsync(ct);

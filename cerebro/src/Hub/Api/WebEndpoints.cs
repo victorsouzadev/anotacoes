@@ -33,6 +33,8 @@ public sealed record WebRestoreDto(string Versao, string? Path);
 public sealed record WebAppsDto(bool Ativo, List<string>? Horarios, List<string>? Apps);
 
 /// <param name="ChaveApi">null mantém a chave salva; "" apaga; texto substitui.</param>
+public sealed record WebTranscricaoDto(string? Servico, string? Modelo, string? ChaveApi);
+
 public sealed record WebAiDto(string? Provedor, string? Modelo, string? ChaveApi);
 
 /// <summary>
@@ -111,6 +113,8 @@ public static class WebEndpoints
         web.MapGet("/ia", GetAi);
         web.MapPut("/ia", SaveAi);
         web.MapPost("/ia/testar", TestAi);
+        web.MapGet("/transcricao", (TranscriptionSettings t) => Results.Ok(DescribeTranscription(t)));
+        web.MapPut("/transcricao", SaveTranscription);
 
         web.MapGet("/acessos", GetAccess);
         web.MapPost("/acessos/revelar", RevealAccess);
@@ -201,6 +205,35 @@ public static class WebEndpoints
             },
             atualizado_em = updatedAt,
         };
+    }
+
+    private static object DescribeTranscription(TranscriptionSettings t)
+    {
+        var stored = t.Load();
+        var key = t.StoredKey();
+        var e = t.Resolve();
+        return new
+        {
+            servico = stored.Preset ?? TranscriptionSettings.Presets[0].Id,
+            modelo = stored.Model,
+            chave_configurada = key is not null,
+            chave_mascarada = key is null ? null : SecretBox.Mask(key),
+            chave_invalida = stored.EncryptedKey is not null && key is null,
+            efetivo = new { ligado = e.Enabled, origem = e.KeySource, modelo = e.Model, url = e.BaseUrl },
+            servicos = TranscriptionSettings.Presets.Select(p => new { id = p.Id, nome = p.Name, modelo = p.Model, descricao = p.Description }),
+        };
+    }
+
+    private static IResult SaveTranscription(WebTranscricaoDto dto, TranscriptionSettings t)
+    {
+        if (dto.Modelo?.Length > 200 || dto.ChaveApi?.Length > 500)
+            return Results.BadRequest(new { error = "Modelo ou chave longos demais." });
+        if (!string.IsNullOrWhiteSpace(dto.ChaveApi) && !t.CanStoreKeys)
+            return Results.BadRequest(new { error = "Sem JWT_SECRET no servidor não dá para guardar a chave." });
+        if (dto.Servico is not null && TranscriptionSettings.Presets.All(p => p.Id != dto.Servico))
+            return Results.BadRequest(new { error = "Serviço deve ser openai ou groq." });
+        t.Save(dto.Servico, dto.Modelo, dto.ChaveApi);
+        return Results.Ok(DescribeTranscription(t));
     }
 
     private static IResult SaveAi(WebAiDto dto, AiSettings ai, IOptions<HubOptions> options)
