@@ -35,6 +35,7 @@ builder.Services.AddSingleton<AccessStore>();
 builder.Services.AddSingleton<ApiKeyAuth>();
 builder.Services.AddSingleton<SecretBox>();
 builder.Services.AddSingleton<AiSettings>();
+builder.Services.AddSingleton<TranscriptionSettings>();
 
 // Pipeline
 builder.Services.AddSingleton<ProcessingQueue>();

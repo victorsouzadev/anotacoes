@@ -226,6 +226,15 @@ export class CerebroService {
 
   // ------------------------------------------------------------- IA
 
+  configTranscricao(): Promise<ConfigTranscricao> {
+    return firstValueFrom(this.http.get<ConfigTranscricao>(`${BASE}/transcricao`));
+  }
+
+  /** chaveApi: null mantém a salva, '' apaga, texto substitui. */
+  salvarTranscricao(servico: string, modelo: string | null, chaveApi: string | null): Promise<ConfigTranscricao> {
+    return firstValueFrom(this.http.put<ConfigTranscricao>(`${BASE}/transcricao`, { servico, modelo, chave_api: chaveApi }));
+  }
+
   configIa(): Promise<ConfigIa> {
     return firstValueFrom(this.http.get<ConfigIa>(`${BASE}/ia`));
   }
@@ -348,4 +357,15 @@ export class CerebroService {
 export interface Grafo {
   nos: { path: string; title: string; pasta: string; tags: string[] }[];
   links: { de: string; para: string }[];
+}
+
+/** Transcrição de áudio (Configurações): serviço compatível com a OpenAI, chave cifrada no servidor. */
+export interface ConfigTranscricao {
+  servico: string;
+  modelo: string | null;
+  chave_configurada: boolean;
+  chave_mascarada: string | null;
+  chave_invalida: boolean;
+  efetivo: { ligado: boolean; origem: 'tela' | 'servidor' | 'nenhuma'; modelo: string; url: string };
+  servicos: { id: string; nome: string; modelo: string; descricao: string }[];
 }

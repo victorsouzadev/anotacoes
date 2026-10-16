@@ -59,7 +59,7 @@ do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
 Android, faça login e toque em **Instalar app** (ou ⋮ → Instalar app).
 
 - **Capturar:** texto, link, tags, áudio gravado na hora e anexos (foto, áudio, PDF). Tudo vai
-  para a Inbox. O áudio é transcrito pelo pipeline e precisa de `CEREBRO_OPENAI_API_KEY`.
+  para a Inbox. O áudio é transcrito pelo pipeline: a chave (OpenAI ou Groq) se configura em Configurações → Transcrição de áudio, ou em `CEREBRO_OPENAI_API_KEY` no `.env`.
 - **Do WhatsApp:** toque e segure a mensagem ou o áudio, depois Compartilhar → **Cérebro**. O app
   instalado aparece na lista porque é um Web Share Target. O `sw-cerebro.js` recebe o compartilhamento
   e a tela mostra o que chegou, para revisar antes de enviar.
