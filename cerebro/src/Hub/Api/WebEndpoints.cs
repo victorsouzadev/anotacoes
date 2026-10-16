@@ -86,6 +86,15 @@ public static class WebEndpoints
         web.MapGet("/notas", ListNotes);
         web.MapGet("/nota", ReadNote);
         web.MapGet("/decisoes", RecentDecisions);
+        web.MapGet("/grafo", (NoteIndex index) =>
+        {
+            var (nodes, edges) = index.Graph();
+            return Results.Ok(new
+            {
+                nos = nodes.Select(n => new { path = n.Path, title = n.Title, pasta = n.Folder.Split('/')[0], tags = n.Tags }),
+                links = edges.Select(e => new { de = e.Source, para = e.Target }),
+            });
+        });
 
         // Edição pela tela (você). Tudo entra no histórico git, que é o log e a fonte de restauração.
         web.MapGet("/pastas", (VaultStore vault) => Results.Ok(vault.UserFolders()));
