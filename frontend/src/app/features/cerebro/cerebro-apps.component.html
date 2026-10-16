@@ -1,0 +1,67 @@
+@if (config(); as c) {
+  <section class="card">
+    <h2>Apps do hub</h2>
+    <p class="ajuda">
+      Nos horários abaixo, o Cérebro conversa com o MCP de cada app do hub e grava um resumo em
+      <code>_sistema/apps</code> (regravado a cada vez), com uma linha no diário. Assim o Claude e a busca do Cérebro
+      enxergam suas tarefas, finanças e sites junto com as notas. Os MCPs são só de leitura: nada é alterado nos apps.
+    </p>
+
+    @if (!c.token_configurado) {
+      <p class="alerta erro">Falta o token dos apps: gere em <strong>Conectar → Apps do hub</strong>. Sem ele a rotina não roda.</p>
+    }
+
+    <label class="opcao">
+      <input type="checkbox" name="ativo" [(ngModel)]="ativo" />
+      <span><strong>Rotina ligada</strong><small>Desligada, só sincroniza quando você clicar em "Sincronizar agora".</small></span>
+    </label>
+
+    <h3>Horários <small>(fuso do Cérebro)</small></h3>
+    <div class="horarios">
+      @for (h of horarios; track h) {
+        <span class="horario">{{ h }} <button type="button" (click)="removerHorario(h)" [attr.aria-label]="'Remover ' + h"><app-icon name="x" [size]="11" /></button></span>
+      } @empty { <span class="ajuda sem-margem">Sem horários: vale o padrão 08:00 e 20:00.</span> }
+      <form class="linha novo" (ngSubmit)="adicionarHorario()">
+        <input name="novoHorario" [(ngModel)]="novoHorario" type="time" />
+        <button type="submit" class="botao pequeno"><app-icon name="plus" [size]="12" /> Adicionar</button>
+      </form>
+    </div>
+
+    <h3>Apps</h3>
+    <div class="apps">
+      @for (a of c.apps; track a.id) {
+        <label class="opcao">
+          <input type="checkbox" [name]="'app-' + a.id" [(ngModel)]="appsAtivos[a.id]" />
+          <span><strong>{{ a.nome }}</strong><small>{{ a.descricao }} → <code>{{ a.nota }}</code></small></span>
+        </label>
+      }
+    </div>
+
+    @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+    @if (aviso()) { <p class="alerta ok">{{ aviso() }}</p> }
+
+    <div class="acoes">
+      <button type="button" class="botao" (click)="sincronizarAgora()" [disabled]="sincronizando() || !c.token_configurado">
+        <app-icon name="refresh" [size]="13" /> {{ sincronizando() ? 'Sincronizando…' : 'Sincronizar agora' }}
+      </button>
+      <button type="button" class="botao primario" (click)="salvar()" [disabled]="salvando()"><app-icon name="check" [size]="13" /> Salvar rotina</button>
+    </div>
+
+    @if (c.ultima; as u) {
+      <div class="ultima">
+        <h3>Última sincronização</h3>
+        <p class="ajuda sem-margem">{{ u.em | date: 'dd/MM/yyyy HH:mm' }} · {{ u.gatilho }}</p>
+        <ul>
+          @for (r of u.resultados; track r.app) {
+            <li [class.falhou]="!r.ok">
+              <app-icon [name]="r.ok ? 'check' : 'x'" [size]="12" /> {{ nome(r.app) }}
+              @if (r.ok) { → <code>{{ r.nota }}</code> } @else { : {{ r.erro }} }
+            </li>
+          }
+        </ul>
+      </div>
+    }
+  </section>
+} @else if (erro()) {
+  <p class="alerta erro">{{ erro() }}</p>
+}

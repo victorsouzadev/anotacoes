@@ -174,6 +174,30 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
+        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas e /criativo.
+        // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
+        builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
+        builder.Services
+            .AddMcpServer(o => o.ServerInstructions =
+                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites e imagens). Só leitura.")
+            .WithHttpTransport(o =>
+            {
+                o.Stateless = true;
+                o.ConfigureSessionOptions = (http, options, _) =>
+                {
+                    var grupo = (http.Request.RouteValues["grupo"] as string ?? "").ToLowerInvariant();
+                    if (options.ToolCollection is { } tools)
+                        foreach (var t in tools.ToArray())
+                            if (!t.ProtocolTool.Name.StartsWith(grupo + "_", StringComparison.Ordinal)) tools.Remove(t);
+                    return Task.CompletedTask;
+                };
+            })
+            .WithTools<Notas.Api.Mcp.TarefasMcpTools>()
+            .WithTools<Notas.Api.Mcp.FinancasMcpTools>()
+            .WithTools<Notas.Api.Mcp.CriativoMcpTools>();
+
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(o => o.TokenValidationParameters = TokenService.ValidationParameters(jwtSecret));
@@ -243,6 +267,8 @@ public static class NotasApp
         // por usuário: com a ordem invertida, ctx.User estaria vazio e todo mundo atrás do
         // mesmo IP dividiria a mesma cota.
         app.UseAuthentication();
+        // Depois da autenticação JWT: nas rotas /api/mcp quem decide é o token dos apps (do Cérebro).
+        app.Use((http, next) => Notas.Api.Mcp.AppsMcpAuth.Middleware(http, () => next(http)));
         app.UseRateLimiter();
         app.UseAuthorization();
 
@@ -287,6 +313,7 @@ public static class NotasApp
         app.MapImagemEndpoints();
         app.MapSitesEndpoints();
         app.MapMoldesEndpoints();
+        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

@@ -20,9 +20,11 @@ public static partial class VaultLayout
     public const string RejectedInbox = "90-Arquivo/Inbox rejeitada";
     /// <summary>Notas excluídas pela tela. Dá para restaurar movendo de volta (e o git guarda tudo).</summary>
     public const string Trash = "_sistema/lixeira";
+    /// <summary>Resumos trazidos dos apps do hub pela rotina de sincronização (regravados a cada vez).</summary>
+    public const string Apps = "_sistema/apps";
 
     public static readonly string[] AllFolders =
-        { Inbox, Daily, Projects, Areas, Resources, People, Archive, Attachments, Ai, Templates, Trash };
+        { Inbox, Daily, Projects, Areas, Resources, People, Archive, Attachments, Ai, Templates, Trash, Apps };
 
     /// <summary>Destinos possíveis ao aprovar um item da Inbox.</summary>
     public static readonly string[] PermanentFolders = { Projects, Areas, Resources, People, Archive };
@@ -68,10 +70,10 @@ public static partial class VaultLayout
     }
 
     public static bool CanCreate(string relative) =>
-        IsUnder(relative, Inbox) || IsUnder(relative, Ai) || IsUnder(relative, Attachments);
+        IsUnder(relative, Inbox) || IsUnder(relative, Ai) || IsUnder(relative, Attachments) || IsUnder(relative, Apps);
 
     public static bool CanReplace(string relative) =>
-        IsUnder(relative, Inbox) || IsUnder(relative, Ai);
+        IsUnder(relative, Inbox) || IsUnder(relative, Ai) || IsUnder(relative, Apps);
 
     public static bool CanAppend(string relative) => IsUnder(relative, Daily);
 

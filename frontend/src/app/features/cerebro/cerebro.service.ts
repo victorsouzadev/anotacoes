@@ -53,6 +53,8 @@ export interface Acessos {
   pode_guardar: boolean;
   mcp: { configurado: boolean; origem: Origem; mascarado: string };
   ops: { configurado: boolean; mascarado: string };
+  /** Token dos MCPs dos apps do hub (Tarefas, Finanças, Criativo). */
+  apps: { configurado: boolean; mascarado: string };
   webdav: { configurado: boolean; origem: Origem; usuario: string | null; pasta: string };
   api_keys: { nome: string; origem: 'tela' | 'servidor'; mascarada: string }[];
 }
@@ -127,7 +129,20 @@ export interface Decisao {
   exists: boolean;
 }
 
-/** mcp | ops | webdav | api:<nome> */
+export interface AppsSync {
+  ativo: boolean;
+  /** "HH:mm", no fuso do Cérebro. */
+  horarios: string[];
+  token_configurado: boolean;
+  apps: { id: string; nome: string; descricao: string; nota: string; ativo: boolean }[];
+  ultima: {
+    em: string;
+    gatilho: string;
+    resultados: { app: string; ok: boolean; erro: string | null; nota: string | null }[];
+  } | null;
+}
+
+/** mcp | ops | apps | webdav | api:<nome> */
 export type ItemAcesso = string;
 
 export interface ItemInbox {
@@ -214,6 +229,20 @@ export class CerebroService {
     return firstValueFrom(this.http.post<TesteIa>(`${BASE}/ia/testar`, { provedor, modelo, chave_api: chaveApi }));
   }
 
+  // ------------------------------------------------------------- apps do hub
+
+  appsSync(): Promise<AppsSync> {
+    return firstValueFrom(this.http.get<AppsSync>(`${BASE}/apps`));
+  }
+
+  salvarAppsSync(ativo: boolean, horarios: string[], apps: string[]): Promise<AppsSync> {
+    return firstValueFrom(this.http.put<AppsSync>(`${BASE}/apps`, { ativo, horarios, apps }));
+  }
+
+  sincronizarApps(): Promise<AppsSync> {
+    return firstValueFrom(this.http.post<AppsSync>(`${BASE}/apps/sincronizar`, {}));
+  }
+
   // ------------------------------------------------------------- acessos
 
   acessos(): Promise<Acessos> {
@@ -224,7 +253,7 @@ export class CerebroService {
     return firstValueFrom(this.http.post<{ valor: string }>(`${BASE}/acessos/revelar`, { item })).then((r) => r.valor);
   }
 
-  gerarToken(qual: 'mcp' | 'ops'): Promise<string> {
+  gerarToken(qual: 'mcp' | 'ops' | 'apps'): Promise<string> {
     return firstValueFrom(this.http.post<{ valor: string }>(`${BASE}/acessos/${qual}/gerar`, {})).then((r) => r.valor);
   }
 

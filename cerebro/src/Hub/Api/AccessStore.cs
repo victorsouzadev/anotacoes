@@ -21,6 +21,8 @@ public sealed class AccessStore
     private const string Key = "access";
     /// <summary>Arquivo lido pelo serviço ops (montado só leitura): só o hash do token, nunca o token.</summary>
     public const string OpsTokenFile = "access/ops-token.sha256";
+    /// <summary>Lido pelo notas-api (MCPs dos apps): SHA-256 do token e e-mail do dono, nunca o token.</summary>
+    public const string AppsTokenFile = "access/apps-token.json";
 
     private readonly HubDb _db;
     private readonly SecretBox _box;
@@ -40,6 +42,7 @@ public sealed class AccessStore
     public sealed record Stored(
         string? McpToken = null,
         string? OpsToken = null,
+        string? AppsToken = null,
         string? WebdavUser = null,
         string? WebdavPass = null,
         List<StoredKey>? ApiKeys = null);
@@ -74,6 +77,9 @@ public sealed class AccessStore
 
     /// <summary>Token do MCP da VPS. Só o da tela é conhecido aqui (o do .env fica no serviço ops).</summary>
     public string? OpsToken => _box.Decrypt(Load().OpsToken);
+
+    /// <summary>Token dos MCPs dos apps do hub (Tarefas, Finanças, Criativo). Só existe se gerado pela tela.</summary>
+    public string? AppsToken => _box.Decrypt(Load().AppsToken);
 
     public (string User, string Pass)? Webdav
     {
@@ -115,6 +121,14 @@ public sealed class AccessStore
         return token;
     }
 
+    public string RegenerateAppsToken()
+    {
+        var token = SecretBox.NewToken();
+        Save(Load() with { AppsToken = _box.Encrypt(token) });
+        WriteAppsTokenFile(token);
+        return token;
+    }
+
     /// <summary>Senha null = gerar uma nova.</summary>
     public (string User, string Pass) SetWebdav(string user, string? pass)
     {
@@ -153,6 +167,23 @@ public sealed class AccessStore
     public void SyncOpsTokenFile()
     {
         if (OpsToken is { } t) WriteOpsTokenHash(t);
+        if (AppsToken is { } a) WriteAppsTokenFile(a);
+    }
+
+    /// <summary>O notas-api age como o dono do Cérebro: o primeiro e-mail de CEREBRO_USUARIOS.</summary>
+    private void WriteAppsTokenFile(string token)
+    {
+        var email = _options.Web.AllowedEmails.FirstOrDefault()
+            ?? throw new InvalidOperationException("Defina CEREBRO_USUARIOS: o MCP dos apps age como esse usuário.");
+        var json = JsonSerializer.Serialize(new
+        {
+            sha256 = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(token))),
+            email,
+        });
+        var path = Path.Combine(Path.GetFullPath(_options.DataPath), AppsTokenFile);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path + ".tmp", json);
+        File.Move(path + ".tmp", path, overwrite: true);
     }
 
     private void WriteOpsTokenHash(string token)

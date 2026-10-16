@@ -53,3 +53,4 @@ details summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); 
   .corpo { padding: 12px 14px 14px; }
   .campos th { white-space: normal; }
 }
+.lista-apps { margin: 0 0 12px; padding-left: 20px; font-size: 12.5px; line-height: 1.7; }

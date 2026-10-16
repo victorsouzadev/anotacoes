@@ -81,6 +81,69 @@
     }
   </section>
 
+  <!-- ============================================================ MCPs dos apps do hub -->
+  <section class="card secao" [class.aberta]="aberta() === 'apps'">
+    <button type="button" class="cabecalho" (click)="aberta.set('apps')">
+      <span class="titulo"><app-icon name="grid" [size]="16" /> Apps do hub: Tarefas, Finanças, Publicar e Imagens (MCP)</span>
+      <span class="selo" [class.ok]="a.apps.configurado">{{ a.apps.configurado ? 'Ativo' : 'Sem token' }}</span>
+    </button>
+    @if (aberta() === 'apps') {
+      <div class="corpo">
+        <p class="ajuda">
+          Cada app do hub tem um MCP próprio, <strong>só de leitura</strong>, que enxerga os seus dados (a conta do hub com o e-mail
+          do dono do Cérebro). O Cérebro usa esses MCPs na <strong>rotina de sincronização</strong> (aba Configurações) e você pode
+          ligar os mesmos MCPs no Claude Code e no Claude web para perguntar sobre tarefas, gastos e sites.
+        </p>
+        <ul class="lista-apps">
+          @for (m of mcpsApps; track m.id) { <li><strong>{{ m.nome }}</strong> · <code>/api/mcp/{{ m.id }}</code> · {{ m.descricao }}</li> }
+        </ul>
+
+        <div class="valor">
+          <span class="rotulo">Token <small>(o mesmo para os três)</small></span>
+          <code class="segredo">{{ revelado('apps') ? v('apps') : (a.apps.mascarado || '—') }}</code>
+          @if (a.apps.configurado) {
+            <button type="button" class="botao pequeno" (click)="alternar('apps')"><app-icon name="eye" [size]="12" /> {{ revelado('apps') ? 'Ocultar' : 'Mostrar' }}</button>
+            <button type="button" class="botao pequeno" (click)="copiarCom(['apps'], v.bind(this, 'apps'))"><app-icon name="copy" [size]="12" /> Copiar</button>
+          }
+          <button type="button" class="botao pequeno" (click)="gerar('apps')" [disabled]="ocupado() === 'apps' || !a.pode_guardar">
+            <app-icon name="refresh" [size]="12" /> {{ a.apps.configurado ? 'Gerar novo' : 'Gerar token' }}
+          </button>
+        </div>
+        @if (!a.apps.configurado) {
+          <p class="ajuda">Gere o token para ligar os MCPs dos apps. A rotina do Cérebro só funciona depois disso.</p>
+        } @else {
+          <div class="clientes">
+            <button type="button" [class.ativo]="clienteApps() === 'code'" (click)="clienteApps.set('code')">Claude Code (PC)</button>
+            <button type="button" [class.ativo]="clienteApps() === 'web'" (click)="clienteApps.set('web')">Claude web / app</button>
+          </div>
+          @if (clienteApps() === 'code') {
+            <ol class="passos">
+              <li>Cole os comandos no terminal do PC (um MCP por app; pode ligar só os que quiser).</li>
+              <li>Confira com <code>claude mcp list</code>: devem aparecer <code>hub-tarefas</code>, <code>hub-financas</code> e <code>hub-criativo</code>.</li>
+              <li>Pergunte, por exemplo: <em>"quanto gastei com alimentação este mês e quais tarefas estão atrasadas?"</em></li>
+            </ol>
+            <div class="bloco">
+              <pre>{{ cmdCodeApps() }}</pre>
+              <button type="button" class="botao pequeno" (click)="copiarCom(['apps'], cmdCodeApps)"><app-icon name="copy" [size]="12" /> Copiar comandos</button>
+            </div>
+          } @else {
+            <ol class="passos">
+              <li>Em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>, adicione <strong>um conector personalizado por app</strong>.</li>
+              <li>Use as URLs abaixo (o token vai na URL: trate como senha). OAuth em branco.</li>
+            </ol>
+            @for (m of mcpsApps; track m.id) {
+              <div class="bloco">
+                <span class="rotulo">{{ m.nome }}</span>
+                <pre>{{ urlWebApp(m.id) }}</pre>
+                <button type="button" class="botao pequeno" (click)="copiarCom(['apps'], urlWebApp.bind(this, m.id))"><app-icon name="copy" [size]="12" /> Copiar URL</button>
+              </div>
+            }
+          }
+        }
+      </div>
+    }
+  </section>
+
   <!-- ============================================================ MCP da VPS -->
   <section class="card secao" [class.aberta]="aberta() === 'ops'">
     <button type="button" class="cabecalho" (click)="aberta.set('ops')">
