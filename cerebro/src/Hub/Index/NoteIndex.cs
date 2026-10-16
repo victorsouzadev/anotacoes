@@ -16,6 +16,9 @@ public sealed record NoteSummary(string Path, string Title, string Folder, IRead
 /// Índice de busca em SQLite (FTS5 + metadados + grafo de links).
 /// É derivado do vault: pode ser apagado e reconstruído a qualquer momento.
 /// </summary>
+public sealed record GraphNode(string Path, string Title, string Folder, IReadOnlyList<string> Tags);
+public sealed record GraphEdge(string Source, string Target);
+
 public sealed class NoteIndex
 {
     private readonly VaultStore _vault;
@@ -279,6 +282,44 @@ public sealed class NoteIndex
         cmd.Parameters.AddWithValue("$suffix", "%/" + EscapeLike(withExt));
         cmd.Parameters.AddWithValue("$t", t);
         return cmd.ExecuteScalar() as string;
+    }
+
+    /// <summary>
+    /// Grafo do vault: todas as notas e as ligações [[wikilink]] entre elas, já resolvidas para caminhos
+    /// (pelo caminho sem extensão ou pelo nome do arquivo, como o Obsidian). Links para notas que não
+    /// existem ficam de fora.
+    /// </summary>
+    public (IReadOnlyList<GraphNode> Nodes, IReadOnlyList<GraphEdge> Edges) Graph()
+    {
+        using var c = Open();
+        var nodes = new List<GraphNode>();
+        var byKey = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = "SELECT path, title, folder, tags FROM notes ORDER BY length(path)";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var path = r.GetString(0);
+                nodes.Add(new GraphNode(path, r.GetString(1), r.GetString(2),
+                    r.GetString(3).Split(',', StringSplitOptions.RemoveEmptyEntries)));
+                byKey[NormalizeLinkTarget(path)] = path;
+                byKey.TryAdd(NormalizeLinkTarget(Path.GetFileNameWithoutExtension(path)), path);
+            }
+        }
+
+        var edges = new HashSet<GraphEdge>();
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = "SELECT src, dst FROM links";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var src = r.GetString(0);
+                if (byKey.TryGetValue(r.GetString(1), out var dst) && dst != src) edges.Add(new GraphEdge(src, dst));
+            }
+        }
+        return (nodes, edges.ToList());
     }
 
     /// <summary>Notas que apontam para esta (por nome de arquivo ou caminho).</summary>

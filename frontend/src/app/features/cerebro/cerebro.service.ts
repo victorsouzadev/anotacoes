@@ -274,6 +274,10 @@ export class CerebroService {
     return firstValueFrom(this.http.get<ListaNotas>(`${BASE}/notas`, { params: pasta ? { pasta } : {} }));
   }
 
+  grafo(): Promise<Grafo> {
+    return firstValueFrom(this.http.get<Grafo>(`${BASE}/grafo`));
+  }
+
   nota(path: string): Promise<Nota> {
     return firstValueFrom(this.http.get<Nota>(`${BASE}/nota`, { params: { path } }));
   }
@@ -328,4 +332,10 @@ export class CerebroService {
   buscar(q: string): Promise<ResultadoBusca[]> {
     return firstValueFrom(this.http.get<ResultadoBusca[]>(`${BASE}/search`, { params: { q } }));
   }
+}
+
+/** Grafo do vault: notas e [[links]] resolvidos entre elas. */
+export interface Grafo {
+  nos: { path: string; title: string; pasta: string; tags: string[] }[];
+  links: { de: string; para: string }[];
 }
