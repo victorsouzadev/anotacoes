@@ -53,6 +53,20 @@ do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
   no diário. Se o serviço estava fora no horário, roda quando voltar (só o horário mais recente).
 - **Claude:** a mesma tela traz os comandos do Claude Code e as URLs do Claude web para cada MCP.
 
+## App no celular (Android) e grafo
+
+`https://cerebro.vsitefy.com.br/capturar` é o app do celular, um PWA instalável. Abra no Chrome do
+Android, faça login e toque em **Instalar app** (ou ⋮ → Instalar app).
+
+- **Capturar:** texto, link, tags, áudio gravado na hora e anexos (foto, áudio, PDF). Tudo vai
+  para a Inbox. O áudio é transcrito pelo pipeline e precisa de `CEREBRO_OPENAI_API_KEY`.
+- **Do WhatsApp:** toque e segure a mensagem ou o áudio, depois Compartilhar → **Cérebro**. O app
+  instalado aparece na lista porque é um Web Share Target. O `sw-cerebro.js` recebe o compartilhamento
+  e a tela mostra o que chegou, para revisar antes de enviar.
+- **Grafo:** as notas e os `[[links]]` entre elas. A mesma visualização está na aba Grafo do site.
+- **Endpoints:** `POST /api/v1/web/captures/arquivo` (multipart: `arquivo`, `texto`, `tags`, `origem`)
+  e `GET /api/v1/web/grafo`.
+
 ## Editar pela tela, log e restauração (abas Notas e Histórico)
 
 Na aba **Notas** você cria, edita (Markdown com frontmatter), move, renomeia e exclui notas. Excluir manda

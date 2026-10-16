@@ -202,6 +202,16 @@ export class CerebroService {
     }));
   }
 
+  /** Captura com arquivo (áudio, foto, PDF), do app do celular ou compartilhado do WhatsApp. */
+  capturarArquivo(arquivo: Blob, nome: string, texto: string, tags: string[], origem: 'celular' | 'compartilhado'): Promise<{ id: string; path: string }> {
+    const form = new FormData();
+    form.append('arquivo', arquivo, nome);
+    if (texto) form.append('texto', texto);
+    if (tags.length) form.append('tags', tags.join(','));
+    form.append('origem', origem);
+    return firstValueFrom(this.http.post<{ id: string; path: string }>(`${BASE}/captures/arquivo`, form));
+  }
+
   aprovar(path: string, folder: string | null): Promise<{ path: string; status: string }> {
     return firstValueFrom(this.http.post<{ path: string; status: string }>(`${BASE}/inbox/approve`, { path, folder }));
   }

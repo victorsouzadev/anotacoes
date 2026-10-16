@@ -113,6 +113,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/cerebro/cerebro.page').then((m) => m.CerebroPageComponent),
   },
   {
+    // App do Segundo Cérebro para o celular (PWA): captura com texto, áudio e o que vier do WhatsApp.
+    path: 'capturar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/cerebro/cerebro-celular.page').then((m) => m.CerebroCelularPageComponent),
+  },
+  {
     path: 'publicar',
     canActivate: [authGuard],
     loadComponent: () => import('./features/publicar/publicar.page').then((m) => m.PublicarPageComponent),

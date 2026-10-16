@@ -30,6 +30,11 @@ const CORES = ['#7c6cf0', '#e7548c', '#1fa37a', '#e59a2b', '#3b8fd9', '#c2185b',
       <label class="opcao"><input type="checkbox" [(ngModel)]="soLigadas" (ngModelChange)="montar()" /> Só notas com ligação</label>
       <label class="opcao"><input type="checkbox" [(ngModel)]="sistema" (ngModelChange)="montar()" /> Incluir _sistema</label>
       <button class="botao pequeno" (click)="carregar()"><app-icon name="refresh" [size]="12" /> Atualizar</button>
+      <span class="zoom">
+        <button class="botao pequeno" (click)="zoomBotao(1.4)" aria-label="Aproximar"><app-icon name="zoom-in" [size]="12" /></button>
+        <button class="botao pequeno" (click)="zoomBotao(1 / 1.4)" aria-label="Afastar"><app-icon name="zoom-out" [size]="12" /></button>
+        <button class="botao pequeno" (click)="enquadrar()" aria-label="Enquadrar"><app-icon name="fit-to-screen" [size]="12" /></button>
+      </span>
     </div>
     @if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
     <div class="palco card">
@@ -50,6 +55,7 @@ const CORES = ['#7c6cf0', '#e7548c', '#1fa37a', '#e59a2b', '#3b8fd9', '#c2185b',
     :host { display: flex; flex-direction: column; gap: 10px; }
     .barra { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .barra input:not([type]) { flex: 1 1 200px; }
+    .zoom { display: inline-flex; gap: 4px; }
     .opcao { font-size: 12.5px; color: var(--text-muted); display: flex; gap: 4px; align-items: center; }
     .palco { position: relative; padding: 0; height: min(70vh, 720px); overflow: hidden; }
     canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
@@ -84,6 +90,7 @@ export class CerebroGrafoComponent implements AfterViewInit {
   private sobre: No | null = null;
   private arrasto: { no: No | null; x: number; y: number; moveu: boolean } | null = null;
   private observador?: ResizeObserver;
+  private enquadrado = false;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -145,12 +152,14 @@ export class CerebroGrafoComponent implements AfterViewInit {
 
   private aquecer(): void {
     this.calor = 1;
+    this.enquadrado = false;
     cancelAnimationFrame(this.quadro);
     const passo = () => {
       this.simular();
       this.desenhar();
       this.calor *= 0.985;
       if (this.calor > 0.01 || this.arrasto?.no) this.quadro = requestAnimationFrame(passo);
+      else if (!this.enquadrado) { this.enquadrado = true; this.enquadrar(); }
     };
     this.quadro = requestAnimationFrame(passo);
   }
@@ -225,7 +234,7 @@ export class CerebroGrafoComponent implements AfterViewInit {
     ctx.textAlign = 'center';
     ctx.font = `${11 / this.escala}px system-ui, sans-serif`;
     for (const n of this.nos) {
-      const mostrar = n === foco || vizinhos.has(n) || (termo && !apagado(n)) || this.escala > 1.4 || n.grau >= 4;
+      const mostrar = n === foco || vizinhos.has(n) || (termo && !apagado(n)) || this.escala > 1.4 || n.grau >= 4 || this.nos.length <= 40;
       if (!mostrar) continue;
       ctx.globalAlpha = apagado(n) ? 0.2 : 1;
       ctx.fillText(n.title, n.x, n.y + this.raio(n) + 12 / this.escala);
@@ -307,6 +316,26 @@ export class CerebroGrafoComponent implements AfterViewInit {
 
   sair(): void {
     if (this.sobre && !this.arrasto) { this.sobre = null; this.desenhar(); }
+  }
+
+  /** Ajusta zoom e posição para todas as notas caberem na tela. */
+  enquadrar(): void {
+    if (!this.nos.length) return;
+    const c = this.tela().nativeElement;
+    const xs = this.nos.map(n => n.x), ys = this.nos.map(n => n.y);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const margem = 40;
+    this.escala = Math.min(2, Math.max(0.2, Math.min(
+      (c.clientWidth - margem * 2) / Math.max(x1 - x0, 1),
+      (c.clientHeight - margem * 2) / Math.max(y1 - y0, 1))));
+    this.origem = { x: -((x0 + x1) / 2) * this.escala, y: -((y0 + y1) / 2) * this.escala };
+    this.desenhar();
+  }
+
+  zoomBotao(fator: number): void {
+    this.escala = Math.min(4, Math.max(0.2, this.escala * fator));
+    this.origem = { x: this.origem.x * fator, y: this.origem.y * fator };
+    this.desenhar();
   }
 
   zoom(e: WheelEvent): void {
