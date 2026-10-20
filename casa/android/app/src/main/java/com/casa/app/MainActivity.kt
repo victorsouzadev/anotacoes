@@ -9,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,7 +68,10 @@ private fun Boas_vindas(vm: CasaViewModel) {
     var casa by remember { mutableStateOf("") }
     var codigo by remember { mutableStateOf("") }
     var nome by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Spacer(Modifier.height(32.dp))
         Text("Casa", style = MaterialTheme.typography.displaySmall, color = Verde, fontWeight = FontWeight.Bold)
         Text("Divida as tarefas de casa de forma justa.")

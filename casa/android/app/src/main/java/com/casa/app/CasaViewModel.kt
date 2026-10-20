@@ -20,7 +20,8 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     var estado by mutableStateOf<Estado?>(null); private set
     var carregando by mutableStateOf(false); private set
     var erro by mutableStateOf<String?>(null)
-    val logado get() = api.token != null
+    // Precisa ser estado do Compose: a tela inicial escolhe entre boas-vindas e app por este valor.
+    var logado by mutableStateOf(api.token != null); private set
 
     init { if (logado) atualizar() }
 
@@ -37,21 +38,21 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun guardaToken(servidor: String, r: JSONObject): JSONObject {
-        api.servidor = servidor; api.token = r.getString("token")
+        api.servidor = servidor; api.token = r.getString("token"); logado = true
         prefs.edit().putString("servidor", servidor).putString("token", api.token).apply()
         Lembretes.agendar(getApplication())
         return api.chamar("GET", "/api/estado")
     }
 
-    fun criar(servidor: String, casa: String, nome: String) = executa {
+    fun criar(servidor: String, casa: String, nome: String) = if (carregando) null else executa {
         api.servidor = servidor
         guardaToken(servidor, api.chamar("POST", "/api/casas", JSONObject().put("nome", casa).put("membroNome", nome)))
     }
-    fun entrar(servidor: String, codigo: String, nome: String) = executa {
+    fun entrar(servidor: String, codigo: String, nome: String) = if (carregando) null else executa {
         api.servidor = servidor
         guardaToken(servidor, api.chamar("POST", "/api/entrar", JSONObject().put("codigo", codigo).put("nome", nome)))
     }
-    fun sair() { api.token = null; estado = null; prefs.edit().remove("token").apply(); Lembretes.agendar(getApplication()) }
+    fun sair() { api.token = null; logado = false; estado = null; prefs.edit().remove("token").apply(); Lembretes.agendar(getApplication()) }
 
     fun atualizar() = executa { api.chamar("GET", "/api/estado") }
     fun concluir(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/${if (a.feito) "desfazer" else "concluir"}") }
