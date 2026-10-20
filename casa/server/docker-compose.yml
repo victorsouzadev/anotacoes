@@ -1,0 +1,12 @@
+services:
+  casa:
+    build: .
+    container_name: casa-api
+    restart: unless-stopped
+    ports:
+      - "8095:8080"
+    volumes:
+      - casa-data:/data
+    mem_limit: 96m
+volumes:
+  casa-data:
