@@ -150,6 +150,7 @@ function distribuir(casaId, inicio = segunda()) {
   const semanaPassada = db.prepare('SELECT tarefa_id, membro_id FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, anterior);
   const fezAntes = (m, t) => semanaPassada.some(a => a.membro_id === m && a.tarefa_id === t);
   const contagemRodizio = {};
+  const mediaDiaria = total / 7 / Math.max(1, membros.length);
   // Carga de cada pessoa em cada dia, para não acumular tudo no mesmo dia.
   const cargaPessoaDia = {};
   for (const f of feitas) if (f.membro_id) cargaPessoaDia[f.membro_id + f.dia] = (cargaPessoaDia[f.membro_id + f.dia] ?? 0) + f.pontos;
@@ -172,10 +173,14 @@ function distribuir(casaId, inicio = segunda()) {
     } else {
       // Equilíbrio da semana + preferência + variedade + disponibilidade no dia (dia de trabalho
       // pesa mais, ainda mais para tarefa pesada) + o que a pessoa já tem naquele dia.
+      // Num dia "pouco", passar de f × (carga diária média por pessoa) custa caro: a pessoa fica
+      // com uma tarefa leve e o resto vai para quem está livre (ou para outro dia dela).
       const custo = m => {
         const f = Math.max(fator(m, dia), 0.05);
+        const noDia = (cargaPessoaDia[m.id + dia] ?? 0) + t.pontos;
+        const estouro = f < 0.99 ? Math.max(0, noDia - Math.max(1, f * mediaDiaria)) : 0;
         return carga[m.id] / alvo[m.id] - pref(m.id, t.id) * 0.25 + (fezAntes(m.id, t.id) ? 0.1 : 0)
-          + (1 - f) * (0.6 + 0.08 * t.pontos) + 0.05 * (cargaPessoaDia[m.id + dia] ?? 0) / f;
+          + (1 - f) * (1.2 + 0.15 * t.pontos) + 0.05 * (cargaPessoaDia[m.id + dia] ?? 0) / f + 0.5 * estouro;
       };
       escolhido = disponiveis.reduce((a, b) => custo(b) < custo(a) ? b : a).id;
     }
