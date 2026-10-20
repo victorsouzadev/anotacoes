@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -82,6 +83,7 @@ object Lembretes {
         val abrir = PendingIntent.getActivity(c, 0, Intent(c, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         NotificationManagerCompat.from(c).notify(id, NotificationCompat.Builder(c, CANAL)
             .setSmallIcon(R.drawable.ic_notificacao)
+            .setColor(GrafiteCores.Dia.nanquim.toArgb()) // acento da notificação
             .setContentTitle(titulo).setContentText(texto)
             .setStyle(NotificationCompat.BigTextStyle().bigText(texto))
             .setContentIntent(abrir).setAutoCancel(true).build())

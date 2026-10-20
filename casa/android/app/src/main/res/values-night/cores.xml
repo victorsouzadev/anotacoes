@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grafite (noite). -->
+<resources>
+    <color name="papel">#121514</color>
+    <color name="folha">#1A1E1D</color>
+    <color name="grafite">#E6EAE7</color>
+    <color name="nanquim">#7FB5AE</color>
+</resources>

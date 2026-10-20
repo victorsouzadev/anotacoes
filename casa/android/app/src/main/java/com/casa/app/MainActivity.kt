@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,7 +35,6 @@ import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale
 
-private val Verde = Color(0xFF2E7D5B)
 
 class MainActivity : ComponentActivity() {
     private val vm: CasaViewModel by viewModels()
@@ -44,8 +46,8 @@ class MainActivity : ComponentActivity() {
             .launch(Manifest.permission.POST_NOTIFICATIONS)
         Lembretes.agendar(this)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = Verde, secondary = Color(0xFF5B8C74))) {
-                Surface(Modifier.fillMaxSize()) { if (vm.logado && vm.estado != null) Principal(vm) else if (vm.logado) Carregando(vm) else Boas_vindas(vm) }
+            TemaGrafite {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { if (vm.logado && vm.estado != null) Principal(vm) else if (vm.logado) Carregando(vm) else Boas_vindas(vm) }
             }
         }
     }
@@ -55,10 +57,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Carregando(vm: CasaViewModel) {
     Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        if (vm.erro == null) CircularProgressIndicator() else {
+        if (vm.erro == null) CircularProgressIndicator(color = grafite.grafiteSuave) else {
             Text(vm.erro!!); Spacer(Modifier.height(12.dp))
-            Button(onClick = vm::atualizar) { Text("Tentar de novo") }
-            TextButton(onClick = vm::sair) { Text("Sair da casa") }
+            Button(onClick = vm::atualizar, shape = RaioBotao) { Text("Tentar de novo") }
+            AcaoNeutra(onClick = vm::sair) { Text("Sair da casa") }
         }
     }
 }
@@ -75,7 +77,7 @@ private fun Boas_vindas(vm: CasaViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(32.dp))
-        Text("Casa", style = MaterialTheme.typography.displaySmall, color = Verde, fontWeight = FontWeight.Bold)
+        Text("Casa", style = MaterialTheme.typography.displaySmall)
         Text("Divida as tarefas de casa de forma justa.")
         Row {
             FilterChip(criar, { criar = true }, { Text("Criar casa") }); Spacer(Modifier.width(8.dp))
@@ -87,6 +89,7 @@ private fun Boas_vindas(vm: CasaViewModel) {
         OutlinedTextField(servidor, { servidor = it }, label = { Text("Servidor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         vm.erro?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(
+            shape = RaioBotao,
             onClick = { if (criar) vm.criar(servidor.trim(), casa, nome) else vm.entrar(servidor.trim(), codigo, nome) },
             enabled = !vm.carregando && nome.isNotBlank() && (if (criar) casa.isNotBlank() else codigo.isNotBlank()),
             modifier = Modifier.fillMaxWidth(),
@@ -106,13 +109,14 @@ private fun Principal(vm: CasaViewModel) {
     var aba by rememberSaveable { mutableStateOf(Aba.Hoje) }
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text(e.casaNome) }, actions = {
-                if (vm.carregando) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            TopAppBar(title = { Text(e.casaNome) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), actions = {
+                if (vm.carregando) CircularProgressIndicator(Modifier.size(20.dp), color = grafite.grafiteSuave, strokeWidth = 2.dp)
                 IconButton(onClick = vm::atualizar) { Icon(Icons.Filled.Refresh, "Atualizar") }
             })
         },
         bottomBar = {
-            NavigationBar { Aba.entries.forEach { a -> NavigationBarItem(aba == a, { aba = a }, { Icon(a.icone, null) }, label = { Text(a.titulo) }) } }
+            HorizontalDivider(color = grafite.linha)
+            NavigationBar(tonalElevation = 0.dp) { Aba.entries.forEach { a -> NavigationBarItem(aba == a, { aba = a }, { Icon(a.icone, null) }, label = { Text(a.titulo) }) } }
         },
     ) { p ->
         Column(Modifier.padding(p)) {
@@ -137,11 +141,12 @@ private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrar
     val dono = e.membros.find { it.id == a.membroId }?.nome ?: "Ninguém"
     val minha = a.membroId == e.euId
     ListItem(
-        leadingContent = { Checkbox(a.feito, { vm.concluir(a) }) },
+        colors = coresLinha(),
+        leadingContent = { Checkbox(a.feito, { vm.concluir(a) }, colors = coresCaixa()) },
         headlineContent = { Text(a.tarefa, textDecoration = if (a.feito) TextDecoration.LineThrough else null) },
         supportingContent = { Text((if (mostrarDono) "$dono · " else "") + "${a.pontos} pt") },
         trailingContent = {
-            if (!minha && !a.feito) TextButton(onClick = { vm.assumir(a) }) { Text("Assumir") }
+            if (!minha && !a.feito) AcaoNeutra(onClick = { vm.assumir(a) }) { Text("Assumir") }
         },
     )
 }
@@ -155,15 +160,17 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
     val eu = e.placar.find { it.membroId == e.euId }
     LazyColumn {
         item {
-            Card(Modifier.fillMaxWidth().padding(12.dp)) {
+            OutlinedCard(Modifier.fillMaxWidth().padding(12.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Olá, ${e.membros.find { it.id == e.euId }?.nome}", style = MaterialTheme.typography.titleLarge)
                     e.regrasDoDia(e.hoje).takeIf { it.isNotEmpty() }?.let { r ->
-                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, color = Verde)
+                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, color = grafite.grafiteSuave)
                     }
                     if (eu != null) {
-                        Text("${eu.feitos} de ${eu.previstos} pontos nesta semana")
-                        LinearProgressIndicator(progress = { if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat() }, Modifier.fillMaxWidth().padding(top = 8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${eu.feitos} de ${eu.previstos}", style = EstiloValor); Text(" pontos nesta semana")
+                        }
+                        Progresso(if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 8.dp))
                     }
                 }
             }
@@ -173,13 +180,13 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
         if (hoje.isEmpty()) item { Text("Nada para hoje. 🎉", Modifier.padding(16.dp)) }
         items(hoje, { it.id }) { LinhaAtribuicao(vm, e, it, false) }
         if (proximas.isNotEmpty()) { item { Titulo("Próximos dias") }; items(proximas, { it.id }) { a ->
-            Column { Text(nomeDia(a.dia), Modifier.padding(start = 16.dp), style = MaterialTheme.typography.labelSmall); LinhaAtribuicao(vm, e, a, false) }
+            Column { Text(nomeDia(a.dia).uppercase(), Modifier.padding(start = 16.dp), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave); LinhaAtribuicao(vm, e, a, false) }
         } }
     }
 }
 
 @Composable
-private fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium, color = Verde)
+private fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium)
 
 @Composable
 private fun Semana(vm: CasaViewModel, e: Estado) {
@@ -213,6 +220,7 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
                 val nivel = e.preferencias[t.id] ?: 0
                 val fixo = e.membros.find { it.id == t.fixoId }?.nome
                 ListItem(
+        colors = coresLinha(),
                     modifier = Modifier.clickable { editando = t },
                     headlineContent = { Text(t.nome) },
                     supportingContent = {
@@ -222,14 +230,15 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
                     },
                     trailingContent = {
                         Row {
-                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }) { Icon(Icons.Filled.ThumbUp, "Gosto", tint = if (nivel == 1) Verde else Color.LightGray) }
-                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == -1) 0 else -1) }) { Icon(Icons.Filled.ThumbDown, "Evito", tint = if (nivel == -1) Color(0xFFC62828) else Color.LightGray) }
+                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }) { Icon(if (nivel == 1) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Gosto", tint = if (nivel == 1) grafite.grafite else grafite.grafiteSuave) }
+                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == -1) 0 else -1) }) { Icon(if (nivel == -1) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "Evito", tint = if (nivel == -1) grafite.grafite else grafite.grafiteSuave) }
                         }
                     },
                 )
             }
         }
-        ExtendedFloatingActionButton(onClick = { nova = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp), icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Nova tarefa") })
+        ExtendedFloatingActionButton(onClick = { nova = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp), shape = RaioBotao,
+            containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Nova tarefa") })
     }
     if (nova || editando != null) EditorTarefa(e, editando, vm) { nova = false; editando = null }
 }
@@ -248,9 +257,9 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
             Column {
                 OutlinedTextField(nome, { nome = it }, label = { Text("Nome") }, singleLine = true)
                 Text("Esforço: ${pontos.toInt()} pt", Modifier.padding(top = 12.dp))
-                Slider(pontos, { pontos = it }, valueRange = 1f..10f, steps = 8)
+                Slider(pontos, { pontos = it }, valueRange = 1f..10f, steps = 8, colors = coresSlider())
                 Text("Frequência: " + if (vezes.toInt() == 7) "todo dia" else "${vezes.toInt()}x por semana")
-                Slider(vezes, { vezes = it }, valueRange = 1f..7f, steps = 5)
+                Slider(vezes, { vezes = it }, valueRange = 1f..7f, steps = 5, colors = coresSlider())
                 Text("Responsável fixo")
                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(fixo == null, { fixo = null }, { Text("Dividir") })
@@ -268,8 +277,8 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
         confirmButton = { TextButton(onClick = { vm.salvarTarefa(t?.id, nome, pontos.toInt(), vezes.toInt(), fixo, regra); fechar() }, enabled = nome.isNotBlank()) { Text("Salvar") } },
         dismissButton = {
             Row {
-                if (t != null) TextButton(onClick = { vm.removerTarefa(t.id); fechar() }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = fechar) { Text("Cancelar") }
+                if (t != null) AcaoPerigo(onClick = { vm.removerTarefa(t.id); fechar() }) { Text("Excluir") }
+                AcaoNeutra(onClick = fechar) { Text("Cancelar") }
             }
         },
     )
@@ -283,10 +292,10 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
     var novaRegra by remember { mutableStateOf(false) }
     LazyColumn {
         item {
-            Card(Modifier.fillMaxWidth().padding(12.dp)) {
+            OutlinedCard(Modifier.fillMaxWidth().padding(12.dp)) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Código de convite", style = MaterialTheme.typography.labelMedium)
-                    Text(e.codigo, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Verde)
+                    Text("Código de convite".uppercase(), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
+                    Text(e.codigo, style = EstiloValor, modifier = Modifier.padding(vertical = 4.dp))
                     TextButton(onClick = {
                         val i = Intent(Intent.ACTION_SEND).setType("text/plain")
                             .putExtra(Intent.EXTRA_TEXT, "Entre na casa \"${e.casaNome}\" no app Casa com o código ${e.codigo}")
@@ -299,6 +308,7 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
         items(e.placar, { it.membroId }) { p ->
             val m = e.membros.find { it.id == p.membroId }
             ListItem(
+        colors = coresLinha(),
                 modifier = Modifier.clickable { editando = m },
                 headlineContent = { Text(p.nome + if (p.membroId == e.euId) " (você)" else "") },
                 supportingContent = {
@@ -307,7 +317,7 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                         m?.disponibilidade?.withIndex()?.filter { it.value < 0.99 }?.takeIf { it.isNotEmpty() }?.let { l ->
                             Text("Menos tarefa: " + l.joinToString(", ") { DIAS_CURTOS[it.index] + if (it.value <= 0) " (nada)" else "" }, style = MaterialTheme.typography.bodySmall)
                         }
-                        LinearProgressIndicator(progress = { if (p.previstos == 0) 0f else p.feitos / p.previstos.toFloat() }, Modifier.fillMaxWidth().padding(top = 4.dp))
+                        Progresso(if (p.previstos == 0) 0f else p.feitos / p.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 4.dp))
                     }
                 },
             )
@@ -324,7 +334,8 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                     else "As tarefas giram entre as pessoas a cada semana.",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                OutlinedButton(onClick = vm::redistribuir, Modifier.padding(top = 8.dp)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Redistribuir a semana") }
+                OutlinedButton(onClick = vm::redistribuir, Modifier.padding(top = 8.dp), shape = RaioBotao,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = grafite.grafite), border = BorderStroke(1.dp, grafite.linha)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Redistribuir a semana") }
             }
         }
         item { Titulo("Regras da casa") }
@@ -335,13 +346,14 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
         items(e.condicoes, { "regra${it.id}" }) { c ->
             val n = e.tarefas.count { it.condicaoId == c.id }
             ListItem(
+        colors = coresLinha(),
                 modifier = Modifier.clickable { regraEditando = c },
                 headlineContent = { Text(rotuloRegra(c)) },
                 supportingContent = { Text(descreverRegra(c, e.hoje) + " · $n tarefa${if (n == 1) "" else "s"}") },
             )
         }
         item {
-            TextButton(onClick = { novaRegra = true }, Modifier.padding(horizontal = 8.dp)) {
+            AcaoNeutra(onClick = { novaRegra = true }, Modifier.padding(horizontal = 8.dp)) {
                 Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Nova regra")
             }
         }
@@ -350,7 +362,7 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(24.dp))
-                TextButton(onClick = vm::sair) { Text("Sair deste aparelho") }
+                AcaoNeutra(onClick = vm::sair, cor = grafite.grafiteSuave) { Text("Sair deste aparelho") }
             }
         }
     }
@@ -418,8 +430,8 @@ private fun EditorRegra(vm: CasaViewModel, e: Estado, c: Condicao?, fechar: () -
         },
         dismissButton = {
             Row {
-                if (c != null) TextButton(onClick = { vm.removerRegra(c.id); fechar() }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = fechar) { Text("Cancelar") }
+                if (c != null) AcaoPerigo(onClick = { vm.removerRegra(c.id); fechar() }) { Text("Excluir") }
+                AcaoNeutra(onClick = fechar) { Text("Cancelar") }
             }
         },
     )
@@ -436,7 +448,7 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
         text = {
             Column {
                 Text("Peso na divisão: ${"%.1f".format(peso)}  (1 = normal, 0.5 = metade)")
-                Slider(peso, { peso = it }, valueRange = 0.1f..3f)
+                Slider(peso, { peso = it }, valueRange = 0.1f..3f, colors = coresSlider())
                 OutlinedTextField(dias, { dias = it.filter(Char::isDigit) }, label = { Text("Ausente pelos próximos N dias") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                 if (m.ausenteAte != null) Text("Hoje ausente até ${m.ausenteAte} (deixe 0 para limpar)", style = MaterialTheme.typography.bodySmall)
@@ -448,7 +460,7 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
                         val proximo = when { f >= 0.99 -> 0.4; f > 0 -> 0.0; else -> 1.0 }
                         FilterChip(f < 0.99, { disp = disp.toMutableList().also { it[i] = proximo } }, {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(d); Text(if (f >= 0.99) "livre" else if (f > 0) "pouco" else "nada", style = MaterialTheme.typography.labelSmall)
+                                Text(d); Text((if (f >= 0.99) "livre" else if (f > 0) "pouco" else "nada").uppercase(), style = MaterialTheme.typography.labelSmall)
                             }
                         })
                     }
@@ -465,10 +477,10 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
         },
         dismissButton = {
             Row {
-                if (e.euAdmin || m.id == e.euId) TextButton(onClick = { vm.removerMembro(m.id); fechar() }) {
-                    Text(if (m.id == e.euId) "Sair da casa" else "Remover", color = MaterialTheme.colorScheme.error)
+                if (e.euAdmin || m.id == e.euId) AcaoPerigo(onClick = { vm.removerMembro(m.id); fechar() }) {
+                    Text(if (m.id == e.euId) "Sair da casa" else "Remover")
                 }
-                TextButton(onClick = fechar) { Text("Cancelar") }
+                AcaoNeutra(onClick = fechar) { Text("Cancelar") }
             }
         },
     )
@@ -484,13 +496,47 @@ private fun ConfigLembretes() {
     Column(Modifier.padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Avisar sobre minhas tarefas", Modifier.weight(1f))
-            Switch(ativo, { ativo = it; salvar() })
+            Switch(ativo, { ativo = it; salvar() }, colors = coresChave())
         }
         if (ativo) {
             Text("Manhã (tarefas do dia): ${manha.toInt()}h")
-            Slider(manha, { manha = it }, valueRange = 5f..12f, steps = 6, onValueChangeFinished = salvar)
+            Slider(manha, { manha = it }, valueRange = 5f..12f, steps = 6, onValueChangeFinished = salvar, colors = coresSlider())
             Text("Noite (o que ficou pendente): ${noite.toInt()}h")
-            Slider(noite, { noite = it }, valueRange = 16f..23f, steps = 6, onValueChangeFinished = salvar)
+            Slider(noite, { noite = it }, valueRange = 16f..23f, steps = 6, onValueChangeFinished = salvar, colors = coresSlider())
         }
     }
 }
+
+// ---------- componentes no padrão Grafite ----------
+// Nanquim é o acento único da tela; as ações secundárias ficam em grafite.
+
+@Composable
+private fun AcaoNeutra(onClick: () -> Unit, modifier: Modifier = Modifier, cor: Color = grafite.grafite, content: @Composable RowScope.() -> Unit) =
+    TextButton(onClick = onClick, modifier = modifier, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = cor), content = content)
+
+@Composable
+private fun AcaoPerigo(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =
+    TextButton(onClick = onClick, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = grafite.negativo), content = content)
+
+@Composable
+private fun Progresso(valor: Float, modifier: Modifier) =
+    LinearProgressIndicator(progress = { valor }, modifier = modifier, color = grafite.grafite, trackColor = grafite.linha)
+
+@Composable
+private fun coresCaixa() = CheckboxDefaults.colors(checkedColor = grafite.grafite, uncheckedColor = grafite.grafiteSuave, checkmarkColor = grafite.folha)
+
+@Composable
+private fun coresSlider() = SliderDefaults.colors(
+    thumbColor = grafite.grafite, activeTrackColor = grafite.grafite, inactiveTrackColor = grafite.linha,
+    activeTickColor = grafite.folha, inactiveTickColor = grafite.grafiteSuave,
+)
+
+@Composable
+private fun coresChave() = SwitchDefaults.colors(
+    checkedThumbColor = grafite.folha, checkedTrackColor = grafite.grafite,
+    uncheckedThumbColor = grafite.grafiteSuave, uncheckedTrackColor = grafite.papel, uncheckedBorderColor = grafite.grafiteSuave,
+)
+
+/** Linhas de lista direto no papel; folha fica para cartões e janelas. */
+@Composable
+private fun coresLinha() = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background)

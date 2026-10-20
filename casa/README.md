@@ -19,6 +19,15 @@ curl -X PUT https://casa.vsitefy.com.br/admin/apk -H "X-Upload-Token: $UPLOAD_TO
   --data-binary @android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Identidade visual (Grafite)
+
+Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `main`).
+- App: tokens e mapeamento para o Material 3 em `android/.../Tema.kt` (`GrafiteCores.Dia`/`Noite`, segue o
+  modo do sistema), janela em `res/values*/temas.xml` e `cores.xml`, fontes Newsreader, Figtree e IBM Plex Mono
+  em `res/font/` (Google Fonts, licença SIL OFL 1.1), ícone adaptável gerado do símbolo em `res/mipmap-anydpi-v26/`.
+- Página de download e `/favicon.svg`: mesmas variáveis em `server/server.mjs`.
+- Nanquim é o acento único de cada tela; ações secundárias ficam em grafite (`AcaoNeutra`).
+
 ## Regras da casa
 
 - **Condições** (`condicoes`): "Água" dia sim, dia não (`tipo: alternado`, com uma data em que vale) ou

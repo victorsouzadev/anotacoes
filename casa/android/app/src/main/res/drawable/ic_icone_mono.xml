@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gerado a partir do símbolo Grafite (traço M9.5 24 21 9.5, ponto em 23.6,23.2 r1.9) dentro da zona segura de 66%. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="6.188" android:strokeLineCap="round" android:pathData="M40.594,70.5L64.312,40.594" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M65.756,68.85a3.919,3.919 0,1 1,7.838,0a3.919,3.919 0,1 1,-7.838,0z" />
+</vector>

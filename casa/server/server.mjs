@@ -359,18 +359,40 @@ function paginaDownload(res) {
     : 'Ainda não há versão publicada.';
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   res.end(`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Casa</title><style>
-:root{--bg:#f6f8f7;--fg:#1c2b24;--sub:#5b6b63;--verde:#2e7d5b;--card:#fff}
-@media (prefers-color-scheme:dark){:root{--bg:#111815;--fg:#e6efe9;--sub:#9fb2a8;--card:#1a2420}}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
-main{background:var(--card);padding:32px 24px;border-radius:16px;max-width:360px;margin:16px;text-align:center;box-shadow:0 2px 12px #0001}
-h1{color:var(--verde);margin:0 0 4px}p{color:var(--sub);margin:8px 0}
-a.b{display:inline-block;margin:16px 0 8px;padding:14px 28px;background:var(--verde);color:#fff;border-radius:999px;text-decoration:none;font-weight:600}
-small{color:var(--sub)}</style>
-<main><h1>Casa</h1><p>Divida as tarefas de casa de forma justa.</p>
-${info ? '<a class="b" href="/casa.apk">Baixar para Android</a>' : ''}<p><small>${detalhe}</small></p>
+<title>Casa</title><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Newsreader:opsz,wght@6..72,500&display=swap" rel="stylesheet">
+<style>
+/* Identidade Grafite: tokens dia em :root, noite em prefers-color-scheme. */
+:root{--papel:#F4F5F2;--folha:#FFFFFF;--grafite:#1E2523;--grafite-suave:#5E6865;--linha:#DFE3DF;
+  --nanquim:#2E5E5A;--nanquim-escuro:#224744;--nanquim-tinta:#E2ECEA;--sobre-nanquim:#FFFFFF;--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62}
+@media (prefers-color-scheme:dark){:root{--papel:#121514;--folha:#1A1E1D;--grafite:#E6EAE7;--grafite-suave:#9AA4A0;--linha:#2A302E;
+  --nanquim:#7FB5AE;--nanquim-escuro:#A3CDC7;--nanquim-tinta:#1F3331;--sobre-nanquim:#121514;--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514}}
+body{margin:0;background:var(--papel);color:var(--grafite);font:400 15px/23px Figtree,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
+main{background:var(--folha);border:1px solid var(--linha);border-radius:16px;padding:32px 24px;max-width:360px;margin:16px;text-align:center}
+svg{width:64px;height:64px;display:block;margin:0 auto 16px}
+h1{font:500 36px/40px Newsreader,Georgia,serif;margin:0 0 8px}
+p{color:var(--grafite-suave);margin:8px 0}
+small{font:500 13px/18px Figtree,system-ui,sans-serif}
+.valor{font:500 15px/22px "IBM Plex Mono",ui-monospace,monospace;color:var(--grafite)}
+a.b{display:inline-block;margin:24px 0 12px;padding:12px 24px;background:var(--nanquim);color:var(--sobre-nanquim);border-radius:10px;
+  text-decoration:none;font:600 15px/23px Figtree,system-ui,sans-serif}
+a.b:hover,a.b:active{background:var(--nanquim-escuro)}
+a.b:focus-visible{outline:2px solid var(--nanquim);outline-offset:2px}</style>
+<main>${SIMBOLO.replace('<svg', '<svg aria-hidden="true"')}<h1>Casa</h1><p>Divida as tarefas de casa de forma justa.</p>
+${info ? '<a class="b" href="/casa.apk">Baixar para Android</a>' : ''}<p class="valor">${detalhe}</p>
 <p><small>Ao instalar, permita “instalar apps desconhecidos” para o navegador.</small></p></main></html>`);
 }
+
+// Símbolo Grafite: quadrado nanquim, traço de lápis e ponto. As cores vêm das variáveis da página;
+// no favicon (fora da página) o próprio SVG troca para a versão escura.
+const SIMBOLO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" style="fill:var(--marca)"/>` +
+  `<path d="M9.5 24 21 9.5" style="stroke:var(--marca-traco)" stroke-width="3" stroke-linecap="round"/>` +
+  `<circle cx="23.6" cy="23.2" r="1.9" style="fill:var(--marca-ponto)"/></svg>`;
+const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>` +
+  `:root{--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62}` +
+  `@media (prefers-color-scheme:dark){:root{--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514}}</style>` +
+  SIMBOLO.replace(/^<svg[^>]*>/, '');
 
 function baixarApk(res) {
   if (!fs.existsSync(APK)) { res.writeHead(404); return res.end('APK ainda não publicado'); }
@@ -450,6 +472,9 @@ http.createServer(async (req, res) => {
     chave = `${req.method} ${url.pathname}`;
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/download')) return paginaDownload(res);
     if (req.method === 'GET' && url.pathname === '/casa.apk') return baixarApk(res);
+    if (req.method === 'GET' && url.pathname === '/favicon.svg') {
+      res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }); return res.end(FAVICON);
+    }
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
     if (url.pathname === '/mcp') return await mcp(req, res, url);

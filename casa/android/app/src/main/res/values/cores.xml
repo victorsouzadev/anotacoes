@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grafite (dia). Os valores de noite estão em values-night/cores.xml. -->
+<resources>
+    <color name="papel">#F4F5F2</color>
+    <color name="folha">#FFFFFF</color>
+    <color name="grafite">#1E2523</color>
+    <color name="nanquim">#2E5E5A</color>
+    <!-- Ícone do app: fundo fixo em nanquim (dia), traço em papel e ponto em #D6AE62, nos dois temas. -->
+    <color name="icone_fundo">#2E5E5A</color>
+    <color name="icone_traco">#F4F5F2</color>
+    <color name="icone_ponto">#D6AE62</color>
+</resources>
