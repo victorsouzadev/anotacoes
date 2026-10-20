@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -70,12 +69,16 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
         item {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { vm.dia.value = dia.minusDays(1) }) { Icon(Icons.Filled.ChevronLeft, "Dia anterior") }
-                Text(
-                    if (dia == Datas.hoje()) "Hoje" else Datas.curta(dia),
-                    Modifier.weight(1f).clickable { vm.dia.value = Datas.hoje() },
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                progresso?.let { AssistChip(onClick = {}, label = { Text("${it.sequencia} dias · Nv ${it.nivel}", style = EstiloValor) }) }
+                // Com a fonte do sistema grande, o título encolhe com reticências e a sequência desce para baixo dele,
+                // em vez de quebrar "Hoje" em duas linhas.
+                Column1(Modifier.weight(1f).clickable { vm.dia.value = Datas.hoje() }) {
+                    Text(
+                        if (dia == Datas.hoje()) "Hoje" else Datas.curta(dia),
+                        style = MaterialTheme.typography.titleLarge, maxLines = 1, softWrap = false,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    progresso?.let { Sub("${it.sequencia} dias seguidos · nível ${it.nivel}", Modifier, maxLines = 1) }
+                }
                 IconButton(onClick = { vm.sincronizar() }, enabled = !sincronizando) { Icon(Icons.Filled.Sync, "Sincronizar") }
                 IconButton(onClick = { vm.dia.value = dia.plusDays(1) }, enabled = dia < Datas.hoje()) { Icon(Icons.Filled.ChevronRight, "Próximo dia") }
             }
@@ -112,9 +115,12 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                     }
                 }
                 BarraMeta("", totalAgua.toDouble(), metas.aguaMl, "ml")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     listOf(200, 300, 500).forEach { ml ->
-                        BotaoSecundario(onClick = { vm.lancar { vm.repo.beberAgua(dia, ml) } }) { Text("+$ml ml") }
+                        BotaoSecundario(onClick = { vm.lancar { vm.repo.beberAgua(dia, ml) } }, Modifier.weight(1f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+                            Text("+$ml", maxLines = 1, softWrap = false, style = EstiloValor)
+                        }
                     }
                 }
             }

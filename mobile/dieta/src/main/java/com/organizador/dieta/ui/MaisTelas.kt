@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -261,9 +262,8 @@ fun ContaTela(vm: DietaViewModel, voltar: () -> Unit) {
                 Text("Conectado como $email")
                 Sub(if (ultimo > 0) "Último sync: ${DateFormat.getDateTimeInstance().format(Date(ultimo))}" else "Ainda não sincronizado.")
                 Spacer(Modifier.height(8.dp))
-                Row {
+                FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !sincronizando, onClick = { vm.sincronizar() }) { Text(if (sincronizando) "Sincronizando…" else "Sincronizar agora") }
-                    Spacer(Modifier.width(8.dp))
                     BotaoSecundario(onClick = { vm.sair() }) { Text("Sair") }
                 }
             } else {
@@ -274,9 +274,8 @@ fun ContaTela(vm: DietaViewModel, voltar: () -> Unit) {
                 OutlinedTextField(senha, { senha = it }, Modifier.fillMaxWidth(), label = { Text("Senha") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                 Spacer(Modifier.height(8.dp))
-                Row {
+                FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                     Button(enabled = login.isNotBlank() && senha.isNotBlank(), onClick = { vm.entrar(servidor, login, senha, false) { senha = "" } }) { Text("Entrar") }
-                    Spacer(Modifier.width(8.dp))
                     BotaoSecundario(enabled = login.isNotBlank() && senha.length >= 8, onClick = { vm.entrar(servidor, login, senha, true) { senha = "" } }) { Text("Criar conta") }
                 }
             }

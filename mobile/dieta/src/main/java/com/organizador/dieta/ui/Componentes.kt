@@ -74,8 +74,9 @@ fun Titulo(texto: String, modifier: Modifier = Modifier) =
     Text(texto, modifier = modifier, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
 @Composable
-fun Sub(texto: String, modifier: Modifier = Modifier) =
-    Text(texto, modifier = modifier, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun Sub(texto: String, modifier: Modifier = Modifier, maxLines: Int = Int.MAX_VALUE) =
+    Text(texto, modifier = modifier, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = maxLines, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
 
 @Composable
 fun <T> Escolha(opcoes: List<Pair<T, String>>, valor: T, aoEscolher: (T) -> Unit) {
@@ -168,9 +169,11 @@ fun rememberFoto(aoEscolher: (android.net.Uri) -> Unit): (Boolean) -> Unit {
 // Nanquim é o acento único da tela: fica para a ação principal. Botões secundários e de texto vão em grafite.
 
 @Composable
-fun BotaoSecundario(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) =
+fun BotaoSecundario(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+                    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.material3.ButtonDefaults.ContentPadding,
+                    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) =
     androidx.compose.material3.OutlinedButton(
-        onClick, modifier, enabled,
+        onClick, modifier, enabled, contentPadding = contentPadding,
         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = grafite.grafite),
         border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha),
         content = content,

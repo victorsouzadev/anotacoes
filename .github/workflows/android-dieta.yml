@@ -40,11 +40,30 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-      # versionCode cresce a cada execução, para o Android aceitar a atualização por cima.
+      # Chave fixa de assinatura: é o que deixa a versão nova instalar por cima da anterior. Fica na VPS em
+      # /opt/notas-vps/segredos/dieta-keystore.env (só root), lida pelo mesmo SSH que publica o APK.
+      - name: Chave de assinatura (VPS)
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          HOST: ${{ secrets.VPS_HOST }}
+          USUARIO: ${{ secrets.VPS_USER }}
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/ssh_key" && printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/ssh_key"
+          if ssh -i "$RUNNER_TEMP/ssh_key" -o StrictHostKeyChecking=accept-new -o BatchMode=yes "$USUARIO@$HOST" \
+               'cat /opt/notas-vps/segredos/dieta-keystore.env' > "$RUNNER_TEMP/chave.env"; then
+            set -a; . "$RUNNER_TEMP/chave.env"; set +a
+            echo "::add-mask::$DIETA_KEYSTORE_SENHA"
+            echo "$DIETA_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/dieta.jks"
+            { echo "DIETA_KEYSTORE_ARQUIVO=$RUNNER_TEMP/dieta.jks"; echo "DIETA_KEYSTORE_SENHA=$DIETA_KEYSTORE_SENHA";
+              echo "DIETA_KEYSTORE_ALIAS=$DIETA_KEYSTORE_ALIAS"; } >> "$GITHUB_ENV"
+          else
+            echo "::warning::Chave não encontrada na VPS: o APK sai com chave de debug e não instala por cima da versão anterior."
+          fi
+          rm -f "$RUNNER_TEMP/ssh_key" "$RUNNER_TEMP/chave.env"
+      # versionCode = número da execução, sempre crescente, para o Android aceitar a atualização por cima.
       - run: |
           ./gradlew :dieta:testDebugUnitTest :dieta:assembleRelease --no-daemon \
-            -Pandroid.injected.version.name=${{ steps.v.outputs.versao }} \
-            -Pandroid.injected.version.code=${{ github.run_number }}
+            -PversaoNome=${{ steps.v.outputs.versao }} -PversaoCodigo=${{ github.run_number }}
           mkdir -p ../android
           cp dieta/build/outputs/apk/release/dieta-release.apk ../android/Dieta.apk
           printf '{"versao":"%s","arquivo":"Dieta.apk","tamanho":%s,"publicadoEm":"%s"}\n' \

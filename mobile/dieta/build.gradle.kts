@@ -13,8 +13,21 @@ android {
         applicationId = "com.organizador.dieta"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // O workflow "Android (Dieta)" passa -PversaoCodigo (número da execução) e -PversaoNome (ex.: 1.2.0).
+        versionCode = (findProperty("versaoCodigo") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("versaoNome") as String?) ?: "1.0"
+    }
+
+    // Chave fixa de assinatura vinda dos segredos do GitHub (DIETA_KEYSTORE_*): sem ela, cada execução do
+    // workflow assinaria com uma chave de debug nova e o Android recusaria instalar a atualização por cima.
+    val chave = System.getenv("DIETA_KEYSTORE_ARQUIVO")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (chave != null) create("fixa") {
+            storeFile = chave
+            storePassword = System.getenv("DIETA_KEYSTORE_SENHA")
+            keyAlias = System.getenv("DIETA_KEYSTORE_ALIAS")
+            keyPassword = System.getenv("DIETA_KEYSTORE_SENHA")
+        }
     }
 
     // A tabela TACO é a mesma que o backend carrega: um arquivo só no repositório.
@@ -45,8 +58,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Assinado com a chave de debug para o APK de release instalar direto (uso pessoal, fora da Play Store).
-            signingConfig = signingConfigs.getByName("debug")
+            // Chave fixa quando o workflow fornece; senão a de debug (APK instala direto, uso pessoal, fora da Play Store).
+            signingConfig = signingConfigs.findByName("fixa") ?: signingConfigs.getByName("debug")
         }
     }
 
