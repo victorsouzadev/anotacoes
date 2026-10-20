@@ -67,7 +67,7 @@ object Lembretes {
         val token = p.getString("token", null) ?: return
         val e = runCatching {
             runBlocking { Api(p.getString("servidor", null) ?: BuildConfig.SERVIDOR, token).chamar("GET", "/api/estado").paraEstado() }
-        }.getOrNull() ?: return
+        }.onFailure { Registro.aviso("lembrete_falhou", it) }.getOrNull() ?: return
         val minhas = e.atribuicoes.filter { it.membroId == e.euId && !it.feito && it.dia <= e.hoje }
         if (minhas.isEmpty()) return
         val titulo = if (tipo == MANHA) "Hoje você tem ${minhas.size} tarefa${if (minhas.size > 1) "s" else ""}"
@@ -90,6 +90,7 @@ object Lembretes {
 
 class AlarmeReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
+        Registro.iniciar(c)
         val r = goAsync()
         Thread {
             try {

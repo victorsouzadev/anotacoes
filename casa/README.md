@@ -18,3 +18,16 @@ Para publicar uma nova versão (o token está em `/opt/casa/.env` na VPS):
 curl -X PUT https://casa.vsitefy.com.br/admin/apk -H "X-Upload-Token: $UPLOAD_TOKEN" \
   --data-binary @android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Logs
+
+- **Requisições**: uma linha JSON por chamada (rota, status, tempo, casa, membro, versão do app) no
+  stdout: `docker logs -f casa-api` (rotação: 3 × 10 MB). Tokens e corpos nunca são registrados.
+- **Eventos e erros** (casa criada, membro entrou/saiu, APK publicado, erros 500 do servidor e
+  erros/travamentos enviados pelo app) também ficam na tabela `logs`, guardados por 30 dias (`LOG_DIAS`):
+  ```bash
+  curl -H "X-Upload-Token: $UPLOAD_TOKEN" "https://casa.vsitefy.com.br/admin/logs?nivel=erro&limite=50"
+  # filtros: nivel=info|aviso|erro, origem=app|servidor, casa=<id>, evento=<nome>, desde=<data ISO>
+  ```
+- O app guarda erros numa fila local (até 50) e envia para `POST /api/logs` quando há conexão;
+  um travamento é gravado na hora e enviado na próxima abertura.

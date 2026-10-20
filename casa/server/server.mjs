@@ -21,7 +21,26 @@ CREATE TABLE IF NOT EXISTS atribuicoes(id INTEGER PRIMARY KEY, casa_id INTEGER, 
   membro_id INTEGER REFERENCES membros(id) ON DELETE SET NULL, semana TEXT, dia TEXT, pontos INTEGER, feito_em TEXT);
 CREATE TABLE IF NOT EXISTS saldos(membro_id INTEGER REFERENCES membros(id) ON DELETE CASCADE, semana TEXT, saldo REAL,
   PRIMARY KEY(membro_id, semana));
+CREATE TABLE IF NOT EXISTS logs(id INTEGER PRIMARY KEY, em TEXT, nivel TEXT, origem TEXT, evento TEXT, mensagem TEXT,
+  casa_id INTEGER, membro_id INTEGER, versao TEXT, detalhes TEXT);
+CREATE INDEX IF NOT EXISTS logs_em ON logs(em);
 `);
+
+// ---------- logs ----------
+// Toda requisição vira uma linha JSON no stdout (docker logs casa-api, com rotação no compose).
+// Eventos e erros, do servidor e os enviados pelo app, também vão para a tabela "logs",
+// consultável em GET /admin/logs. Nunca registra tokens nem corpos de requisição.
+const DIAS_LOGS = Number(process.env.LOG_DIAS || 30);
+const corta = (v, n) => v == null ? null : String(v).slice(0, n);
+function registra({ nivel = 'info', origem = 'servidor', evento, mensagem, casaId, membroId, versao, detalhes }) {
+  const em = new Date().toISOString();
+  console.log(JSON.stringify({ em, nivel, origem, evento, mensagem, casaId, membroId, versao, detalhes }));
+  db.prepare('INSERT INTO logs(em,nivel,origem,evento,mensagem,casa_id,membro_id,versao,detalhes) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run(em, nivel, origem, corta(evento, 80), corta(mensagem, 2000), casaId ?? null, membroId ?? null, corta(versao, 40),
+      detalhes == null ? null : corta(typeof detalhes === 'string' ? detalhes : JSON.stringify(detalhes), 8000));
+}
+const limpaLogs = () => db.prepare('DELETE FROM logs WHERE em < ?').run(new Date(Date.now() - DIAS_LOGS * 864e5).toISOString());
+limpaLogs(); setInterval(limpaLogs, 6 * 3600e3).unref();
 
 const BIBLIOTECA = [
   ['Lavar a louça', 2, 7], ['Tirar o lixo', 1, 3], ['Limpar o banheiro', 5, 1], ['Varrer / aspirar a casa', 3, 2],
@@ -144,6 +163,7 @@ const rotas = {
     db.prepare('INSERT INTO membros(casa_id,nome,token,admin) VALUES(?,?,?,1)').run(c.lastInsertRowid, b.membroNome.trim(), tk);
     if (b.biblioteca !== false) for (const [n, p, v] of BIBLIOTECA)
       db.prepare('INSERT INTO tarefas(casa_id,nome,pontos,vezes) VALUES(?,?,?,?)').run(c.lastInsertRowid, n, p, v);
+    registra({ evento: 'casa_criada', mensagem: b.nome.trim(), casaId: Number(c.lastInsertRowid) });
     return { token: tk };
   },
   'POST /api/entrar': (_, b) => {
@@ -151,7 +171,8 @@ const rotas = {
     exige(c, 404, 'Código de casa não encontrado');
     exige(b.nome?.trim(), 400, 'Informe o seu nome');
     const tk = token();
-    db.prepare('INSERT INTO membros(casa_id,nome,token) VALUES(?,?,?)').run(c.id, b.nome.trim(), tk);
+    const novo = db.prepare('INSERT INTO membros(casa_id,nome,token) VALUES(?,?,?)').run(c.id, b.nome.trim(), tk);
+    registra({ evento: 'membro_entrou', mensagem: b.nome.trim(), casaId: c.id, membroId: Number(novo.lastInsertRowid) });
     distribuir(c.id);
     return { token: tk };
   },
@@ -188,6 +209,7 @@ const rotas = {
   'DELETE /api/membros/:id': (m, _, id) => {
     exige(m.admin || m.id === id, 403, 'Só o administrador remove outras pessoas');
     db.prepare('DELETE FROM membros WHERE id=? AND casa_id=?').run(id, m.casa_id);
+    registra({ evento: 'membro_removido', casaId: m.casa_id, membroId: m.id, detalhes: { removido: id } });
     distribuir(m.casa_id); return m.id === id ? { saiu: true } : estado(m);
   },
   'PUT /api/preferencias': (m, b) => {
@@ -241,43 +263,89 @@ function baixarApk(res) {
   fs.createReadStream(APK).pipe(res);
 }
 
-async function publicarApk(req) {
+// Token de administração (UPLOAD_TOKEN no .env): publicar APK e ler logs.
+function exigeAdmin(req) {
   const esperado = process.env.UPLOAD_TOKEN || '';
   const recebido = String(req.headers['x-upload-token'] || '');
   exige(esperado && recebido.length === esperado.length &&
-    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado)), 401, 'Token de envio inválido');
+    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado)), 401, 'Token de administração inválido');
+}
+
+async function publicarApk(req) {
+  exigeAdmin(req);
   const tmp = APK + '.tmp';
   await pipeline(req, fs.createWriteStream(tmp));
   // Um APK é um zip: confere a assinatura "PK" antes de publicar.
   const cab = Buffer.alloc(2); const fd = fs.openSync(tmp, 'r'); fs.readSync(fd, cab, 0, 2, 0); fs.closeSync(fd);
   if (cab.toString() !== 'PK') { fs.rmSync(tmp); throw new Erro(400, 'Arquivo não é um APK'); }
   fs.renameSync(tmp, APK);
+  registra({ evento: 'apk_publicado', detalhes: { bytes: fs.statSync(APK).size } });
   return { ok: true, bytes: fs.statSync(APK).size };
 }
 
+// GET /admin/logs?nivel=erro&origem=app&casa=5&desde=2026-10-20&limite=200
+function lerLogs(url) {
+  const q = url.searchParams, onde = [], args = [];
+  for (const [p, col] of [['nivel', 'nivel'], ['origem', 'origem'], ['casa', 'casa_id'], ['evento', 'evento']])
+    if (q.get(p)) { onde.push(`${col}=?`); args.push(q.get(p)); }
+  if (q.get('desde')) { onde.push('em>=?'); args.push(q.get('desde')); }
+  const limite = Math.min(1000, Number(q.get('limite')) || 200);
+  return db.prepare(`SELECT * FROM logs ${onde.length ? 'WHERE ' + onde.join(' AND ') : ''} ORDER BY id DESC LIMIT ${limite}`).all(...args)
+    .map(l => ({ ...l, detalhes: l.detalhes && l.detalhes.startsWith('{') ? JSON.parse(l.detalhes) : l.detalhes }));
+}
+
+// POST /api/logs: o app envia erros e travamentos (com ou sem login, para pegar falhas antes de entrar).
+// Limite por IP para ninguém encher a tabela.
+const envios = new Map();
+function recebeLogs(req, membro, b) {
+  const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0];
+  const agora = Date.now(), j = envios.get(ip)?.filter(t => agora - t < 60e3) ?? [];
+  const itens = (Array.isArray(b.logs) ? b.logs : [b]).slice(0, 20);
+  exige(j.length + itens.length <= 60, 429, 'Logs demais, tente mais tarde');
+  envios.set(ip, [...j, ...itens.map(() => agora)]);
+  for (const l of itens) registra({
+    nivel: ['info', 'aviso', 'erro'].includes(l.nivel) ? l.nivel : 'erro', origem: 'app',
+    evento: l.evento || 'erro_app', mensagem: l.mensagem, casaId: membro?.casa_id, membroId: membro?.id,
+    versao: req.headers['x-app-versao'], detalhes: { aparelho: l.aparelho, android: l.android, quando: l.quando, pilha: corta(l.pilha, 6000) },
+  });
+  return { ok: true, recebidos: itens.length };
+}
+
+const PUBLICAS = new Set(['GET /health', 'POST /api/casas', 'POST /api/entrar']);
+
 http.createServer(async (req, res) => {
+  const inicio = performance.now();
+  let chave = `${req.method} ?`, membro = null;
+  res.on('finish', () => {
+    // Uma linha por requisição no stdout; só a rota (sem ids nem query) e quem chamou.
+    if (chave === 'GET /health') return;
+    console.log(JSON.stringify({ em: new Date().toISOString(), req: chave, status: res.statusCode,
+      ms: Math.round(performance.now() - inicio), casaId: membro?.casa_id, membroId: membro?.id, versao: req.headers['x-app-versao'] }));
+  });
   const envia = (s, o) => { res.writeHead(s, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
   try {
     const url = new URL(req.url, 'http://x');
+    chave = `${req.method} ${url.pathname}`;
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/download')) return paginaDownload(res);
     if (req.method === 'GET' && url.pathname === '/casa.apk') return baixarApk(res);
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
+    if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
     const partes = url.pathname.split('/');
     const idx = partes.findIndex(p => /^\d+$/.test(p));
     const id = idx > 0 ? Number(partes[idx]) : null;
-    const chave = `${req.method} ${idx > 0 ? (partes[idx] = ':id', partes.join('/')) : url.pathname}`;
-    const rota = rotas[chave]; exige(rota, 404, 'Rota não encontrada');
+    chave = `${req.method} ${idx > 0 ? (partes[idx] = ':id', partes.join('/')) : url.pathname}`;
+    const rota = rotas[chave] || (chave === 'POST /api/logs' ? 'logs' : null); exige(rota, 404, 'Rota não encontrada');
     let corpo = ''; for await (const c of req) { corpo += c; exige(corpo.length < 1e5, 413, 'Corpo grande demais'); }
     const b = corpo ? JSON.parse(corpo) : {};
-    let membro = null;
-    if (chave.startsWith('GET /health') || chave === 'POST /api/casas' || chave === 'POST /api/entrar') membro = null;
-    else {
-      membro = db.prepare('SELECT * FROM membros WHERE token=?').get((req.headers.authorization || '').replace(/^Bearer /, ''));
-      exige(membro, 401, 'Sessão inválida — entre de novo na casa');
-    }
-    envia(200, rota(membro, b, id));
+    const token = (req.headers.authorization || '').replace(/^Bearer /, '');
+    if (token) membro = db.prepare('SELECT * FROM membros WHERE token=?').get(token) ?? null;
+    if (rota === 'logs') return envia(200, recebeLogs(req, membro, b));
+    if (!PUBLICAS.has(chave)) exige(membro, 401, 'Sessão inválida — entre de novo na casa');
+    envia(200, rota(PUBLICAS.has(chave) ? null : membro, b, id));
   } catch (e) {
-    if (!e.status) console.error(e);
-    envia(e.status || (e instanceof SyntaxError ? 400 : 500), { erro: e.status ? e.message : 'Erro interno' });
+    const status = e.status || (e instanceof SyntaxError ? 400 : 500);
+    if (status >= 500) registra({ nivel: 'erro', evento: 'erro_servidor', mensagem: `${chave}: ${e.message}`,
+      casaId: membro?.casa_id, membroId: membro?.id, versao: req.headers['x-app-versao'], detalhes: corta(e.stack, 6000) });
+    if (!res.headersSent) envia(status, { erro: e.status ? e.message : status === 400 ? 'Corpo da requisição inválido' : 'Erro interno' });
   }
 }).listen(Number(process.env.PORT || 8080), () => console.log('casa ouvindo'));

@@ -17,6 +17,7 @@ class Api(var servidor: String, var token: String?) {
             c.requestMethod = metodo
             c.connectTimeout = 10_000; c.readTimeout = 15_000
             c.setRequestProperty("Content-Type", "application/json")
+            c.setRequestProperty("X-App-Versao", BuildConfig.VERSION_NAME)
             token?.let { c.setRequestProperty("Authorization", "Bearer $it") }
             if (corpo != null) { c.doOutput = true; c.outputStream.use { it.write(corpo.toString().toByteArray()) } }
             val s = c.responseCode

@@ -32,8 +32,14 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
             if (r != null) { if (r.optBoolean("saiu")) sair() else if (r.has("casa")) estado = r.paraEstado() }
         } catch (e: ApiErro) {
             erro = e.message; if (e.status == 401) sair()
-        } catch (e: Exception) {
+            if (e.status >= 500) Registro.erro("erro_api", e)
+        } catch (e: java.io.IOException) {
             erro = "Sem conexão com o servidor (${e.javaClass.simpleName})"
+            Registro.aviso("sem_conexao", e)
+        } catch (e: Exception) {
+            // Falha do próprio app (ex.: resposta que não conseguiu interpretar): mostra e registra.
+            erro = "Erro no app: ${e.javaClass.simpleName}"
+            Registro.erro("erro_app", e)
         } finally { carregando = false }
     }
 

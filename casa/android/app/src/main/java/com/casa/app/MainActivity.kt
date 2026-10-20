@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val vm: CasaViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Registro.iniciar(this)
         Lembretes.criarCanal(this)
         if (Build.VERSION.SDK_INT >= 33) registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
             .launch(Manifest.permission.POST_NOTIFICATIONS)
