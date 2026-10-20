@@ -3,6 +3,7 @@ package com.organizador.dieta.ui
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Restaurant
@@ -33,6 +34,7 @@ private data class Aba(val rota: String, val nome: String, val icone: ImageVecto
 
 private val ABAS = listOf(
     Aba("hoje", "Hoje", Icons.Filled.Restaurant),
+    Aba("chat", "Assistente", Icons.Filled.Forum),
     Aba("progresso", "Progresso", Icons.Filled.EmojiEvents),
     Aba("fotos", "Fotos", Icons.Filled.PhotoLibrary),
     Aba("mais", "Mais", Icons.Filled.Menu),
@@ -75,6 +77,7 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
                     AdicionarTela(vm, it.arguments?.getString("refeicao") ?: "almoco", voltar = { nav.popBackStack() },
                         novoAlimento = { nav.navigate("alimento/novo") })
                 }
+                composable("chat") { ChatTela(vm) }
                 composable("progresso") { ProgressoTela(vm) }
                 composable("fotos") { FotosTela(vm) }
                 composable("mais") { MaisTela(vm, ir = { nav.navigate(it) }) }

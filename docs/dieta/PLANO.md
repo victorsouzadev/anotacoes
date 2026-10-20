@@ -16,7 +16,7 @@
 | D1 | Onde roda o back | **VPS**, dentro do hub: módulo novo no `backend/Notas.Api` (C#), mesmo login, Postgres e deploy |
 | D2 | Domínio | **https://cerebro.vsitefy.com.br** (domínio do hub). API em `/api/dieta/*`, página pública em `/p/dieta/<token>` |
 | D3 | App | **APK Android nativo, Kotlin + Jetpack Compose**, local-first (Room), sincroniza com a conta do hub |
-| D4 | Fotos | Só registro (refeição e progresso corporal). **Sem IA na imagem** |
+| D4 | Fotos | Registro (refeição e progresso corporal). Depois: IA opcional para reconhecer prato e tabela nutricional |
 | D5 | MCP | Ferramentas da Dieta no MCP do hub + resumo do dia no Segundo Cérebro |
 | D6 | Gamificação | XP, níveis, sequências, conquistas, desafios semanais, heatmap |
 | D7 | Compartilhamento | Link público com escopos, cards de imagem e modo nutricionista |
@@ -110,7 +110,16 @@ Sync do app no mesmo modelo das Tarefas: completo, por `remoteId`/`updatedAt`.
 7. **Compartilhamento**: página pública, cards, modo nutricionista; APK de release.
 8. (Depois) tela "Dieta" na versão web do hub.
 
-## 7. Restrições
+## 7. IA (acrescentado depois)
+
+- Chat da Dieta (`/api/dieta/chat`, `Services/Dieta/Ia`): mesmo laço de ferramentas do chat de Finanças
+  (`ChatComFerramentas`), com consultas e alterações (metas, plano, registros, alimentos). O prompt manda propor e
+  só gravar depois da confirmação. Não substitui nutricionista.
+- Reconhecimento (`/api/dieta/ia/reconhecer`): prato (foto), texto ou rótulo (foto da tabela nutricional). Nada é
+  gravado no servidor: o app mostra para conferir.
+- Chave e modelo: os de Configurações de IA do hub. Foto só com OpenRouter. Limite `dieta-ia`: 30 por minuto.
+
+## 8. Restrições
 
 - VPS com 1.9 GiB de RAM: nada de serviço novo pesado; tudo dentro do `Notas.Api` e do Postgres existentes.
 - Fotos ocupam disco: limite por usuário e entrada no backup.

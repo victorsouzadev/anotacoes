@@ -72,17 +72,19 @@ fun MeusAlimentosTela(vm: DietaViewModel, voltar: () -> Unit, editar: (String) -
 @Composable
 fun AlimentoTela(vm: DietaViewModel, id: String, voltar: () -> Unit) {
     val alimentos by vm.alimentos.collectAsStateWithLifecycle()
+    // "novo" pode vir preenchido com o que a IA leu de uma tabela nutricional (vm.rascunho); só é usado uma vez.
+    val rascunho = remember(id) { if (id == "novo") vm.rascunho.also { vm.rascunho = null } else null }
     val original = remember(id) { alimentos.firstOrNull { it.id == id } }
     var receita by remember { mutableStateOf(original?.fonte == "receita") }
-    var nome by remember { mutableStateOf(original?.nome ?: "") }
+    var nome by remember { mutableStateOf(original?.nome ?: rascunho?.nome ?: "") }
     val campos = remember {
         mutableStateListOf(
-            *listOf(original?.kcal, original?.proteina, original?.carbo, original?.gordura, original?.fibra, original?.sodio)
+            *(original ?: rascunho).let { b -> listOf(b?.kcal, b?.proteina, b?.carbo, b?.gordura, b?.fibra, b?.sodio) }
                 .map { it?.let(::fmt) ?: "" }.toTypedArray(),
         )
     }
-    var porcaoNome by remember { mutableStateOf(original?.porcaoNome ?: "") }
-    var porcaoG by remember { mutableStateOf(original?.porcaoG?.let(::fmt) ?: "100") }
+    var porcaoNome by remember { mutableStateOf(original?.porcaoNome ?: rascunho?.porcaoNome ?: "") }
+    var porcaoG by remember { mutableStateOf((original ?: rascunho)?.porcaoG?.let(::fmt) ?: "100") }
     var codigo by remember { mutableStateOf(original?.codigoBarras ?: "") }
     val itens = remember {
         mutableStateListOf<Pair<Alimento, Double>>().apply {

@@ -56,6 +56,11 @@ data class Progresso(
     }
 }
 
+data class MsgChat(val papel: String, val texto: String, val comFoto: Boolean = false)
+
+/** Item reconhecido pela IA. [alimento] = o que casou na base (TACO ou próprio); senão vale a [estimativa] da IA. */
+data class ItemIa(val nome: String, val gramas: Double, val alimento: Alimento?, val estimativa: Alimento)
+
 data class Link(val id: String, val titulo: String, val escopos: List<String>, val url: String, val expiraEm: String?, val revogado: Boolean)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -100,6 +105,81 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun avisar(msg: String) { aviso.value = msg }
+
+    // ---------- IA ----------
+    val chat = MutableStateFlow(carregarChat())
+    val pensando = MutableStateFlow(false)
+    /** Alimento lido de um rótulo, para a tela de cadastro abrir preenchida. */
+    var rascunho: Alimento? = null
+
+    private fun carregarChat(): List<MsgChat> = runCatching {
+        JSONArray(prefs.chat ?: "[]").objetos().map { MsgChat(it.getString("papel"), it.getString("texto"), it.optBoolean("comFoto")) }
+    }.getOrDefault(emptyList())
+
+    private fun salvarChat(l: List<MsgChat>) {
+        chat.value = l
+        prefs.chat = JSONArray(l.takeLast(60).map { JSONObject().put("papel", it.papel).put("texto", it.texto).put("comFoto", it.comFoto) }).toString()
+    }
+
+    fun limparChat() = salvarChat(emptyList())
+
+    /** Manda a conversa (até 30 mensagens) e a foto opcional; se a IA alterou metas/plano/registros, sincroniza. */
+    fun enviarChat(texto: String, foto: Uri?) = viewModelScope.launch {
+        if (!a.api.logado) { avisar("Entre com a conta do hub (Mais → Conta) para usar a IA."); return@launch }
+        val historico = chat.value + MsgChat("usuario", texto, foto != null)
+        salvarChat(historico)
+        pensando.value = true
+        try {
+            sincronizar(silencioso = true).join()
+            val corpo = JSONObject().put("mensagens", JSONArray(historico.takeLast(30).map { JSONObject().put("papel", it.papel).put("texto", it.texto) }))
+            foto?.let { corpo.put("imagem", repo.dataUrl(it)) }
+            val r = a.api.chamar("POST", "/api/dieta/chat", corpo) as JSONObject
+            salvarChat(chat.value + MsgChat("assistente", r.getString("resposta")))
+            if (r.optBoolean("alterou")) sincronizar(silencioso = true)
+        } catch (e: Exception) {
+            avisar(e.message ?: "A IA não respondeu.")
+        } finally {
+            pensando.value = false
+        }
+    }
+
+    /** modo: prato (foto), texto (descrição) ou rotulo (foto da tabela nutricional). */
+    fun reconhecer(modo: String, texto: String?, foto: Uri?, itens: (List<ItemIa>) -> Unit, rotulo: (Alimento) -> Unit) = viewModelScope.launch {
+        if (!a.api.logado) { avisar("Entre com a conta do hub (Mais → Conta) para usar a IA."); return@launch }
+        pensando.value = true
+        try {
+            val corpo = JSONObject().put("modo", modo).put("texto", texto ?: JSONObject.NULL)
+            foto?.let { corpo.put("imagem", repo.dataUrl(it)) }
+            val r = a.api.chamar("POST", "/api/dieta/ia/reconhecer", corpo) as JSONObject
+            r.optJSONObject("rotulo")?.let { j ->
+                rotulo(Alimento(java.util.UUID.randomUUID().toString(), j.getString("nome"), j.getDouble("kcal"), j.getDouble("proteina"),
+                    j.getDouble("carbo"), j.getDouble("gordura"), j.getDouble("fibra"), j.getDouble("sodio"), j.getDouble("porcaoG"),
+                    j.optStringOrNull("porcaoNome")))
+                return@launch
+            }
+            val lista = r.getJSONArray("itens").objetos().map { j ->
+                val e = j.getJSONObject("estimado")
+                ItemIa(j.getString("nome"), j.getDouble("gramas"), j.optJSONObject("alimento")?.let(Json::alimento),
+                    Alimento(java.util.UUID.randomUUID().toString(), e.getString("nome"), e.getDouble("kcal"), e.getDouble("proteina"),
+                        e.getDouble("carbo"), e.getDouble("gordura"), e.getDouble("fibra")))
+            }
+            if (lista.isEmpty()) avisar("Nenhum alimento reconhecido.") else itens(lista)
+        } catch (e: Exception) {
+            avisar(e.message ?: "A IA não respondeu.")
+        } finally {
+            pensando.value = false
+        }
+    }
+
+    /** Registra os itens escolhidos; o que não casou com a base vira alimento próprio com a estimativa da IA. */
+    fun registrarItens(refeicao: String, itens: List<Pair<ItemIa, Double>>) = lancar {
+        val data = dia.value
+        for ((item, gramas) in itens) {
+            val alimento = item.alimento ?: item.estimativa.copy(nome = item.estimativa.nome + " (estimado pela IA)").also { repo.salvarAlimento(it) }
+            repo.registrar(data, refeicao, alimento, gramas)
+        }
+        avisar("${itens.size} item(ns) registrado(s).")
+    }
 
     fun sincronizar(silencioso: Boolean = false) = viewModelScope.launch {
         if (!a.api.logado) { if (!silencioso) avisar("Entre com a conta do hub em Mais → Conta para sincronizar."); return@launch }

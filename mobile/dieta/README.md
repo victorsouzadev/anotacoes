@@ -28,6 +28,13 @@ Plano e decisões: [docs/dieta/PLANO.md](../../docs/dieta/PLANO.md). Backend: `/
 - **Compartilhar.** Links públicos com escopos escolhidos (peso, macros, diário, fotos de refeição,
   fotos corporais, conquistas, CSV), validade e revogação; "modo nutricionista" pré-seleciona diário,
   macros, peso e CSV. Também gera um card PNG da semana para redes sociais e exporta o CSV.
+- **IA** (usa a chave e o modelo de Configurações de IA do hub; foto exige a da OpenRouter):
+  - **Assistente** (aba própria): chat que consulta perfil, metas, dias e plano e, depois de o usuário
+    confirmar, grava metas, monta ou altera o plano alimentar, registra refeições e cadastra alimentos
+    (`POST /api/dieta/chat`). Aceita foto. Quando algo muda, o app sincroniza na hora.
+  - **Reconhecer** (botão de IA em Adicionar): foto do prato ou descrição em texto viram itens com gramas,
+    casados com a TACO quando possível, para conferir e registrar; foto da tabela nutricional abre o cadastro
+    de alimento já preenchido com os valores por 100 g (`POST /api/dieta/ia/reconhecer`).
 - **Lembretes.** 13:30 e 20:30, só se o almoço/jantar ainda não foi registrado (desligável em Conta).
 
 ## Build

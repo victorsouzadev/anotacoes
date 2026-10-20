@@ -55,70 +55,45 @@ public class ChatModeloCliente(IHttpClientFactory httpFactory, IOptions<Anthropi
     }
 }
 
-// Chat sobre as finanças do usuário. O modelo não recebe os dados de antemão:
-// recebe a lista de consultas (FerramentasFinanceiras) e pede o que precisa;
-// o laço executa cada pedido e devolve o resultado até o modelo responder.
-public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente, FerramentasFinanceiras ferramentas,
-    FinancasClock clock)
+/// <summary>Executa a ferramenta que o modelo pediu e devolve o resultado (JSON) que volta para ele.</summary>
+public delegate Task<string> ExecutarFerramenta(string nome, JsonObject? args, CancellationToken ct);
+
+/// <summary>
+/// O laço de chat com ferramentas, igual para Anthropic e OpenRouter: o modelo recebe as definições, pede o que
+/// precisa, o laço executa e devolve o resultado até vir a resposta. Usado pelos chats de Finanças e da Dieta.
+/// </summary>
+public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cliente)
 {
     private const int MaxRodadas = 10;
     private const int MaxTokens = 4096;
 
-    public async Task<RespostaChat> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico,
-        CancellationToken ct)
+    public async Task<RespostaChat> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, string prompt,
+        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, CancellationToken ct, string? imagem = null)
     {
         var cred = await llm.ResolverCredenciaisAsync(userId, ct);
         if (cred.Provedor == "heuristico" || string.IsNullOrWhiteSpace(cred.Chave))
             throw new ChatIndisponivelException(
                 "O chat precisa de um provedor de IA. Configure uma chave da OpenRouter ou da Anthropic em Configurações de IA.");
+        if (imagem is not null && cred.Provedor != "openrouter")
+            throw new ChatIndisponivelException("Para mandar foto no chat, configure uma chave da OpenRouter (o provedor que lê imagens).");
 
         var consultas = new List<string>();
         return cred.Provedor == "anthropic"
-            ? await AnthropicAsync(userId, cred, historico, consultas, ct)
-            : await OpenAiAsync(userId, cred, historico, consultas, ct);
-    }
-
-    // Fixo, e não pela cultura: sem ICU (como no container) a cultura pt-BR não existe.
-    private static readonly string[] DiasDaSemana =
-        ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
-
-    public string PromptDoSistema()
-    {
-        var hoje = clock.Hoje();
-        return $"""
-            Você é o assistente financeiro do app de finanças pessoais do usuário. Responda em português do Brasil,
-            de forma direta, com valores em reais (R$ 1.234,56).
-
-            Hoje é {DiasDaSemana[(int)hoje.DayOfWeek]}, {hoje.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.
-
-            Você tem consultas aos dados reais do usuário. Use-as sempre que a pergunta depender dos números dele —
-            nunca invente valores, e diga quando os dados não bastam para responder. Faça quantas consultas precisar,
-            e prefira os totais das consultas a somar itens você mesmo.
-
-            Conceitos do app:
-            - Competência: o mês a que o lançamento pertence. Compras no cartão contam no mês da fatura.
-              Resumos mensais usam competência; buscas por data usam a data da compra.
-            - Lançamentos "fora dos totais" (pagamento de fatura, transferências entre contas) não entram em nenhuma soma.
-            - Consumo: despesas sem investimentos e sem pagamento de fatura; é o melhor número para "quanto gastei".
-            - Categorias: Alimentacao, Transporte, Moradia, Saude, Educacao, Lazer, Compras, ContasServicos, Salario,
-              Investimentos, Outros.
-
-            Seja conciso: comece pela resposta, depois os números que a sustentam. Use listas ou tabelas markdown curtas
-            quando ajudar. Quando fizer sentido, sugira uma ação prática.
-            """;
+            ? await AnthropicAsync(cred, historico, prompt, definicoes, executar, consultas, ct)
+            : await OpenAiAsync(cred, historico, prompt, definicoes, executar, consultas, imagem, ct);
     }
 
     // ------------------------------------------------------------ Anthropic
 
-    private async Task<RespostaChat> AnthropicAsync(string userId, CredenciaisLlm cred,
-        IReadOnlyList<MensagemChat> historico, List<string> consultas, CancellationToken ct)
+    private async Task<RespostaChat> AnthropicAsync(CredenciaisLlm cred, IReadOnlyList<MensagemChat> historico, string prompt,
+        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, List<string> consultas, CancellationToken ct)
     {
         var mensagens = new JsonArray(historico.Select(m => (JsonNode)new JsonObject
         {
             ["role"] = m.Papel == "assistente" ? "assistant" : "user",
             ["content"] = m.Texto,
         }).ToArray());
-        var tools = new JsonArray(FerramentasFinanceiras.Definicoes.Select(d => (JsonNode)new JsonObject
+        var tools = new JsonArray(definicoes.Select(d => (JsonNode)new JsonObject
         {
             ["name"] = d.Nome, ["description"] = d.Descricao, ["input_schema"] = d.Parametros.DeepClone(),
         }).ToArray());
@@ -127,7 +102,7 @@ public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente
         {
             var corpo = new JsonObject
             {
-                ["model"] = cred.Modelo, ["max_tokens"] = MaxTokens, ["system"] = PromptDoSistema(),
+                ["model"] = cred.Modelo, ["max_tokens"] = MaxTokens, ["system"] = prompt,
                 ["tools"] = tools.DeepClone(), ["messages"] = mensagens.DeepClone(),
             };
             var res = await cliente.EnviarAsync(cred, corpo, ct);
@@ -151,7 +126,7 @@ public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente
                 {
                     ["type"] = "tool_result",
                     ["tool_use_id"] = bloco["id"]!.GetValue<string>(),
-                    ["content"] = await ferramentas.ExecutarAsync(userId, nome, bloco["input"] as JsonObject, ct),
+                    ["content"] = await executar(nome, bloco["input"] as JsonObject, ct),
                 });
             }
             mensagens.Add(new JsonObject { ["role"] = "user", ["content"] = resultados });
@@ -161,13 +136,23 @@ public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente
 
     // -------------------------------------------- OpenRouter (formato OpenAI)
 
-    private async Task<RespostaChat> OpenAiAsync(string userId, CredenciaisLlm cred,
-        IReadOnlyList<MensagemChat> historico, List<string> consultas, CancellationToken ct)
+    private async Task<RespostaChat> OpenAiAsync(CredenciaisLlm cred, IReadOnlyList<MensagemChat> historico, string prompt,
+        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, List<string> consultas, string? imagem,
+        CancellationToken ct)
     {
-        var mensagens = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = PromptDoSistema() } };
-        foreach (var m in historico)
-            mensagens.Add(new JsonObject { ["role"] = m.Papel == "assistente" ? "assistant" : "user", ["content"] = m.Texto });
-        var tools = new JsonArray(FerramentasFinanceiras.Definicoes.Select(d => (JsonNode)new JsonObject
+        var mensagens = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = prompt } };
+        for (var i = 0; i < historico.Count; i++)
+        {
+            var m = historico[i];
+            // A foto (se houver) vai junto da última pergunta, no formato multimodal da OpenRouter.
+            JsonNode conteudo = imagem is not null && i == historico.Count - 1
+                ? new JsonArray(
+                    new JsonObject { ["type"] = "text", ["text"] = m.Texto },
+                    new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = imagem } })
+                : JsonValue.Create(m.Texto)!;
+            mensagens.Add(new JsonObject { ["role"] = m.Papel == "assistente" ? "assistant" : "user", ["content"] = conteudo });
+        }
+        var tools = new JsonArray(definicoes.Select(d => (JsonNode)new JsonObject
         {
             ["type"] = "function",
             ["function"] = new JsonObject
@@ -208,7 +193,7 @@ public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente
                     ["tool_call_id"] = chamada["id"]?.GetValue<string>(),
                     ["content"] = args is null
                         ? """{"erro":"argumentos em JSON inválido"}"""
-                        : await ferramentas.ExecutarAsync(userId, nome, args, ct),
+                        : await executar(nome, args, ct),
                 });
             }
         }
@@ -220,5 +205,45 @@ public class ChatFinanceiro(ILlmExtractorFactory llm, IChatModeloCliente cliente
         texto = texto.Trim();
         if (texto.Length == 0) texto = "Não consegui formular uma resposta. Tente reformular a pergunta.";
         return cortado ? texto + "\n\n_(resposta cortada por tamanho)_" : texto;
+    }
+}
+
+// Chat sobre as finanças do usuário. O modelo não recebe os dados de antemão:
+// recebe a lista de consultas (FerramentasFinanceiras) e pede o que precisa;
+// o laço (ChatComFerramentas) executa cada pedido e devolve o resultado até o modelo responder.
+public class ChatFinanceiro(ChatComFerramentas chat, FerramentasFinanceiras ferramentas, FinancasClock clock)
+{
+    public Task<RespostaChat> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, CancellationToken ct) =>
+        chat.ResponderAsync(userId, historico, PromptDoSistema(), FerramentasFinanceiras.Definicoes,
+            (nome, args, c) => ferramentas.ExecutarAsync(userId, nome, args, c), ct);
+
+    // Fixo, e não pela cultura: sem ICU (como no container) a cultura pt-BR não existe.
+    private static readonly string[] DiasDaSemana =
+        ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+
+    public string PromptDoSistema()
+    {
+        var hoje = clock.Hoje();
+        return $"""
+            Você é o assistente financeiro do app de finanças pessoais do usuário. Responda em português do Brasil,
+            de forma direta, com valores em reais (R$ 1.234,56).
+
+            Hoje é {DiasDaSemana[(int)hoje.DayOfWeek]}, {hoje.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.
+
+            Você tem consultas aos dados reais do usuário. Use-as sempre que a pergunta depender dos números dele —
+            nunca invente valores, e diga quando os dados não bastam para responder. Faça quantas consultas precisar,
+            e prefira os totais das consultas a somar itens você mesmo.
+
+            Conceitos do app:
+            - Competência: o mês a que o lançamento pertence. Compras no cartão contam no mês da fatura.
+              Resumos mensais usam competência; buscas por data usam a data da compra.
+            - Lançamentos "fora dos totais" (pagamento de fatura, transferências entre contas) não entram em nenhuma soma.
+            - Consumo: despesas sem investimentos e sem pagamento de fatura; é o melhor número para "quanto gastei".
+            - Categorias: Alimentacao, Transporte, Moradia, Saude, Educacao, Lazer, Compras, ContasServicos, Salario,
+              Investimentos, Outros.
+
+            Seja conciso: comece pela resposta, depois os números que a sustentam. Use listas ou tabelas markdown curtas
+            quando ajudar. Quando fizer sentido, sugira uma ação prática.
+            """;
     }
 }
