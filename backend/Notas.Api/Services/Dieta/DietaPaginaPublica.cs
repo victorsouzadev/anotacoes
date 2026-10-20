@@ -136,18 +136,18 @@ public static class DietaPaginaPublica
 
     private static string GraficoPeso(List<(DateOnly Data, double Kg)> pontos)
     {
-        const int w = 800, h = 220, pad = 32;
+        const int w = 800, h = 260, pad = 40;
         var min = pontos.Min(p => p.Kg) - 0.5;
         var max = pontos.Max(p => p.Kg) + 0.5;
         var d0 = pontos[0].Data.DayNumber;
         var span = Math.Max(1, pontos[^1].Data.DayNumber - d0);
-        string X(DateOnly d) => (pad + (w - 2 * pad) * (d.DayNumber - d0) / (double)span).ToString("0.0", CultureInfo.InvariantCulture);
+        string X(DateOnly d) => (80 + (w - 80 - pad) * (d.DayNumber - d0) / (double)span).ToString("0.0", CultureInfo.InvariantCulture);
         string Y(double kg) => (h - pad - (h - 2 * pad) * (kg - min) / (max - min)).ToString("0.0", CultureInfo.InvariantCulture);
         var linha = string.Join(' ', pontos.Select(p => $"{X(p.Data)},{Y(p.Kg)}"));
         var media = string.Join(' ', pontos.Select(p => $"{X(p.Data)},{Y(pontos.Where(q => q.Data <= p.Data && q.Data > p.Data.AddDays(-7)).Average(q => q.Kg))}"));
         return $"""
             <svg viewBox="0 0 {w} {h}" width="100%" role="img" aria-label="Gráfico de peso">
-            <text x="4" y="{Y(max - 0.5)}">{(max - 0.5).ToString("0.0", Br)}</text><text x="4" y="{Y(min + 0.5)}">{(min + 0.5).ToString("0.0", Br)}</text>
+            <text x="4" y="{Y(max - 0.5)}" dy="8">{(max - 0.5).ToString("0.0", Br)}</text><text x="4" y="{Y(min + 0.5)}">{(min + 0.5).ToString("0.0", Br)}</text>
             <polyline fill="none" stroke="var(--line)" stroke-width="2" points="{linha}"/>
             <polyline fill="none" stroke="var(--acc)" stroke-width="3" points="{media}"/>
             </svg><p class="sub" style="margin:4px 0 0">Linha verde: média móvel de 7 dias.</p>
@@ -174,14 +174,14 @@ public static class DietaPaginaPublica
             .tbl{overflow-x:auto}
             .badges{display:flex;flex-wrap:wrap;gap:8px}.badge{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px}
             .badge.off{opacity:.4}
-            .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto}
-            .heat i{width:11px;height:11px;border-radius:2px;background:var(--h0)}
+            .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,auto);grid-auto-columns:1fr;gap:2px}
+            .heat i{aspect-ratio:1;border-radius:2px;background:var(--h0)}
             .l1{background:var(--h1)!important}.l2{background:var(--h2)!important}.l3{background:var(--h3)!important}.l4{background:var(--h4)!important}
             .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
             .fotos figure{margin:0}.fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
             .fotos figcaption{font-size:12px;color:var(--mute)}
             .dia{margin:0 0 12px}.dia h3{font-size:14px;margin:0 0 4px}.dia ul{margin:0;padding-left:18px;font-size:14px}
-            svg text{fill:var(--mute);font-size:11px}
+            svg text{fill:var(--mute);font-size:24px}
             a{color:var(--acc2)}
             """;
 

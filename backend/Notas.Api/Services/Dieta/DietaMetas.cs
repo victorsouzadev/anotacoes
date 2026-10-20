@@ -30,7 +30,7 @@ public static class DietaMetas
         var proteina = kg * (perfil.Objetivo == "perder" ? 2.0 : 1.8);
         var gordura = kg * 0.8;
         var carbo = Math.Max(0, (kcal - proteina * 4 - gordura * 9) / 4);
-        return new MetasDieta(Arred(kcal, 10), (int)Math.Round(proteina), (int)Math.Round(carbo), (int)Math.Round(gordura), Arred(kg * 35, 50));
+        return new MetasDieta(Arred(kcal, 10), R(proteina), R(carbo), R(gordura), Arred(kg * 35, 50));
     }
 
     /// <summary>Metas em vigor: as que o usuário fixou; cada uma que estiver zerada vem da sugestão.</summary>
@@ -53,5 +53,7 @@ public static class DietaMetas
         return Math.Clamp(idade, 10, 100);
     }
 
-    private static int Arred(double v, int passo) => (int)(Math.Round(v / passo) * passo);
+    // Meio para cima, como o roundToInt do app Android: as duas contas precisam dar o mesmo número.
+    private static int R(double v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
+    private static int Arred(double v, int passo) => R(v / passo) * passo;
 }

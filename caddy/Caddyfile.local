@@ -82,6 +82,16 @@
         file_server
     }
 
+    # APK do app Dieta, gravado pelo workflow "Android (Dieta)" em /opt/notas-vps/downloads/android.
+    handle /downloads/android/* {
+        root * /srv-downloads
+        @json path *.json
+        header @json Cache-Control "no-cache"
+        @apk path *.apk
+        header @apk Content-Type "application/vnd.android.package-archive"
+        file_server
+    }
+
     handle {
         root * /srv
         try_files {path} /index.html

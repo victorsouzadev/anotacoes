@@ -77,7 +77,7 @@ public static class DietaEndpoints
 
         // Só os do usuário (com os excluídos), para o sync. A TACO o app já leva embutida.
         g.MapGet("/alimentos/meus", async (DateTime? desde, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            await db.DietaAlimentos.AsNoTracking().Where(a => a.UserId == user.UserId() && (desde == null || a.UpdatedAt > desde))
+            await db.DietaAlimentos.AsNoTracking().Where(a => a.UserId == user.UserId() && (desde == null || a.UpdatedAt > Utc(desde)))
                 .OrderBy(a => a.UpdatedAt).Select(a => ToDto(a)).ToListAsync(ct));
 
         g.MapPut("/alimentos/{id}", async (string id, DietaAlimentoUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -132,7 +132,7 @@ public static class DietaEndpoints
         // ---------- Registros (diário) ----------
         g.MapGet("/registros", async (DateTime? desde, DateOnly? data, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
             await db.DietaRegistros.AsNoTracking()
-                .Where(r => r.UserId == user.UserId() && (desde == null || r.UpdatedAt > desde) && (data == null || (r.Data == data && r.DeletedAt == null)))
+                .Where(r => r.UserId == user.UserId() && (desde == null || r.UpdatedAt > Utc(desde)) && (data == null || (r.Data == data && r.DeletedAt == null)))
                 .OrderBy(r => r.UpdatedAt).Select(r => ToDto(r)).ToListAsync(ct));
 
         g.MapPut("/registros/{id}", async (string id, DietaRegistroUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -187,7 +187,7 @@ public static class DietaEndpoints
 
         // ---------- Peso, água, plano ----------
         g.MapGet("/pesos", async (DateTime? desde, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            await db.DietaPesos.AsNoTracking().Where(p => p.UserId == user.UserId() && (desde == null || p.UpdatedAt > desde))
+            await db.DietaPesos.AsNoTracking().Where(p => p.UserId == user.UserId() && (desde == null || p.UpdatedAt > Utc(desde)))
                 .OrderBy(p => p.Data).Select(p => new DietaPesoDto(p.Id, p.Data, p.Kg, p.UpdatedAt, p.DeletedAt)).ToListAsync(ct));
 
         g.MapPut("/pesos/{id}", async (string id, DietaPesoUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -205,7 +205,7 @@ public static class DietaEndpoints
         });
 
         g.MapGet("/agua", async (DateTime? desde, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            await db.DietaAguas.AsNoTracking().Where(a => a.UserId == user.UserId() && (desde == null || a.UpdatedAt > desde))
+            await db.DietaAguas.AsNoTracking().Where(a => a.UserId == user.UserId() && (desde == null || a.UpdatedAt > Utc(desde)))
                 .OrderBy(a => a.UpdatedAt).Select(a => new DietaAguaDto(a.Id, a.Data, a.Ml, a.UpdatedAt, a.DeletedAt)).ToListAsync(ct));
 
         g.MapPut("/agua/{id}", async (string id, DietaAguaUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -223,7 +223,7 @@ public static class DietaEndpoints
         });
 
         g.MapGet("/plano", async (DateTime? desde, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
-            await db.DietaPlano.AsNoTracking().Where(p => p.UserId == user.UserId() && (desde == null || p.UpdatedAt > desde))
+            await db.DietaPlano.AsNoTracking().Where(p => p.UserId == user.UserId() && (desde == null || p.UpdatedAt > Utc(desde)))
                 .OrderBy(p => p.DiaSemana).Select(p => ToDto(p)).ToListAsync(ct));
 
         g.MapPut("/plano/{id}", async (string id, DietaPlanoUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
@@ -245,7 +245,7 @@ public static class DietaEndpoints
         // ---------- Fotos ----------
         g.MapGet("/fotos", async (DateTime? desde, string? tipo, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
             await db.DietaFotos.AsNoTracking()
-                .Where(f => f.UserId == user.UserId() && (desde == null || f.CreatedAt > desde || f.DeletedAt > desde) && (tipo == null || f.Tipo == tipo))
+                .Where(f => f.UserId == user.UserId() && (desde == null || f.CreatedAt > Utc(desde) || f.DeletedAt > Utc(desde)) && (tipo == null || f.Tipo == tipo))
                 .OrderByDescending(f => f.Data)
                 .Select(f => new DietaFotoDto(f.Id, f.Data, f.Tipo, f.Rotulo, f.ContentType, f.SizeBytes, f.CreatedAt, f.DeletedAt))
                 .ToListAsync(ct));
@@ -444,6 +444,9 @@ public static class DietaEndpoints
             if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) sb.Append(char.ToLowerInvariant(ch));
         return sb.ToString().Replace(',', ' ');
     }
+
+    // "?desde=...Z" chega como horário local do processo; o banco guarda UTC.
+    private static DateTime? Utc(DateTime? d) => d?.ToUniversalTime();
 
     private static bool Negativo(params double[] v) => v.Any(x => x < 0 || double.IsNaN(x) || x > 100000);
 

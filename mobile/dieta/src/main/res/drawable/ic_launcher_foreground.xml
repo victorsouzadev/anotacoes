@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Maçã estilizada em branco sobre o fundo verde do ícone adaptativo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M54,40c-4,-4 -12,-5 -17,0c-6,6 -5,18 0,26c4,7 9,11 13,9c2,-1 6,-1 8,0c4,2 9,-2 13,-9c5,-8 6,-20 0,-26c-5,-5 -13,-4 -17,0z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M55,38c0,-6 3,-10 9,-11c0,6 -3,10 -9,11z" />
+</vector>

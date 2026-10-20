@@ -1,0 +1,8 @@
+<resources>
+    <color name="ic_launcher_background">#2F9E44</color>
+    <style name="Theme.Dieta" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0E1116</item>
+        <item name="android:navigationBarColor">#0E1116</item>
+        <item name="android:windowBackground">#0E1116</item>
+    </style>
+</resources>

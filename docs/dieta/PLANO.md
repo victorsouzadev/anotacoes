@@ -1,6 +1,13 @@
 # Plano — ferramenta "Dieta"
 
-> Status: **planejamento**. Nova ferramenta do hub para acompanhar dieta e alimentação.
+> Status: **implementado** (etapas 1 a 7). Backend em `backend/Notas.Api` (`/api/dieta`, `/api/mcp/dieta`),
+> app em [`mobile/dieta`](../../mobile/dieta/README.md). Falta a etapa 8 (tela web).
+>
+> Diferenças em relação ao desenho abaixo: as fotos ficam como BLOB no SQLite do hub (o hub usa SQLite, não
+> Postgres), XP e conquistas são **derivados** dos registros em vez de tabelas de eventos (apagar um registro
+> errado recalcula tudo), a página pública fica em `/api/dieta/publico/<token>/` (rota que o Caddy já manda
+> para a API) e o "fechamento do dia" é a rotina de sincronização do Cérebro chamando `dieta_resumo`
+> (08:00 e 20:00, configurável), que grava `_sistema/apps/Dieta (app).md` e anota no diário.
 
 ## 1. Decisões
 

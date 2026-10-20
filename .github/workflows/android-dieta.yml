@@ -1,0 +1,102 @@
+name: Android (Dieta)
+
+# Monta o APK de release do app Dieta (mobile/dieta) e grava na VPS, em
+# /downloads/android: https://cerebro.vsitefy.com.br/downloads/android/Dieta.apk.
+# A tag dieta-v1.2.3 também publica uma Release no GitHub.
+
+on:
+  push:
+    tags: ['dieta-v*']
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: 'Versão (ex.: 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Versão
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/dieta-v* ]]; then v="${GITHUB_REF#refs/tags/dieta-v}"; else v="${{ inputs.versao }}"; fi
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
+      # versionCode cresce a cada execução, para o Android aceitar a atualização por cima.
+      - run: |
+          ./gradlew :dieta:testDebugUnitTest :dieta:assembleRelease --no-daemon \
+            -Pandroid.injected.version.name=${{ steps.v.outputs.versao }} \
+            -Pandroid.injected.version.code=${{ github.run_number }}
+          mkdir -p ../android
+          cp dieta/build/outputs/apk/release/dieta-release.apk ../android/Dieta.apk
+          printf '{"versao":"%s","arquivo":"Dieta.apk","tamanho":%s,"publicadoEm":"%s"}\n' \
+            "${{ steps.v.outputs.versao }}" "$(stat -c %s ../android/Dieta.apk)" "$(date -u +%FT%TZ)" > ../android/versao.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dieta-${{ steps.v.outputs.versao }}
+          path: android/
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/dieta-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Dieta ${{ steps.v.outputs.versao }} (Android)
+          files: android/Dieta.apk
+
+  servidor:
+    needs: apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Dieta-${{ needs.apk.outputs.versao }}
+          path: android
+      - name: Prepara a pasta na VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: rm -rf /opt/notas-vps/downloads/novo-android && mkdir -p /opt/notas-vps/downloads/novo-android
+      - name: Envia o APK
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: android
+          target: /opt/notas-vps/downloads/novo-android
+      - name: Troca a versão publicada
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/notas-vps/downloads
+            rm -rf antigo-android
+            if [ -d android ]; then mv android antigo-android; fi
+            mv novo-android/android android
+            rm -rf novo-android antigo-android
+      - name: Confere o link
+        run: |
+          curl -sf https://cerebro.vsitefy.com.br/downloads/android/versao.json | grep -q '"versao":"${{ needs.apk.outputs.versao }}"' || {
+            echo "::error::O site não está servindo /downloads/android (o Caddy precisa da rota nova — faça um deploy da main)."
+            exit 1
+          }
