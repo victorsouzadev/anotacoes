@@ -76,6 +76,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
+    public DbSet<DietaPerfil> DietaPerfis => Set<DietaPerfil>();
+    public DbSet<DietaAlimento> DietaAlimentos => Set<DietaAlimento>();
+    public DbSet<DietaRegistro> DietaRegistros => Set<DietaRegistro>();
+    public DbSet<DietaPeso> DietaPesos => Set<DietaPeso>();
+    public DbSet<DietaAgua> DietaAguas => Set<DietaAgua>();
+    public DbSet<DietaPlanoItem> DietaPlano => Set<DietaPlanoItem>();
+    public DbSet<DietaFoto> DietaFotos => Set<DietaFoto>();
+    public DbSet<DietaCompartilhamento> DietaCompartilhamentos => Set<DietaCompartilhamento>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -142,6 +150,80 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(n => new { n.UserId, n.FolderId });
             e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(n => n.FolderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<DietaPerfil>(e =>
+        {
+            e.ToTable("dieta_perfis");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Sexo).HasMaxLength(1);
+            e.Property(x => x.Objetivo).HasMaxLength(10);
+            e.HasOne<User>().WithOne().HasForeignKey<DietaPerfil>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaAlimento>(e =>
+        {
+            e.ToTable("dieta_alimentos");
+            e.Property(x => x.Nome).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Fonte).HasMaxLength(10);
+            e.Property(x => x.CodigoBarras).HasMaxLength(32);
+            e.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            e.HasIndex(x => new { x.UserId, x.CodigoBarras });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaRegistro>(e =>
+        {
+            e.ToTable("dieta_registros");
+            e.Property(x => x.Nome).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Refeicao).HasMaxLength(10);
+            e.HasIndex(x => new { x.UserId, x.Data });
+            e.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaPeso>(e =>
+        {
+            e.ToTable("dieta_pesos");
+            e.HasIndex(x => new { x.UserId, x.Data });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaAgua>(e =>
+        {
+            e.ToTable("dieta_agua");
+            e.HasIndex(x => new { x.UserId, x.Data });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaPlanoItem>(e =>
+        {
+            e.ToTable("dieta_plano");
+            e.Property(x => x.Nome).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Refeicao).HasMaxLength(10);
+            e.HasIndex(x => x.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaFoto>(e =>
+        {
+            e.ToTable("dieta_fotos");
+            e.Property(x => x.Tipo).HasMaxLength(10);
+            e.Property(x => x.Rotulo).HasMaxLength(10);
+            e.Property(x => x.ContentType).HasMaxLength(50);
+            e.HasIndex(x => new { x.UserId, x.Data });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DietaCompartilhamento>(e =>
+        {
+            e.ToTable("dieta_compartilhamentos");
+            e.Property(x => x.Token).IsRequired().HasMaxLength(64);
+            e.Property(x => x.Titulo).HasMaxLength(100);
+            e.Property(x => x.Escopos).HasMaxLength(200);
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => x.UserId);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Site>(e =>

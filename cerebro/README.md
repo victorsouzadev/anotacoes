@@ -35,7 +35,7 @@ Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, capt
 
 ## Apps do hub: MCPs e rotina de sincronização
 
-O notas-api expõe um MCP **só de leitura** por app, que enxerga os dados da conta do hub com o e-mail
+O notas-api expõe um MCP por app, **só de leitura** (exceto os registros rápidos da Dieta), que enxerga os dados da conta do hub com o e-mail
 do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
 
 | MCP | Ferramentas |
@@ -43,6 +43,7 @@ do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
 | `/api/mcp/tarefas` | `tarefas_resumo`, `tarefas_listar` |
 | `/api/mcp/financas` | `financas_resumo`, `financas_resumo_mes`, `financas_buscar_transacoes`, `financas_evolucao`, `financas_saude`, `financas_metas`, `financas_recorrentes`, `financas_compromissos` (as mesmas consultas do chat financeiro) |
 | `/api/mcp/criativo` | `criativo_resumo`, `criativo_sites`, `criativo_projetos_imagem` |
+| `/api/mcp/dieta` | `dieta_resumo`, `dieta_dia`, `dieta_periodo`, `dieta_buscar_alimento` e os registros rápidos `dieta_registrar_refeicao`, `dieta_registrar_peso`, `dieta_registrar_agua` (os únicos que escrevem) |
 
 - **Token:** gerado em **Conectar → Apps do hub**. O Cérebro grava só o SHA-256 e o e-mail em
   `data/cerebro/hub/access/apps-token.json`, montado só leitura no `api` (`Mcp__TokenFile`). Sem o

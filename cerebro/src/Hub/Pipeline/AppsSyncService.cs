@@ -15,7 +15,7 @@ namespace Hub.Pipeline;
 public sealed record HubApp(string Id, string Name, string Tool, string Note, string Description);
 
 /// <summary>
-/// Rotina que busca dados dos apps do hub (Tarefas, Finanças, Criativo) pelos MCPs deles, em horários
+/// Rotina que busca dados dos apps do hub (Tarefas, Finanças, Criativo, Dieta) pelos MCPs deles, em horários
 /// configuráveis (padrão 08:00 e 20:00), e grava um resumo de cada um em _sistema/apps/. O MCP do
 /// notas-api age como o dono do Cérebro (token gerado na tela, aba Conectar).
 /// </summary>
@@ -26,6 +26,7 @@ public sealed class AppsSyncService : BackgroundService
         new("tarefas", "Tarefas", "tarefas_resumo", "Tarefas (app)", "Atrasadas, hoje, próximos 7 dias, concluídas e projetos."),
         new("financas", "Finanças", "financas_resumo", "Finanças (app)", "Mês atual e anterior, saúde financeira e metas."),
         new("criativo", "Publicar e Imagens", "criativo_resumo", "Publicar e Imagens (app)", "Sites publicados e projetos do Editor de Imagens."),
+        new("dieta", "Dieta", "dieta_resumo", "Dieta (app)", "Calorias, macros e água de hoje e ontem, peso, nível, sequências e desafio da semana."),
     ];
 
     private const string Key = "apps-sync";
