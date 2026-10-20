@@ -34,7 +34,7 @@ private data class Aba(val rota: String, val nome: String, val icone: ImageVecto
 
 private val ABAS = listOf(
     Aba("hoje", "Hoje", Icons.Filled.Restaurant),
-    Aba("chat", "Assistente", Icons.Filled.Forum),
+    Aba("chat", "IA", Icons.Filled.Forum),
     Aba("progresso", "Progresso", Icons.Filled.EmojiEvents),
     Aba("fotos", "Fotos", Icons.Filled.PhotoLibrary),
     Aba("mais", "Mais", Icons.Filled.Menu),
@@ -65,7 +65,7 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
                                 }
                             },
                             icon = { Icon(aba.icone, null) },
-                            label = { Text(aba.nome) },
+                            label = { Text(aba.nome, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                         )
                     }
                 }

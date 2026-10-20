@@ -81,7 +81,7 @@ fun ProgressoTela(vm: DietaViewModel) {
                     color = grafite.grafite, trackColor = grafite.linha)
                 Sub("Faltam ${p.xpParaProximo - p.xpNoNivel} XP para o nível ${p.nivel + 1}")
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Numero("${p.sequencia}", "dias seguidos")
                     Numero("${p.sequenciaMeta}", "na meta")
                     Numero("${p.melhorSequencia}", "melhor sequência")

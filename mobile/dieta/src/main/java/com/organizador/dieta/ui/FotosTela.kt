@@ -72,10 +72,10 @@ fun FotosTela(vm: DietaViewModel) {
                 Sub("Fotos privadas: só aparecem num link se você liberar \"fotos de progresso\" ao compartilhar.")
                 Spacer(Modifier.height(8.dp))
                 Escolha(POSES, pose) { pose = it }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Button(onClick = { pedirFoto(true) }) { Text("Tirar foto") }
                     BotaoSecundario(onClick = { pedirFoto(false) }) { Text("Da galeria") }
-                    if (comparar.size == 2) Button(onClick = { comparando = true }) { Text("Comparar") }
+                    if (comparar.size == 2) BotaoSecundario(onClick = { comparando = true }) { Text("Comparar") }
                 }
                 Sub(if (comparar.isEmpty()) "Toque e segure em duas fotos para comparar." else "${comparar.size}/2 selecionadas")
             }
