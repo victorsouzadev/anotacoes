@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -157,6 +158,9 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
             Card(Modifier.fillMaxWidth().padding(12.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Olá, ${e.membros.find { it.id == e.euId }?.nome}", style = MaterialTheme.typography.titleLarge)
+                    e.regrasDoDia(e.hoje).takeIf { it.isNotEmpty() }?.let { r ->
+                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, color = Verde)
+                    }
                     if (eu != null) {
                         Text("${eu.feitos} de ${eu.previstos} pontos nesta semana")
                         LinearProgressIndicator(progress = { if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat() }, Modifier.fillMaxWidth().padding(top = 8.dp))
@@ -189,7 +193,10 @@ private fun Semana(vm: CasaViewModel, e: Estado) {
             }
         }
         lista.toSortedMap().forEach { (dia, itens) ->
-            item { Titulo(nomeDia(dia) + if (dia == e.hoje) " · hoje" else "") }
+            item {
+                val regras = e.regrasDoDia(dia).joinToString(" ") { rotuloRegra(it) }
+                Titulo(nomeDia(dia) + (if (dia == e.hoje) " · hoje" else "") + (if (regras.isNotEmpty()) "   $regras" else ""))
+            }
             items(itens, { it.id }) { LinhaAtribuicao(vm, e, it) }
         }
     }
@@ -208,7 +215,11 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
                 ListItem(
                     modifier = Modifier.clickable { editando = t },
                     headlineContent = { Text(t.nome) },
-                    supportingContent = { Text("${t.pontos} pt · ${if (t.vezes == 7) "todo dia" else "${t.vezes}x/semana"}" + (fixo?.let { " · sempre $it" } ?: "")) },
+                    supportingContent = {
+                        val regra = e.condicoes.find { it.id == t.condicaoId }
+                        Text("${t.pontos} pt · ${if (t.vezes == 7) "todo dia" else "${t.vezes}x/semana"}" + (fixo?.let { " · sempre $it" } ?: "") +
+                            (regra?.let { " · só com ${rotuloRegra(it)}" } ?: ""))
+                    },
                     trailingContent = {
                         Row {
                             IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }) { Icon(Icons.Filled.ThumbUp, "Gosto", tint = if (nivel == 1) Verde else Color.LightGray) }
@@ -229,6 +240,7 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
     var pontos by remember { mutableFloatStateOf((t?.pontos ?: 2).toFloat()) }
     var vezes by remember { mutableFloatStateOf((t?.vezes ?: 1).toFloat()) }
     var fixo by remember { mutableStateOf(t?.fixoId) }
+    var regra by remember { mutableStateOf(t?.condicaoId) }
     AlertDialog(
         onDismissRequest = fechar,
         title = { Text(if (t == null) "Nova tarefa" else "Editar tarefa") },
@@ -244,9 +256,16 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
                     FilterChip(fixo == null, { fixo = null }, { Text("Dividir") })
                     e.membros.take(3).forEach { m -> FilterChip(fixo == m.id, { fixo = m.id }, { Text(m.nome) }) }
                 }
+                if (e.condicoes.isNotEmpty()) {
+                    Text("Só nos dias de", Modifier.padding(top = 8.dp))
+                    Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(regra == null, { regra = null }, { Text("Qualquer dia") })
+                        e.condicoes.forEach { c -> FilterChip(regra == c.id, { regra = c.id }, { Text(rotuloRegra(c)) }) }
+                    }
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { vm.salvarTarefa(t?.id, nome, pontos.toInt(), vezes.toInt(), fixo); fechar() }, enabled = nome.isNotBlank()) { Text("Salvar") } },
+        confirmButton = { TextButton(onClick = { vm.salvarTarefa(t?.id, nome, pontos.toInt(), vezes.toInt(), fixo, regra); fechar() }, enabled = nome.isNotBlank()) { Text("Salvar") } },
         dismissButton = {
             Row {
                 if (t != null) TextButton(onClick = { vm.removerTarefa(t.id); fechar() }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
@@ -260,6 +279,8 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
 private fun CasaTela(vm: CasaViewModel, e: Estado) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var editando by remember { mutableStateOf<Membro?>(null) }
+    var regraEditando by remember { mutableStateOf<Condicao?>(null) }
+    var novaRegra by remember { mutableStateOf(false) }
     LazyColumn {
         item {
             Card(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -283,6 +304,9 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                 supportingContent = {
                     Column {
                         Text("${p.feitos}/${p.previstos} pt · peso ${m?.peso} · saldo ${if (p.saldo > 0) "+" else ""}${p.saldo}" + (m?.ausenteAte?.let { " · ausente até $it" } ?: ""))
+                        m?.disponibilidade?.withIndex()?.filter { it.value < 0.99 }?.takeIf { it.isNotEmpty() }?.let { l ->
+                            Text("Menos tarefa: " + l.joinToString(", ") { DIAS_CURTOS[it.index] + if (it.value <= 0) " (nada)" else "" }, style = MaterialTheme.typography.bodySmall)
+                        }
                         LinearProgressIndicator(progress = { if (p.previstos == 0) 0f else p.feitos / p.previstos.toFloat() }, Modifier.fillMaxWidth().padding(top = 4.dp))
                     }
                 },
@@ -303,6 +327,24 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                 OutlinedButton(onClick = vm::redistribuir, Modifier.padding(top = 8.dp)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Redistribuir a semana") }
             }
         }
+        item { Titulo("Regras da casa") }
+        item {
+            Text("Tarefas ligadas a uma regra só caem nos dias em que ela vale (ex.: lavar louça só quando tem água).",
+                Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall)
+        }
+        items(e.condicoes, { "regra${it.id}" }) { c ->
+            val n = e.tarefas.count { it.condicaoId == c.id }
+            ListItem(
+                modifier = Modifier.clickable { regraEditando = c },
+                headlineContent = { Text(rotuloRegra(c)) },
+                supportingContent = { Text(descreverRegra(c, e.hoje) + " · $n tarefa${if (n == 1) "" else "s"}") },
+            )
+        }
+        item {
+            TextButton(onClick = { novaRegra = true }, Modifier.padding(horizontal = 8.dp)) {
+                Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Nova regra")
+            }
+        }
         item { Titulo("Lembretes") }
         item { ConfigLembretes() }
         item {
@@ -313,12 +355,81 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
         }
     }
     editando?.let { m -> EditorMembro(vm, e, m) { editando = null } }
+    if (novaRegra || regraEditando != null) EditorRegra(vm, e, regraEditando) { novaRegra = false; regraEditando = null }
+}
+
+private val DIAS_CURTOS = listOf("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+
+private fun rotuloRegra(c: Condicao): String {
+    val n = c.nome.lowercase()
+    val icone = when {
+        "água" in n || "agua" in n -> "💧"
+        "luz" in n || "energia" in n -> "⚡"
+        "gás" in n || "gas" in n -> "🔥"
+        "lixo" in n || "coleta" in n -> "🗑️"
+        "feira" in n -> "🥬"
+        else -> "📌"
+    }
+    return "$icone ${c.nome}"
+}
+
+private fun descreverRegra(c: Condicao, hoje: String): String =
+    if (c.tipo == "alternado") {
+        val vale = c.referencia != null && java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(c.referencia), LocalDate.parse(hoje)) % 2 == 0L
+        "Dia sim, dia não · hoje ${if (vale) "tem" else "não tem"}"
+    } else c.dias.joinToString(", ") { DIAS_CURTOS[it] }.ifEmpty { "nenhum dia" }
+
+@Composable
+private fun EditorRegra(vm: CasaViewModel, e: Estado, c: Condicao?, fechar: () -> Unit) {
+    var nome by remember { mutableStateOf(c?.nome ?: "Água") }
+    var tipo by remember { mutableStateOf(c?.tipo ?: "alternado") }
+    val valeHojeInicial = c?.let { it.tipo == "alternado" && descreverRegra(it, e.hoje).endsWith("hoje tem") } ?: true
+    var valeHoje by remember { mutableStateOf(valeHojeInicial) }
+    var dias by remember { mutableStateOf(c?.dias?.toSet() ?: emptySet()) }
+    AlertDialog(
+        onDismissRequest = fechar,
+        title = { Text(if (c == null) "Nova regra" else "Editar regra") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(nome, { nome = it }, label = { Text("Nome (ex.: Água)") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(tipo == "alternado", { tipo = "alternado" }, { Text("Dia sim, dia não") })
+                    FilterChip(tipo == "semana", { tipo = "semana" }, { Text("Dias da semana") })
+                }
+                if (tipo == "alternado") {
+                    Text("Hoje vale?")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(valeHoje, { valeHoje = true }, { Text("Sim, hoje") })
+                        FilterChip(!valeHoje, { valeHoje = false }, { Text("Não, amanhã") })
+                    }
+                } else {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DIAS_CURTOS.forEachIndexed { i, d -> FilterChip(i in dias, { dias = if (i in dias) dias - i else dias + i }, { Text(d) }) }
+                    }
+                }
+                Text("Depois, ligue as tarefas a esta regra na aba Tarefas.", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val ref = if (tipo == "alternado") LocalDate.parse(e.hoje).plusDays(if (valeHoje) 0 else 1).toString() else null
+                vm.salvarRegra(c?.id, nome.trim(), tipo, ref, dias.sorted()); fechar()
+            }, enabled = nome.isNotBlank() && (tipo == "alternado" || dias.isNotEmpty())) { Text("Salvar") }
+        },
+        dismissButton = {
+            Row {
+                if (c != null) TextButton(onClick = { vm.removerRegra(c.id); fechar() }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = fechar) { Text("Cancelar") }
+            }
+        },
+    )
 }
 
 @Composable
 private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> Unit) {
     var peso by remember { mutableFloatStateOf(m.peso.toFloat()) }
     var dias by remember { mutableStateOf("") }
+    var disp by remember { mutableStateOf(m.disponibilidade) }
     AlertDialog(
         onDismissRequest = fechar,
         title = { Text(m.nome) },
@@ -329,12 +440,27 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
                 OutlinedTextField(dias, { dias = it.filter(Char::isDigit) }, label = { Text("Ausente pelos próximos N dias") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                 if (m.ausenteAte != null) Text("Hoje ausente até ${m.ausenteAte} (deixe 0 para limpar)", style = MaterialTheme.typography.bodySmall)
+                Text("Disponibilidade na semana (toque para mudar)", Modifier.padding(top = 12.dp))
+                Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    DIAS_CURTOS.forEachIndexed { i, d ->
+                        val f = disp[i]
+                        // Livre → Pouco → Nada → Livre
+                        val proximo = when { f >= 0.99 -> 0.4; f > 0 -> 0.0; else -> 1.0 }
+                        FilterChip(f < 0.99, { disp = disp.toMutableList().also { it[i] = proximo } }, {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(d); Text(if (f >= 0.99) "livre" else if (f > 0) "pouco" else "nada", style = MaterialTheme.typography.labelSmall)
+                            }
+                        })
+                    }
+                }
+                Text("Em dias de \"pouco\" a pessoa recebe só tarefas leves; o que sobra vai para outros dias ou pessoas, mantendo a semana equilibrada.",
+                    style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val ausente = when { dias.isBlank() -> m.ausenteAte; dias == "0" -> null; else -> LocalDate.now().plusDays(dias.toLong()).toString() }
-                vm.salvarMembro(m, Math.round(peso * 10) / 10.0, ausente); fechar()
+                vm.salvarMembro(m, Math.round(peso * 10) / 10.0, ausente, disp); fechar()
             }) { Text("Salvar") }
         },
         dismissButton = {

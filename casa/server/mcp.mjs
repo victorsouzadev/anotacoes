@@ -10,11 +10,18 @@ Comece por casa_resumo. As tarefas da semana têm um id de atribuição (use em 
 passar_tarefa); as tarefas cadastradas têm outro id (use em editar_tarefa e remover_tarefa).
 Pessoas podem ser indicadas pelo nome. Para guardar algo no Segundo Cérebro (ex.: o resumo da
 semana no diário), use resumo_semana e depois as ferramentas do servidor Segundo Cérebro.
-Peça confirmação ao usuário antes de remover tarefas ou redistribuir a semana.`;
+Regras da casa: uma tarefa pode depender de uma regra (ex.: "Água", dia sim, dia não) e só cai nos
+dias em que ela vale; cada pessoa tem disponibilidade por dia da semana (livre, pouco, nada), e a
+divisão põe menos tarefa nos dias com pouca disponibilidade, compensando nos outros.
+Peça confirmação ao usuário antes de remover tarefas ou regras ou redistribuir a semana.`;
 
 const txt = { type: 'string' }, int = { type: 'integer' }, bool = { type: 'boolean' };
 const obj = (props = {}, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
 const pessoa = { type: 'string', description: 'Nome da pessoa (como aparece na casa).' };
+const regra = { type: 'string', description: 'Nome da regra (ex.: "Água"); "" = sem regra, vale todo dia.' };
+const SEMANA = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+const NIVEL = { livre: 1, pouco: 0.4, nada: 0 };
+const nivelDe = f => f >= 0.99 ? 'livre' : f <= 0 ? 'nada' : 'pouco';
 
 export function criarMcp({ db, rotas, registra, lerLogs }) {
   const membroDe = id => db.prepare('SELECT * FROM membros WHERE id=?').get(id);
@@ -31,9 +38,20 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
     if (!p) throw new ErroFerramenta(`Pessoa "${nome}" não encontrada. Na casa: ${todos.map(x => x.nome).join(', ')}`);
     return p;
   };
+  const acharRegra = (m, nome) => {
+    const todas = db.prepare('SELECT * FROM condicoes WHERE casa_id=?').all(m.casa_id);
+    const n = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+    const r = todas.find(x => n(x.nome) === n(nome));
+    if (!r) throw new ErroFerramenta(`Regra "${nome}" não encontrada. Regras: ${todas.map(x => x.nome).join(', ') || 'nenhuma'}`);
+    return r;
+  };
+  const descreveRegra = c => c.tipo === 'alternado'
+    ? `${c.nome}: dia sim, dia não (vale em ${c.referencia} e a cada 2 dias)`
+    : `${c.nome}: ${c.dias.map(d => SEMANA[d]).join(', ') || 'nenhum dia'}`;
+  const regrasDoDia = (e, d) => (e.diasCondicoes.find(x => x.dia === d)?.condicoes ?? []).map(id => e.condicoes.find(c => c.id === id)?.nome);
   const nomeDe = (e, id) => e.membros.find(x => x.id === id)?.nome ?? 'ninguém';
   const dia = d => new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · ✅ feita' : ''}`;
+  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · ✅ feita' : ''}`;
   // "Lavar a louça ×3, Tirar o lixo"
   const agrupa = l => Object.entries(l.reduce((c, a) => ({ ...c, [a.tarefa]: (c[a.tarefa] ?? 0) + 1 }), {}))
     .map(([t, n]) => n > 1 ? `${t} ×${n}` : t).join(', ');
@@ -51,6 +69,9 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
           `Casa "${e.casa.nome}" · código ${e.casa.codigo} · modo ${e.casa.modo === 'pontos' ? 'equilibrar pontos' : 'rodízio'}`,
           `Você é ${e.eu.nome}. Semana de ${e.semana}, hoje ${e.hoje}.`,
           `Pessoas: ${e.membros.map(x => `${x.nome} (peso ${x.peso}${x.ausente_ate ? `, ausente até ${x.ausente_ate}` : ''})`).join(', ')}`,
+          `Disponibilidade: ${e.membros.map(x => `${x.nome} — ${x.disponibilidade.map((f, i) => f < 1 ? `${SEMANA[i]} ${nivelDe(f)}` : null).filter(Boolean).join(', ') || 'livre todos os dias'}`).join('; ')}`,
+          `Regras: ${e.condicoes.map(descreveRegra).join('; ') || 'nenhuma'}`,
+          `Hoje valem: ${regrasDoDia(e, e.hoje).join(', ') || 'nenhuma regra'}`,
           `\nPlacar:\n${placar(e)}`,
           `\nHoje:\n${hoje.map(a => linhaAtrib(e, a)).join('\n') || 'nada'}`,
           `\nAtrasadas:\n${atrasadas.map(a => linhaAtrib(e, a)).join('\n') || 'nenhuma'}`,
@@ -72,7 +93,8 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
       esquema: obj(), leitura: true,
       exec: (m) => {
         const e = estado(m);
-        return e.tarefas.map(t => `[${t.id}] ${t.nome} · ${t.pontos} pt · ${t.vezes === 7 ? 'todo dia' : `${t.vezes}x/semana`}${t.fixo_id ? ` · sempre ${nomeDe(e, t.fixo_id)}` : ''}`).join('\n');
+        return e.tarefas.map(t => `[${t.id}] ${t.nome} · ${t.pontos} pt · ${t.vezes === 7 ? 'todo dia' : `${t.vezes}x/semana`}` +
+          `${t.fixo_id ? ` · sempre ${nomeDe(e, t.fixo_id)}` : ''}${t.condicao_id ? ` · só quando: ${e.condicoes.find(c => c.id === t.condicao_id)?.nome}` : ''}`).join('\n');
       },
     },
     concluir_tarefa: {
@@ -96,23 +118,25 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
       descricao: 'Cadastra uma tarefa e redistribui a semana.',
       esquema: obj({
         nome: txt, pontos: { type: 'integer', minimum: 1, maximum: 10, description: 'Esforço' },
-        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa,
+        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra,
       }, ['nome']),
       exec: (m, a) => {
         const fixo = a.responsavel_fixo ? acharPessoa(m, a.responsavel_fixo).id : null;
-        rotas['POST /api/tarefas'](m, { nome: a.nome, pontos: a.pontos ?? 2, vezes: a.vezes_por_semana ?? 1, fixoId: fixo });
+        const cond = a.regra ? acharRegra(m, a.regra).id : null;
+        rotas['POST /api/tarefas'](m, { nome: a.nome, pontos: a.pontos ?? 2, vezes: a.vezes_por_semana ?? 1, fixoId: fixo, condicaoId: cond });
         return `Tarefa "${a.nome}" criada e semana redistribuída.`;
       },
     },
     editar_tarefa: {
       descricao: 'Altera uma tarefa cadastrada. responsavel_fixo vazio ("") volta a dividir entre todos.',
       esquema: obj({ tarefa_id: int, nome: txt, pontos: { type: 'integer', minimum: 1, maximum: 10 },
-        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa }, ['tarefa_id']),
+        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra }, ['tarefa_id']),
       exec: (m, a) => {
         const t = db.prepare('SELECT * FROM tarefas WHERE id=? AND casa_id=? AND ativa=1').get(a.tarefa_id, m.casa_id);
         if (!t) throw new ErroFerramenta('Tarefa não encontrada');
         const fixo = a.responsavel_fixo === undefined ? t.fixo_id : a.responsavel_fixo ? acharPessoa(m, a.responsavel_fixo).id : null;
-        rotas['PUT /api/tarefas/:id'](m, { nome: a.nome, pontos: a.pontos, vezes: a.vezes_por_semana, fixoId: fixo }, a.tarefa_id);
+        const cond = a.regra === undefined ? undefined : a.regra ? acharRegra(m, a.regra).id : null;
+        rotas['PUT /api/tarefas/:id'](m, { nome: a.nome, pontos: a.pontos, vezes: a.vezes_por_semana, fixoId: fixo, condicaoId: cond }, a.tarefa_id);
         return `Tarefa ${a.tarefa_id} atualizada e semana redistribuída.`;
       },
     },
@@ -130,6 +154,39 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
         rotas['PUT /api/membros/:id'](m, { ausenteAte: ate }, p.id);
         return ate ? `${p.nome} ausente até ${ate}; semana redistribuída.` : `${p.nome} disponível de novo.`;
       },
+    },
+    definir_disponibilidade: {
+      descricao: 'Define quanto alguém consegue fazer em cada dia da semana: livre, pouco (recebe só tarefas leves e poucas) ou nada. Dias não informados ficam como estão.',
+      esquema: obj({ pessoa, dias: { type: 'object', description: 'Ex.: {"qua":"pouco","qui":"pouco","sex":"pouco"}',
+        propertyNames: { enum: SEMANA }, additionalProperties: { type: 'string', enum: Object.keys(NIVEL) } } }, ['pessoa', 'dias']),
+      exec: (m, a) => {
+        const p = acharPessoa(m, a.pessoa);
+        const e = estado(m);
+        const disp = [...e.membros.find(x => x.id === p.id).disponibilidade];
+        for (const [dia, nivel] of Object.entries(a.dias ?? {})) {
+          const i = SEMANA.indexOf(dia.toLowerCase().replace('sab', 'sáb'));
+          if (i < 0 || !(nivel in NIVEL)) throw new ErroFerramenta(`Use dias ${SEMANA.join('/')} e níveis livre/pouco/nada`);
+          disp[i] = NIVEL[nivel];
+        }
+        rotas['PUT /api/membros/:id'](m, { disponibilidade: disp }, p.id);
+        return `${p.nome}: ${disp.map((f, i) => `${SEMANA[i]} ${nivelDe(f)}`).join(', ')}; semana redistribuída.`;
+      },
+    },
+    criar_regra: {
+      descricao: 'Cria uma regra da casa. tipo "alternado" = dia sim, dia não (informe se vale hoje); tipo "semana" = só em certos dias.',
+      esquema: obj({ nome: txt, tipo: { type: 'string', enum: ['alternado', 'semana'] }, vale_hoje: bool,
+        dias: { type: 'array', items: { type: 'string', enum: SEMANA } } }, ['nome', 'tipo']),
+      exec: (m, a) => {
+        const e = estado(m);
+        const ref = a.vale_hoje === false ? new Date(new Date(e.hoje + 'T00:00:00Z').getTime() + 864e5).toISOString().slice(0, 10) : e.hoje;
+        rotas['POST /api/condicoes'](m, { nome: a.nome, tipo: a.tipo, referencia: ref, dias: (a.dias ?? []).map(d => SEMANA.indexOf(d)) });
+        return `Regra "${a.nome}" criada. Ligue tarefas a ela com editar_tarefa (campo regra).`;
+      },
+    },
+    remover_regra: {
+      descricao: 'Remove uma regra; as tarefas ligadas a ela passam a valer todo dia.',
+      esquema: obj({ nome: txt }, ['nome']), destrutiva: true,
+      exec: (m, a) => { const r = acharRegra(m, a.nome); rotas['DELETE /api/condicoes/:id'](m, {}, r.id); return `Regra "${r.nome}" removida.`; },
     },
     definir_peso: {
       descricao: 'Muda o peso de alguém na divisão (1 = normal, 0.5 = metade da carga, até 3).',

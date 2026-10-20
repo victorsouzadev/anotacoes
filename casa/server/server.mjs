@@ -25,7 +25,16 @@ CREATE TABLE IF NOT EXISTS saldos(membro_id INTEGER REFERENCES membros(id) ON DE
 CREATE TABLE IF NOT EXISTS logs(id INTEGER PRIMARY KEY, em TEXT, nivel TEXT, origem TEXT, evento TEXT, mensagem TEXT,
   casa_id INTEGER, membro_id INTEGER, versao TEXT, detalhes TEXT);
 CREATE INDEX IF NOT EXISTS logs_em ON logs(em);
+-- Regras da casa: condições que valem só em certos dias (ex.: "Água", dia sim, dia não).
+-- tipo 'alternado': vale na data de referência e a cada 2 dias; tipo 'semana': vale nos dias da lista (0 = segunda).
+CREATE TABLE IF NOT EXISTS condicoes(id INTEGER PRIMARY KEY, casa_id INTEGER REFERENCES casas(id) ON DELETE CASCADE,
+  nome TEXT, tipo TEXT, referencia TEXT, dias TEXT);
 `);
+// Colunas novas em bancos já existentes.
+const colunas = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+if (!colunas('tarefas').includes('condicao_id')) db.exec('ALTER TABLE tarefas ADD COLUMN condicao_id INTEGER');
+// Disponibilidade de cada dia da semana (segunda a domingo): 1 = livre, 0.4 = pouco, 0 = nada.
+if (!colunas('membros').includes('disponibilidade')) db.exec("ALTER TABLE membros ADD COLUMN disponibilidade TEXT DEFAULT '[1,1,1,1,1,1,1]'");
 
 // ---------- logs ----------
 // Toda requisição vira uma linha JSON no stdout (docker logs casa-api, com rotação no compose).
@@ -50,15 +59,25 @@ const BIBLIOTECA = [
 ];
 
 // ---------- datas ----------
+// O contêiner roda com TZ=America/Sao_Paulo: "hoje" e a segunda-feira seguem o horário local.
 const iso = d => d.toISOString().slice(0, 10);
+const hoje = () => { const d = new Date(); return iso(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))); };
+const diaSemana = dia => (new Date(dia + 'T00:00:00Z').getUTCDay() + 6) % 7; // 0 = segunda
+const diasEntre = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 864e5);
 function segunda(d = new Date()) {
   const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7));
   return x;
 }
 const addDias = (d, n) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; };
-// Espalha n ocorrências pelos 7 dias da semana (ex.: 2 → seg e qui).
-const diasDe = n => Array.from({ length: Math.min(7, Math.max(1, n)) }, (_, i) => Math.floor(i * 7 / Math.min(7, n)));
+
+// ---------- regras ----------
+const lista = (v, padrao) => { try { const x = JSON.parse(v); return Array.isArray(x) ? x : padrao; } catch { return padrao; } };
+const disponibilidade = m => { const d = lista(m.disponibilidade, []); return Array.from({ length: 7 }, (_, i) => Number(d[i] ?? 1)); };
+function condicaoVale(c, dia) {
+  if (c.tipo === 'alternado') return ((diasEntre(c.referencia, dia) % 2) + 2) % 2 === 0;
+  return lista(c.dias, []).includes(diaSemana(dia));
+}
 
 // ---------- distribuição ----------
 function saldoAcumulado(membroId) {
@@ -88,16 +107,38 @@ function distribuir(casaId, inicio = segunda()) {
 
   const membros = db.prepare('SELECT * FROM membros WHERE casa_id=? ORDER BY id').all(casaId);
   const tarefas = db.prepare('SELECT * FROM tarefas WHERE casa_id=? AND ativa=1').all(casaId);
+  const condicoes = db.prepare('SELECT * FROM condicoes WHERE casa_id=?').all(casaId);
   // Mantém o que já foi feito; refaz o resto.
   db.prepare('DELETE FROM atribuicoes WHERE casa_id=? AND semana=? AND feito_em IS NULL').run(casaId, semana);
   const feitas = db.prepare('SELECT * FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, semana);
 
+  const dias = Array.from({ length: 7 }, (_, i) => iso(addDias(inicio, i)));
+  const fator = (m, dia) => (m.ausente_ate && m.ausente_ate >= dia) ? 0 : disponibilidade(m)[diaSemana(dia)];
+  // Quanto a casa consegue fazer em cada dia (soma da disponibilidade de todos) e quanto já foi marcado.
+  const capacidade = Object.fromEntries(dias.map(d => [d, membros.reduce((s, m) => s + fator(m, d), 0)]));
+  const cargaDoDia = Object.fromEntries(dias.map(d => [d, feitas.filter(f => f.dia === d).reduce((s, f) => s + f.pontos, 0)]));
+
+  // Escolhe os dias de cada tarefa: só os dias em que a condição dela vale (ex.: tem água),
+  // espalhados pela semana e puxados para os dias com mais gente livre e menos tarefa marcada.
   const ocorrencias = [];
-  for (const t of tarefas) diasDe(t.vezes).forEach((d, i) => {
-    const dia = iso(addDias(inicio, d));
+  for (const t of [...tarefas].sort((a, b) => b.pontos - a.pontos)) {
+    const cond = condicoes.find(c => c.id === t.condicao_id);
+    const candidatos = cond ? dias.filter(d => condicaoVale(cond, d)) : dias;
+    if (!candidatos.length) continue;
+    const n = Math.min(t.vezes, candidatos.length);
+    let melhor = null;
+    for (let deslocamento = 0; deslocamento < candidatos.length; deslocamento++) {
+      const escolha = Array.from({ length: n }, (_, i) => candidatos[(deslocamento + Math.floor(i * candidatos.length / n)) % candidatos.length]);
+      const nota = escolha.reduce((s, d) => s + capacidade[d] - 0.15 * cargaDoDia[d], 0);
+      if (!melhor || nota > melhor.nota + 1e-9) melhor = { nota, escolha };
+    }
     const jaFeitas = feitas.filter(f => f.tarefa_id === t.id).length;
-    if (i >= jaFeitas) ocorrencias.push({ t, dia });
-  });
+    melhor.escolha.sort().forEach((dia, i) => {
+      if (i < jaFeitas) return;
+      ocorrencias.push({ t, dia });
+      cargaDoDia[dia] += t.pontos;
+    });
+  }
 
   const carga = Object.fromEntries(membros.map(m => [m.id, feitas.filter(f => f.membro_id === m.id).reduce((s, f) => s + f.pontos, 0)]));
   const total = ocorrencias.reduce((s, o) => s + o.t.pontos, 0) + feitas.reduce((s, f) => s + f.pontos, 0);
@@ -109,11 +150,17 @@ function distribuir(casaId, inicio = segunda()) {
   const semanaPassada = db.prepare('SELECT tarefa_id, membro_id FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, anterior);
   const fezAntes = (m, t) => semanaPassada.some(a => a.membro_id === m && a.tarefa_id === t);
   const contagemRodizio = {};
+  // Carga de cada pessoa em cada dia, para não acumular tudo no mesmo dia.
+  const cargaPessoaDia = {};
+  for (const f of feitas) if (f.membro_id) cargaPessoaDia[f.membro_id + f.dia] = (cargaPessoaDia[f.membro_id + f.dia] ?? 0) + f.pontos;
 
   ocorrencias.sort((a, b) => b.t.pontos - a.t.pontos || a.dia.localeCompare(b.dia));
+  const plano = [];
   const ins = db.prepare('INSERT INTO atribuicoes(casa_id,tarefa_id,membro_id,semana,dia,pontos) VALUES(?,?,?,?,?,?)');
   for (const { t, dia } of ocorrencias) {
-    const disponiveis = membros.filter(m => !m.ausente_ate || m.ausente_ate < dia);
+    // Quem não pode no dia (ausente ou disponibilidade 0) fica de fora, a não ser que ninguém possa.
+    const livres = membros.filter(m => fator(m, dia) > 0);
+    const disponiveis = livres.length ? livres : membros.filter(m => !m.ausente_ate || m.ausente_ate < dia);
     let escolhido = null;
     if (t.fixo_id && membros.some(m => m.id === t.fixo_id)) escolhido = t.fixo_id;
     else if (!disponiveis.length) escolhido = null;
@@ -123,12 +170,39 @@ function distribuir(casaId, inicio = segunda()) {
       const k = contagemRodizio[t.id] = (contagemRodizio[t.id] ?? -1) + 1;
       escolhido = disponiveis[(t.id + n + k) % disponiveis.length].id;
     } else {
-      const custo = m => carga[m.id] / alvo[m.id] - pref(m.id, t.id) * 0.25 + (fezAntes(m.id, t.id) ? 0.1 : 0);
+      // Equilíbrio da semana + preferência + variedade + disponibilidade no dia (dia de trabalho
+      // pesa mais, ainda mais para tarefa pesada) + o que a pessoa já tem naquele dia.
+      const custo = m => {
+        const f = Math.max(fator(m, dia), 0.05);
+        return carga[m.id] / alvo[m.id] - pref(m.id, t.id) * 0.25 + (fezAntes(m.id, t.id) ? 0.1 : 0)
+          + (1 - f) * (0.6 + 0.08 * t.pontos) + 0.05 * (cargaPessoaDia[m.id + dia] ?? 0) / f;
+      };
       escolhido = disponiveis.reduce((a, b) => custo(b) < custo(a) ? b : a).id;
     }
-    if (escolhido) carga[escolhido] += t.pontos;
-    ins.run(casaId, t.id, escolhido, semana, dia, t.pontos);
+    if (escolhido) { carga[escolhido] += t.pontos; cargaPessoaDia[escolhido + dia] = (cargaPessoaDia[escolhido + dia] ?? 0) + t.pontos; }
+    plano.push({ t, dia, membro: escolhido });
   }
+
+  // Ajuste final (modo pontos): quem ficou acima da sua parte passa tarefas para quem ficou abaixo,
+  // só em dias em que quem recebe está tão livre quanto quem passa, sem tarefa fixa nem "evito".
+  // Assim o que sai dos dias de trabalho de alguém volta para essa pessoa nos dias livres.
+  if (casa.modo !== 'rodizio' && membros.length > 1) {
+    const meta = Object.fromEntries(membros.map(m => [m.id, alvo[m.id]]));
+    const hojeLocal = hoje();
+    for (let volta = 0; volta < 200; volta++) {
+      const ordem = [...membros].sort((a, b) => (carga[b.id] - meta[b.id]) - (carga[a.id] - meta[a.id]));
+      const [acima, abaixo] = [ordem[0], ordem[ordem.length - 1]];
+      const folga = Math.min(carga[acima.id] - meta[acima.id], meta[abaixo.id] - carga[abaixo.id]);
+      if (folga <= 0.5) break;
+      const movivel = plano.filter(o => o.membro === acima.id && !o.t.fixo_id && o.t.pontos <= 2 * folga &&
+        fator(abaixo, o.dia) > 0 && fator(abaixo, o.dia) >= fator(acima, o.dia) && pref(abaixo.id, o.t.id) >= 0)
+        // Prefere mexer em dias de hoje em diante (o que já passou vira "atrasada").
+        .sort((a, b) => (a.dia < hojeLocal) - (b.dia < hojeLocal) || Math.abs(folga - a.t.pontos) - Math.abs(folga - b.t.pontos))[0];
+      if (!movivel) break;
+      movivel.membro = abaixo.id; carga[acima.id] -= movivel.t.pontos; carga[abaixo.id] += movivel.t.pontos;
+    }
+  }
+  for (const o of plano) ins.run(casaId, o.t.id, o.membro, semana, o.dia, o.t.pontos);
 }
 
 // ---------- estado ----------
@@ -136,8 +210,16 @@ function estado(m) {
   const casa = db.prepare('SELECT id,nome,codigo,modo FROM casas WHERE id=?').get(m.casa_id);
   const semana = iso(segunda());
   if (!db.prepare('SELECT 1 FROM atribuicoes WHERE casa_id=? AND semana=?').get(casa.id, semana)) distribuir(casa.id);
-  const membros = db.prepare('SELECT id,nome,peso,ausente_ate,admin FROM membros WHERE casa_id=? ORDER BY id').all(casa.id);
-  const tarefas = db.prepare('SELECT id,nome,pontos,vezes,fixo_id FROM tarefas WHERE casa_id=? AND ativa=1 ORDER BY nome').all(casa.id);
+  const membros = db.prepare('SELECT id,nome,peso,ausente_ate,admin,disponibilidade FROM membros WHERE casa_id=? ORDER BY id').all(casa.id)
+    .map(x => ({ ...x, disponibilidade: disponibilidade(x) }));
+  const tarefas = db.prepare('SELECT id,nome,pontos,vezes,fixo_id,condicao_id FROM tarefas WHERE casa_id=? AND ativa=1 ORDER BY nome').all(casa.id);
+  const condicoes = db.prepare('SELECT id,nome,tipo,referencia,dias FROM condicoes WHERE casa_id=? ORDER BY nome').all(casa.id)
+    .map(c => ({ ...c, dias: lista(c.dias, []) }));
+  // Para cada dia da semana, quais condições valem (o app mostra, ex.: 💧 nos dias com água).
+  const diasCondicoes = Array.from({ length: 7 }, (_, i) => {
+    const dia = iso(addDias(new Date(semana + 'T00:00:00Z'), i));
+    return { dia, condicoes: condicoes.filter(c => condicaoVale({ ...c, dias: JSON.stringify(c.dias) }, dia)).map(c => c.id) };
+  });
   const atribuicoes = db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em
     FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=? ORDER BY a.dia, t.nome`).all(casa.id, semana);
   const placar = membros.map(x => {
@@ -146,7 +228,8 @@ function estado(m) {
       previstos: minhas.reduce((s, a) => s + a.pontos, 0), saldo: Math.round(saldoAcumulado(x.id) * 10) / 10 };
   });
   const preferencias = db.prepare('SELECT tarefa_id, nivel FROM preferencias WHERE membro_id=?').all(m.id);
-  return { eu: { id: m.id, nome: m.nome, admin: !!m.admin }, casa, semana, hoje: iso(new Date()), membros, tarefas, atribuicoes, placar, preferencias };
+  return { eu: { id: m.id, nome: m.nome, admin: !!m.admin }, casa, semana, hoje: hoje(), membros, tarefas, condicoes, diasCondicoes,
+    atribuicoes, placar, preferencias };
 }
 
 // ---------- http ----------
@@ -186,14 +269,15 @@ const rotas = {
   'POST /api/distribuir': m => { distribuir(m.casa_id); return estado(m); },
   'POST /api/tarefas': (m, b) => {
     exige(b.nome?.trim(), 400, 'Informe o nome da tarefa');
-    db.prepare('INSERT INTO tarefas(casa_id,nome,pontos,vezes,fixo_id) VALUES(?,?,?,?,?)')
-      .run(m.casa_id, b.nome.trim(), clamp(b.pontos, 1, 10), clamp(b.vezes, 1, 7), b.fixoId || null);
+    db.prepare('INSERT INTO tarefas(casa_id,nome,pontos,vezes,fixo_id,condicao_id) VALUES(?,?,?,?,?,?)')
+      .run(m.casa_id, b.nome.trim(), clamp(b.pontos, 1, 10), clamp(b.vezes, 1, 7), b.fixoId || null, condicaoDaCasa(m, b.condicaoId));
     distribuir(m.casa_id); return estado(m);
   },
   'PUT /api/tarefas/:id': (m, b, id) => {
     const t = db.prepare('SELECT * FROM tarefas WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(t, 404, 'Tarefa não encontrada');
-    db.prepare('UPDATE tarefas SET nome=?,pontos=?,vezes=?,fixo_id=? WHERE id=?')
-      .run(b.nome?.trim() || t.nome, clamp(b.pontos ?? t.pontos, 1, 10), clamp(b.vezes ?? t.vezes, 1, 7), b.fixoId || null, id);
+    db.prepare('UPDATE tarefas SET nome=?,pontos=?,vezes=?,fixo_id=?,condicao_id=? WHERE id=?')
+      .run(b.nome?.trim() || t.nome, clamp(b.pontos ?? t.pontos, 1, 10), clamp(b.vezes ?? t.vezes, 1, 7), b.fixoId || null,
+        b.condicaoId === undefined ? t.condicao_id : condicaoDaCasa(m, b.condicaoId), id);
     distribuir(m.casa_id); return estado(m);
   },
   'DELETE /api/tarefas/:id': (m, _, id) => {
@@ -203,8 +287,10 @@ const rotas = {
   },
   'PUT /api/membros/:id': (m, b, id) => {
     const x = db.prepare('SELECT * FROM membros WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(x, 404, 'Membro não encontrado');
-    db.prepare('UPDATE membros SET nome=?,peso=?,ausente_ate=? WHERE id=?')
-      .run(b.nome?.trim() || x.nome, Math.min(3, Math.max(0.1, Number(b.peso ?? x.peso))), b.ausenteAte === undefined ? x.ausente_ate : (b.ausenteAte || null), id);
+    const disp = Array.isArray(b.disponibilidade) && b.disponibilidade.length === 7
+      ? JSON.stringify(b.disponibilidade.map(v => Math.min(1, Math.max(0, Number(v) || 0)))) : x.disponibilidade;
+    db.prepare('UPDATE membros SET nome=?,peso=?,ausente_ate=?,disponibilidade=? WHERE id=?')
+      .run(b.nome?.trim() || x.nome, Math.min(3, Math.max(0.1, Number(b.peso ?? x.peso))), b.ausenteAte === undefined ? x.ausente_ate : (b.ausenteAte || null), disp, id);
     distribuir(m.casa_id); return estado(m);
   },
   'DELETE /api/membros/:id': (m, _, id) => {
@@ -212,6 +298,14 @@ const rotas = {
     db.prepare('DELETE FROM membros WHERE id=? AND casa_id=?').run(id, m.casa_id);
     registra({ evento: 'membro_removido', casaId: m.casa_id, membroId: m.id, detalhes: { removido: id } });
     distribuir(m.casa_id); return m.id === id ? { saiu: true } : estado(m);
+  },
+  'POST /api/condicoes': (m, b) => { salvarCondicao(m, null, b); distribuir(m.casa_id); return estado(m); },
+  'PUT /api/condicoes/:id': (m, b, id) => { salvarCondicao(m, id, b); distribuir(m.casa_id); return estado(m); },
+  'DELETE /api/condicoes/:id': (m, _, id) => {
+    exige(db.prepare('SELECT 1 FROM condicoes WHERE id=? AND casa_id=?').get(id, m.casa_id), 404, 'Regra não encontrada');
+    db.prepare('UPDATE tarefas SET condicao_id=NULL WHERE condicao_id=?').run(id);
+    db.prepare('DELETE FROM condicoes WHERE id=?').run(id);
+    distribuir(m.casa_id); return estado(m);
   },
   'PUT /api/preferencias': (m, b) => {
     for (const [tid, nivel] of Object.entries(b || {}))
@@ -222,6 +316,25 @@ const rotas = {
   'POST /api/atribuicoes/:id/desfazer': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET feito_em=NULL WHERE id=?'),
   'POST /api/atribuicoes/:id/assumir': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET membro_id=? WHERE id=?', m.id),
 };
+function condicaoDaCasa(m, id) {
+  if (!id) return null;
+  exige(db.prepare('SELECT 1 FROM condicoes WHERE id=? AND casa_id=?').get(id, m.casa_id), 404, 'Regra não encontrada');
+  return Number(id);
+}
+// { nome, tipo: 'alternado', referencia: 'AAAA-MM-DD' } ou { nome, tipo: 'semana', dias: [0..6] }
+function salvarCondicao(m, id, b) {
+  const atual = id ? db.prepare('SELECT * FROM condicoes WHERE id=? AND casa_id=?').get(id, m.casa_id) : null;
+  if (id) exige(atual, 404, 'Regra não encontrada');
+  const nome = (b.nome ?? atual?.nome ?? '').trim();
+  const tipo = b.tipo ?? atual?.tipo;
+  exige(nome, 400, 'Dê um nome à regra');
+  exige(['alternado', 'semana'].includes(tipo), 400, 'Tipo de regra inválido');
+  const referencia = tipo === 'alternado' ? (b.referencia ?? atual?.referencia ?? hoje()) : null;
+  exige(!referencia || /^\d{4}-\d{2}-\d{2}$/.test(referencia), 400, 'Data de referência inválida');
+  const dias = tipo === 'semana' ? JSON.stringify([...new Set((b.dias ?? lista(atual?.dias, [])).map(Number).filter(d => d >= 0 && d <= 6))].sort()) : null;
+  if (id) db.prepare('UPDATE condicoes SET nome=?,tipo=?,referencia=?,dias=? WHERE id=?').run(nome, tipo, referencia, dias, id);
+  else db.prepare('INSERT INTO condicoes(casa_id,nome,tipo,referencia,dias) VALUES(?,?,?,?,?)').run(m.casa_id, nome, tipo, referencia, dias);
+}
 const clamp = (v, a, b) => Math.min(b, Math.max(a, Math.round(Number(v) || a)));
 function marca(m, id, sql, ...args) {
   exige(db.prepare('SELECT 1 FROM atribuicoes WHERE id=? AND casa_id=?').get(id, m.casa_id), 404, 'Tarefa não encontrada');

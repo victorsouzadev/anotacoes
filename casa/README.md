@@ -19,6 +19,16 @@ curl -X PUT https://casa.vsitefy.com.br/admin/apk -H "X-Upload-Token: $UPLOAD_TO
   --data-binary @android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## Regras da casa
+
+- **Condições** (`condicoes`): "Água" dia sim, dia não (`tipo: alternado`, com uma data em que vale) ou
+  só em certos dias da semana (`tipo: semana`). Uma tarefa ligada a uma condição só cai nos dias em que ela vale.
+- **Disponibilidade** por pessoa e dia da semana (`membros.disponibilidade`, segunda a domingo):
+  1 = livre, 0.4 = pouco, 0 = nada. A divisão escolhe os dias das tarefas puxando para os dias com mais gente
+  livre, evita dar tarefa (sobretudo pesada) a quem tem pouco no dia e, no fim, devolve o equilíbrio da semana
+  passando tarefas de quem ficou acima da sua parte para quem ficou abaixo, nos dias livres desta pessoa.
+- O servidor usa `TZ=America/Sao_Paulo`: "hoje" e a virada da semana seguem o horário de Brasília.
+
 ## Logs
 
 - **Requisições**: uma linha JSON por chamada (rota, status, tempo, casa, membro, versão do app) no

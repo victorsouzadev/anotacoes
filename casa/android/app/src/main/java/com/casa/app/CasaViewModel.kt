@@ -66,15 +66,24 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     fun redistribuir() = executa { api.chamar("POST", "/api/distribuir") }
     fun modo(m: String) = executa { api.chamar("PUT", "/api/casa", JSONObject().put("modo", m)) }
 
-    fun salvarTarefa(id: Int?, nome: String, pontos: Int, vezes: Int, fixoId: Int?) = executa {
+    fun salvarTarefa(id: Int?, nome: String, pontos: Int, vezes: Int, fixoId: Int?, condicaoId: Int?) = executa {
         val b = JSONObject().put("nome", nome).put("pontos", pontos).put("vezes", vezes).put("fixoId", fixoId ?: JSONObject.NULL)
+            .put("condicaoId", condicaoId ?: JSONObject.NULL)
         if (id == null) api.chamar("POST", "/api/tarefas", b) else api.chamar("PUT", "/api/tarefas/$id", b)
     }
     fun removerTarefa(id: Int) = executa { api.chamar("DELETE", "/api/tarefas/$id") }
     fun preferencia(tarefaId: Int, nivel: Int) = executa { api.chamar("PUT", "/api/preferencias", JSONObject().put("$tarefaId", nivel)) }
 
-    fun salvarMembro(m: Membro, peso: Double, ausenteAte: String?) = executa {
-        api.chamar("PUT", "/api/membros/${m.id}", JSONObject().put("peso", peso).put("ausenteAte", ausenteAte ?: ""))
+    fun salvarMembro(m: Membro, peso: Double, ausenteAte: String?, disponibilidade: List<Double>) = executa {
+        api.chamar("PUT", "/api/membros/${m.id}", JSONObject().put("peso", peso).put("ausenteAte", ausenteAte ?: "")
+            .put("disponibilidade", org.json.JSONArray(disponibilidade)))
     }
+
+    fun salvarRegra(id: Int?, nome: String, tipo: String, referencia: String?, dias: List<Int>) = executa {
+        val b = JSONObject().put("nome", nome).put("tipo", tipo).put("dias", org.json.JSONArray(dias))
+        if (referencia != null) b.put("referencia", referencia)
+        if (id == null) api.chamar("POST", "/api/condicoes", b) else api.chamar("PUT", "/api/condicoes/$id", b)
+    }
+    fun removerRegra(id: Int) = executa { api.chamar("DELETE", "/api/condicoes/$id") }
     fun removerMembro(id: Int) = executa { api.chamar("DELETE", "/api/membros/$id") }
 }
