@@ -23,7 +23,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -121,7 +120,7 @@ fun AlimentoTela(vm: DietaViewModel, id: String, voltar: () -> Unit) {
                         IconButton(onClick = { itens.removeAt(i) }) { Icon(Icons.Filled.Close, "Remover") }
                     }
                 }
-                OutlinedButton(onClick = { buscando = true }) { Text("Adicionar ingrediente") }
+                BotaoSecundario(onClick = { buscando = true }) { Text("Adicionar ingrediente") }
                 if (itens.isNotEmpty()) {
                     val total = itens.sumOf { it.second }
                     val kcal = itens.sumOf { (a, g) -> Calculos.porcao(a, g).kcal }

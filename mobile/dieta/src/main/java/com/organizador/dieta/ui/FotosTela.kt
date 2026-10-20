@@ -18,11 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -76,7 +74,7 @@ fun FotosTela(vm: DietaViewModel) {
                 Escolha(POSES, pose) { pose = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Button(onClick = { pedirFoto(true) }) { Text("Tirar foto") }
-                    OutlinedButton(onClick = { pedirFoto(false) }) { Text("Da galeria") }
+                    BotaoSecundario(onClick = { pedirFoto(false) }) { Text("Da galeria") }
                     if (comparar.size == 2) Button(onClick = { comparando = true }) { Text("Comparar") }
                 }
                 Sub(if (comparar.isEmpty()) "Toque e segure em duas fotos para comparar." else "${comparar.size}/2 selecionadas")
@@ -110,8 +108,8 @@ fun FotosTela(vm: DietaViewModel) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 AsyncImage(File(f.caminho), null, Modifier.fillMaxWidth(), contentScale = ContentScale.Fit)
                 Row {
-                    TextButton(onClick = { apagar = f; aberta = null }) { Text("Apagar") }
-                    TextButton(onClick = { aberta = null }) { Text("Fechar") }
+                    BotaoTexto(onClick = { apagar = f; aberta = null }, cor = grafite.negativo) { Text("Apagar") }
+                    BotaoTexto(onClick = { aberta = null }) { Text("Fechar") }
                 }
             }
         }
@@ -130,7 +128,7 @@ fun FotosTela(vm: DietaViewModel) {
                 }
                 val dias = LocalDate.parse(b.data).toEpochDay() - LocalDate.parse(a.data).toEpochDay()
                 Text("$dias dias de diferença", Modifier.padding(8.dp))
-                TextButton(onClick = { comparando = false; comparar.clear() }) { Text("Fechar") }
+                BotaoTexto(onClick = { comparando = false; comparar.clear() }) { Text("Fechar") }
             }
         }
     }
@@ -139,8 +137,8 @@ fun FotosTela(vm: DietaViewModel) {
             onDismissRequest = { apagar = null },
             title = { Text("Apagar foto?") },
             text = { Text("Ela sai deste aparelho e do servidor.") },
-            confirmButton = { TextButton(onClick = { comparar.remove(f); vm.lancar { vm.repo.apagarFoto(f) }; apagar = null }) { Text("Apagar") } },
-            dismissButton = { TextButton(onClick = { apagar = null }) { Text("Cancelar") } },
+            confirmButton = { BotaoTexto(onClick = { comparar.remove(f); vm.lancar { vm.repo.apagarFoto(f) }; apagar = null }, cor = grafite.negativo) { Text("Apagar") } },
+            dismissButton = { BotaoTexto(onClick = { apagar = null }) { Text("Cancelar") } },
         )
     }
 }

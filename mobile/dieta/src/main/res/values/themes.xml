@@ -1,8 +1,10 @@
 <resources>
-    <color name="ic_launcher_background">#2F9E44</color>
-    <style name="Theme.Dieta" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#0E1116</item>
-        <item name="android:navigationBarColor">#0E1116</item>
-        <item name="android:windowBackground">#0E1116</item>
+    <!-- Grafite (dia). A noite fica em values-night. -->
+    <color name="ic_launcher_background">#2E5E5A</color>
+    <color name="papel">#F4F5F2</color>
+    <style name="Theme.Dieta" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/papel</item>
+        <item name="android:navigationBarColor">@color/papel</item>
+        <item name="android:windowBackground">@color/papel</item>
     </style>
 </resources>

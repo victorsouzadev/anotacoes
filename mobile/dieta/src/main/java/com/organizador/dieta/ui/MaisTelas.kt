@@ -32,12 +32,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -157,7 +155,7 @@ fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit) {
                 val itens = plano.filter { it.diaSemana == diaSemana && it.refeicao == cod }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Titulo(nome, Modifier.weight(1f))
-                    TextButton(onClick = { refeicao = cod; buscando = true }) { Text("Adicionar") }
+                    BotaoTexto(onClick = { refeicao = cod; buscando = true }) { Text("Adicionar") }
                 }
                 itens.forEach { p ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,7 +209,7 @@ fun CompartilharTela(vm: DietaViewModel, voltar: () -> Unit) {
                 }
             }
             Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { marcados.clear(); marcados.addAll(listOf("macros", "diario", "peso", "exportar")); titulo = "Para o(a) nutricionista" }) {
+                BotaoSecundario(onClick = { marcados.clear(); marcados.addAll(listOf("macros", "diario", "peso", "exportar")); titulo = "Para o(a) nutricionista" }) {
                     Text("Modo nutricionista")
                 }
             }
@@ -222,7 +220,7 @@ fun CompartilharTela(vm: DietaViewModel, voltar: () -> Unit) {
                 vm.criarLink(titulo, marcados.toList(), validade) { compartilharTexto(context, "${it.titulo}: ${it.url}") }
             }) { Text("Criar e compartilhar link") }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+            BotaoSecundario(modifier = Modifier.fillMaxWidth(), onClick = {
                 vm.exportar(90) { compartilharArquivo(context, it, "text/csv") }
             }) { Text("Exportar CSV (90 dias)") }
             Spacer(Modifier.height(16.dp))
@@ -233,9 +231,9 @@ fun CompartilharTela(vm: DietaViewModel, voltar: () -> Unit) {
                     Sub(l.escopos.joinToString { e -> ESCOPOS.firstOrNull { it.first == e }?.second ?: e } +
                         (l.expiraEm?.let { " · expira ${it.take(10)}" } ?: ""))
                     if (!l.revogado) Row {
-                        TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(l.url))) }) { Text("Abrir") }
-                        TextButton(onClick = { copiar(context, l.url); vm.avisar("Link copiado.") }) { Text("Copiar") }
-                        TextButton(onClick = { vm.revogar(l) }) { Text("Revogar") }
+                        BotaoTexto(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(l.url))) }) { Text("Abrir") }
+                        BotaoTexto(onClick = { copiar(context, l.url); vm.avisar("Link copiado.") }) { Text("Copiar") }
+                        BotaoTexto(onClick = { vm.revogar(l) }, cor = grafite.negativo) { Text("Revogar") }
                     }
                 }
                 HorizontalDivider()
@@ -266,7 +264,7 @@ fun ContaTela(vm: DietaViewModel, voltar: () -> Unit) {
                 Row {
                     Button(enabled = !sincronizando, onClick = { vm.sincronizar() }) { Text(if (sincronizando) "Sincronizando…" else "Sincronizar agora") }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { vm.sair() }) { Text("Sair") }
+                    BotaoSecundario(onClick = { vm.sair() }) { Text("Sair") }
                 }
             } else {
                 Sub("Use a mesma conta do hub. Sem login o app funciona offline, mas sem sync, progresso, código de barras e compartilhamento.")
@@ -279,7 +277,7 @@ fun ContaTela(vm: DietaViewModel, voltar: () -> Unit) {
                 Row {
                     Button(enabled = login.isNotBlank() && senha.isNotBlank(), onClick = { vm.entrar(servidor, login, senha, false) { senha = "" } }) { Text("Entrar") }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(enabled = login.isNotBlank() && senha.length >= 8, onClick = { vm.entrar(servidor, login, senha, true) { senha = "" } }) { Text("Criar conta") }
+                    BotaoSecundario(enabled = login.isNotBlank() && senha.length >= 8, onClick = { vm.entrar(servidor, login, senha, true) { senha = "" } }) { Text("Criar conta") }
                 }
             }
             Spacer(Modifier.height(24.dp))

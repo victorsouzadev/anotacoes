@@ -2,7 +2,6 @@ package com.organizador.dieta.ui
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,8 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,47 +38,33 @@ import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
 
-val Verde = Color(0xFF2F9E44)
-val Azul = Color(0xFF1C7ED6)
-val Laranja = Color(0xFFE8590C)
-val Roxo = Color(0xFF7048E8)
-
-@Composable
-fun DietaTema(content: @Composable () -> Unit) {
-    val escuro = isSystemInDarkTheme()
-    val cores = if (escuro) {
-        darkColorScheme(primary = Color(0xFF51CF66), secondary = Color(0xFF4DABF7), background = Color(0xFF0E1116),
-            surface = Color(0xFF0E1116), surfaceVariant = Color(0xFF1B1F27), surfaceContainer = Color(0xFF161A21))
-    } else {
-        lightColorScheme(primary = Verde, secondary = Azul, background = Color(0xFFF7F7F5), surface = Color(0xFFF7F7F5),
-            surfaceVariant = Color(0xFFFFFFFF), surfaceContainer = Color(0xFFEFEFEB))
-    }
-    MaterialTheme(colorScheme = cores, content = content)
-}
-
 @Composable
 fun Cartao(modifier: Modifier = Modifier, conteudo: @Composable () -> Unit) {
+    // Folha sobre papel, borda linha de 1 px, sem sombra.
     Card(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = grafite.folha, contentColor = grafite.grafite),
+        border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha),
+        elevation = CardDefaults.cardElevation(0.dp),
     ) { Column(Modifier.padding(16.dp)) { conteudo() } }
 }
 
-/** Barra "consumido / meta" com rótulo. Passou de 110% fica laranja. */
+/** Barra "consumido / meta". [destaque] = a barra principal (grafite); as outras em grafite-suave. Passou de 110% vira atenção. */
 @Composable
-fun BarraMeta(rotulo: String, valor: Double, meta: Int, unidade: String, cor: Color) {
+fun BarraMeta(rotulo: String, valor: Double, meta: Int, unidade: String, destaque: Boolean = false) {
     val frac = if (meta > 0) (valor / meta).toFloat() else 0f
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(rotulo, style = MaterialTheme.typography.bodyMedium)
-            Text("${valor.roundToInt()} / $meta $unidade", style = MaterialTheme.typography.bodyMedium)
+            Text("${valor.roundToInt()} / $meta $unidade", style = EstiloValor)
         }
         Spacer(Modifier.height(4.dp))
         LinearProgressIndicator(
             progress = { frac.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(8.dp),
-            color = if (frac > 1.1f) Laranja else cor,
-            trackColor = MaterialTheme.colorScheme.surfaceContainer,
+            color = if (frac > 1.1f) grafite.atencao else if (destaque) grafite.grafite else grafite.grafiteSuave,
+            trackColor = grafite.linha,
         )
     }
 }
@@ -133,8 +116,8 @@ fun QuantidadeDialog(alimento: Alimento, inicial: Double = alimento.porcaoG, aoC
                 }
             }
         },
-        confirmButton = { TextButton(enabled = gramas != null && gramas > 0 && gramas <= 5000, onClick = { aoConfirmar(gramas!!) }) { Text("OK") } },
-        dismissButton = { TextButton(onClick = aoFechar) { Text("Cancelar") } },
+        confirmButton = { BotaoTexto(enabled = gramas != null && gramas > 0 && gramas <= 5000, onClick = { aoConfirmar(gramas!!) }, cor = grafite.nanquim) { Text("OK") } },
+        dismissButton = { BotaoTexto(onClick = aoFechar) { Text("Cancelar") } },
     )
 }
 
@@ -146,7 +129,7 @@ fun Macros(kcal: Double, p: Double, c: Double, g: Double) =
 fun LinhaValor(rotulo: String, valor: String) = Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(rotulo, Modifier.weight(1f))
     Spacer(Modifier.width(8.dp))
-    Text(valor, fontWeight = FontWeight.SemiBold)
+    Text(valor, style = EstiloValor)
 }
 
 fun fmt(v: Double): String = if (v == v.roundToInt().toDouble()) v.roundToInt().toString() else String.format(Locale("pt", "BR"), "%.1f", v)
@@ -181,3 +164,20 @@ fun rememberFoto(aoEscolher: (android.net.Uri) -> Unit): (Boolean) -> Unit {
         else galeria.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 }
+
+// Nanquim é o acento único da tela: fica para a ação principal. Botões secundários e de texto vão em grafite.
+
+@Composable
+fun BotaoSecundario(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) =
+    androidx.compose.material3.OutlinedButton(
+        onClick, modifier, enabled,
+        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = grafite.grafite),
+        border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha),
+        content = content,
+    )
+
+/** [cor] padrão grafite; nanquim só na confirmação de um diálogo, negativo para excluir. */
+@Composable
+fun BotaoTexto(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, cor: Color = grafite.grafite,
+               content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) =
+    TextButton(onClick, modifier, enabled, colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = cor), content = content)

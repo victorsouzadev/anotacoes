@@ -21,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,11 +60,11 @@ fun ProgressoTela(vm: DietaViewModel) {
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(16.dp, 16.dp, 8.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Progresso", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Progresso", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
             IconButton(onClick = {
                 val dias = semana.groupBy { it.data }.mapValues { (_, rs) -> rs.fold(Totais()) { t, r -> t + r } }
                 val arq = CardProgresso.gerar(context, progresso, dias.values.toList(), metas, pesos.map { LocalDate.parse(it.data) to it.kg })
-                compartilharArquivo(context, arq, "image/png", "Meu progresso na dieta 💪")
+                compartilharArquivo(context, arq, "image/png", "Meu progresso na dieta")
             }) { Icon(Icons.Filled.Share, "Compartilhar card") }
         }
 
@@ -75,22 +74,23 @@ fun ProgressoTela(vm: DietaViewModel) {
         } else {
             Cartao {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Nível ${p.nivel}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("${p.xpTotal} XP")
+                    Text("Nível ${p.nivel}", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                    Text("${p.xpTotal} XP", style = EstiloValor)
                 }
-                LinearProgressIndicator(progress = { p.xpNoNivel.toFloat() / p.xpParaProximo.coerceAtLeast(1) }, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                LinearProgressIndicator(progress = { p.xpNoNivel.toFloat() / p.xpParaProximo.coerceAtLeast(1) }, Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    color = grafite.grafite, trackColor = grafite.linha)
                 Sub("Faltam ${p.xpParaProximo - p.xpNoNivel} XP para o nível ${p.nivel + 1}")
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Numero("🔥 ${p.sequencia}", "dias seguidos")
-                    Numero("🎯 ${p.sequenciaMeta}", "na meta")
-                    Numero("🏆 ${p.melhorSequencia}", "melhor sequência")
+                    Numero("${p.sequencia}", "dias seguidos")
+                    Numero("${p.sequenciaMeta}", "na meta")
+                    Numero("${p.melhorSequencia}", "melhor sequência")
                 }
             }
             Cartao {
                 Titulo("Desafio da semana")
                 Text(p.desafio)
-                LinearProgressIndicator(progress = { p.desafioFeito.toFloat() / p.desafioAlvo }, Modifier.fillMaxWidth().padding(vertical = 6.dp), color = Laranja)
+                LinearProgressIndicator(progress = { p.desafioFeito.toFloat() / p.desafioAlvo }, Modifier.fillMaxWidth().padding(vertical = 6.dp), color = grafite.grafiteSuave, trackColor = grafite.linha)
                 Sub("${p.desafioFeito} de ${p.desafioAlvo} dias")
             }
             Cartao {
@@ -118,7 +118,7 @@ fun ProgressoTela(vm: DietaViewModel) {
                 Spacer(Modifier.height(8.dp))
                 GraficoPeso(serie)
                 val dif = serie.last().second - serie.first().second
-                Sub("${fmt(serie.last().second)} kg · ${if (dif > 0) "+" else ""}${fmt(dif)} kg desde ${serie.first().first.format(DateTimeFormatter.ofPattern("dd/MM"))}. Verde: média de 7 dias.")
+                Sub("${fmt(serie.last().second)} kg · ${if (dif > 0) "+" else ""}${fmt(dif)} kg desde ${serie.first().first.format(DateTimeFormatter.ofPattern("dd/MM"))}. Linha escura: média de 7 dias.")
             }
             pesos.takeLast(5).reversed().forEach { ps ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,9 +135,10 @@ fun ProgressoTela(vm: DietaViewModel) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     it.conquistas.forEach { c ->
                         val ok = c.em != null
-                        Surface(shape = MaterialTheme.shapes.medium, color = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer) {
+                        Surface(shape = MaterialTheme.shapes.medium, color = grafite.folha, contentColor = if (ok) grafite.grafite else grafite.grafiteSuave,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha)) {
                             Column(Modifier.padding(10.dp).width(140.dp)) {
-                                Text((if (ok) "🏅 " else "🔒 ") + c.nome, fontWeight = FontWeight.SemiBold)
+                                Text(c.nome + if (ok) "" else " (bloqueada)", style = MaterialTheme.typography.titleSmall)
                                 Sub(c.descricao)
                                 c.em?.let { em -> Sub("em ${LocalDate.parse(em).format(DateTimeFormatter.ofPattern("dd/MM/yy"))}") }
                             }
@@ -146,13 +147,13 @@ fun ProgressoTela(vm: DietaViewModel) {
                 }
             }
         }
-        OutlinedButton(onClick = { vm.sincronizar() }, Modifier.padding(16.dp)) { Text("Atualizar") }
+        BotaoSecundario(onClick = { vm.sincronizar() }, Modifier.padding(16.dp)) { Text("Atualizar") }
     }
 }
 
 @Composable
 private fun Numero(valor: String, rotulo: String) = Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Text(valor, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    Text(valor, style = EstiloValor.copy(fontSize = androidx.compose.ui.unit.TextUnit(26f, androidx.compose.ui.unit.TextUnitType.Sp)))
     Sub(rotulo)
 }
 
@@ -161,7 +162,9 @@ private fun Numero(valor: String, rotulo: String) = Column(horizontalAlignment =
 fun Heatmap(niveis: Map<LocalDate, Int>) {
     val hoje = Datas.hoje()
     val inicio = hoje.minusWeeks(25).let { it.minusDays((it.dayOfWeek.value % 7).toLong()) }
-    val cores = listOf(MaterialTheme.colorScheme.surfaceContainer, Color(0xFFB2E3B9), Color(0xFF7CCB8A), Color(0xFF3FA154), Color(0xFF1F6E30))
+    // Linha (vazio) e grafite cada vez mais forte conforme as metas batidas: dado, não acento.
+    val g = grafite
+    val cores = listOf(g.linha, g.grafite.copy(alpha = 0.25f), g.grafite.copy(alpha = 0.5f), g.grafite.copy(alpha = 0.75f), g.grafite)
     Canvas(Modifier.fillMaxWidth().height(110.dp)) {
         val semanas = 26
         val gap = 3f
@@ -179,7 +182,9 @@ fun Heatmap(niveis: Map<LocalDate, Int>) {
 @Composable
 fun GraficoPeso(serie: List<Pair<LocalDate, Double>>) {
     val media = Calculos.mediaMovel(serie)
-    val linha = MaterialTheme.colorScheme.outline
+    val linha = grafite.linha
+    val suave = grafite.grafiteSuave
+    val acento = grafite.grafite
     Canvas(Modifier.fillMaxWidth().height(160.dp)) {
         val min = (serie.minOf { it.second } - 0.5)
         val max = (serie.maxOf { it.second } + 0.5)
@@ -190,7 +195,7 @@ fun GraficoPeso(serie: List<Pair<LocalDate, Double>>) {
             serie.forEachIndexed { i, (d, _) -> val o = pt(d, vals[i]); if (i == 0) moveTo(o.x, o.y) else lineTo(o.x, o.y) }
         }
         drawPath(caminho(serie.map { it.second }), linha, style = Stroke(2.dp.toPx()))
-        drawPath(caminho(media), Verde, style = Stroke(3.dp.toPx()))
-        serie.forEach { (d, v) -> drawCircle(linha, 3.dp.toPx(), pt(d, v)) }
+        drawPath(caminho(media), acento, style = Stroke(3.dp.toPx()))
+        serie.forEach { (d, v) -> drawCircle(suave, 3.dp.toPx(), pt(d, v)) }
     }
 }

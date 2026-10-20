@@ -29,9 +29,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,9 +73,9 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                 Text(
                     if (dia == Datas.hoje()) "Hoje" else Datas.curta(dia),
                     Modifier.weight(1f).clickable { vm.dia.value = Datas.hoje() },
-                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
                 )
-                progresso?.let { AssistChip(onClick = {}, label = { Text("🔥 ${it.sequencia} · Nv ${it.nivel}") }) }
+                progresso?.let { AssistChip(onClick = {}, label = { Text("${it.sequencia} dias · Nv ${it.nivel}", style = EstiloValor) }) }
                 IconButton(onClick = { vm.sincronizar() }, enabled = !sincronizando) { Icon(Icons.Filled.Sync, "Sincronizar") }
                 IconButton(onClick = { vm.dia.value = dia.plusDays(1) }, enabled = dia < Datas.hoje()) { Icon(Icons.Filled.ChevronRight, "Próximo dia") }
             }
@@ -87,14 +85,14 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                 val restante = metas.kcal - totais.kcal
                 Text(
                     if (restante >= 0) "${restante.roundToInt()} kcal restantes" else "${(-restante).roundToInt()} kcal acima da meta",
-                    style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
-                    color = if (restante >= 0) MaterialTheme.colorScheme.primary else Laranja,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (restante >= 0) grafite.grafite else grafite.atencao,
                 )
                 Spacer(Modifier.height(8.dp))
-                BarraMeta("Calorias", totais.kcal, metas.kcal, "kcal", Verde)
-                BarraMeta("Proteína", totais.proteina, metas.proteinaG, "g", Azul)
-                BarraMeta("Carboidrato", totais.carbo, metas.carboG, "g", Laranja)
-                BarraMeta("Gordura", totais.gordura, metas.gorduraG, "g", Roxo)
+                BarraMeta("Calorias", totais.kcal, metas.kcal, "kcal", destaque = true)
+                BarraMeta("Proteína", totais.proteina, metas.proteinaG, "g")
+                BarraMeta("Carboidrato", totais.carbo, metas.carboG, "g")
+                BarraMeta("Gordura", totais.gordura, metas.gorduraG, "g")
                 Sub("Fibra ${fmt(totais.fibra)} g")
                 val ds = Datas.diaSemana(dia)
                 val doDia = plano.filter { it.diaSemana == -1 || it.diaSemana == ds }.map { it.refeicao }.distinct()
@@ -108,15 +106,15 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
         item {
             Cartao {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Titulo("💧 Água", Modifier.weight(1f))
+                    Titulo("Água", Modifier.weight(1f))
                     agua.lastOrNull()?.let { ultima ->
                         IconButton(onClick = { vm.lancar { vm.repo.desfazerAgua(ultima) } }) { Icon(Icons.AutoMirrored.Filled.Undo, "Desfazer") }
                     }
                 }
-                BarraMeta("", totalAgua.toDouble(), metas.aguaMl, "ml", Azul)
+                BarraMeta("", totalAgua.toDouble(), metas.aguaMl, "ml")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(200, 300, 500).forEach { ml ->
-                        OutlinedButton(onClick = { vm.lancar { vm.repo.beberAgua(dia, ml) } }) { Text("+$ml ml") }
+                        BotaoSecundario(onClick = { vm.lancar { vm.repo.beberAgua(dia, ml) } }) { Text("+$ml ml") }
                     }
                 }
             }
@@ -143,7 +141,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                             DropdownMenuItem(text = { Text("Foto da galeria") }, onClick = { menu = false; fotoPara = codigo; pedirFoto(false) })
                         }
                     }
-                    IconButton(onClick = { adicionar(codigo) }) { Icon(Icons.Filled.Add, "Adicionar") }
+                    IconButton(onClick = { adicionar(codigo) }) { Icon(Icons.Filled.Add, "Adicionar", tint = grafite.nanquim) }
                 }
                 if (fotosRef.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
@@ -162,7 +160,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                         IconButton(onClick = { vm.lancar { vm.repo.apagar(r) } }) { Icon(Icons.Filled.Delete, "Remover") }
                     }
                 }
-                if (itens.isEmpty()) TextButton(onClick = { adicionar(codigo) }) { Text("Adicionar alimento") }
+                if (itens.isEmpty()) BotaoTexto(onClick = { adicionar(codigo) }) { Text("Adicionar alimento") }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }

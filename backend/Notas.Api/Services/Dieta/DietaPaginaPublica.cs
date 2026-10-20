@@ -27,6 +27,7 @@ public static class DietaPaginaPublica
         var sb = new StringBuilder();
         sb.Append("<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\">")
           .Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"robots\" content=\"noindex\">")
+          .Append("<meta name=\"color-scheme\" content=\"light dark\">").Append($"<link rel=\"icon\" href=\"{Favicon}\">").Append(Fontes)
           .Append($"<title>{E(c.Titulo)}</title><style>").Append(Css).Append("</style></head><body><main>")
           .Append($"<h1>{E(c.Titulo)}</h1><p class=\"sub\">Atualizado em {hoje.ToString("dd/MM/yyyy", Br)}</p>");
 
@@ -41,11 +42,11 @@ public static class DietaPaginaPublica
                 <div class="kpi"><b>{p.SequenciaMeta} dias</b><span>seguidos na meta</span></div>
                 <div class="kpi"><b>{p.DiasRegistrados}</b><span>dias registrados</span></div>
                 </div>
-                <p style="margin:14px 0 6px"><b>Desafio da semana:</b> {E(p.Desafio.Descricao)} — {p.Desafio.Feito}/{p.Desafio.Alvo}</p>
+                <p style="margin:16px 0 8px"><b>Desafio da semana:</b> {E(p.Desafio.Descricao)} — <span class="mono">{p.Desafio.Feito}/{p.Desafio.Alvo}</span></p>
                 <div class="badges">
                 """);
             foreach (var cq in p.Conquistas)
-                sb.Append($"<span class=\"badge{(cq.Em is null ? " off" : "")}\" title=\"{E(cq.Descricao)}\">{(cq.Em is null ? "🔒" : "🏅")} {E(cq.Nome)}</span>");
+                sb.Append($"<span class=\"badge{(cq.Em is null ? " off" : "")}\" title=\"{E(cq.Descricao)}\">{E(cq.Nome)}{(cq.Em is null ? " (bloqueada)" : "")}</span>");
             sb.Append("</div><h2 style=\"margin-top:16px\">Últimos 6 meses</h2><div class=\"heat\">");
             var inicioHeat = hoje.AddDays(-181 - (int)hoje.AddDays(-181).DayOfWeek);
             var porDia = p.Dias.ToDictionary(d => d.Data);
@@ -148,42 +149,58 @@ public static class DietaPaginaPublica
         return $"""
             <svg viewBox="0 0 {w} {h}" width="100%" role="img" aria-label="Gráfico de peso">
             <text x="4" y="{Y(max - 0.5)}" dy="8">{(max - 0.5).ToString("0.0", Br)}</text><text x="4" y="{Y(min + 0.5)}">{(min + 0.5).ToString("0.0", Br)}</text>
-            <polyline fill="none" stroke="var(--line)" stroke-width="2" points="{linha}"/>
-            <polyline fill="none" stroke="var(--acc)" stroke-width="3" points="{media}"/>
-            </svg><p class="sub" style="margin:4px 0 0">Linha verde: média móvel de 7 dias.</p>
+            <polyline fill="none" stroke="var(--linha)" stroke-width="2" points="{linha}"/>
+            <polyline fill="none" stroke="var(--grafite)" stroke-width="3" points="{media}"/>
+            </svg><p class="sub" style="margin:4px 0 0">Linha escura: média móvel de 7 dias.</p>
             """;
     }
 
+    // Identidade Grafite (skill aplicar-grafite): tokens dia em :root e noite pelo modo do sistema. Nanquim é o
+    // acento único (o link); barras e heatmap são dado, em grafite; positivo marca meta batida (estado).
     private const string Css = """
-
-            :root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1b;--mute:#6b6b66;--line:#e4e4df;--acc:#2f9e44;--acc2:#1971c2;
-              --h0:#ebedf0;--h1:#c6e9c9;--h2:#8fd19a;--h3:#4fae5f;--h4:#2b7a3a}
-            @media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1e1e1c;--fg:#ececea;--mute:#9a9a94;--line:#33332f;
-              --acc:#51cf66;--acc2:#4dabf7;--h0:#2a2a27;--h1:#1f4b2a;--h2:#2b6e3b;--h3:#3d9a52;--h4:#5fd075}}
-            *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+            :root{--papel:#F4F5F2;--folha:#FFFFFF;--grafite:#1E2523;--grafite-suave:#5E6865;--linha:#DFE3DF;
+              --nanquim:#2E5E5A;--nanquim-escuro:#224744;--positivo:#2F7D4F}
+            @media (prefers-color-scheme:dark){:root{--papel:#121514;--folha:#1A1E1D;--grafite:#E6EAE7;--grafite-suave:#9AA4A0;
+              --linha:#2A302E;--nanquim:#7FB5AE;--nanquim-escuro:#A3CDC7;--positivo:#6FCF97}}
+            *{box-sizing:border-box}
+            body{margin:0;background:var(--papel);color:var(--grafite);font:400 15px/23px Figtree,system-ui,sans-serif}
             main{max-width:860px;margin:0 auto;padding:24px 16px 48px}
-            h1{font-size:26px;margin:0 0 4px}h2{font-size:17px;margin:0 0 12px}
-            .sub{color:var(--mute);margin:0 0 20px}
-            .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:0 0 16px}
-            .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
-            .kpi b{display:block;font-size:22px}.kpi span{color:var(--mute);font-size:13px}
-            .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
-            .bar i{display:block;height:100%;background:var(--acc)}
-            table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
-            th:first-child,td:first-child{text-align:left}.ok{color:var(--acc)}
+            h1{font:500 36px/40px Newsreader,Georgia,serif;margin:0 0 4px}
+            h2{font:600 17px/24px Figtree,system-ui,sans-serif;margin:0 0 12px}
+            .sub,.kpi span,.fotos figcaption{color:var(--grafite-suave);font:500 13px/18px Figtree,system-ui,sans-serif}
+            .sub{margin:0 0 16px}
+            .mono,.kpi b,td,th{font-family:"IBM Plex Mono",ui-monospace,monospace;font-weight:500}
+            .card{background:var(--folha);border:1px solid var(--linha);border-radius:10px;padding:16px;margin:0 0 16px}
+            .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:12px}
+            .kpi b{display:block;font-size:24px;line-height:32px}
+            .bar{height:8px;background:var(--linha);border-radius:6px;overflow:hidden;margin-top:8px}
+            .bar i{display:block;height:100%;background:var(--grafite)}
+            table{width:100%;border-collapse:collapse;font-size:15px;line-height:22px}
+            th,td{text-align:right;padding:8px 4px;border-bottom:1px solid var(--linha)}
+            th:first-child,td:first-child{text-align:left}.ok{color:var(--positivo)}
             .tbl{overflow-x:auto}
-            .badges{display:flex;flex-wrap:wrap;gap:8px}.badge{border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px}
-            .badge.off{opacity:.4}
+            .badges{display:flex;flex-wrap:wrap;gap:8px}
+            .badge{border:1px solid var(--linha);border-radius:6px;padding:4px 8px;font:500 13px/18px Figtree,system-ui,sans-serif}
+            .badge.off{color:var(--grafite-suave)}
             .heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,auto);grid-auto-columns:1fr;gap:2px}
-            .heat i{aspect-ratio:1;border-radius:2px;background:var(--h0)}
-            .l1{background:var(--h1)!important}.l2{background:var(--h2)!important}.l3{background:var(--h3)!important}.l4{background:var(--h4)!important}
+            .heat i{aspect-ratio:1;border-radius:2px;background:var(--linha)}
+            .heat i.l1,.heat i.l2,.heat i.l3,.heat i.l4{background:var(--grafite)}
+            .l1{opacity:.25}.l2{opacity:.5}.l3{opacity:.75}
             .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
-            .fotos figure{margin:0}.fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
-            .fotos figcaption{font-size:12px;color:var(--mute)}
-            .dia{margin:0 0 12px}.dia h3{font-size:14px;margin:0 0 4px}.dia ul{margin:0;padding-left:18px;font-size:14px}
-            svg text{fill:var(--mute);font-size:24px}
-            a{color:var(--acc2)}
+            .fotos figure{margin:0}.fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
+            .dia{margin:0 0 12px}.dia h3{font:600 15px/23px Figtree,system-ui,sans-serif;margin:0 0 4px}.dia ul{margin:0;padding-left:20px}
+            svg text{fill:var(--grafite-suave);font:500 24px "IBM Plex Mono",monospace}
+            a{color:var(--nanquim)}a:hover{color:var(--nanquim-escuro)}
             """;
+
+    // Símbolo do Grafite como favicon (32×32, quadrado nanquim, traço papel, ponto #D6AE62).
+    private const string Favicon =
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E5E5A'/%3E" +
+        "%3Cpath d='M9.5 24 21 9.5' stroke='%23F4F5F2' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='23.6' cy='23.2' r='1.9' fill='%23D6AE62'/%3E%3C/svg%3E";
+
+    private const string Fontes =
+        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" +
+        "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Newsreader:opsz,wght@6..72,500&display=swap\">";
 
     private static string E(string s) => WebUtility.HtmlEncode(s);
 }

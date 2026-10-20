@@ -1,0 +1,10 @@
+<resources>
+    <!-- Grafite (noite). -->
+    <color name="papel">#121514</color>
+    <color name="ic_launcher_background">#7FB5AE</color>
+    <style name="Theme.Dieta" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/papel</item>
+        <item name="android:navigationBarColor">@color/papel</item>
+        <item name="android:windowBackground">@color/papel</item>
+    </style>
+</resources>

@@ -159,10 +159,10 @@ class Sincronizador(private val context: Context, private val repo: Repo, privat
         val primeiraVez = vistas.isEmpty() && prefs.nivelVisto == 0
         if (!primeiraVez) {
             desbloqueadas.filter { it.getString("codigo") !in vistas }.forEach {
-                Notificacoes.mostrar(context, it.getString("codigo").hashCode(), "🏅 Conquista: ${it.getString("nome")}", it.getString("descricao"))
+                Notificacoes.mostrar(context, it.getString("codigo").hashCode(), "Conquista: ${it.getString("nome")}", it.getString("descricao"))
             }
             val nivel = p.getInt("nivel")
-            if (nivel > prefs.nivelVisto) Notificacoes.mostrar(context, 1, "⭐ Nível $nivel!", "Você subiu de nível na Dieta. Continue assim.")
+            if (nivel > prefs.nivelVisto) Notificacoes.mostrar(context, 1, "Nível $nivel", "Você subiu de nível na Dieta. Continue assim.")
         }
         prefs.conquistasVistas = desbloqueadas.map { it.getString("codigo") }.toSet()
         prefs.nivelVisto = p.getInt("nivel")
