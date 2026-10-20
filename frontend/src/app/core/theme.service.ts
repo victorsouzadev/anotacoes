@@ -79,9 +79,9 @@ export class ThemeService {
     this.apply();
   }
 
-  /** true quando a paleta ativa é o Monocromático (única com alternância dia/noite). */
+  /** true quando a paleta ativa tem alternância dia/noite (Grafite e Monocromático). */
   isMono(): boolean {
-    return this.paletteId() === DEFAULT_THEME_ID;
+    return findTheme(this.paletteId()).supportsDayNight;
   }
 
   private resolvedMode(): 'light' | 'dark' {
