@@ -1,7 +1,7 @@
 /**
  * Catálogo de temas visuais do site. Cada tema é um conjunto de tokens (cores, fontes,
  * raios, sombras) aplicado via CSS custom properties em `document.documentElement`.
- * Só o "Monocromático" tem variação dia/noite — os demais têm uma única paleta.
+ * Só o "Grafite" e o "Monocromático" têm variação dia/noite — os demais têm uma única paleta.
  */
 
 export interface ThemeTokens {
@@ -169,11 +169,84 @@ const NEG_DARK = '#f87171';
 const ATT_DARK = '#fbbf24';
 
 const INTER = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const GRAFITE_DISPLAY = "'Newsreader', Georgia, 'Times New Roman', serif";
+const GRAFITE_SANS = "'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 // ------------------------------------------------------------------ catálogo
 
 export const THEMES: ThemeDef[] = [
-  // 0. Monocromático (padrão, com dia/noite) -----------------------------
+  // Grafite (identidade do hub, padrão, com dia/noite) ------------------
+  // Fonte da verdade: o design system "Grafite" (tokens papel, folha, grafite, linha, nanquim…).
+  {
+    id: 'grafite',
+    name: 'Grafite',
+    supportsDayNight: true,
+    preview: { bg: '#F4F5F2', accent: '#2E5E5A', text: '#1E2523' },
+    light: build({
+      bg: '#F4F5F2',
+      card: '#FFFFFF',
+      text: '#1E2523',
+      textMuted: '#5E6865',
+      accent: '#2E5E5A',
+      accentDark: '#224744',
+      accentSoft: '#E2ECEA',
+      accentContrast: '#FFFFFF',
+      border: '#DFE3DF',
+      divider: '#DFE3DF',
+      positivo: '#2F7D4F',
+      negativo: '#B3403A',
+      atencao: '#9A5D0C',
+      fontHeading: GRAFITE_DISPLAY,
+      fontBody: GRAFITE_SANS,
+      radius: '10px',
+      radiusSm: '6px',
+      radiusLg: '16px',
+      radiusCard: '10px',
+      checkboxBorder: '#9AA4A0',
+      checkboxFill: '#2E5E5A',
+      checkboxIcon: '#FFFFFF',
+      tagBg: '#E9ECE8',
+      tagText: '#5E6865',
+      fabBg: '#2E5E5A',
+      fabFg: '#FFFFFF',
+      shadowSm: 'none',
+      shadow: 'none',
+      shadowLg: '0 12px 32px rgba(30,37,35,0.14)',
+    }),
+    dark: build({
+      bg: '#121514',
+      card: '#1A1E1D',
+      text: '#E6EAE7',
+      textMuted: '#9AA4A0',
+      accent: '#7FB5AE',
+      accentDark: '#A3CDC7',
+      accentSoft: '#1F3331',
+      accentContrast: '#121514',
+      border: '#2A302E',
+      divider: '#2A302E',
+      positivo: '#6FCF97',
+      negativo: '#F08A84',
+      atencao: '#F0B860',
+      fontHeading: GRAFITE_DISPLAY,
+      fontBody: GRAFITE_SANS,
+      radius: '10px',
+      radiusSm: '6px',
+      radiusLg: '16px',
+      radiusCard: '10px',
+      checkboxBorder: '#5E6865',
+      checkboxFill: '#7FB5AE',
+      checkboxIcon: '#121514',
+      tagBg: '#232927',
+      tagText: '#9AA4A0',
+      fabBg: '#7FB5AE',
+      fabFg: '#121514',
+      shadowSm: 'none',
+      shadow: 'none',
+      shadowLg: '0 12px 32px rgba(0,0,0,0.5)',
+    }),
+  },
+
+  // 0. Monocromático (com dia/noite) -----------------------------
   {
     id: 'mono',
     name: 'Monocromático',
@@ -707,7 +780,7 @@ export const THEMES: ThemeDef[] = [
   },
 ];
 
-export const DEFAULT_THEME_ID = 'mono';
+export const DEFAULT_THEME_ID = 'grafite';
 
 export function findTheme(id: string): ThemeDef {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
