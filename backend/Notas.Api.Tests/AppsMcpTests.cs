@@ -106,6 +106,10 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
         var criativo = (await Rpc("criativo", Listar)).Body;
         Assert.Contains("\"criativo_sites\"", criativo);
+
+        var dieta = (await Rpc("dieta", Listar)).Body;
+        Assert.Contains("\"dieta_registrar_refeicao\"", dieta);
+        Assert.DoesNotContain("\"tarefas_", dieta);
         Assert.Equal(HttpStatusCode.NotFound, (await Rpc("outro", Listar)).Status);
     }
 
@@ -124,6 +128,9 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
         var criativo = (await Rpc("criativo", Chamar("criativo_resumo"))).Body;
         Assert.Contains("Nenhum site publicado", criativo);
+
+        var dieta = (await Rpc("dieta", Chamar("dieta_resumo"))).Body;
+        Assert.Contains("Meta: 2000 kcal", dieta);
     }
 
     [Fact]

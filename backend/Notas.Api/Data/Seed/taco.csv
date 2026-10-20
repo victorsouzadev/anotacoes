@@ -1,0 +1,599 @@
+# TACO 4a ed. (NEPA/UNICAMP), valores por 100 g. Fonte: github.com/raulfdm/taco-api (MIT)
+id;nome;kcal;proteina;carbo;gordura;fibra;sodio
+1;Arroz, integral, cozido;124.0;2.6;25.8;1.0;2.7;1.0
+2;Arroz, integral, cru;360.0;7.3;77.5;1.9;4.8;2.0
+3;Arroz, tipo 1, cozido;128.0;2.5;28.1;0.2;1.6;1.0
+4;Arroz, tipo 1, cru;358.0;7.2;78.8;0.3;1.6;1.0
+5;Arroz, tipo 2, cozido;130.0;2.6;28.2;0.4;1.1;2.0
+6;Arroz, tipo 2, cru;358.0;7.2;78.9;0.3;1.7;1.0
+7;Aveia, flocos, crua;394.0;13.9;66.6;8.5;9.1;5.0
+8;Biscoito, doce, maisena;443.0;8.1;75.2;12.0;2.1;352.0
+9;Biscoito, doce, recheado com chocolate;472.0;6.4;70.5;19.6;3.0;239.0
+10;Biscoito, doce, recheado com morango;471.0;5.7;71.0;19.6;1.5;230.0
+11;Biscoito, doce, wafer, recheado de chocolate;502.0;5.6;67.5;24.7;1.8;137.0
+12;Biscoito, doce, wafer, recheado de morango;513.0;4.5;67.4;26.4;0.8;120.0
+13;Biscoito, salgado, cream cracker;432.0;10.1;68.7;14.4;2.5;854.0
+14;Bolo, mistura para;419.0;6.2;84.7;6.1;1.7;463.0
+15;Bolo, pronto, aipim;324.0;4.4;47.9;12.7;0.7;111.0
+16;Bolo, pronto, chocolate;410.0;6.2;54.7;18.5;1.4;283.0
+17;Bolo, pronto, coco;333.0;5.7;52.3;11.3;1.1;190.0
+18;Bolo, pronto, milho;311.0;4.8;45.1;12.4;0.7;134.0
+19;Canjica, branca, crua;358.0;7.2;78.1;1.0;5.5;1.0
+20;Canjica, com leite integral;112.0;2.4;23.6;1.2;1.2;28.0
+21;Cereais, milho, flocos, com sal;370.0;7.3;80.8;1.6;5.3;272.0
+22;Cereais, milho, flocos, sem sal;363.0;6.9;80.4;1.2;1.8;31.0
+23;Cereais, mingau, milho, infantil;394.0;6.4;87.3;1.1;3.2;399.0
+24;Cereais, mistura para vitamina, trigo, cevada e aveia;381.0;8.9;81.6;2.1;5.0;1163.0
+25;Cereal matinal, milho;365.0;7.2;83.8;1.0;4.1;655.0
+26;Cereal matinal, milho, açúcar;377.0;4.7;88.8;0.7;2.1;405.0
+27;Creme de arroz, pó;386.0;7.0;83.9;1.2;1.1;1.0
+28;Creme de milho, pó;333.0;4.8;86.1;1.6;3.7;594.0
+29;Curau, milho verde;78.0;2.4;13.9;1.6;0.5;21.0
+30;Curau, milho verde, mistura para;402.0;2.2;79.8;13.4;2.5;223.0
+31;Farinha, de arroz, enriquecida;363.0;1.3;85.5;0.3;0.6;17.0
+32;Farinha, de centeio, integral;336.0;12.5;73.3;1.8;15.5;41.0
+33;Farinha, de milho, amarela;351.0;7.2;79.1;1.5;5.5;45.0
+34;Farinha, de rosca;371.0;11.4;75.8;1.5;4.8;333.0
+35;Farinha, de trigo;360.0;9.8;75.1;1.4;2.3;1.0
+36;Farinha, láctea, de cereais;415.0;11.9;77.8;5.8;1.9;125.0
+37;Lasanha, massa fresca, cozida;164.0;5.8;32.5;1.2;1.6;207.0
+38;Lasanha, massa fresca, crua;220.0;7.0;45.1;1.3;1.6;667.0
+39;Macarrão, instantâneo;436.0;8.8;62.4;17.2;5.6;1516.0
+40;Macarrão, trigo, cru;371.0;10.0;77.9;1.3;2.9;7.0
+41;Macarrão, trigo, cru, com ovos;371.0;10.3;76.6;2.0;2.3;15.0
+42;Milho, amido, cru;361.0;0.6;87.1;0.0;0.7;8.0
+43;Milho, fubá, cru;353.0;7.2;78.9;1.9;4.7;0.0
+44;Milho, verde, cru;138.0;6.6;28.6;0.6;3.9;1.0
+45;Milho, verde, enlatado, drenado;98.0;3.2;17.1;2.4;4.6;260.0
+46;Mingau tradicional, pó;373.0;0.6;89.3;0.4;0.9;15.0
+47;Pamonha, barra para cozimento, pré-cozida;171.0;2.6;30.7;4.8;2.4;132.0
+48;Pão, aveia, forma;343.0;12.4;59.6;5.7;6.0;606.0
+49;Pão, de soja;309.0;11.3;56.5;3.6;5.7;663.0
+50;Pão, glúten, forma;253.0;12.0;44.1;2.7;2.5;22.0
+51;Pão, milho, forma;292.0;8.3;56.4;3.1;4.3;507.0
+52;Pão, trigo, forma, integral;253.0;9.4;49.9;3.7;6.9;506.0
+53;Pão, trigo, francês;300.0;8.0;58.6;3.1;2.3;648.0
+54;Pão, trigo, sovado;311.0;8.4;61.5;2.8;2.4;431.0
+55;Pastel, de carne, cru;289.0;10.7;42.0;8.8;1.0;1309.0
+56;Pastel, de carne, frito;388.0;10.1;43.8;20.1;1.0;1040.0
+57;Pastel, de queijo, cru;308.0;9.9;45.9;9.6;1.1;985.0
+58;Pastel, de queijo, frito;422.0;8.7;48.1;22.7;0.9;821.0
+59;Pastel, massa, crua;310.0;6.9;57.4;5.5;1.4;1344.0
+60;Pastel, massa, frita;570.0;6.0;49.3;40.9;1.3;1175.0
+61;Pipoca, com óleo de soja, sem sal;448.0;9.9;70.3;15.9;14.3;4.0
+62;Polenta, pré-cozida;103.0;2.3;23.3;0.3;2.4;442.0
+63;Torrada, pão francês;377.0;10.5;74.6;3.3;3.4;829.0
+64;Abóbora, cabotian, cozida;48.0;1.4;10.8;0.7;2.5;1.0
+65;Abóbora, cabotian, crua;39.0;1.7;8.4;0.5;2.2;0.0
+66;Abóbora, menina brasileira, crua;14.0;0.6;3.3;0.0;1.2;0.0
+67;Abóbora, moranga, crua;12.0;1.0;2.7;0.1;1.7;0.0
+68;Abóbora, moranga, refogada;29.0;0.4;6.0;0.8;1.5;3.0
+69;Abóbora, pescoço, crua;24.0;0.7;6.1;0.1;2.3;1.0
+70;Abobrinha, italiana, cozida;15.0;1.1;3.0;0.2;1.6;1.0
+71;Abobrinha, italiana, crua;19.0;1.1;4.3;0.1;1.4;0.0
+72;Abobrinha, italiana, refogada;24.0;1.1;4.2;0.8;1.4;2.0
+73;Abobrinha, paulista, crua;31.0;0.6;7.9;0.1;2.6;1.0
+74;Acelga, crua;21.0;1.4;4.6;0.1;1.1;1.0
+75;Agrião, cru;17.0;2.7;2.3;0.2;2.1;7.0
+76;Aipo, cru;19.0;0.8;4.3;0.1;1.0;10.0
+77;Alface, americana, crua;9.0;0.6;1.7;0.1;1.0;7.0
+78;Alface, crespa, crua;11.0;1.3;1.7;0.2;1.8;3.0
+79;Alface, lisa, crua;14.0;1.7;2.4;0.1;2.3;4.0
+80;Alface, roxa, crua;13.0;0.9;2.5;0.2;2.0;7.0
+81;Alfavaca, crua;29.0;2.7;5.2;0.5;4.1;5.0
+82;Alho, cru;113.0;7.0;23.9;0.2;4.3;5.0
+83;Alho-poró, cru;32.0;1.4;6.9;0.1;2.5;2.0
+84;Almeirão, cru;18.0;1.8;3.3;0.2;2.6;2.0
+85;Almeirão, refogado;65.0;1.7;5.7;4.8;3.4;15.0
+86;Batata, baroa, cozida;80.0;0.9;18.9;0.2;1.8;2.0
+87;Batata, baroa, crua;101.0;1.0;24.0;0.2;2.1;0.0
+88;Batata, doce, cozida;77.0;0.6;18.4;0.1;2.2;3.0
+89;Batata, doce, crua;118.0;1.3;28.2;0.1;2.6;9.0
+90;Batata, frita, tipo chips, industrializada;543.0;5.6;51.2;36.6;2.5;607.0
+91;Batata, inglesa, cozida;52.0;1.2;11.9;0.0;1.3;2.0
+92;Batata, inglesa, crua;64.0;1.8;14.7;0.0;1.2;0.0
+93;Batata, inglesa, frita;267.0;5.0;35.6;13.1;8.1;2.0
+94;Batata, inglesa, sauté;68.0;1.3;14.1;0.9;1.4;8.0
+95;Berinjela, cozida;19.0;0.7;4.5;0.1;2.5;1.0
+96;Berinjela, crua;20.0;1.2;4.4;0.1;2.9;0.0
+97;Beterraba, cozida;32.0;1.3;7.2;0.1;1.9;23.0
+98;Beterraba, crua;49.0;1.9;11.1;0.1;3.4;10.0
+99;Biscoito, polvilho doce;438.0;1.3;80.5;12.2;1.2;98.0
+100;Brócolis, cozido;25.0;2.1;4.4;0.5;3.4;2.0
+101;Brócolis, cru;25.0;3.6;4.0;0.3;2.9;3.0
+102;Cará, cozido;78.0;1.5;18.9;0.1;2.6;1.0
+103;Cará, cru;96.0;2.3;23.0;0.1;7.3;0.0
+104;Caruru, cru;34.0;3.2;6.0;0.6;4.5;14.0
+105;Catalonha, crua;24.0;1.9;4.8;0.3;2.0;9.0
+106;Catalonha, refogada;63.0;2.0;4.8;4.8;3.7;25.0
+107;Cebola, crua;39.0;1.7;8.9;0.1;2.2;1.0
+108;Cebolinha, crua;20.0;1.9;3.4;0.4;3.6;2.0
+109;Cenoura, cozida;30.0;0.8;6.7;0.2;2.6;8.0
+110;Cenoura, crua;34.0;1.3;7.7;0.2;3.2;3.0
+111;Chicória, crua;14.0;1.1;2.9;0.1;2.2;14.0
+112;Chuchu, cozido;19.0;0.4;4.8;0.0;1.0;2.0
+113;Chuchu, cru;17.0;0.7;4.1;0.1;1.3;0.0
+114;Coentro, folhas desidratadas;309.0;20.9;48.0;10.4;37.3;18.0
+115;Couve, manteiga, crua;27.0;2.9;4.3;0.5;3.1;6.0
+116;Couve, manteiga, refogada ;90.0;1.7;8.7;6.6;5.7;11.0
+117;Couve-flor, crua;23.0;1.9;4.5;0.2;2.4;3.0
+118;Couve-flor, cozida;19.0;1.2;3.9;0.3;2.1;2.0
+119;Espinafre, Nova Zelândia, cru;16.0;2.0;2.6;0.2;2.1;17.0
+120;Espinafre, Nova Zelândia, refogado;67.0;2.7;4.2;5.4;2.5;47.0
+121;Farinha, de mandioca, crua;361.0;1.6;87.9;0.3;6.4;1.0
+122;Farinha, de mandioca, torrada;365.0;1.2;89.2;0.3;6.5;10.0
+123;Farinha, de puba;360.0;1.6;87.3;0.5;4.2;4.0
+124;Fécula, de mandioca;331.0;0.5;81.1;0.3;0.6;2.0
+125;Feijão, broto, cru;39.0;4.2;7.8;0.1;2.0;2.0
+126;Inhame, cru;97.0;2.1;23.2;0.2;1.7;0.0
+127;Jiló, cru;27.0;1.4;6.2;0.2;4.8;0.0
+128;Jurubeba, crua;126.0;4.4;23.1;3.9;23.9;1.0
+129;Mandioca, cozida;125.0;0.6;30.1;0.3;1.6;1.0
+130;Mandioca, crua;151.0;1.1;36.2;0.3;1.9;2.0
+131;Mandioca, farofa, temperada;406.0;2.1;80.3;9.1;7.8;575.0
+132;Mandioca, frita;300.0;1.4;50.3;11.2;1.9;9.0
+133;Manjericão, cru;21.0;2.0;3.6;0.4;3.3;4.0
+134;Maxixe, cru;14.0;1.4;2.7;0.1;2.2;11.0
+135;Mostarda, folha, crua;18.0;2.1;3.2;0.2;1.9;3.0
+136;Nhoque, batata, cozido;181.0;5.9;36.8;1.9;1.8;7.0
+137;Nabo, cru;18.0;1.2;4.1;0.1;2.6;2.0
+138;Palmito, juçara, em conserva;23.0;1.8;4.3;0.4;3.2;514.0
+139;Palmito, pupunha, em conserva;29.0;2.5;5.5;0.5;2.6;563.0
+140;Pão, de queijo, assado;363.0;5.1;34.2;24.6;0.6;773.0
+141;Pão, de queijo, cru;295.0;3.6;38.5;14.0;1.0;405.0
+142;Pepino, cru;10.0;0.9;2.0;0.0;1.1;0.0
+143;Pimentão, amarelo, cru;28.0;1.2;6.0;0.4;1.9;0.0
+144;Pimentão, verde, cru;21.0;1.1;4.9;0.2;2.6;0.0
+145;Pimentão, vermelho, cru;23.0;1.0;5.5;0.1;1.6;0.0
+146;Polvilho, doce;351.0;0.4;86.8;0.0;0.2;2.0
+147;Quiabo, cru;30.0;1.9;6.4;0.3;4.6;1.0
+148;Rabanete, cru;14.0;1.4;2.7;0.1;2.2;11.0
+149;Repolho, branco, cru;17.0;0.9;3.9;0.1;1.9;4.0
+150;Repolho, roxo, cru;31.0;1.9;7.2;0.1;2.0;2.0
+151;Repolho, roxo, refogado;42.0;1.8;7.6;1.2;1.8;3.0
+152;Rúcula, crua;13.0;1.8;2.2;0.1;1.7;9.0
+153;Salsa, crua;33.0;3.3;5.7;0.6;1.9;2.0
+154;Seleta de legumes, enlatada;57.0;3.4;12.7;0.4;3.1;398.0
+155;Serralha, crua;30.0;2.7;4.9;0.7;3.5;19.0
+156;Taioba, crua;34.0;2.9;5.4;0.9;4.5;1.0
+157;Tomate, com semente, cru;15.0;1.1;3.1;0.2;1.2;1.0
+158;Tomate, extrato;61.0;2.4;15.0;0.2;2.8;498.0
+159;Tomate, molho industrializado;38.0;1.4;7.7;0.9;3.1;418.0
+160;Tomate, purê;28.0;1.4;6.9;0.0;1.0;104.0
+161;Tomate, salada;21.0;0.8;5.1;0.0;2.3;5.0
+162;Vagem, crua;25.0;1.8;5.3;0.2;2.4;0.0
+163;Abacate, cru;96.0;1.2;6.0;8.4;6.3;0.0
+164;Abacaxi, cru;48.0;0.9;12.3;0.1;1.0;0.0
+165;Abacaxi, polpa, congelada;31.0;0.5;7.8;0.1;0.3;1.0
+166;Abiu, cru;62.0;0.8;14.9;0.7;1.7;0.0
+167;Açaí, polpa, com xarope de guaraná e glucose;110.0;0.7;21.5;3.7;1.7;15.0
+168;Açaí, polpa, congelada;58.0;0.8;6.2;3.9;2.6;5.0
+169;Acerola, crua;33.0;0.9;8.0;0.2;1.5;0.0
+170;Acerola, polpa, congelada;22.0;0.6;5.5;0.0;0.7;1.0
+171;Ameixa, calda, enlatada ;183.0;0.4;46.9;0.0;0.5;3.0
+172;Ameixa, crua;53.0;0.8;13.9;0.0;2.4;0.0
+173;Ameixa, em calda, enlatada, drenada ;177.0;1.0;47.7;0.3;4.5;3.0
+174;Atemóia, crua;97.0;1.0;25.3;0.3;2.1;1.0
+175;Banana, da terra, crua;128.0;1.4;33.7;0.2;1.5;0.0
+176;Banana, doce em barra;280.0;2.2;75.7;0.1;3.8;10.0
+177;Banana, figo, crua;105.0;1.1;27.8;0.1;2.8;0.0
+178;Banana, maçã, crua;87.0;1.8;22.3;0.1;2.6;0.0
+179;Banana, nanica, crua;92.0;1.4;23.8;0.1;1.9;0.0
+180;Banana, ouro, crua;112.0;1.5;29.3;0.2;2.0;0.0
+181;Banana, pacova, crua;78.0;1.2;20.3;0.1;2.0;1.0
+182;Banana, prata, crua;98.0;1.3;26.0;0.1;2.0;0.0
+183;Cacau, cru;74.0;1.0;19.4;0.1;2.2;1.0
+184;Cajá-Manga, cru;46.0;1.3;11.4;0.0;2.6;1.0
+185;Cajá, polpa, congelada;26.0;0.6;6.4;0.2;1.4;7.0
+186;Caju, cru;43.0;1.0;10.3;0.3;1.7;3.0
+187;Caju, polpa, congelada;37.0;0.5;9.4;0.2;0.8;4.0
+188;Caju, suco concentrado, envasado;45.0;0.4;10.7;0.2;0.6;45.0
+189;Caqui, chocolate, cru;71.0;0.4;19.3;0.1;6.5;2.0
+190;Carambola, crua;46.0;0.9;11.5;0.2;2.0;4.0
+191;Ciriguela, crua;76.0;1.4;18.9;0.4;3.9;2.0
+192;Cupuaçu, cru;49.0;1.2;10.4;1.0;3.1;3.0
+193;Cupuaçu, polpa, congelada;49.0;0.8;11.4;0.6;1.6;1.0
+194;Figo, cru;41.0;1.0;10.2;0.2;1.8;0.0
+195;Figo, enlatado, em calda;184.0;0.6;50.3;0.2;2.0;7.0
+196;Fruta-pão, crua;67.0;1.1;17.2;0.2;5.5;1.0
+197;Goiaba, branca, com casca, crua;52.0;0.9;12.4;0.5;6.3;0.0
+198;Goiaba, doce em pasta;269.0;0.6;74.1;0.0;3.7;4.0
+199;Goiaba, doce, cascão;286.0;0.4;78.7;0.1;4.4;11.0
+200;Goiaba, vermelha, com casca, crua;54.0;1.1;13.0;0.4;6.2;0.0
+201;Graviola, crua;62.0;0.8;15.8;0.2;1.9;4.0
+202;Graviola, polpa, congelada;38.0;0.6;9.8;0.1;1.2;3.0
+203;Jabuticaba, crua;58.0;0.6;15.3;0.1;2.3;0.0
+204;Jaca, crua;88.0;1.4;22.5;0.3;2.4;2.0
+205;Jambo, cru;27.0;0.9;6.5;0.1;5.1;22.0
+206;Jamelão, cru;41.0;0.5;10.6;0.1;1.8;1.0
+207;Kiwi, cru;51.0;1.3;11.5;0.6;2.7;0.0
+208;Laranja, baía, crua;45.0;1.0;11.5;0.1;1.1;0.0
+209;Laranja, baía, suco;37.0;0.7;8.7;0.0;0.0;0.0
+210;Laranja, da terra, crua;51.0;1.1;12.9;0.2;4.0;1.0
+211;Laranja, da terra, suco;41.0;0.7;9.6;0.1;1.0;0.0
+212;Laranja, lima, crua;46.0;1.1;11.5;0.1;1.8;1.0
+213;Laranja, lima, suco;39.0;0.7;9.2;0.1;0.4;0.0
+214;Laranja, pêra, crua;37.0;1.0;8.9;0.1;0.8;0.0
+215;Laranja, pêra, suco;33.0;0.7;7.6;0.1;0.0;0.0
+216;Laranja, valência, crua;46.0;0.8;11.7;0.2;1.7;1.0
+217;Laranja, valência, suco;36.0;0.5;8.6;0.1;0.4;0.0
+218;Limão, cravo, suco;14.0;0.3;5.2;0.0;0.0;0.0
+219;Limão, galego, suco;22.0;0.6;7.3;0.1;0.0;0.0
+220;Limão, tahiti, cru;32.0;0.9;11.1;0.1;1.2;1.0
+221;Maçã, Argentina, com casca, crua;63.0;0.2;16.6;0.2;2.0;1.0
+222;Maçã, Fuji, com casca, crua;56.0;0.3;15.2;0.0;1.3;0.0
+223;Macaúba, crua;404.0;2.1;13.9;40.7;13.4;1.0
+224; Mamão, doce em calda, drenado;196.0;0.2;54.0;0.1;1.3;3.0
+225;Mamão, Formosa, cru;45.0;0.8;11.6;0.1;1.8;3.0
+226;Mamão, Papaia, cru;40.0;0.5;10.4;0.1;1.0;2.0
+227; Mamão verde, doce em calda, drenado;209.0;0.3;57.6;0.1;1.2;5.0
+228;Manga, Haden, crua;64.0;0.4;16.7;0.3;1.6;1.0
+229;Manga, Palmer, crua;72.0;0.4;19.4;0.2;1.6;2.0
+230;Manga, polpa, congelada;48.0;0.4;12.5;0.2;1.1;7.0
+231;Manga, Tommy Atkins, crua;51.0;0.9;12.8;0.2;2.1;0.0
+232;Maracujá, cru;68.0;2.0;12.3;2.1;1.1;2.0
+233;Maracujá, polpa, congelada;39.0;0.8;9.6;0.2;0.5;8.0
+234;Maracujá, suco concentrado, envasado;42.0;0.8;9.6;0.2;0.4;22.0
+235;Melancia, crua;33.0;0.9;8.1;0.0;0.1;0.0
+236;Melão, cru;29.0;0.7;7.5;0.0;0.3;11.0
+237;Mexerica, Murcote, crua;58.0;0.9;14.9;0.1;3.1;1.0
+238;Mexerica, Rio, crua;37.0;0.7;9.3;0.1;2.7;2.0
+239;Morango, cru;30.0;0.9;6.8;0.3;1.7;0.0
+240;Nêspera, crua;43.0;0.3;11.5;0.0;3.0;0.0
+241;Pequi, cru;205.0;2.3;13.0;18.0;19.0;0.0
+242;Pêra, Park, crua;61.0;0.2;16.1;0.2;3.0;1.0
+243;Pêra, Williams, crua;53.0;0.6;14.0;0.1;3.0;0.0
+244;Pêssego, Aurora, cru;36.0;0.8;9.3;0.0;1.4;0.0
+245;Pêssego, enlatado, em calda;63.0;0.7;16.9;0.0;1.0;3.0
+246;Pinha, crua;88.0;1.5;22.4;0.3;3.4;1.0
+247;Pitanga, crua;41.0;0.9;10.2;0.2;3.2;2.0
+248;Pitanga, polpa, congelada;19.0;0.3;4.8;0.1;0.7;5.0
+249;Romã, crua;56.0;0.4;15.1;0.0;0.4;1.0
+250;Tamarindo, cru;276.0;3.2;72.5;0.5;6.4;0.0
+251;Tangerina, Poncã, crua;38.0;0.8;9.6;0.1;0.9;0.0
+252;Tangerina, Poncã, suco;36.0;0.5;8.8;0.0;0.0;0.0
+253;Tucumã, cru;262.0;2.1;26.5;19.1;12.7;4.0
+254;Umbu, cru;37.0;0.8;9.4;0.0;2.0;0.0
+255;Umbu, polpa, congelada;34.0;0.5;8.8;0.1;1.3;6.0
+256;Uva, Itália, crua;53.0;0.7;13.6;0.2;0.9;0.0
+257;Uva, Rubi, crua;49.0;0.6;12.7;0.2;0.9;8.0
+258;Uva, suco concentrado, envasado;58.0;0.0;14.7;0.0;0.2;10.0
+259;Azeite, de dendê;884.0;0;0;100.0;0;0
+260;Azeite, de oliva, extra virgem;884.0;0;0;100.0;0;0
+261;Manteiga, com sal;726.0;0.4;0.1;82.4;0;579.0
+262;Manteiga, sem sal;758.0;0.4;0.0;86.0;0;4.0
+263;Margarina, com óleo hidrogenado, com sal (65% de lipídeos);596.0;0.0;0.0;67.4;0;894.0
+264;Margarina, com óleo hidrogenado, sem sal (80% de lipídeos);723.0;0.0;0.0;81.7;0;78.0
+265;Margarina, com óleo interesterificado, com sal (65%de lipídeos);594.0;0.0;0.0;67.2;0;561.0
+266;Margarina, com óleo interesterificado, sem sal (65% de lipídeos);593.0;0.0;0.0;67.1;0;33.0
+267;Óleo, de babaçu;884.0;0;0;100.0;0;0
+268;Óleo, de canola;884.0;0;0;100.0;0;0
+269;Óleo, de girassol;884.0;0;0;100.0;0;0
+270;Óleo, de milho;884.0;0;0;100.0;0;0
+271;Óleo, de pequi;884.0;0;0;100.0;0;0
+272;Óleo, de soja;884.0;0;0;100.0;0;0
+273;Abadejo, filé, congelado, assado;112.0;23.5;0.0;1.2;0;334.0
+274;Abadejo, filé, congelado,cozido;91.0;19.3;0.0;0.9;0;189.0
+275;Abadejo, filé, congelado, cru;59.0;13.1;0.0;0.4;0;79.0
+276;Abadejo, filé, congelado, grelhado;130.0;27.6;0.0;1.3;0;305.0
+277;Atum, conserva em óleo;166.0;26.2;0.0;6.0;0;362.0
+278;Atum, fresco, cru;118.0;25.7;0.0;0.9;0;30.0
+279;Bacalhau, salgado, cru;136.0;29.0;0.0;1.3;0;13585.0
+280;Bacalhau, salgado, refogado;140.0;24.0;1.2;3.6;0;1256.0
+281;Cação, posta, com farinha de trigo, frita;208.0;25.0;3.1;10.0;0.5;160.0
+282;Cação, posta, cozida;116.0;25.6;0.0;0.7;0;115.0
+283;Cação, posta, crua;83.0;17.9;0.0;0.8;0;176.0
+284;Camarão, Rio Grande, grande, cozido;90.0;19.0;0.0;1.0;0;367.0
+285;Camarão, Rio Grande, grande, cru;47.0;10.0;0.0;0.5;0;201.0
+286;Camarão, Sete Barbas, sem cabeça, com casca, frito;231.0;18.4;2.9;15.6;0;99.0
+287;Caranguejo, cozido;83.0;18.5;0.0;0.4;0;360.0
+288;Corimba, cru;128.0;17.4;0.0;6.0;0;47.0
+289;Corimbatá, assado;261.0;19.9;0.0;19.6;0;40.0
+290;Corimbatá, cozido;239.0;20.1;0.0;16.9;0;37.0
+291;Corvina de água doce, crua;101.0;18.9;0.0;2.2;0;45.0
+292;Corvina do mar, crua;94.0;18.6;0.0;1.6;0;68.0
+293;Corvina grande, assada;147.0;26.8;0.0;3.6;0;85.0
+294;Corvina grande, cozida;100.0;23.4;0.0;2.6;0;68.0
+295;Dourada de água doce, fresca;131.0;18.8;0.0;5.6;0;40.0
+296;Lambari, congelado, cru;131.0;16.8;0.0;6.5;0;48.0
+297;Lambari, congelado, frito;327.0;28.4;0.0;22.8;0;65.0
+298;Lambari, fresco, cru;152.0;15.7;0.0;9.4;0;41.0
+299;Manjuba, com farinha de trigo, frita;344.0;23.5;10.2;22.6;0.4;37.0
+300;Manjuba, frita;349.0;30.1;0.0;24.5;0;41.0
+301;Merluza, filé, assado;122.0;26.6;0.0;0.9;0;120.0
+302;Merluza, filé, cru;89.0;16.6;0.0;2.0;0;80.0
+303;Merluza, filé, frito;192.0;26.9;0.0;8.5;0;90.0
+304;Pescada, branca, crua;111.0;16.3;0.0;4.6;0;76.0
+305;Pescada, branca, frita;223.0;27.4;0.0;11.8;0;107.0
+306;Pescada, filé, com farinha de trigo, frito;283.0;21.4;5.0;19.1;0.0;91.0
+307;Pescada, filé, cru;107.0;16.7;0.0;4.0;0;77.0
+308;Pescada, filé, frito;154.0;28.6;0.0;3.6;0;115.0
+309;Pescada, filé, molho escabeche;142.0;11.8;5.0;8.0;0.8;51.0
+310;Pescadinha, crua;76.0;15.5;0.0;1.1;0;120.0
+311;Pintado, assado;192.0;36.5;0.0;4.0;0;81.0
+312;Pintado, cru;91.0;18.6;0.0;1.3;0;43.0
+313;Pintado, grelhado;152.0;30.8;0.0;2.3;0;53.0
+314;Porquinho, cru;93.0;20.5;0.0;0.6;0;67.0
+315;Salmão, filé, com pele, fresco,  grelhado;229.0;23.9;0.0;14.0;0;85.0
+316;Salmão, sem pele, fresco, cru;170.0;19.3;0.0;9.7;0;64.0
+317;Salmão, sem pele, fresco, grelhado;243.0;26.1;0.0;14.5;0;96.0
+318;Sardinha, assada;164.0;32.2;0.0;3.0;0;74.0
+319;Sardinha, conserva em óleo;285.0;15.9;0.0;24.0;0;666.0
+320;Sardinha, frita;257.0;33.4;0.0;12.7;0;60.0
+321;Sardinha, inteira, crua;114.0;21.1;0.0;2.7;0;60.0
+322;Tucunaré, filé, congelado, cru;88.0;18.0;0.0;1.2;0;57.0
+323;Apresuntado;129.0;13.5;2.9;6.7;0;943.0
+324;Caldo de carne, tablete;241.0;7.8;15.1;16.6;0.6;22180.0
+325;Caldo de galinha, tablete;251.0;6.3;10.6;20.4;11.8;22300.0
+326;Carne, bovina, acém, moído, cozido;212.0;26.7;0.0;10.9;0;52.0
+327;Carne, bovina, acém, moído, cru;137.0;19.4;0.0;5.9;0;49.0
+328;Carne, bovina, acém, sem gordura, cozido;215.0;27.3;0.0;10.9;0;56.0
+329;Carne, bovina, acém, sem gordura, cru;144.0;20.8;0.0;6.1;0;50.0
+330;Carne, bovina, almôndegas, cruas;189.0;12.3;9.8;11.2;0;621.0
+331;Carne, bovina, almôndegas, fritas;272.0;18.2;14.3;15.8;0;1030.0
+332;Carne, bovina, bucho, cozido;133.0;21.6;0.0;4.5;0;38.0
+333;Carne, bovina, bucho, cru;137.0;20.5;0.0;5.5;0;45.0
+334;Carne, bovina, capa de contra-filé, com gordura, crua;217.0;19.2;0.0;15.0;0;58.0
+335;Carne, bovina, capa de contra-filé, com gordura, grelhada;312.0;30.7;0.0;20.0;0;81.0
+336;Carne, bovina, capa de contra-filé, sem gordura, crua;131.0;21.5;0.0;4.3;0;79.0
+337;Carne, bovina, capa de contra-filé, sem gordura, grelhada;239.0;35.1;0.0;10.0;0;83.0
+338;Carne, bovina, charque, cozido;263.0;36.4;0.0;11.9;0;1443.0
+339;Carne, bovina, charque, cru;249.0;22.7;0.0;16.8;0;5875.0
+340;Carne, bovina, contra-filé, à milanesa;352.0;20.6;12.2;24.0;0.4;77.0
+341;Carne, bovina, contra-filé de costela, cru;202.0;19.8;0.0;13.1;0;39.0
+342;Carne, bovina, contra-filé de costela, grelhado;275.0;29.9;0.0;16.3;0;51.0
+343;Carne, bovina, contra-filé, com gordura, cru;206.0;21.2;0.0;12.8;0;44.0
+344;Carne, bovina, contra-filé, com gordura, grelhado;278.0;32.4;0.0;15.5;0;57.0
+345;Carne, bovina, contra-filé, sem gordura, cru;157.0;24.0;0.0;6.0;0;53.0
+346;Carne, bovina, contra-filé, sem gordura, grelhado;194.0;35.9;0.0;4.5;0;58.0
+347;Carne, bovina, costela, assada;373.0;28.8;0.0;27.7;0;92.0
+348;Carne, bovina, costela, crua;358.0;16.7;0.0;31.8;0;70.0
+349;Carne, bovina, coxão duro, sem gordura, cozido;217.0;31.9;0.0;8.9;0;41.0
+350;Carne, bovina, coxão duro, sem gordura, cru;148.0;21.5;0.0;6.2;0;49.0
+351;Carne, bovina, coxão mole, sem gordura, cozido;219.0;32.4;0.0;8.9;0;44.0
+352;Carne, bovina, coxão mole, sem gordura, cru;169.0;21.2;0.0;8.7;0;61.0
+353;Carne, bovina, cupim, assado;330.0;28.6;0.0;23.0;0;72.0
+354;Carne, bovina, cupim, cru;221.0;19.5;0.0;15.3;0;47.0
+355;Carne, bovina, fígado, cru;141.0;20.7;1.1;5.4;0;76.0
+356;Carne, bovina, fígado, grelhado;225.0;29.9;4.2;9.0;0;82.0
+357;Carne, bovina, filé mingnon, sem gordura, cru;143.0;21.6;0.0;5.6;0;49.0
+358;Carne, bovina, filé mingnon, sem gordura, grelhado;220.0;32.8;0.0;8.8;0;58.0
+359;Carne, bovina, flanco, sem gordura, cozido;196.0;29.4;0.0;7.8;0;42.0
+360;Carne, bovina, flanco, sem gordura, cru;141.0;20.0;0.0;6.2;0;54.0
+361;Carne, bovina, fraldinha, com gordura, cozida;338.0;24.2;0.0;26.0;0;39.0
+362;Carne, bovina, fraldinha, com gordura, crua;221.0;17.6;0.0;16.1;0;51.0
+363;Carne, bovina, lagarto, cozido;222.0;32.9;0.0;9.1;0;48.0
+364;Carne, bovina, lagarto, cru;135.0;20.5;0.0;5.2;0;54.0
+365;Carne, bovina, língua, cozida;315.0;21.4;0.0;24.8;0;59.0
+366;Carne, bovina, língua, crua;215.0;17.1;0.0;15.8;0;73.0
+367;Carne, bovina, maminha, crua;153.0;20.9;0.0;7.0;0;37.0
+368;Carne, bovina, maminha, grelhada;153.0;30.7;0.0;2.4;0;58.0
+369;Carne, bovina, miolo de alcatra, sem gordura, cru;163.0;21.6;0.0;7.8;0;43.0
+370;Carne, bovina, miolo de alcatra, sem gordura, grelhado;241.0;31.9;0.0;11.6;0;52.0
+371;Carne, bovina, músculo, sem gordura, cozido;194.0;31.2;0.0;6.7;0;62.0
+372;Carne, bovina, músculo, sem gordura, cru;142.0;21.6;0.0;5.5;0;66.0
+373;Carne, bovina, paleta, com gordura, crua;159.0;21.4;0.0;7.5;0;65.0
+374;Carne, bovina, paleta, sem gordura, cozida;194.0;29.7;0.0;7.4;0;58.0
+375;Carne, bovina, paleta, sem gordura, crua;141.0;21.0;0.0;5.7;0;66.0
+376;Carne, bovina, patinho, sem gordura, cru;133.0;21.7;0.0;4.5;0;49.0
+377;Carne, bovina, patinho, sem gordura, grelhado;219.0;35.9;0.0;7.3;0;60.0
+378;Carne, bovina, peito, sem gordura, cozido;338.0;22.2;0.0;27.0;0;56.0
+379;Carne, bovina, peito, sem gordura, cru;259.0;17.6;0.0;20.4;0;64.0
+380;Carne, bovina, picanha, com gordura, crua;213.0;18.8;0.0;14.7;0;38.0
+381;Carne, bovina, picanha, com gordura, grelhada;289.0;26.4;0.0;19.5;0;60.0
+382;Carne, bovina, picanha, sem gordura, crua;134.0;21.3;0.0;4.7;0;61.0
+383;Carne, bovina, picanha, sem gordura, grelhada;238.0;31.9;0.0;11.3;0;61.0
+384;Carne, bovina, seca, cozida;313.0;26.9;0.0;21.9;0;1943.0
+385;Carne, bovina, seca, crua;313.0;19.7;0.0;25.4;0;4440.0
+386;Coxinha de frango, frita;283.0;9.6;34.5;11.8;5.0;532.0
+387;Croquete, de carne, cru;246.0;12.0;13.9;15.6;0;711.0
+388;Croquete, de carne, frito;347.0;16.9;18.1;22.7;0;916.0
+389;Empada de frango, pré-cozida, assada;358.0;6.9;47.5;15.6;2.2;525.0
+390;Empada, de frango, pré-cozida;377.0;7.3;35.5;22.9;2.2;771.0
+391;Frango, asa, com pele, crua;213.0;18.1;0.0;15.1;0;96.0
+392;Frango, caipira, inteiro, com pele, cozido;243.0;23.9;0.0;15.6;0;56.0
+393;Frango, caipira, inteiro, sem pele, cozido;196.0;29.6;0.0;7.7;0;53.0
+394;Frango, coração, cru;222.0;12.6;0.0;18.6;0;95.0
+395;Frango, coração, grelhado;207.0;22.4;0.6;12.1;0;128.0
+396;Frango, coxa, com pele, assada;215.0;28.5;0.1;10.4;0;95.0
+397;Frango, coxa, com pele, crua;161.0;17.1;0.0;9.8;0;95.0
+398;Frango, coxa, sem pele, cozida;167.0;26.9;0.0;5.8;0;64.0
+399;Frango, coxa, sem pele, crua;120.0;17.8;0.0;4.9;0;98.0
+400;Frango, fígado, cru;106.0;17.6;0.0;3.5;0;82.0
+401;Frango, filé, à milanesa;221.0;28.5;7.5;7.8;1.1;122.0
+402;Frango, inteiro, com pele, cru;226.0;16.4;0.0;17.3;0;63.0
+403;Frango, inteiro, sem pele, assado;187.0;28.0;0.0;7.5;0;70.0
+404;Frango, inteiro, sem pele, cozido;170.0;25.0;0.0;7.1;0;51.0
+405;Frango, inteiro, sem pele, cru;129.0;20.6;0.0;4.6;0;73.0
+406;Frango, peito, com pele, assado;212.0;33.4;0.0;7.6;0;56.0
+407;Frango, peito, com pele, cru;149.0;20.8;0.0;6.7;0;62.0
+408;Frango, peito, sem pele, cozido;163.0;31.5;0.0;3.2;0;36.0
+409;Frango, peito, sem pele, cru;119.0;21.5;0.0;3.0;0;56.0
+410;Frango, peito, sem pele, grelhado;159.0;32.0;0.0;2.5;0;50.0
+411;Frango, sobrecoxa, com pele, assada;260.0;28.7;0.0;15.2;0;96.0
+412;Frango, sobrecoxa, com pele, crua;255.0;15.5;0.0;20.9;0;68.0
+413;Frango, sobrecoxa, sem pele, assada;233.0;29.2;0.0;12.0;0;106.0
+414;Frango, sobrecoxa, sem pele, crua;162.0;17.6;0.0;9.6;0;80.0
+415;Hambúrguer, bovino, cru;215.0;13.2;4.2;16.2;0;869.0
+416;Hambúrguer, bovino, frito;258.0;20.0;6.3;17.0;0;1252.0
+417;Hambúrguer, bovino, grelhado;210.0;13.2;11.3;12.4;0;1090.0
+418;Lingüiça, frango, crua;218.0;14.2;0.0;17.4;0;1126.0
+419;Lingüiça, frango, frita;245.0;18.3;0.0;18.5;0;1374.0
+420;Lingüiça, frango, grelhada;244.0;18.2;0.0;18.4;0;1351.0
+421;Lingüiça, porco, crua;227.0;16.1;0.0;17.6;0;1176.0
+422;Lingüiça, porco, frita;280.0;20.5;0.0;21.3;0;1432.0
+423;Lingüiça, porco, grelhada;296.0;23.2;0.0;21.9;0;1456.0
+424;Mortadela;269.0;12.0;5.8;21.6;0;1212.0
+425;Peru, congelado, assado;163.0;26.2;0.0;5.7;0;628.0
+426;Peru, congelado, cru;94.0;18.1;0.0;1.8;0;711.0
+427;Porco, bisteca, crua;164.0;21.5;0.0;8.0;0;54.0
+428;Porco, bisteca, frita;311.0;33.7;0.0;18.5;0;63.0
+429;Porco, bisteca, grelhada;280.0;28.9;0.0;17.4;0;51.0
+430;Porco, costela, assada;402.0;30.2;0.0;30.3;0;63.0
+431;Porco, costela, crua;256.0;18.0;0.0;19.8;0;88.0
+432;Porco, lombo, assado;210.0;35.7;0.0;6.4;0;39.0
+433;Porco, lombo, cru;176.0;22.6;0.0;8.8;0;53.0
+434;Porco, orelha, salgada, crua;258.0;18.5;0.0;19.9;0;616.0
+435;Porco, pernil, assado;262.0;32.1;0.0;13.9;0;62.0
+436;Porco, pernil, cru;186.0;20.1;0.0;11.1;0;102.0
+437;Porco, rabo, salgado, cru;377.0;15.6;0.0;34.5;0;1158.0
+438;Presunto, com capa de gordura;128.0;14.4;1.4;6.8;0;1021.0
+439;Presunto, sem capa de gordura;94.0;14.3;2.1;2.7;0;1039.0
+440;Quibe, assado;136.0;14.6;12.9;2.7;1.9;40.0
+441;Quibe, cru;109.0;12.4;10.8;1.7;1.6;39.0
+442;Quibe, frito;254.0;14.9;12.3;15.8;0;836.0
+443;Salame;398.0;25.8;2.9;30.6;0;1574.0
+444;Toucinho, cru;593.0;11.5;0.0;60.3;0;50.0
+445;Toucinho, frito;697.0;27.3;0.0;64.3;0;125.0
+446;Bebida láctea, pêssego;55.0;2.1;7.6;1.9;0.3;46.0
+447;Creme de Leite;221.0;1.5;4.5;22.5;0;52.0
+448;Iogurte, natural;51.0;4.1;1.9;3.0;0;52.0
+449;Iogurte, natural, desnatado;41.0;3.8;5.8;0.3;0;60.0
+450;Iogurte, sabor abacaxi;0;0;0;0;0;0
+451;Iogurte, sabor morango;70.0;2.7;9.7;2.3;0.2;38.0
+452;Iogurte, sabor pêssego;68.0;2.5;9.4;2.3;0.7;37.0
+453;Leite, condensado;313.0;7.7;57.0;6.7;0;94.0
+454;Leite, de cabra;66.0;3.1;5.2;3.8;0;74.0
+455;Leite, de vaca, achocolatado;83.0;2.1;14.2;2.2;0.6;72.0
+456;Leite, de vaca, desnatado, pó;362.0;34.7;53.0;0.9;0;432.0
+457;Leite, de vaca, desnatado, UHT;0;0;0;0;0;51.0
+458;Leite, de vaca, integral;0;0;0;0;0;64.0
+459;Leite, de vaca, integral, pó;497.0;25.4;39.2;26.9;0;323.0
+460;Leite, fermentado;70.0;1.9;15.7;0.1;0;33.0
+461;Queijo, minas, frescal;264.0;17.4;3.2;20.2;0;31.0
+462;Queijo, minas, meia cura;321.0;21.2;3.6;24.6;0;501.0
+463;Queijo, mozarela;330.0;22.6;3.0;25.2;0;581.0
+464;Queijo, parmesão;453.0;35.6;1.7;33.5;0;1844.0
+465;Queijo, pasteurizado;303.0;9.4;5.7;27.4;0;780.0
+466;Queijo, petit suisse, morango;121.0;5.8;18.5;2.8;0;412.0
+467;Queijo, prato;360.0;22.7;1.9;29.1;0;580.0
+468;Queijo, requeijão, cremoso;257.0;9.6;2.4;23.4;0;558.0
+469;Queijo, ricota;140.0;12.6;3.8;8.1;0;283.0
+470;Bebida isotônica, sabores variados;26.0;0.0;6.4;0.0;0;44.0
+471;Café, infusão 10%;9.0;0.7;1.5;0.1;0;1.0
+472;Cana, aguardente 1;216.0;0;0;0;0;3.0
+473;Cana, caldo de;65.0;0.0;18.2;0.0;0.1;0.0
+474;Cerveja, pilsen 2;41.0;0.6;3.3;0.0;0;4.0
+475;Chá, erva-doce, infusão 5%;1.0;0.0;0.4;0.0;0;1.0
+476;Chá, mate, infusão 5%;3.0;0.0;0.6;0.1;0;0.0
+477;Chá, preto, infusão 5%;2.0;0.0;0.6;0.0;0;0.0
+478;Coco, água de;22.0;0.0;5.3;0.0;0.1;2.0
+479;Refrigerante, tipo água tônica;31.0;0.0;8.0;0.0;0;8.0
+480;Refrigerante, tipo cola;34.0;0.0;8.7;0.0;0;7.0
+481;Refrigerante, tipo guaraná;39.0;0.0;10.0;0.0;0;9.0
+482;Refrigerante, tipo laranja;46.0;0.0;11.8;0.0;0;9.0
+483;Refrigerante, tipo limão;40.0;0.0;10.3;0.0;0;9.0
+484;Omelete, de queijo;268.0;15.6;0.4;22.0;0;216.0
+485;Ovo, de codorna, inteiro, cru;177.0;13.7;0.8;12.7;0;129.0
+486;Ovo, de galinha, clara, cozida/10minutos;59.0;13.4;0.0;0.1;0;181.0
+487;Ovo, de galinha, gema, cozida/10minutos;353.0;15.9;1.6;30.8;0;45.0
+488;Ovo, de galinha, inteiro, cozido/10minutos;146.0;13.3;0.6;9.5;0;146.0
+489;Ovo, de galinha, inteiro, cru;143.0;13.0;1.6;8.9;0;168.0
+490;Ovo, de galinha, inteiro, frito;240.0;15.6;1.2;18.6;0;166.0
+491;Achocolatado, pó;401.0;4.2;91.2;2.2;3.9;65.0
+492;Açúcar, cristal;387.0;0.3;99.6;0.0;0;0.0
+493;Açúcar, mascavo;369.0;0.8;94.5;0.1;0;25.0
+494;Açúcar, refinado;387.0;0.3;99.5;0.0;0;12.0
+495;Chocolate, ao leite;540.0;7.2;59.6;30.3;2.2;77.0
+496;Chocolate, ao leite, com castanha do Pará;559.0;7.4;55.4;34.2;2.5;64.0
+497;Chocolate, ao leite, dietético;557.0;6.9;56.3;33.8;2.8;85.0
+498;Chocolate, meio amargo;475.0;4.9;62.4;29.9;4.9;9.0
+499;Cocada branca;449.0;1.1;81.4;13.6;3.6;29.0
+500;Doce, de abóbora, cremoso;199.0;0.9;54.6;0.2;2.3;0.0
+501;Doce, de leite, cremoso;306.0;5.5;59.5;6.0;0;120.0
+502;Geléia, mocotó, natural;106.0;2.1;24.2;0.1;0;43.0
+503;Glicose de milho;292.0;0.0;79.4;0.0;0;59.0
+504;Maria mole;301.0;3.8;73.6;0.2;0.7;15.0
+505;Maria mole, coco queimado;307.0;3.9;75.1;0.1;0.6;14.0
+506;Marmelada;257.0;0.4;70.8;0.1;4.1;11.0
+507;Mel, de abelha;309.0;0.0;84.0;0.0;0;6.0
+508;Melado;297.0;0.0;76.6;0.0;0;4.0
+509;Quindim;411.0;4.7;46.3;24.4;3.2;27.0
+510;Rapadura;352.0;1.0;90.8;0.1;0;22.0
+511;Café, pó, torrado;419.0;14.7;65.8;11.9;51.2;1.0
+512;Capuccino, pó;417.0;11.3;73.6;8.6;2.4;382.0
+513;Fermento em pó, químico;90.0;0.5;43.9;0.1;0;10052.0
+514;Fermento, biológico, levedura, tablete;90.0;17.0;7.7;1.5;4.2;40.0
+515;Gelatina, sabores variados, pó;380.0;8.9;89.2;0.0;0;235.0
+516;Sal, dietético;0;0;0;0;0;23432.0
+517;Sal, grosso;0;0;0;0;0;39943.0
+518;Shoyu;61.0;3.3;11.6;0.3;0;5024.0
+519;Tempero a base de sal;21.0;2.7;2.1;0.3;0.6;32560.0
+520;Azeitona, preta, conserva;194.0;1.2;5.5;20.3;4.6;1567.0
+521;Azeitona, verde, conserva;137.0;0.9;4.1;14.2;3.8;1347.0
+522;Chantilly, spray, com gordura vegetal;315.0;0.5;16.9;27.3;0;110.0
+523;Leite, de coco;166.0;1.0;2.2;18.4;0.7;44.0
+524;Maionese, tradicional com ovos;302.0;0.6;7.9;30.5;0;787.0
+525;Acarajé;289.0;8.3;19.1;19.9;9.4;305.0
+526;Arroz carreteiro;154.0;10.8;11.6;7.1;1.5;1622.0
+527;Baião de dois, arroz e feijão-de-corda;136.0;6.2;20.4;3.2;5.1;93.0
+528;Barreado;165.0;18.3;0.2;9.5;0.1;48.0
+529;Bife à cavalo, com contra filé;291.0;23.7;0.0;21.1;0;83.0
+530;Bolinho de arroz;274.0;8.0;41.7;8.3;2.7;59.0
+531;Camarão à baiana;101.0;7.9;3.2;6.0;0.4;85.0
+532;Charuto, de repolho;78.0;6.8;10.1;1.1;1.5;12.0
+533;Cuscuz, de milho, cozido com sal;113.0;2.2;25.3;0.7;2.1;248.0
+534;Cuscuz, paulista;142.0;2.6;22.5;4.6;2.4;236.0
+535;Cuxá, molho;80.0;5.6;5.7;3.6;3.0;1344.0
+536;Dobradinha;125.0;19.8;0.0;4.4;0;29.0
+537;Estrogonofe de carne;173.0;15.0;3.0;10.8;0;123.0
+538;Estrogonofe de frango;157.0;17.6;2.6;8.0;0;99.0
+539;Feijão tropeiro mineiro;152.0;10.2;19.6;6.8;3.6;365.0
+540;Feijoada;117.0;8.7;11.6;6.5;5.1;278.0
+541;Frango, com açafrão;113.0;9.7;4.1;6.2;0.2;29.0
+542;Macarrão, molho bolognesa;120.0;4.9;22.5;0.9;0.8;9.0
+543;Maniçoba;134.0;10.0;3.4;8.7;2.2;407.0
+544;Quibebe;86.0;8.6;6.6;2.7;1.7;247.0
+545;Salada, de legumes, com maionese;96.0;1.1;8.9;7.0;2.2;228.0
+546;Salada, de legumes, cozida no vapor;35.0;2.0;7.1;0.3;2.5;3.0
+547;Salpicão, de frango;148.0;13.9;4.6;7.8;0.4;248.0
+548;Sarapatel;123.0;18.5;1.1;4.4;0;216.0
+549;Tabule;57.0;2.0;10.6;1.2;2.1;1.0
+550;Tacacá;47.0;7.0;3.4;0.4;0.2;1349.0
+551;Tapioca, com manteiga;348.0;0.1;63.6;10.9;0.0;158.0
+552;Tucupi, com pimenta-de-cheiro;27.0;2.1;4.7;0.3;0.2;5.0
+553;Vaca atolada;145.0;5.1;10.1;9.3;2.3;26.0
+554;Vatapá;255.0;6.0;9.7;23.2;1.7;880.0
+555;Virado à paulista;307.0;10.2;14.1;25.6;2.2;346.0
+556;Yakisoba;113.0;7.5;18.3;2.6;1.1;794.0
+557;Amendoim, grão, cru;544.0;27.2;20.3;43.9;8.0;0.0
+558;Amendoim, torrado, salgado;606.0;22.5;18.7;54.0;7.8;376.0
+559;Ervilha, em vagem;88.0;7.5;14.2;0.5;9.7;0.0
+560;Ervilha, enlatada, drenada;74.0;4.6;13.4;0.4;5.1;372.0
+561;Feijão, carioca, cozido;76.0;4.8;13.6;0.5;8.5;2.0
+562;Feijão, carioca, cru;329.0;20.0;61.2;1.3;18.4;0.0
+563;Feijão, fradinho, cozido;78.0;5.1;13.5;0.6;7.5;1.0
+564;Feijão, fradinho, cru;339.0;20.2;61.2;2.4;23.6;10.0
+565;Feijão, jalo, cozido;93.0;6.1;16.5;0.5;13.9;1.0
+566;Feijão, jalo, cru;328.0;20.1;61.5;0.9;30.3;25.0
+567;Feijão, preto, cozido;77.0;4.5;14.0;0.5;8.4;2.0
+568;Feijão, preto, cru;324.0;21.3;58.8;1.2;21.8;0.0
+569;Feijão, rajado, cozido;85.0;5.5;15.3;0.4;9.3;1.0
+570;Feijão, rajado, cru;326.0;17.3;62.9;1.2;24.0;14.0
+571;Feijão, rosinha, cozido;68.0;4.5;11.8;0.5;4.8;2.0
+572;Feijão, rosinha, cru;337.0;20.9;62.2;1.3;20.6;24.0
+573;Feijão, roxo, cozido;77.0;5.7;12.9;0.5;11.5;1.0
+574;Feijão, roxo, cru;331.0;22.2;60.0;1.2;33.8;10.0
+575;Grão-de-bico, cru;355.0;21.2;57.9;5.4;12.4;5.0
+576;Guandu, cru;344.0;19.0;64.0;2.1;21.3;2.0
+577;Lentilha, cozida;93.0;6.3;16.3;0.5;7.9;1.0
+578;Lentilha, crua;339.0;23.2;62.0;0.8;16.9;0.0
+579;Paçoca, amendoim;487.0;16.0;52.4;26.1;7.3;167.0
+580;Pé-de-moleque, amendoim;503.0;13.2;54.7;28.0;3.4;16.0
+581;Soja, farinha;404.0;36.0;38.4;14.6;20.2;6.0
+582;Soja, extrato solúvel, natural, fluido;39.0;2.4;4.3;1.6;0.4;57.0
+583;Soja, extrato solúvel, pó;459.0;35.7;28.5;26.2;7.3;83.0
+584;Soja, queijo (tofu);64.0;6.6;2.1;4.0;0.8;1.0
+585;Tremoço, cru;381.0;33.6;43.8;10.3;32.3;3.0
+586;Tremoço, em conserva;121.0;11.1;12.4;3.8;14.4;1809.0
+587;Amêndoa, torrada, salgada;581.0;18.6;29.5;47.3;11.6;279.0
+588;Castanha-de-caju, torrada, salgada;570.0;18.5;29.1;46.3;3.7;125.0
+589;Castanha-do-Brasil, crua;643.0;14.5;15.1;63.5;7.9;1.0
+590;Coco, cru;406.0;3.7;10.4;42.0;5.4;15.0
+591;Coco,  verde, cru;0;0;0;0;0;0
+592;Farinha, de mesocarpo de babaçu, crua;329.0;1.4;79.2;0.2;17.9;12.0
+593;Gergelim, semente;584.0;21.2;21.6;50.4;11.9;3.0
+594;Linhaça, semente;495.0;14.1;43.3;32.3;33.5;9.0
+595;Pinhão, cozido;174.0;3.0;43.9;0.7;15.6;1.0
+596;Pupunha, cozida;219.0;2.5;29.6;12.8;4.3;1.0
+597;Noz, crua;620.0;14.0;18.4;59.4;7.2;5.0

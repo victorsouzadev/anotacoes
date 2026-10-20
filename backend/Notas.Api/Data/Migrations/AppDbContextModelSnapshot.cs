@@ -159,6 +159,370 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("sites_deployments", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.DietaAgua", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Ml")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Data");
+
+                    b.ToTable("dieta_agua", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaAlimento", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Carbo")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("CodigoBarras")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Favorito")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Fibra")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Fonte")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Gordura")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Itens")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Kcal")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("PorcaoG")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PorcaoNome")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Proteina")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Sodio")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CodigoBarras");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("dieta_alimentos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaCompartilhamento", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Escopos")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevogadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("dieta_compartilhamentos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaFoto", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Conteudo")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Rotulo")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Data");
+
+                    b.ToTable("dieta_fotos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPerfil", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("AlturaCm")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Atividade")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("MetaAguaMl")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetaCarboG")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetaGorduraG")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetaKcal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MetaProteinaG")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("Nascimento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Objetivo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sexo")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("dieta_perfis", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPeso", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Kg")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Data");
+
+                    b.ToTable("dieta_pesos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPlanoItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AlimentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DiaSemana")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("QuantidadeG")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Refeicao")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("dieta_plano", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaRegistro", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AlimentoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Carbo")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Fibra")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("FotoId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Gordura")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Kcal")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Proteina")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("QuantidadeG")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Refeicao")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Data");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("dieta_registros", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Divida", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1265,6 +1629,77 @@ namespace Notas.Api.Data.Migrations
                     b.HasOne("Notas.Api.Data.Site", null)
                         .WithMany()
                         .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaAgua", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaAlimento", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaCompartilhamento", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaFoto", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPerfil", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithOne()
+                        .HasForeignKey("Notas.Api.Data.DietaPerfil", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPeso", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaPlanoItem", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.DietaRegistro", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
