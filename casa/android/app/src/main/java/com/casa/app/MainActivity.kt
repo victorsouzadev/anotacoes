@@ -1,6 +1,9 @@
 package com.casa.app
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,6 +35,10 @@ class MainActivity : ComponentActivity() {
     private val vm: CasaViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Lembretes.criarCanal(this)
+        if (Build.VERSION.SDK_INT >= 33) registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+            .launch(Manifest.permission.POST_NOTIFICATIONS)
+        Lembretes.agendar(this)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme(primary = Verde, secondary = Color(0xFF5B8C74))) {
                 Surface(Modifier.fillMaxSize()) { if (vm.logado && vm.estado != null) Principal(vm) else if (vm.logado) Carregando(vm) else Boas_vindas(vm) }
@@ -288,6 +295,12 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedButton(onClick = vm::redistribuir, Modifier.padding(top = 8.dp)) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Redistribuir a semana") }
+            }
+        }
+        item { Titulo("Lembretes") }
+        item { ConfigLembretes() }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(24.dp))
                 TextButton(onClick = vm::sair) { Text("Sair deste aparelho") }
             }
@@ -327,4 +340,25 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
             }
         },
     )
+}
+
+@Composable
+private fun ConfigLembretes() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var ativo by remember { mutableStateOf(Lembretes.ativo(ctx)) }
+    var manha by remember { mutableFloatStateOf(Lembretes.horaManha(ctx).toFloat()) }
+    var noite by remember { mutableFloatStateOf(Lembretes.horaNoite(ctx).toFloat()) }
+    val salvar = { Lembretes.configurar(ctx, ativo, manha.toInt(), noite.toInt()) }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Avisar sobre minhas tarefas", Modifier.weight(1f))
+            Switch(ativo, { ativo = it; salvar() })
+        }
+        if (ativo) {
+            Text("Manhã (tarefas do dia): ${manha.toInt()}h")
+            Slider(manha, { manha = it }, valueRange = 5f..12f, steps = 6, onValueChangeFinished = salvar)
+            Text("Noite (o que ficou pendente): ${noite.toInt()}h")
+            Slider(noite, { noite = it }, valueRange = 16f..23f, steps = 6, onValueChangeFinished = salvar)
+        }
+    }
 }

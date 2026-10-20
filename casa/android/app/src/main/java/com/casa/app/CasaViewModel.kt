@@ -12,7 +12,10 @@ import org.json.JSONObject
 
 class CasaViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("casa", Context.MODE_PRIVATE)
-    val api = Api(prefs.getString("servidor", null) ?: BuildConfig.SERVIDOR, prefs.getString("token", null))
+    val api = Api(
+        prefs.getString("servidor", null)?.takeIf { it != "http://191.252.177.244:8095" } ?: BuildConfig.SERVIDOR,
+        prefs.getString("token", null),
+    )
 
     var estado by mutableStateOf<Estado?>(null); private set
     var carregando by mutableStateOf(false); private set
@@ -36,6 +39,7 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun guardaToken(servidor: String, r: JSONObject): JSONObject {
         api.servidor = servidor; api.token = r.getString("token")
         prefs.edit().putString("servidor", servidor).putString("token", api.token).apply()
+        Lembretes.agendar(getApplication())
         return api.chamar("GET", "/api/estado")
     }
 
@@ -47,7 +51,7 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
         api.servidor = servidor
         guardaToken(servidor, api.chamar("POST", "/api/entrar", JSONObject().put("codigo", codigo).put("nome", nome)))
     }
-    fun sair() { api.token = null; estado = null; prefs.edit().remove("token").apply() }
+    fun sair() { api.token = null; estado = null; prefs.edit().remove("token").apply(); Lembretes.agendar(getApplication()) }
 
     fun atualizar() = executa { api.chamar("GET", "/api/estado") }
     fun concluir(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/${if (a.feito) "desfazer" else "concluir"}") }

@@ -11,10 +11,10 @@ android {
         applicationId = "com.casa.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         // Servidor padrão (VPS); pode ser trocado na tela inicial do app.
-        buildConfigField("String", "SERVIDOR", "\"http://191.252.177.244:8095\"")
+        buildConfigField("String", "SERVIDOR", "\"https://casa.vsitefy.com.br\"")
     }
 
     buildFeatures { compose = true; buildConfig = true }

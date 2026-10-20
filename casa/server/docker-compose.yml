@@ -1,12 +1,16 @@
+# HTTPS pelo nginx-proxy-manager: casa.vsitefy.com.br → casa-api:8080 (rede "proxy").
 services:
   casa:
     build: .
     container_name: casa-api
     restart: unless-stopped
-    ports:
-      - "8095:8080"
     volumes:
       - casa-data:/data
+    networks:
+      - proxy
     mem_limit: 96m
 volumes:
   casa-data:
+networks:
+  proxy:
+    external: true
