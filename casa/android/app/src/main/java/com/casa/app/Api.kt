@@ -31,13 +31,15 @@ class Api(var servidor: String, var token: String?) {
 
 /** disponibilidade: segunda a domingo; 1 = livre, 0.4 = pouco, 0 = nada. */
 data class Membro(val id: Int, val nome: String, val peso: Double, val ausenteAte: String?, val admin: Boolean, val disponibilidade: List<Double>)
-data class Tarefa(val id: Int, val nome: String, val pontos: Int, val vezes: Int, val fixoId: Int?, val condicaoId: Int?)
+/** horario: "HH:MM" de preferência (ou null); duracao em minutos, para a agenda. */
+data class Tarefa(val id: Int, val nome: String, val pontos: Int, val vezes: Int, val fixoId: Int?, val condicaoId: Int?, val horario: String?, val duracao: Int)
 /** Regra da casa. tipo "alternado": vale em [referencia] e a cada 2 dias; "semana": nos [dias] (0 = segunda). */
 data class Condicao(val id: Int, val nome: String, val tipo: String, val referencia: String?, val dias: List<Int>)
-data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val membroId: Int?, val dia: String, val pontos: Int, val feito: Boolean)
+data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val membroId: Int?, val dia: String, val pontos: Int, val feito: Boolean,
+    val horario: String? = null, val duracao: Int = 30)
 data class Placar(val membroId: Int, val nome: String, val feitos: Int, val previstos: Int, val saldo: Double)
 data class Estado(
-    val euId: Int, val euAdmin: Boolean, val casaNome: String, val codigo: String, val modo: String,
+    val euId: Int, val euAdmin: Boolean, val agendaUrl: String?, val casaNome: String, val codigo: String, val modo: String,
     val semana: String, val hoje: String, val membros: List<Membro>, val tarefas: List<Tarefa>,
     val atribuicoes: List<Atribuicao>, val placar: List<Placar>, val preferencias: Map<Int, Int>,
     val condicoes: List<Condicao>, val condicoesDoDia: Map<String, List<Int>>,
@@ -49,11 +51,12 @@ private inline fun <T> JSONArray.mapa(f: (JSONObject) -> T) = (0 until length())
 private fun JSONObject.intOuNull(k: String) = if (isNull(k)) null else getInt(k)
 private fun JSONObject.strOuNull(k: String) = if (isNull(k)) null else getString(k)
 private fun JSONObject.optIntOuNull(k: String) = if (!has(k) || isNull(k)) null else getInt(k)
+private fun JSONObject.optStrOuNull(k: String) = if (!has(k) || isNull(k)) null else getString(k)
 
 fun JSONObject.paraEstado(): Estado {
     val eu = getJSONObject("eu"); val casa = getJSONObject("casa")
     return Estado(
-        euId = eu.getInt("id"), euAdmin = eu.getBoolean("admin"),
+        euId = eu.getInt("id"), euAdmin = eu.getBoolean("admin"), agendaUrl = eu.optStrOuNull("agendaUrl"),
         casaNome = casa.getString("nome"), codigo = casa.getString("codigo"), modo = casa.getString("modo"),
         semana = getString("semana"), hoje = getString("hoje"),
         membros = getJSONArray("membros").mapa {
@@ -62,7 +65,8 @@ fun JSONObject.paraEstado(): Estado {
                 List(7) { i -> d?.optDouble(i, 1.0) ?: 1.0 })
         },
         tarefas = getJSONArray("tarefas").mapa {
-            Tarefa(it.getInt("id"), it.getString("nome"), it.getInt("pontos"), it.getInt("vezes"), it.intOuNull("fixo_id"), it.optIntOuNull("condicao_id"))
+            Tarefa(it.getInt("id"), it.getString("nome"), it.getInt("pontos"), it.getInt("vezes"), it.intOuNull("fixo_id"), it.optIntOuNull("condicao_id"),
+                it.optStrOuNull("horario"), it.optInt("duracao", 30))
         },
         condicoes = optJSONArray("condicoes")?.mapa {
             val d = it.optJSONArray("dias")
@@ -72,7 +76,8 @@ fun JSONObject.paraEstado(): Estado {
             val c = it.getJSONArray("condicoes"); it.getString("dia") to List(c.length()) { i -> c.getInt(i) }
         }.orEmpty().toMap(),
         atribuicoes = getJSONArray("atribuicoes").mapa {
-            Atribuicao(it.getInt("id"), it.getInt("tarefa_id"), it.getString("tarefa"), it.intOuNull("membro_id"), it.getString("dia"), it.getInt("pontos"), !it.isNull("feito_em"))
+            Atribuicao(it.getInt("id"), it.getInt("tarefa_id"), it.getString("tarefa"), it.intOuNull("membro_id"), it.getString("dia"), it.getInt("pontos"), !it.isNull("feito_em"),
+                it.optStrOuNull("horario"), it.optInt("duracao", 30))
         },
         placar = getJSONArray("placar").mapa { Placar(it.getInt("membroId"), it.getString("nome"), it.getInt("feitos"), it.getInt("previstos"), it.getDouble("saldo")) },
         preferencias = getJSONArray("preferencias").mapa { it.getInt("tarefa_id") to it.getInt("nivel") }.toMap(),

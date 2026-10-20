@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS condicoes(id INTEGER PRIMARY KEY, casa_id INTEGER REF
 // Colunas novas em bancos já existentes.
 const colunas = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
 if (!colunas('tarefas').includes('condicao_id')) db.exec('ALTER TABLE tarefas ADD COLUMN condicao_id INTEGER');
+// Horário de preferência ('HH:MM', opcional) e duração em minutos, usados na lista e na agenda.
+if (!colunas('tarefas').includes('horario')) db.exec('ALTER TABLE tarefas ADD COLUMN horario TEXT');
+if (!colunas('tarefas').includes('duracao')) db.exec('ALTER TABLE tarefas ADD COLUMN duracao INTEGER DEFAULT 30');
+// Link secreto da agenda (.ics) de cada pessoa.
+if (!colunas('membros').includes('agenda_token')) db.exec('ALTER TABLE membros ADD COLUMN agenda_token TEXT');
 // Disponibilidade de cada dia da semana (segunda a domingo): 1 = livre, 0.4 = pouco, 0 = nada.
 if (!colunas('membros').includes('disponibilidade')) db.exec("ALTER TABLE membros ADD COLUMN disponibilidade TEXT DEFAULT '[1,1,1,1,1,1,1]'");
 
@@ -211,13 +216,18 @@ function distribuir(casaId, inicio = segunda()) {
 }
 
 // ---------- estado ----------
+// Ordem do dia: primeiro as que têm horário (cedo → tarde), depois as sem horário.
+const listarAtribuicoes = (casaId, semana) => db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em,t.horario,t.duracao
+  FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=?
+  ORDER BY a.dia, t.horario IS NULL, t.horario, t.nome`).all(casaId, semana);
+
 function estado(m) {
   const casa = db.prepare('SELECT id,nome,codigo,modo FROM casas WHERE id=?').get(m.casa_id);
   const semana = iso(segunda());
   if (!db.prepare('SELECT 1 FROM atribuicoes WHERE casa_id=? AND semana=?').get(casa.id, semana)) distribuir(casa.id);
   const membros = db.prepare('SELECT id,nome,peso,ausente_ate,admin,disponibilidade FROM membros WHERE casa_id=? ORDER BY id').all(casa.id)
     .map(x => ({ ...x, disponibilidade: disponibilidade(x) }));
-  const tarefas = db.prepare('SELECT id,nome,pontos,vezes,fixo_id,condicao_id FROM tarefas WHERE casa_id=? AND ativa=1 ORDER BY nome').all(casa.id);
+  const tarefas = db.prepare('SELECT id,nome,pontos,vezes,fixo_id,condicao_id,horario,duracao FROM tarefas WHERE casa_id=? AND ativa=1 ORDER BY nome').all(casa.id);
   const condicoes = db.prepare('SELECT id,nome,tipo,referencia,dias FROM condicoes WHERE casa_id=? ORDER BY nome').all(casa.id)
     .map(c => ({ ...c, dias: lista(c.dias, []) }));
   // Para cada dia da semana, quais condições valem (o app mostra, ex.: 💧 nos dias com água).
@@ -225,15 +235,15 @@ function estado(m) {
     const dia = iso(addDias(new Date(semana + 'T00:00:00Z'), i));
     return { dia, condicoes: condicoes.filter(c => condicaoVale({ ...c, dias: JSON.stringify(c.dias) }, dia)).map(c => c.id) };
   });
-  const atribuicoes = db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em
-    FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=? ORDER BY a.dia, t.nome`).all(casa.id, semana);
+  const atribuicoes = listarAtribuicoes(casa.id, semana);
   const placar = membros.map(x => {
     const minhas = atribuicoes.filter(a => a.membro_id === x.id);
     return { membroId: x.id, nome: x.nome, feitos: minhas.filter(a => a.feito_em).reduce((s, a) => s + a.pontos, 0),
       previstos: minhas.reduce((s, a) => s + a.pontos, 0), saldo: Math.round(saldoAcumulado(x.id) * 10) / 10 };
   });
   const preferencias = db.prepare('SELECT tarefa_id, nivel FROM preferencias WHERE membro_id=?').all(m.id);
-  return { eu: { id: m.id, nome: m.nome, admin: !!m.admin }, casa, semana, hoje: hoje(), membros, tarefas, condicoes, diasCondicoes,
+  const agenda = db.prepare('SELECT agenda_token FROM membros WHERE id=?').get(m.id)?.agenda_token;
+  return { eu: { id: m.id, nome: m.nome, admin: !!m.admin, agendaUrl: agenda ? urlAgenda(agenda) : null }, casa, semana, hoje: hoje(), membros, tarefas, condicoes, diasCondicoes,
     atribuicoes, placar, preferencias };
 }
 
@@ -274,15 +284,17 @@ const rotas = {
   'POST /api/distribuir': m => { distribuir(m.casa_id); return estado(m); },
   'POST /api/tarefas': (m, b) => {
     exige(b.nome?.trim(), 400, 'Informe o nome da tarefa');
-    db.prepare('INSERT INTO tarefas(casa_id,nome,pontos,vezes,fixo_id,condicao_id) VALUES(?,?,?,?,?,?)')
-      .run(m.casa_id, b.nome.trim(), clamp(b.pontos, 1, 10), clamp(b.vezes, 1, 7), b.fixoId || null, condicaoDaCasa(m, b.condicaoId));
+    db.prepare('INSERT INTO tarefas(casa_id,nome,pontos,vezes,fixo_id,condicao_id,horario,duracao) VALUES(?,?,?,?,?,?,?,?)')
+      .run(m.casa_id, b.nome.trim(), clamp(b.pontos, 1, 10), clamp(b.vezes, 1, 7), b.fixoId || null, condicaoDaCasa(m, b.condicaoId),
+        horario(b.horario), clamp(b.duracao ?? 30, 5, 480));
     distribuir(m.casa_id); return estado(m);
   },
   'PUT /api/tarefas/:id': (m, b, id) => {
     const t = db.prepare('SELECT * FROM tarefas WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(t, 404, 'Tarefa não encontrada');
-    db.prepare('UPDATE tarefas SET nome=?,pontos=?,vezes=?,fixo_id=?,condicao_id=? WHERE id=?')
+    db.prepare('UPDATE tarefas SET nome=?,pontos=?,vezes=?,fixo_id=?,condicao_id=?,horario=?,duracao=? WHERE id=?')
       .run(b.nome?.trim() || t.nome, clamp(b.pontos ?? t.pontos, 1, 10), clamp(b.vezes ?? t.vezes, 1, 7), b.fixoId || null,
-        b.condicaoId === undefined ? t.condicao_id : condicaoDaCasa(m, b.condicaoId), id);
+        b.condicaoId === undefined ? t.condicao_id : condicaoDaCasa(m, b.condicaoId),
+        b.horario === undefined ? t.horario : horario(b.horario), clamp(b.duracao ?? t.duracao ?? 30, 5, 480), id);
     distribuir(m.casa_id); return estado(m);
   },
   'DELETE /api/tarefas/:id': (m, _, id) => {
@@ -312,6 +324,13 @@ const rotas = {
     db.prepare('DELETE FROM condicoes WHERE id=?').run(id);
     distribuir(m.casa_id); return estado(m);
   },
+  // Link da agenda: cria (ou troca, revogando o anterior) e devolve a URL; DELETE desliga.
+  'POST /api/agenda': m => {
+    db.prepare('UPDATE membros SET agenda_token=? WHERE id=?').run(crypto.randomBytes(24).toString('hex'), m.id);
+    registra({ evento: 'agenda_link_criado', casaId: m.casa_id, membroId: m.id });
+    return estado(m);
+  },
+  'DELETE /api/agenda': m => { db.prepare('UPDATE membros SET agenda_token=NULL WHERE id=?').run(m.id); return estado(m); },
   'PUT /api/preferencias': (m, b) => {
     for (const [tid, nivel] of Object.entries(b || {}))
       db.prepare('INSERT OR REPLACE INTO preferencias VALUES(?,?,?)').run(m.id, Number(tid), Math.max(-1, Math.min(1, Number(nivel))));
@@ -339,6 +358,12 @@ function salvarCondicao(m, id, b) {
   const dias = tipo === 'semana' ? JSON.stringify([...new Set((b.dias ?? lista(atual?.dias, [])).map(Number).filter(d => d >= 0 && d <= 6))].sort()) : null;
   if (id) db.prepare('UPDATE condicoes SET nome=?,tipo=?,referencia=?,dias=? WHERE id=?').run(nome, tipo, referencia, dias, id);
   else db.prepare('INSERT INTO condicoes(casa_id,nome,tipo,referencia,dias) VALUES(?,?,?,?,?)').run(m.casa_id, nome, tipo, referencia, dias);
+}
+function horario(v) {
+  if (v == null || v === '') return null;
+  const x = String(v).trim().match(/^(\d{1,2}):(\d{2})$/);
+  exige(x && Number(x[1]) < 24 && Number(x[2]) < 60, 400, 'Horário inválido (use HH:MM)');
+  return `${x[1].padStart(2, '0')}:${x[2]}`;
 }
 const clamp = (v, a, b) => Math.min(b, Math.max(a, Math.round(Number(v) || a)));
 function marca(m, id, sql, ...args) {
@@ -452,6 +477,34 @@ function recebeLogs(req, membro, b) {
   return { ok: true, recebidos: itens.length };
 }
 
+// ---------- agenda (.ics) ----------
+// GET /agenda/<token>.ics: as tarefas da pessoa nesta semana e na próxima (se já dividida), para assinar
+// no Google Agenda, Apple Calendário etc. Com horário vira evento com hora; sem horário, evento de dia inteiro.
+const BASE_URL = (process.env.BASE_URL || 'https://casa.vsitefy.com.br').replace(/\/$/, '');
+const urlAgenda = t => `${BASE_URL}/agenda/${t}.ics`;
+const escIcs = v => String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+// Linhas de no máximo 75 bytes (RFC 5545), continuação com espaço.
+const dobra = l => { const out = []; let b = Buffer.from(l); while (b.length > 75) { let n = 75; while ((b[n] & 0xc0) === 0x80) n--; out.push(b.subarray(0, n).toString()); b = Buffer.concat([Buffer.from(' '), b.subarray(n)]); } out.push(b.toString()); return out.join('\r\n'); };
+function agendaIcs(token) {
+  const m = db.prepare('SELECT * FROM membros WHERE agenda_token=?').get(token);
+  if (!m) return null;
+  const e = estado(m);
+  const proxima = iso(addDias(new Date(e.semana + 'T00:00:00Z'), 7));
+  const todas = [...e.atribuicoes, ...listarAtribuicoes(m.casa_id, proxima)].filter(a => a.membro_id === m.id);
+  const carimbo = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const d8 = d => d.replace(/-/g, '');
+  const linhas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Casa//Tarefas de casa//PT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escIcs(`Casa · ${e.casa.nome}`)}`, 'X-WR-TIMEZONE:America/Sao_Paulo', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
+  for (const a of todas) {
+    linhas.push('BEGIN:VEVENT', `UID:atribuicao-${a.id}@casa`, `DTSTAMP:${carimbo}`);
+    if (a.horario) linhas.push(`DTSTART;TZID=America/Sao_Paulo:${d8(a.dia)}T${a.horario.replace(':', '')}00`, `DURATION:PT${a.duracao || 30}M`);
+    else linhas.push(`DTSTART;VALUE=DATE:${d8(a.dia)}`, `DTEND;VALUE=DATE:${d8(iso(addDias(new Date(a.dia + 'T00:00:00Z'), 1)))}`, 'TRANSP:TRANSPARENT');
+    linhas.push(`SUMMARY:${escIcs((a.feito_em ? '✓ ' : '') + a.tarefa)}`, `DESCRIPTION:${escIcs(`${a.pontos} pt · casa ${e.casa.nome}`)}`, 'END:VEVENT');
+  }
+  linhas.push('END:VCALENDAR');
+  return linhas.map(dobra).join('\r\n') + '\r\n';
+}
+
 // MCP para o Claude agir na casa (mcp.mjs): https://casa.vsitefy.com.br/mcp
 const mcp = criarMcp({ db, rotas, registra, lerLogs });
 
@@ -472,6 +525,13 @@ http.createServer(async (req, res) => {
     chave = `${req.method} ${url.pathname}`;
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/download')) return paginaDownload(res);
     if (req.method === 'GET' && url.pathname === '/casa.apk') return baixarApk(res);
+    const ics = req.method === 'GET' && url.pathname.match(/^\/agenda\/([0-9a-f]{48})\.ics$/);
+    if (ics) {
+      chave = 'GET /agenda/:token.ics'; // o token é secreto: não vai para o log
+      const corpo = agendaIcs(ics[1]);
+      if (!corpo) { res.writeHead(404); return res.end('Agenda não encontrada'); }
+      res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'cache-control': 'no-cache' }); return res.end(corpo);
+    }
     if (req.method === 'GET' && url.pathname === '/favicon.svg') {
       res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }); return res.end(FAVICON);
     }

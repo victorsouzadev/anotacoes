@@ -68,10 +68,10 @@ class FluxoTest {
         compose.onNodeWithContentDescription("Atualizar").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Hoje: 💧 Água").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Tarefas")[0].performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("só com 💧 Água", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("todo dia · 💧 Água", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Casa")[0].performClick()
         compose.onNodeWithText("Regras da casa").performScrollTo().assertExists()
         compose.onNodeWithText("Dia sim, dia não · hoje tem", substring = true).performScrollTo().assertExists()
-        compose.onNodeWithText("Menos tarefa: qua, qui, sex").performScrollTo().assertExists()
+        compose.onNodeWithText("menos tarefa qua, qui, sex", substring = true).performScrollTo().assertExists()
     }
 }

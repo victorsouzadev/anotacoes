@@ -47,7 +47,14 @@ class CapturasTest {
             compose.onNode(hasSetTextAction() and hasText("Servidor")).performTextReplacement(servidor!!)
             compose.onAllNodesWithText("Criar casa")[1].performScrollTo().performClick()
             compose.waitUntil(20_000) { compose.onAllNodesWithText("Olá, Victor").fetchSemanticsNodes().isNotEmpty() }
-            compose.onAllNodesWithText("Lavar a louça")[0].performClick() // marca uma como feita
+            val api = Api(servidor, ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("casa", Context.MODE_PRIVATE).getString("token", null))
+            kotlinx.coroutines.runBlocking {
+                val e = api.chamar("GET", "/api/estado").paraEstado()
+                for ((t, h) in listOf("Lavar a louça" to "20:00", "Cozinhar o jantar" to "19:30"))
+                    api.chamar("PUT", "/api/tarefas/${e.tarefas.first { it.nome == t }.id}", org.json.JSONObject().put("horario", h))
+            }
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Atualizar")).performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("20:00").fetchSemanticsNodes().isNotEmpty() }
             compose.waitForIdle(); Thread.sleep(1500); compose.waitForIdle()
             salva(pasta, "$tema-2-hoje")
             for ((aba, nome) in listOf("Semana" to "3-semana", "Tarefas" to "4-tarefas", "Casa" to "5-casa")) {

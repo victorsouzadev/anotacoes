@@ -29,7 +29,7 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
         carregando = true; erro = null
         try {
             val r = bloco()
-            if (r != null) { if (r.optBoolean("saiu")) sair() else if (r.has("casa")) estado = r.paraEstado() }
+            if (r != null) { if (r.optBoolean("saiu")) sair() else if (r.has("casa")) estado = r.paraEstado().also { sincronizarAgenda(it) } }
         } catch (e: ApiErro) {
             erro = e.message; if (e.status == 401) sair()
             if (e.status >= 500) Registro.erro("erro_api", e)
@@ -66,9 +66,9 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     fun redistribuir() = executa { api.chamar("POST", "/api/distribuir") }
     fun modo(m: String) = executa { api.chamar("PUT", "/api/casa", JSONObject().put("modo", m)) }
 
-    fun salvarTarefa(id: Int?, nome: String, pontos: Int, vezes: Int, fixoId: Int?, condicaoId: Int?) = executa {
+    fun salvarTarefa(id: Int?, nome: String, pontos: Int, vezes: Int, fixoId: Int?, condicaoId: Int?, horario: String?, duracao: Int) = executa {
         val b = JSONObject().put("nome", nome).put("pontos", pontos).put("vezes", vezes).put("fixoId", fixoId ?: JSONObject.NULL)
-            .put("condicaoId", condicaoId ?: JSONObject.NULL)
+            .put("condicaoId", condicaoId ?: JSONObject.NULL).put("horario", horario ?: "").put("duracao", duracao)
         if (id == null) api.chamar("POST", "/api/tarefas", b) else api.chamar("PUT", "/api/tarefas/$id", b)
     }
     fun removerTarefa(id: Int) = executa { api.chamar("DELETE", "/api/tarefas/$id") }
@@ -85,5 +85,13 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
         if (id == null) api.chamar("POST", "/api/condicoes", b) else api.chamar("PUT", "/api/condicoes/$id", b)
     }
     fun removerRegra(id: Int) = executa { api.chamar("DELETE", "/api/condicoes/$id") }
+
+    // Agenda: link .ics (servidor) e sincronização com a agenda do celular (Agenda.kt).
+    fun gerarLinkAgenda() = executa { api.chamar("POST", "/api/agenda") }
+    fun desligarLinkAgenda() = executa { api.chamar("DELETE", "/api/agenda") }
+    fun sincronizarAgenda(e: Estado? = estado) {
+        if (e == null) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { Agenda.sincronizar(getApplication(), e) }
+    }
     fun removerMembro(id: Int) = executa { api.chamar("DELETE", "/api/membros/$id") }
 }

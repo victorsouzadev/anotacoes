@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -136,19 +138,20 @@ private fun nomeDia(d: String): String {
     return x.dayOfWeek.getDisplayName(TextStyle.FULL, Locale("pt", "BR")).replaceFirstChar { it.uppercase() } + " ${x.dayOfMonth}/${x.monthValue}"
 }
 
+/** Linha de uma linha só (48 dp): caixa, tarefa e, à direita, horário · pessoa · pontos. */
 @Composable
 private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrarDono: Boolean = true) {
     val dono = e.membros.find { it.id == a.membroId }?.nome ?: "Ninguém"
     val minha = a.membroId == e.euId
-    ListItem(
-        colors = coresLinha(),
-        leadingContent = { Checkbox(a.feito, { vm.concluir(a) }, colors = coresCaixa()) },
-        headlineContent = { Text(a.tarefa, textDecoration = if (a.feito) TextDecoration.LineThrough else null) },
-        supportingContent = { Text((if (mostrarDono) "$dono · " else "") + "${a.pontos} pt") },
-        trailingContent = {
-            if (!minha && !a.feito) AcaoNeutra(onClick = { vm.assumir(a) }) { Text("Assumir") }
-        },
-    )
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(a.feito, { vm.concluir(a) }, colors = coresCaixa())
+        Text(a.tarefa, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = if (a.feito) grafite.grafiteSuave else grafite.grafite, textDecoration = if (a.feito) TextDecoration.LineThrough else null)
+        if (a.horario != null) Text(a.horario, Modifier.padding(start = 8.dp), style = EstiloValor, color = grafite.grafiteSuave)
+        val meta = listOfNotNull(dono.takeIf { mostrarDono }, "${a.pontos} pt").joinToString(" · ")
+        Text((if (a.horario != null) " · " else "  ") + meta, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1)
+        if (!minha && !a.feito) AcaoNeutra(onClick = { vm.assumir(a) }, Modifier.padding(start = 4.dp).height(32.dp), compacta = true) { Text("Assumir") }
+    }
 }
 
 @Composable
@@ -156,47 +159,53 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
     val minhas = e.atribuicoes.filter { it.membroId == e.euId }
     val hoje = minhas.filter { it.dia == e.hoje }
     val atrasadas = minhas.filter { it.dia < e.hoje && !it.feito }
-    val proximas = minhas.filter { it.dia > e.hoje && !it.feito }
+    val proximas = minhas.filter { it.dia > e.hoje && !it.feito }.groupBy { it.dia }
     val eu = e.placar.find { it.membroId == e.euId }
-    LazyColumn {
+    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
         item {
-            OutlinedCard(Modifier.fillMaxWidth().padding(12.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Olá, ${e.membros.find { it.id == e.euId }?.nome}", style = MaterialTheme.typography.titleLarge)
+            OutlinedCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text("Olá, ${e.membros.find { it.id == e.euId }?.nome}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        if (eu != null) Text("${eu.feitos}/${eu.previstos} pt", style = EstiloValor, color = grafite.grafiteSuave)
+                    }
                     e.regrasDoDia(e.hoje).takeIf { it.isNotEmpty() }?.let { r ->
-                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, color = grafite.grafiteSuave)
+                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
                     }
-                    if (eu != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${eu.feitos} de ${eu.previstos}", style = EstiloValor); Text(" pontos nesta semana")
-                        }
-                        Progresso(if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 8.dp))
-                    }
+                    if (eu != null) Progresso(if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 8.dp))
                 }
             }
         }
         if (atrasadas.isNotEmpty()) { item { Titulo("Atrasadas") }; items(atrasadas, { it.id }) { LinhaAtribuicao(vm, e, it, false) } }
         item { Titulo("Hoje") }
-        if (hoje.isEmpty()) item { Text("Nada para hoje. 🎉", Modifier.padding(16.dp)) }
+        if (hoje.isEmpty()) item { Text("Nada para hoje. 🎉", Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         items(hoje, { it.id }) { LinhaAtribuicao(vm, e, it, false) }
-        if (proximas.isNotEmpty()) { item { Titulo("Próximos dias") }; items(proximas, { it.id }) { a ->
-            Column { Text(nomeDia(a.dia).uppercase(), Modifier.padding(start = 16.dp), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave); LinhaAtribuicao(vm, e, a, false) }
-        } }
+        if (proximas.isNotEmpty()) {
+            item { Titulo("Próximos dias") }
+            proximas.forEach { (dia, itens) ->
+                item { Rotulo(nomeDia(dia)) }
+                items(itens, { it.id }) { LinhaAtribuicao(vm, e, it, false) }
+            }
+        }
     }
 }
 
 @Composable
-private fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium)
+private fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium)
+
+/** Legenda em caixa alta (12/16 +0.06em), para separar dias dentro de uma seção. */
+@Composable
+private fun Rotulo(t: String) = Text(t.uppercase(), Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
 
 @Composable
 private fun Semana(vm: CasaViewModel, e: Estado) {
     var filtro by remember { mutableStateOf<Int?>(null) }
     val lista = e.atribuicoes.filter { filtro == null || it.membroId == filtro }.groupBy { it.dia }
-    LazyColumn {
+    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
         item {
-            Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(filtro == null, { filtro = null }, { Text("Todos") })
-                e.membros.take(4).forEach { m -> FilterChip(filtro == m.id, { filtro = m.id }, { Text(m.nome) }) }
+                e.membros.forEach { m -> FilterChip(filtro == m.id, { filtro = m.id }, { Text(m.nome) }) }
             }
         }
         lista.toSortedMap().forEach { (dia, itens) ->
@@ -215,26 +224,21 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
     var nova by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-            item { Text("Toque para editar. Marque o que você gosta 👍 ou prefere evitar 👎 — a divisão leva isso em conta.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall) }
+            item { Text("Toque para editar. 👍 gosto / 👎 evito: a divisão leva isso em conta.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave) }
             items(e.tarefas, { it.id }) { t ->
                 val nivel = e.preferencias[t.id] ?: 0
                 val fixo = e.membros.find { it.id == t.fixoId }?.nome
-                ListItem(
-        colors = coresLinha(),
-                    modifier = Modifier.clickable { editando = t },
-                    headlineContent = { Text(t.nome) },
-                    supportingContent = {
-                        val regra = e.condicoes.find { it.id == t.condicaoId }
-                        Text("${t.pontos} pt · ${if (t.vezes == 7) "todo dia" else "${t.vezes}x/semana"}" + (fixo?.let { " · sempre $it" } ?: "") +
-                            (regra?.let { " · só com ${rotuloRegra(it)}" } ?: ""))
-                    },
-                    trailingContent = {
-                        Row {
-                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }) { Icon(if (nivel == 1) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Gosto", tint = if (nivel == 1) grafite.grafite else grafite.grafiteSuave) }
-                            IconButton(onClick = { vm.preferencia(t.id, if (nivel == -1) 0 else -1) }) { Icon(if (nivel == -1) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "Evito", tint = if (nivel == -1) grafite.grafite else grafite.grafiteSuave) }
-                        }
-                    },
-                )
+                val regra = e.condicoes.find { it.id == t.condicaoId }
+                Row(Modifier.fillMaxWidth().clickable { editando = t }.heightIn(min = 52.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                        Text(t.nome, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(listOfNotNull("${t.pontos} pt", if (t.vezes == 7) "todo dia" else "${t.vezes}x/sem", t.horario?.let { "às $it" },
+                            fixo?.let { "sempre $it" }, regra?.let { rotuloRegra(it) }).joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }, Modifier.size(40.dp)) { Icon(if (nivel == 1) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Gosto", Modifier.size(20.dp), tint = if (nivel == 1) grafite.grafite else grafite.grafiteSuave) }
+                    IconButton(onClick = { vm.preferencia(t.id, if (nivel == -1) 0 else -1) }, Modifier.size(40.dp)) { Icon(if (nivel == -1) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown, "Evito", Modifier.size(20.dp), tint = if (nivel == -1) grafite.grafite else grafite.grafiteSuave) }
+                }
             }
         }
         ExtendedFloatingActionButton(onClick = { nova = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp), shape = RaioBotao,
@@ -250,11 +254,18 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
     var vezes by remember { mutableFloatStateOf((t?.vezes ?: 1).toFloat()) }
     var fixo by remember { mutableStateOf(t?.fixoId) }
     var regra by remember { mutableStateOf(t?.condicaoId) }
+    var horario by remember { mutableStateOf(t?.horario) }
+    var duracao by remember { mutableStateOf(t?.duracao ?: 30) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val escolherHorario = {
+        val (h, m) = (horario ?: "20:00").split(":").map { it.toInt() }
+        android.app.TimePickerDialog(ctx, { _, hh, mm -> horario = "%02d:%02d".format(hh, mm) }, h, m, true).show()
+    }
     AlertDialog(
         onDismissRequest = fechar,
         title = { Text(if (t == null) "Nova tarefa" else "Editar tarefa") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(nome, { nome = it }, label = { Text("Nome") }, singleLine = true)
                 Text("Esforço: ${pontos.toInt()} pt", Modifier.padding(top = 12.dp))
                 Slider(pontos, { pontos = it }, valueRange = 1f..10f, steps = 8, colors = coresSlider())
@@ -265,6 +276,14 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
                     FilterChip(fixo == null, { fixo = null }, { Text("Dividir") })
                     e.membros.take(3).forEach { m -> FilterChip(fixo == m.id, { fixo = m.id }, { Text(m.nome) }) }
                 }
+                Text("Horário de preferência", Modifier.padding(top = 8.dp))
+                Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(horario == null, { horario = null }, { Text("Sem horário") })
+                    FilterChip(horario != null, { escolherHorario() }, { Text(horario ?: "Escolher…", style = if (horario != null) EstiloValor else MaterialTheme.typography.labelLarge) })
+                }
+                if (horario != null) Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(15, 30, 45, 60, 90).forEach { d -> FilterChip(duracao == d, { duracao = d }, { Text("$d min") }) }
+                }
                 if (e.condicoes.isNotEmpty()) {
                     Text("Só nos dias de", Modifier.padding(top = 8.dp))
                     Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -274,7 +293,7 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { vm.salvarTarefa(t?.id, nome, pontos.toInt(), vezes.toInt(), fixo, regra); fechar() }, enabled = nome.isNotBlank()) { Text("Salvar") } },
+        confirmButton = { TextButton(onClick = { vm.salvarTarefa(t?.id, nome, pontos.toInt(), vezes.toInt(), fixo, regra, horario, duracao); fechar() }, enabled = nome.isNotBlank()) { Text("Salvar") } },
         dismissButton = {
             Row {
                 if (t != null) AcaoPerigo(onClick = { vm.removerTarefa(t.id); fechar() }) { Text("Excluir") }
@@ -292,11 +311,13 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
     var novaRegra by remember { mutableStateOf(false) }
     LazyColumn {
         item {
-            OutlinedCard(Modifier.fillMaxWidth().padding(12.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Código de convite".uppercase(), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
-                    Text(e.codigo, style = EstiloValor, modifier = Modifier.padding(vertical = 4.dp))
-                    TextButton(onClick = {
+            OutlinedCard(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Código de convite".uppercase(), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
+                        Text(e.codigo, style = EstiloValor)
+                    }
+                    TextButton(shape = RaioBotao, onClick = {
                         val i = Intent(Intent.ACTION_SEND).setType("text/plain")
                             .putExtra(Intent.EXTRA_TEXT, "Entre na casa \"${e.casaNome}\" no app Casa com o código ${e.codigo}")
                         ctx.startActivity(Intent.createChooser(i, "Convidar"))
@@ -307,20 +328,19 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
         item { Titulo("Placar da semana") }
         items(e.placar, { it.membroId }) { p ->
             val m = e.membros.find { it.id == p.membroId }
-            ListItem(
-        colors = coresLinha(),
-                modifier = Modifier.clickable { editando = m },
-                headlineContent = { Text(p.nome + if (p.membroId == e.euId) " (você)" else "") },
-                supportingContent = {
-                    Column {
-                        Text("${p.feitos}/${p.previstos} pt · peso ${m?.peso} · saldo ${if (p.saldo > 0) "+" else ""}${p.saldo}" + (m?.ausenteAte?.let { " · ausente até $it" } ?: ""))
-                        m?.disponibilidade?.withIndex()?.filter { it.value < 0.99 }?.takeIf { it.isNotEmpty() }?.let { l ->
-                            Text("Menos tarefa: " + l.joinToString(", ") { DIAS_CURTOS[it.index] + if (it.value <= 0) " (nada)" else "" }, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Progresso(if (p.previstos == 0) 0f else p.feitos / p.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 4.dp))
-                    }
-                },
-            )
+            Column(Modifier.fillMaxWidth().clickable { editando = m }.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.nome + if (p.membroId == e.euId) " (você)" else "", Modifier.weight(1f))
+                    Text("${p.feitos}/${p.previstos} pt", style = EstiloValor, color = grafite.grafiteSuave)
+                }
+                val extras = listOfNotNull(
+                    "peso ${m?.peso}", "saldo ${if (p.saldo > 0) "+" else ""}${p.saldo}", m?.ausenteAte?.let { "ausente até $it" },
+                    m?.disponibilidade?.withIndex()?.filter { it.value < 0.99 }?.takeIf { it.isNotEmpty() }
+                        ?.let { l -> "menos tarefa " + l.joinToString(", ") { DIAS_CURTOS[it.index] + if (it.value <= 0) " (nada)" else "" } },
+                )
+                Text(extras.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Progresso(if (p.previstos == 0) 0f else p.feitos / p.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 4.dp))
+            }
         }
         item { Titulo("Como dividir") }
         item {
@@ -357,11 +377,13 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                 Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Nova regra")
             }
         }
+        item { Titulo("Agenda") }
+        item { ConfigAgenda(vm, e) }
         item { Titulo("Lembretes") }
         item { ConfigLembretes() }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
                 AcaoNeutra(onClick = vm::sair, cor = grafite.grafiteSuave) { Text("Sair deste aparelho") }
             }
         }
@@ -487,6 +509,69 @@ private fun EditorMembro(vm: CasaViewModel, e: Estado, m: Membro, fechar: () -> 
 }
 
 @Composable
+private fun ConfigAgenda(vm: CasaViewModel, e: Estado) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var escolhido by remember { mutableStateOf(Agenda.calendarioEscolhido(ctx)) }
+    var calendarios by remember { mutableStateOf(Agenda.calendarios(ctx)) }
+    var escolhendo by remember { mutableStateOf(false) }
+    val permissao = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        calendarios = Agenda.calendarios(ctx)
+        if (calendarios.isNotEmpty()) escolhendo = true
+    }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Minhas tarefas na agenda do celular")
+                Text(escolhido?.let { id -> calendarios.find { it.id == id }?.let { "${it.nome} · ${it.conta}" } } ?: "Com horário vira evento; sem horário, dia inteiro.",
+                    style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Switch(escolhido != null, { ligar ->
+                if (ligar) {
+                    if (Agenda.temPermissao(ctx)) { calendarios = Agenda.calendarios(ctx); escolhendo = true } else permissao.launch(Agenda.PERMISSOES)
+                } else { Agenda.desligar(ctx); escolhido = null }
+            }, colors = coresChave())
+        }
+        if (escolhido != null) AcaoNeutra(onClick = { calendarios = Agenda.calendarios(ctx); escolhendo = true }, compacta = true) { Text("Trocar de agenda") }
+        Text("Link para assinar em outra agenda (Google Agenda no computador, Apple…)", Modifier.padding(top = 8.dp))
+        if (e.agendaUrl == null) {
+            AcaoNeutra(onClick = vm::gerarLinkAgenda, compacta = true) { Text("Gerar link .ics") }
+        } else {
+            Text(e.agendaUrl, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row {
+                AcaoNeutra(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(e.agendaUrl)) }, compacta = true) { Text("Copiar") }
+                AcaoNeutra(onClick = vm::gerarLinkAgenda, compacta = true) { Text("Trocar link") }
+                AcaoNeutra(onClick = vm::desligarLinkAgenda, compacta = true, cor = grafite.grafiteSuave) { Text("Desligar") }
+            }
+            Text("Quem tiver o link vê suas tarefas. \"Trocar link\" invalida o anterior.", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        }
+    }
+    if (escolhendo) AlertDialog(
+        onDismissRequest = { escolhendo = false },
+        title = { Text("Escolha a agenda") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (calendarios.isEmpty()) Text("Nenhuma agenda com permissão de escrita neste celular.")
+                calendarios.forEach { c ->
+                    Row(Modifier.fillMaxWidth().clickable {
+                        escolhido = c.id; escolhendo = false
+                        val estado = vm.estado
+                        kotlin.concurrent.thread { Agenda.escolher(ctx, c.id, estado) }
+                    }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(escolhido == c.id, null, colors = RadioButtonDefaults.colors(selectedColor = grafite.grafite, unselectedColor = grafite.grafiteSuave))
+                        Column(Modifier.padding(start = 8.dp)) {
+                            Text(c.nome)
+                            Text(c.conta, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { AcaoNeutra(onClick = { escolhendo = false }) { Text("Fechar") } },
+    )
+}
+
+@Composable
 private fun ConfigLembretes() {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var ativo by remember { mutableStateOf(Lembretes.ativo(ctx)) }
@@ -511,8 +596,9 @@ private fun ConfigLembretes() {
 // Nanquim é o acento único da tela; as ações secundárias ficam em grafite.
 
 @Composable
-private fun AcaoNeutra(onClick: () -> Unit, modifier: Modifier = Modifier, cor: Color = grafite.grafite, content: @Composable RowScope.() -> Unit) =
-    TextButton(onClick = onClick, modifier = modifier, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = cor), content = content)
+private fun AcaoNeutra(onClick: () -> Unit, modifier: Modifier = Modifier, cor: Color = grafite.grafite, compacta: Boolean = false, content: @Composable RowScope.() -> Unit) =
+    TextButton(onClick = onClick, modifier = modifier, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = cor),
+        contentPadding = if (compacta) PaddingValues(horizontal = 8.dp, vertical = 0.dp) else ButtonDefaults.TextButtonContentPadding, content = content)
 
 @Composable
 private fun AcaoPerigo(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =

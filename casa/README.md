@@ -38,6 +38,16 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
   passando tarefas de quem ficou acima da sua parte para quem ficou abaixo, nos dias livres desta pessoa.
 - O servidor usa `TZ=America/Sao_Paulo`: "hoje" e a virada da semana seguem o horário de Brasília.
 
+## Horário e agenda
+
+- Cada tarefa pode ter **horário de preferência** (`horario` HH:MM) e **duração** (`duracao`, minutos). As listas
+  mostram o horário e ordenam por ele.
+- **Agenda do celular** (app, aba Casa → Agenda): escolhe uma agenda do aparelho e põe as minhas tarefas da semana
+  como eventos (com horário = evento com hora; sem horário = dia inteiro), atualizados a cada mudança da divisão e
+  nos alarmes de lembrete. Eventos de semanas passadas ficam como histórico. Código em `android/.../Agenda.kt`.
+- **Link .ics** (`POST /api/agenda` cria ou troca, `DELETE` desliga): `GET /agenda/<token>.ics` com esta semana e a
+  próxima, para assinar no Google Agenda/Apple. O token não aparece no log de requisições do servidor.
+
 ## Logs
 
 - **Requisições**: uma linha JSON por chamada (rota, status, tempo, casa, membro, versão do app) no

@@ -18,6 +18,8 @@ Peça confirmação ao usuário antes de remover tarefas ou regras ou redistribu
 const txt = { type: 'string' }, int = { type: 'integer' }, bool = { type: 'boolean' };
 const obj = (props = {}, required = []) => ({ type: 'object', properties: props, required, additionalProperties: false });
 const pessoa = { type: 'string', description: 'Nome da pessoa (como aparece na casa).' };
+const hora = { type: 'string', description: 'Horário de preferência HH:MM (ex.: "20:00"); "" tira o horário.' };
+const duracao = { type: 'integer', minimum: 5, maximum: 480, description: 'Duração em minutos (agenda).' };
 const regra = { type: 'string', description: 'Nome da regra (ex.: "Água"); "" = sem regra, vale todo dia.' };
 const SEMANA = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
 const NIVEL = { livre: 1, pouco: 0.4, nada: 0 };
@@ -51,7 +53,7 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
   const regrasDoDia = (e, d) => (e.diasCondicoes.find(x => x.dia === d)?.condicoes ?? []).map(id => e.condicoes.find(c => c.id === id)?.nome);
   const nomeDe = (e, id) => e.membros.find(x => x.id === id)?.nome ?? 'ninguém';
   const dia = d => new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · ✅ feita' : ''}`;
+  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${a.horario ? ` ${a.horario}` : ''}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · ✅ feita' : ''}`;
   // "Lavar a louça ×3, Tirar o lixo"
   const agrupa = l => Object.entries(l.reduce((c, a) => ({ ...c, [a.tarefa]: (c[a.tarefa] ?? 0) + 1 }), {}))
     .map(([t, n]) => n > 1 ? `${t} ×${n}` : t).join(', ');
@@ -94,6 +96,7 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
       exec: (m) => {
         const e = estado(m);
         return e.tarefas.map(t => `[${t.id}] ${t.nome} · ${t.pontos} pt · ${t.vezes === 7 ? 'todo dia' : `${t.vezes}x/semana`}` +
+          `${t.horario ? ` · às ${t.horario} (${t.duracao} min)` : ''}` +
           `${t.fixo_id ? ` · sempre ${nomeDe(e, t.fixo_id)}` : ''}${t.condicao_id ? ` · só quando: ${e.condicoes.find(c => c.id === t.condicao_id)?.nome}` : ''}`).join('\n');
       },
     },
@@ -118,25 +121,27 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
       descricao: 'Cadastra uma tarefa e redistribui a semana.',
       esquema: obj({
         nome: txt, pontos: { type: 'integer', minimum: 1, maximum: 10, description: 'Esforço' },
-        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra,
+        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra, horario: hora, duracao_min: duracao,
       }, ['nome']),
       exec: (m, a) => {
         const fixo = a.responsavel_fixo ? acharPessoa(m, a.responsavel_fixo).id : null;
         const cond = a.regra ? acharRegra(m, a.regra).id : null;
-        rotas['POST /api/tarefas'](m, { nome: a.nome, pontos: a.pontos ?? 2, vezes: a.vezes_por_semana ?? 1, fixoId: fixo, condicaoId: cond });
+        rotas['POST /api/tarefas'](m, { nome: a.nome, pontos: a.pontos ?? 2, vezes: a.vezes_por_semana ?? 1, fixoId: fixo, condicaoId: cond,
+          horario: a.horario, duracao: a.duracao_min });
         return `Tarefa "${a.nome}" criada e semana redistribuída.`;
       },
     },
     editar_tarefa: {
       descricao: 'Altera uma tarefa cadastrada. responsavel_fixo vazio ("") volta a dividir entre todos.',
       esquema: obj({ tarefa_id: int, nome: txt, pontos: { type: 'integer', minimum: 1, maximum: 10 },
-        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra }, ['tarefa_id']),
+        vezes_por_semana: { type: 'integer', minimum: 1, maximum: 7 }, responsavel_fixo: pessoa, regra, horario: hora, duracao_min: duracao }, ['tarefa_id']),
       exec: (m, a) => {
         const t = db.prepare('SELECT * FROM tarefas WHERE id=? AND casa_id=? AND ativa=1').get(a.tarefa_id, m.casa_id);
         if (!t) throw new ErroFerramenta('Tarefa não encontrada');
         const fixo = a.responsavel_fixo === undefined ? t.fixo_id : a.responsavel_fixo ? acharPessoa(m, a.responsavel_fixo).id : null;
         const cond = a.regra === undefined ? undefined : a.regra ? acharRegra(m, a.regra).id : null;
-        rotas['PUT /api/tarefas/:id'](m, { nome: a.nome, pontos: a.pontos, vezes: a.vezes_por_semana, fixoId: fixo, condicaoId: cond }, a.tarefa_id);
+        rotas['PUT /api/tarefas/:id'](m, { nome: a.nome, pontos: a.pontos, vezes: a.vezes_por_semana, fixoId: fixo, condicaoId: cond,
+          horario: a.horario, duracao: a.duracao_min }, a.tarefa_id);
         return `Tarefa ${a.tarefa_id} atualizada e semana redistribuída.`;
       },
     },
