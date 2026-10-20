@@ -389,6 +389,7 @@ const rotas = {
   'POST /api/painel': m => { painel.gerar(m); return estado(m); },
   'DELETE /api/painel': m => { painel.desligar(m); return estado(m); },
   'DELETE /api/painel/sessoes': m => { painel.desconectar(m); return estado(m); },
+  'POST /api/tv': (m, b) => { painel.conectarTv(m, b.codigo); return estado(m); },
   'POST /api/atribuicoes/:id/desfazer': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET feito_em=NULL WHERE id=?'),
   'POST /api/atribuicoes/:id/assumir': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET membro_id=? WHERE id=?', m.id),
 };
@@ -594,7 +595,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
     if (url.pathname === '/mcp') return await mcp(req, res, url);
-    if (url.pathname.startsWith('/p/') || url.pathname.startsWith('/painel/')) {
+    if (url.pathname.startsWith('/p/') || url.pathname.startsWith('/painel/') || url.pathname === '/tv' || url.pathname === '/tv/estado') {
       // O link é secreto: mascara antes de responder (o log é escrito quando a resposta termina).
       chave = url.pathname.startsWith('/p/') ? `${req.method} /p/:link` : `${req.method} ${url.pathname}`;
       const r = await painel.http(req, res, url);

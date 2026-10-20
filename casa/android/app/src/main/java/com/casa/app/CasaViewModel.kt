@@ -106,6 +106,7 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     fun gerarPainel() = executa { api.chamar("POST", "/api/painel") }
     fun desligarPainel() = executa { api.chamar("DELETE", "/api/painel") }
     fun desconectarAparelhos() = executa { api.chamar("DELETE", "/api/painel/sessoes") }
+    fun conectarTv(codigo: String) = executa { api.chamar("POST", "/api/tv", JSONObject().put("codigo", codigo)) }
 
     // Agenda: link .ics (servidor) e sincronização com a agenda do celular (Agenda.kt).
     fun gerarLinkAgenda() = executa { api.chamar("POST", "/api/agenda") }

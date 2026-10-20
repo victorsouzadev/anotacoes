@@ -121,10 +121,26 @@ fun ConfigPainel(vm: CasaViewModel, e: Estado) {
         AcaoNeutra(onClick = { vm.painelAberto = true }, compacta = true) {
             Icon(Icons.Outlined.Dashboard, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Abrir painel")
         }
-        Text("PC ou TV: abra o link no navegador e digite o código.", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        // TV: a TV mostra um código e eu digito aqui (sem digitar link nem senha na TV).
+        var codigoTv by remember { mutableStateOf("") }
+        var conectando by remember { mutableStateOf(false) }
         val p = e.painel
-        if (p == null) {
+        Text("TV", Modifier.padding(top = 8.dp))
+        Text("Na TV, abra ${p?.enderecoTv?.removePrefix("https://") ?: "casa.vsitefy.com.br/tv"} no navegador e digite aqui o código que aparecer.",
+            style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        if (!conectando) AcaoNeutra(onClick = { conectando = true }, compacta = true) { Text("Conectar TV") }
+        else Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(codigoTv, { codigoTv = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, Modifier.weight(1f),
+                label = { Text("Código da TV") }, singleLine = true, textStyle = EstiloValor)
+            AcaoNeutra(onClick = { vm.conectarTv(codigoTv); codigoTv = ""; conectando = false }, compacta = true) { Text("Conectar") }
+        }
+        if ((p?.tvs ?: 0) > 0) Text("${p!!.tvs} TV${if (p.tvs > 1) "s" else ""} conectada${if (p.tvs > 1) "s" else ""}",
+            style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        Text("PC ou outro aparelho", Modifier.padding(top = 8.dp))
+        Text("Abra o link no navegador e digite o código.", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        if (p?.url == null || p.codigo == null) {
             AcaoNeutra(onClick = vm::gerarPainel, compacta = true) { Text("Gerar link e código") }
+            if ((p?.tvs ?: 0) > 0) AcaoNeutra(onClick = vm::desconectarAparelhos, compacta = true, cor = grafite.grafiteSuave) { Text("Desconectar TVs") }
         } else {
             Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -143,7 +159,7 @@ fun ConfigPainel(vm: CasaViewModel, e: Estado) {
                 AcaoNeutra(onClick = vm::gerarPainel, compacta = true) { Text("Trocar") }
             }
             Row {
-                if (p.aparelhos > 0) AcaoNeutra(onClick = vm::desconectarAparelhos, compacta = true, cor = grafite.grafiteSuave) { Text("Desconectar aparelhos") }
+                if (p.aparelhos + p.tvs > 0) AcaoNeutra(onClick = vm::desconectarAparelhos, compacta = true, cor = grafite.grafiteSuave) { Text("Desconectar aparelhos e TVs") }
                 AcaoNeutra(onClick = vm::desligarPainel, compacta = true, cor = grafite.grafiteSuave) { Text("Desligar link") }
             }
             Text("\"Trocar\" gera link e código novos e desconecta os aparelhos.", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)

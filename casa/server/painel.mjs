@@ -14,11 +14,20 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
   const membroDaCasa = casaId => db.prepare('SELECT * FROM membros WHERE casa_id=? ORDER BY admin DESC, id LIMIT 1').get(casaId);
   const limpaVencidas = () => db.prepare('DELETE FROM painel_sessoes WHERE criado < ?').run(new Date(Date.now() - DIAS_SESSAO * 864e5).toISOString());
   limpaVencidas(); setInterval(limpaVencidas, 6 * 3600e3).unref();
+  // Pareamento de TV (como "entrar com código" da Netflix/YouTube): a TV abre /tv, ganha um código curto
+  // e um segredo (cookie); alguém da casa digita o código no app e a TV vira um aparelho conectado.
+  db.exec(`CREATE TABLE IF NOT EXISTS tv_pareamentos(codigo TEXT PRIMARY KEY, segredo TEXT UNIQUE, casa_id INTEGER, criado TEXT, expira TEXT)`);
+  const MIN_PAREAMENTO = 10;
+  const ALFA_TV = 'ACDEFGHJKMNPQRTUVWXY34679'; // sem letras/números que se confundem na TV (0/O, 1/I/L, 5/S, 8/B, 2/Z)
+  const limpaPareamentos = () => db.prepare('DELETE FROM tv_pareamentos WHERE expira < ?').run(agora());
 
   function info(casaId) {
     const p = db.prepare('SELECT * FROM paineis WHERE casa_id=?').get(casaId);
     const aparelhos = db.prepare("SELECT COUNT(*) n FROM painel_sessoes WHERE casa_id=? AND origem='codigo'").get(casaId).n;
-    return p ? { url: `${BASE_URL}/p/${p.slug}`, codigo: p.pin, aparelhos } : null;
+    // TVs conectadas + as já confirmadas no app que ainda não buscaram a sessão (a TV consulta a cada 3 s).
+    const tvs = db.prepare("SELECT COUNT(*) n FROM painel_sessoes WHERE casa_id=? AND origem='tv'").get(casaId).n
+      + db.prepare('SELECT COUNT(*) n FROM tv_pareamentos WHERE casa_id=? AND expira >= ?').get(casaId, agora()).n;
+    return { url: p ? `${BASE_URL}/p/${p.slug}` : null, codigo: p ? p.pin : null, aparelhos, tvs, enderecoTv: `${BASE_URL}/tv` };
   }
 
   function gerar(m) {
@@ -31,12 +40,22 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
     db.prepare('INSERT INTO paineis(casa_id,slug,pin,criado) VALUES(?,?,?,?)').run(m.casa_id, slug, pin, agora());
     registra({ evento: 'painel_link_criado', casaId: m.casa_id, membroId: m.id });
   }
+  /** App: alguém da casa digita o código que a TV mostra. */
+  function conectarTv(m, codigo) {
+    limpaPareamentos();
+    const c = String(codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const p = c.length === 6 ? db.prepare('SELECT * FROM tv_pareamentos WHERE codigo=?').get(c) : null;
+    exige(p && !p.casa_id, 404, 'Código da TV não encontrado ou vencido. Recarregue a página na TV.');
+    db.prepare('UPDATE tv_pareamentos SET casa_id=? WHERE codigo=?').run(m.casa_id, c);
+    registra({ evento: 'tv_conectada', casaId: m.casa_id, membroId: m.id });
+  }
+
   function desligar(m) {
     db.prepare('DELETE FROM paineis WHERE casa_id=?').run(m.casa_id);
     desconectar(m);
   }
   function desconectar(m) {
-    db.prepare("DELETE FROM painel_sessoes WHERE casa_id=? AND origem='codigo'").run(m.casa_id);
+    db.prepare("DELETE FROM painel_sessoes WHERE casa_id=? AND origem IN ('codigo','tv')").run(m.casa_id);
     registra({ evento: 'painel_desconectado', casaId: m.casa_id, membroId: m.id });
   }
 
@@ -109,6 +128,38 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
 
   async function http(req, res, url) {
     const caminho = url.pathname;
+    if (caminho === '/tv' && req.method === 'GET') {
+      const s = sessao(req);
+      if (s) { html(res, 200, paginaPainel(url.searchParams.get('tema'), false, true)); return { chave: 'GET /tv' }; }
+      limpaPareamentos();
+      // Reaproveita o pareamento desta TV se ainda vale (recarregar a página não troca o código).
+      const seg = cookies(req).casa_tv;
+      let p = seg && /^[0-9a-f]{48}$/.test(seg) ? db.prepare('SELECT * FROM tv_pareamentos WHERE segredo=?').get(seg) : null;
+      if (!p) {
+        if (db.prepare('SELECT COUNT(*) n FROM tv_pareamentos').get().n > 5000) { html(res, 503, pagina('Casa', formularioErro('Tente de novo em alguns minutos.'))); return { chave: 'GET /tv' }; }
+        const segredo = crypto.randomBytes(24).toString('hex');
+        let codigo; do { codigo = Array.from(crypto.randomBytes(6), b => ALFA_TV[b % ALFA_TV.length]).join(''); } while (db.prepare('SELECT 1 FROM tv_pareamentos WHERE codigo=?').get(codigo));
+        db.prepare('INSERT INTO tv_pareamentos VALUES(?,?,NULL,?,?)').run(codigo, segredo, agora(), new Date(Date.now() + MIN_PAREAMENTO * 60e3).toISOString());
+        res.setHeader('set-cookie', `casa_tv=${segredo}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MIN_PAREAMENTO * 60}${BASE_URL.startsWith('https') ? '; Secure' : ''}`);
+        p = { codigo };
+      }
+      html(res, 200, paginaTv(p.codigo));
+      return { chave: 'GET /tv' };
+    }
+    if (caminho === '/tv/estado' && req.method === 'GET') {
+      const seg = cookies(req).casa_tv;
+      const p = seg && /^[0-9a-f]{48}$/.test(seg) ? db.prepare('SELECT * FROM tv_pareamentos WHERE segredo=?').get(seg) : null;
+      let r = { pronto: false };
+      if (!p || p.expira < agora()) r = { expirado: true };
+      else if (p.casa_id) {
+        novaSessao(res, p.casa_id, 'tv');
+        db.prepare('DELETE FROM tv_pareamentos WHERE codigo=?').run(p.codigo);
+        registra({ evento: 'painel_aparelho_conectado', casaId: p.casa_id, detalhes: { tv: true, agente: String(req.headers['user-agent'] || '').slice(0, 120) } });
+        r = { pronto: true };
+      }
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(r));
+      return { chave: 'GET /tv/estado' };
+    }
     // App: token do membro no cabeçalho (o WebView manda na primeira carga) → sessão do app.
     if (caminho === '/painel/app' && req.method === 'GET') {
       const token = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -187,7 +238,7 @@ button,.botao{font:600 .9375rem/1.4375rem Figtree,system-ui,sans-serif;border-ra
 button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--nanquim);outline-offset:2px}`;
   const FONTES = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Newsreader:opsz,wght@6..72,500&display=swap" rel="stylesheet">`;
-  const pagina = (titulo, corpo, tema = null, extraHead = '') => `<!doctype html><html lang="pt-BR"${tema ? ` data-tema="${tema}"` : ''}><head><meta charset="utf-8">
+  const pagina = (titulo, corpo, tema = null, extraHead = '', classe = '') => `<!doctype html><html lang="pt-BR"${tema ? ` data-tema="${tema}"` : ''}${classe ? ` class="${classe}"` : ''}><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${titulo}</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">${FONTES}<style>${CSS_BASE}${extraHead}</style></head><body>${corpo}</body></html>`;
   const formularioErro = msg => `<main style="max-width:420px;margin:15vh auto;padding:0 16px;text-align:center" class="marca">${SIMBOLO()}<h1 style="margin-top:16px">Casa</h1><p class="rot">${msg}</p></main>`;
@@ -207,15 +258,39 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(-
   </div>
 </main>`);
 
-  const paginaPainel = (tema, noApp) => pagina('Painel da casa', `
-<header class="topo">
+  const paginaTv = codigo => pagina('Casa na TV', `
+<main class="tvcod">
+  <div class="marca">${SIMBOLO()}</div>
+  <h1>Painel da casa na TV</h1>
+  <p class="rot">No celular, abra o app Casa → aba Casa → Painel da casa → <b>Conectar TV</b> e digite:</p>
+  <div class="codigo val" aria-label="Código ${codigo.split('').join(' ')}">${codigo.slice(0, 3)} ${codigo.slice(3)}</div>
+  <p class="rot" id="st">Aguardando o celular… o código vale por ${MIN_PAREAMENTO} minutos.</p>
+</main>
+<script>
+var t = setInterval(function () {
+  var x = new XMLHttpRequest(); x.open('GET', '/tv/estado'); x.withCredentials = true;
+  x.onload = function () { try { var r = JSON.parse(x.responseText);
+    if (r.pronto) { clearInterval(t); location.replace('/tv'); }
+    else if (r.expirado) { clearInterval(t); document.getElementById('st').textContent = 'O código venceu. Gerando outro…'; setTimeout(function () { location.reload(); }, 1500); }
+  } catch (e) {} };
+  x.send();
+}, 3000);
+</script>`, null, `
+html{font-size:1.4vw}
+.tvcod{max-width:60rem;margin:8vh auto;padding:0 2rem;text-align:center}
+.tvcod .marca svg{width:5rem;height:5rem;margin:0 auto 1.5rem}
+.tvcod .rot{font-size:1.1rem;line-height:1.6rem}
+.codigo{font-size:6rem;line-height:7rem;letter-spacing:.15em;margin:2rem 0;padding:1.5rem 2rem;background:var(--folha);border:1px solid var(--linha);border-radius:16px;display:inline-block}`);
+
+  const paginaPainel = (tema, noApp, tv = false) => pagina('Painel da casa', `
+<header class="topo${tv ? ' tv' : ''}">
   <div class="marca">${SIMBOLO()}</div>
   <div style="flex:1;min-width:0"><h1 id="casa">Casa</h1><div class="leg" id="sub">carregando…</div></div>
   <div class="temas" role="group" aria-label="Tema">${noApp ? '' : `
     <button data-t="sistema">Sistema</button><button data-t="claro">Claro</button><button data-t="escuro">Escuro</button>
     <form method="post" action="/painel/sair" style="display:inline"><button title="Desconectar este aparelho">Sair</button></form>`}</div>
 </header>
-<main id="painel">
+<main id="painel"${tv ? ' class="tv"' : ''}>
   <section class="cartao largo" id="placar"><h2>Placar da semana</h2><div class="grade-pessoas"></div></section>
   <div class="dupla largo">
     <section class="cartao" id="hoje"><h2>Hoje</h2><div></div></section>
@@ -224,22 +299,23 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(-
   <section class="cartao largo" id="semana"><h2>Semana por dia</h2><div class="rolar"></div></section>
   <section class="cartao largo" id="historico"><h2>Pontos feitos por semana</h2><p class="rot" style="margin:-.5rem 0 .75rem">Barra cheia: feito · faixa clara: previsto</p><div class="multiplos"></div>
     <details><summary class="rot">Ver em tabela</summary><div class="rolar" id="hist-tabela"></div></details></section>
-  <section class="cartao largo" id="tarefas"><h2>Tarefas cadastradas</h2><div class="rolar"></div></section>
+  ${tv ? '' : '<section class="cartao largo" id="tarefas"><h2>Tarefas cadastradas</h2><div class="rolar"></div></section>'}
 </main>
 <div id="dica" role="tooltip" hidden></div>
 <script>
 const $ = s => document.querySelector(s);
-const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SEM = ['seg','ter','qua','qui','sex','sáb','dom'];
-const dia = d => { const x = new Date(d + 'T12:00:00Z'); return SEM[(x.getUTCDay() + 6) % 7] + ' ' + String(x.getUTCDate()).padStart(2,'0') + '/' + String(x.getUTCMonth()+1).padStart(2,'0'); };
+const dois = n => (n < 10 ? '0' : '') + n;
+const dia = d => { const x = new Date(d + 'T12:00:00Z'); return SEM[(x.getUTCDay() + 6) % 7] + ' ' + dois(x.getUTCDate()) + '/' + dois(x.getUTCMonth() + 1); };
 const hora = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 // Tema: ?tema= (vindo do app) > escolha salva > sistema.
 const temaUrl = ${JSON.stringify(tema && ['claro', 'escuro'].includes(tema) ? tema : null)};
-let tema = temaUrl; try { tema = tema || localStorage.getItem('tema'); } catch {}
+let tema = temaUrl; try { tema = tema || localStorage.getItem('tema'); } catch (e) {}
 const aplica = t => { if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; else delete document.documentElement.dataset.tema;
   document.querySelectorAll('[data-t]').forEach(b => b.setAttribute('aria-pressed', String((t || 'sistema') === b.dataset.t))); };
 aplica(tema);
-document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tema = b.dataset.t; try { localStorage.setItem('tema', tema); } catch {} aplica(tema); });
+document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tema = b.dataset.t; try { localStorage.setItem('tema', tema); } catch (e) {} aplica(tema); });
 
 function barra(feito, previsto) {
   const p = previsto ? Math.min(100, feito / previsto * 100) : 0;
@@ -270,7 +346,7 @@ function render(d) {
     d.dias.map(x => '<tr' + (x.dia === d.hoje ? ' class="hoje"' : '') + '><td>' + dia(x.dia) + (x.dia === d.hoje ? ' <span class="leg">hoje</span>' : '') + '</td><td class="rot">' + (x.regras.map(esc).join(', ') || '—') + '</td>' +
       d.pessoas.map(p => { const v = x.pessoas[p.id]; return '<td class="num val">' + v.feitos + '/' + v.previstos + (v.naoFeitas ? ' <span class="neg rot">' + v.naoFeitas + ' não</span>' : '') + '</td>'; }).join('') + '</tr>').join('') + '</tbody></table>';
   // Histórico: um pequeno gráfico por pessoa (mesma escala), barra = semana.
-  const max = Math.max(1, ...d.historico.flatMap(h => d.pessoas.map(p => h.pessoas[p.id]?.previstos || 0)));
+  const max = Math.max.apply(null, [1].concat(d.historico.reduce((acc, h) => acc.concat(d.pessoas.map(p => (h.pessoas[p.id] || {}).previstos || 0)), [])));
   const caixa = $('#historico .multiplos');
   const colunas = Math.max(1, getComputedStyle(caixa).gridTemplateColumns.split(' ').length);
   const W = Math.max(200, Math.floor((caixa.clientWidth - (colunas - 1) * 32) / colunas)), H = 140, base = H - 20;
@@ -290,7 +366,7 @@ function render(d) {
   }).join('');
   $('#hist-tabela').innerHTML = '<table><thead><tr><th>Semana</th>' + d.pessoas.map(p => '<th class="num">' + esc(p.nome) + '</th>').join('') + '</tr></thead><tbody>' +
     d.historico.map(h => '<tr><td>' + dia(h.semana) + '</td>' + d.pessoas.map(p => { const v = h.pessoas[p.id] || {}; return '<td class="num val">' + (v.feitos || 0) + '/' + (v.previstos || 0) + '</td>'; }).join('') + '</tr>').join('') + '</tbody></table>';
-  $('#tarefas .rolar').innerHTML = '<table><thead><tr><th>Tarefa</th><th class="num">Pontos</th><th>Frequência</th><th>Horário</th><th>Responsável</th><th>Regra</th></tr></thead><tbody>' +
+  if ($('#tarefas')) $('#tarefas .rolar').innerHTML = '<table><thead><tr><th>Tarefa</th><th class="num">Pontos</th><th>Frequência</th><th>Horário</th><th>Responsável</th><th>Regra</th></tr></thead><tbody>' +
     d.tarefas.map(t => '<tr><td>' + esc(t.nome) + '</td><td class="num val">' + t.pontos + '</td><td>' + (t.vezes === 7 ? 'todo dia' : t.vezes + 'x/sem') + '</td><td class="val">' + (t.horario || '—') +
       '</td><td>' + esc(t.fixo || 'dividida') + '</td><td>' + esc(t.regra || '—') + '</td></tr>').join('') + '</tbody></table>';
 }
@@ -307,19 +383,35 @@ async function atualiza() {
     const r = await fetch('/painel/dados', { credentials: 'same-origin' });
     if (r.status === 401) { location.reload(); return; }
     render(await r.json());
-  } catch { $('#sub').textContent = 'sem conexão — tentando de novo'; }
+  } catch (e) { $('#sub').textContent = 'sem conexão — tentando de novo'; }
 }
 let ultimo = null;
 const _render = render; render = d => { ultimo = d; _render(d); };
 addEventListener('resize', () => { if (ultimo) _render(ultimo); });
 atualiza(); setInterval(atualiza, 60000);
+// TV: pede para a tela não apagar (onde o navegador permitir) e recarrega a página uma vez por dia.
+if (${tv}) {
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {}
+  setTimeout(function () { location.reload(); }, 24 * 3600e3);
+}
 </script>`, tema && ['claro', 'escuro'].includes(tema) ? tema : null, `
 .topo{display:flex;gap:1rem;align-items:center;padding:1.5rem 1.5rem .5rem;max-width:1800px;margin:0 auto;flex-wrap:wrap}
 .temas{display:flex;gap:.5rem;flex-wrap:wrap}.temas button{padding:.25rem .75rem}.temas button[aria-pressed=true]{background:var(--nanquim-tinta);border-color:var(--nanquim-tinta)}
-#painel{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:1rem;padding:1rem 1.5rem 2rem;max-width:1800px;margin:0 auto}
+#painel{display:grid;grid-template-columns:repeat(auto-fit,minmax(22rem,1fr));grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));grid-gap:1rem;gap:1rem;padding:1rem 1.5rem 2rem;max-width:1800px;margin:0 auto}
 .largo{grid-column:1/-1}
-.dupla{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:1rem}
-.grade-pessoas{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:1rem 2rem}
+.item>*+*,.linha>*+*,.topo>*+*{margin-left:.75rem}@supports (gap:1rem){.item>*+*,.linha>*+*,.topo>*+*{margin-left:0}}
+/* TV: cabe numa tela 16:9, letras proporcionais à largura, sem a lista de tarefas cadastradas. */
+.topo.tv,#painel.tv{max-width:none}
+#painel.tv{padding-top:.5rem}
+html.tv{font-size:1.3vw}
+#painel.tv{grid-template-columns:2fr 2fr 3fr;align-items:start}
+#painel.tv #placar{grid-column:1/4;grid-row:1}
+#painel.tv .dupla{grid-column:1/3;grid-row:2;grid-template-columns:1fr 1fr}
+#painel.tv #semana{grid-column:3/4;grid-row:2}
+#painel.tv #historico{display:none}
+#painel.tv #semana td,#painel.tv #semana th{padding:.25rem .5rem .25rem 0}
+.dupla{display:grid;grid-template-columns:repeat(auto-fit,minmax(22rem,1fr));grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));grid-gap:1rem;gap:1rem}
+.grade-pessoas{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));grid-gap:1rem 2rem;gap:1rem 2rem}
 .linha{display:flex;justify-content:space-between;align-items:baseline;gap:1rem}
 .barra{height:.375rem;border-radius:4px;background:var(--linha);margin:.5rem 0 .25rem;overflow:hidden}.barra i{display:block;height:100%;background:var(--grafite);border-radius:4px}
 .item{display:flex;gap:.75rem;align-items:baseline;padding:.25rem 0;border-bottom:1px solid var(--linha)}.item:last-child{border-bottom:0}
@@ -330,14 +422,14 @@ atualiza(); setInterval(atualiza, 60000);
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.375rem .75rem .375rem 0;border-bottom:1px solid var(--linha);white-space:nowrap}
 th{font:500 .75rem/1rem Figtree,system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--grafite-suave)}
 .num{text-align:right}tr.hoje td{background:var(--nanquim-tinta)}
-.multiplos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1rem 2rem}
+.multiplos{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));grid-gap:1rem 2rem;gap:1rem 2rem}
 figure{margin:0}figcaption{margin-bottom:.25rem}svg .prev{fill:var(--linha)}svg .feito{fill:var(--grafite)}svg .base{stroke:var(--linha);stroke-width:1}
 svg .eixo{font:500 .75rem "IBM Plex Mono",monospace;fill:var(--grafite-suave)}svg{display:block;max-width:100%}
 #dica{position:fixed;z-index:9;pointer-events:none;background:var(--folha);color:var(--grafite);border:1px solid var(--linha);border-radius:6px;padding:.25rem .5rem;
   font:500 .8125rem/1.125rem Figtree,system-ui,sans-serif;box-shadow:0 12px 32px rgba(30,37,35,.14)}
 summary{cursor:pointer;margin-top:.75rem}
 :root[data-tema=escuro] #dica{box-shadow:0 12px 32px rgba(0,0,0,.5)}
-@media (prefers-color-scheme:dark){:root:not([data-tema=claro]) #dica{box-shadow:0 12px 32px rgba(0,0,0,.5)}}`);
+@media (prefers-color-scheme:dark){:root:not([data-tema=claro]) #dica{box-shadow:0 12px 32px rgba(0,0,0,.5)}}`, tv ? 'tv' : '');
 
-  return { info, gerar, desligar, desconectar, http, dados };
+  return { info, gerar, desligar, desconectar, conectarTv, http, dados };
 }

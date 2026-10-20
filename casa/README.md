@@ -59,6 +59,10 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
   link `/p/<link>` + código de 6 dígitos (5 erros bloqueiam 15 min). Cada aparelho que acerta o código fica
   conectado por 90 dias (cookie); "Trocar" gera link e código novos e desconecta todos. O link e o código não vão
   para o log de requisições.
+- **TV** (sem instalar nada, pelo navegador da TV): a TV abre `/tv` e mostra um código de 6 caracteres (válido por
+  10 min); alguém da casa digita o código no app (Casa → Painel da casa → Conectar TV, `POST /api/tv`) e a TV entra
+  no painel em modo TV (tela cheia 16:9, letras proporcionais à largura, sem rolagem). O JavaScript das páginas é
+  mantido em ES2017 e o CSS tem alternativas para navegadores antigos de TV (Samsung Tizen 2018+).
 
 ## Logs
 

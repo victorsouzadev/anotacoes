@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -92,5 +93,20 @@ class FluxoTest {
         val depois = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }
         org.junit.Assert.assertEquals("Faltou água", depois.atribuicoes.first { it.id == primeira.id }.naoFeita)
         org.junit.Assert.assertEquals(2, depois.comentarios.count { it.atribuicaoId == primeira.id })
+
+        // TV: abre /tv como a TV faria, lê o código e conecta pelo app.
+        val servidor = System.getenv("CASA_SERVIDOR")!!
+        val tv = java.net.URL("$servidor/tv").openConnection() as java.net.HttpURLConnection
+        val pagina = tv.inputStream.bufferedReader().readText()
+        val cookieTv = tv.getHeaderField("Set-Cookie").substringBefore(";")
+        val codigo = Regex("aria-label=\"Código ([A-Z0-9 ]+)\"").find(pagina)!!.groupValues[1].replace(" ", "")
+        compose.onAllNodesWithText("Casa")[0].performClick(); compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(hasText("Conectar TV"))
+        compose.onNodeWithText("Conectar TV").performClick()
+        compose.onNode(hasSetTextAction() and hasText("Código da TV")).performTextInput(codigo.lowercase())
+        compose.onNodeWithText("Conectar").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("1 TV conectada").fetchSemanticsNodes().isNotEmpty() }
+        val estadoTv = (java.net.URL("$servidor/tv/estado").openConnection() as java.net.HttpURLConnection).apply { setRequestProperty("Cookie", cookieTv) }
+        org.junit.Assert.assertTrue(estadoTv.inputStream.bufferedReader().readText().contains("\"pronto\":true"))
     }
 }

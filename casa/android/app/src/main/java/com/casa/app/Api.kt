@@ -40,7 +40,8 @@ data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val me
     val horario: String? = null, val duracao: Int = 30, val naoFeita: String? = null, val naoFeitaPor: Int? = null, val comentarios: Int = 0)
 /** tipo: "comentario" ou "nao_feita" (criado ao marcar/sinalizar como não feita). */
 data class Comentario(val id: Int, val atribuicaoId: Int, val membroId: Int?, val tipo: String, val texto: String, val em: String)
-data class Painel(val url: String, val codigo: String, val aparelhos: Int)
+/** url/codigo: link + código para PC/TV (null se desligado); tvs: TVs pareadas; enderecoTv: o endereço curto que a TV abre. */
+data class Painel(val url: String?, val codigo: String?, val aparelhos: Int, val tvs: Int, val enderecoTv: String)
 data class Placar(val membroId: Int, val nome: String, val feitos: Int, val previstos: Int, val saldo: Double)
 data class Estado(
     val euId: Int, val euAdmin: Boolean, val agendaUrl: String?, val casaNome: String, val codigo: String, val modo: String,
@@ -87,7 +88,7 @@ fun JSONObject.paraEstado(): Estado {
         comentarios = optJSONArray("comentarios")?.mapa {
             Comentario(it.getInt("id"), it.getInt("atribuicao_id"), it.optIntOuNull("membro_id"), it.getString("tipo"), it.optString("texto"), it.getString("em"))
         }.orEmpty(),
-        painel = optJSONObject("painel")?.let { Painel(it.getString("url"), it.getString("codigo"), it.optInt("aparelhos")) },
+        painel = optJSONObject("painel")?.let { Painel(it.optStrOuNull("url"), it.optStrOuNull("codigo"), it.optInt("aparelhos"), it.optInt("tvs"), it.optString("enderecoTv")) },
         placar = getJSONArray("placar").mapa { Placar(it.getInt("membroId"), it.getString("nome"), it.getInt("feitos"), it.getInt("previstos"), it.getDouble("saldo")) },
         preferencias = getJSONArray("preferencias").mapa { it.getInt("tarefa_id") to it.getInt("nivel") }.toMap(),
     )
