@@ -143,8 +143,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Sem "packages", a action pede o pacote "tools", que não existe mais no SDK atual, e falha.
       - uses: android-actions/setup-android@v3
-      - run: yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
       - run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
 
   mcp-build:
