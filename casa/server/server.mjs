@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
+import { criarMcp } from './mcp.mjs';
 
 const db = new DatabaseSync(process.env.DB_PATH || './casa.db');
 db.exec(`
@@ -311,6 +312,9 @@ function recebeLogs(req, membro, b) {
   return { ok: true, recebidos: itens.length };
 }
 
+// MCP para o Claude agir na casa (mcp.mjs): https://casa.vsitefy.com.br/mcp
+const mcp = criarMcp({ db, rotas, registra, lerLogs });
+
 const PUBLICAS = new Set(['GET /health', 'POST /api/casas', 'POST /api/entrar']);
 
 http.createServer(async (req, res) => {
@@ -330,6 +334,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/casa.apk') return baixarApk(res);
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
+    if (url.pathname === '/mcp') return await mcp(req, res, url);
     const partes = url.pathname.split('/');
     const idx = partes.findIndex(p => /^\d+$/.test(p));
     const id = idx > 0 ? Number(partes[idx]) : null;

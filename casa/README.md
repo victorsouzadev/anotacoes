@@ -31,3 +31,17 @@ curl -X PUT https://casa.vsitefy.com.br/admin/apk -H "X-Upload-Token: $UPLOAD_TO
   ```
 - O app guarda erros numa fila local (até 50) e envia para `POST /api/logs` quando há conexão;
   um travamento é gravado na hora e enviado na próxima abertura.
+
+## MCP (Claude agindo na casa)
+
+`https://casa.vsitefy.com.br/mcp` — Streamable HTTP, implementado em `server/mcp.mjs` sobre as mesmas
+rotas do app. Age em nome do membro `MCP_MEMBRO_ID`; token `MCP_TOKEN` (>= 32 caracteres) no `.env`.
+
+- **Claude Code:** `claude mcp add --transport http casa https://casa.vsitefy.com.br/mcp --header "Authorization: Bearer <MCP_TOKEN>"`
+- **Claude web/app (conector personalizado):** `https://casa.vsitefy.com.br/mcp?key=<MCP_TOKEN>` — a URL vale como senha.
+
+Ferramentas: `casa_resumo`, `listar_semana`, `listar_tarefas`, `concluir_tarefa`, `passar_tarefa`,
+`criar_tarefa`, `editar_tarefa`, `remover_tarefa`, `definir_ausencia`, `definir_peso`, `definir_modo`,
+`redistribuir_semana`, `resumo_semana` (Markdown para salvar no Segundo Cérebro) e `ver_logs`.
+Cada ação que altera algo fica registrada nos logs (`mcp_acao`); token recusado vira `mcp_token_recusado`.
+Trocar o token: `sed -i "s/^MCP_TOKEN=.*/MCP_TOKEN=$(openssl rand -hex 32)/" /opt/casa/.env && docker compose up -d`.
