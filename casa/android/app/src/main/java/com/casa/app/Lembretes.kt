@@ -70,11 +70,27 @@ object Lembretes {
             runBlocking { Api(p.getString("servidor", null) ?: BuildConfig.SERVIDOR, token).chamar("GET", "/api/estado").paraEstado() }
         }.onFailure { Registro.aviso("lembrete_falhou", it) }.getOrNull() ?: return
         Agenda.sincronizar(c, e) // aproveita a consulta para manter a agenda do celular em dia
+        avisarComentarios(c, e)
         val minhas = e.atribuicoes.filter { it.membroId == e.euId && !it.feito && it.dia <= e.hoje }
         if (minhas.isEmpty()) return
         val titulo = if (tipo == MANHA) "Hoje você tem ${minhas.size} tarefa${if (minhas.size > 1) "s" else ""}"
         else "Ainda falta${if (minhas.size > 1) "m" else ""} ${minhas.size} tarefa${if (minhas.size > 1) "s" else ""}"
         notificar(c, tipo, titulo, minhas.joinToString(" · ") { it.tarefa })
+    }
+
+    /** Comentários (ou "não feita") dos outros nas minhas tarefas, desde o último aviso. */
+    private fun avisarComentarios(c: Context, e: Estado) {
+        val p = prefs(c)
+        val desde = maxOf(p.getInt("visto_comentario", 0), p.getInt("avisado_comentario", 0))
+        val minhas = e.atribuicoes.filter { it.membroId == e.euId }.associateBy { it.id }
+        val novos = e.comentarios.filter { it.id > desde && it.membroId != e.euId && it.atribuicaoId in minhas }
+        if (novos.isEmpty()) return
+        p.edit().putInt("avisado_comentario", novos.maxOf { it.id }).apply()
+        val u = novos.last(); val quem = e.membros.find { it.id == u.membroId }?.nome ?: "Alguém"
+        val tarefa = minhas[u.atribuicaoId]?.tarefa ?: ""
+        val texto = if (u.tipo == "nao_feita") "$quem marcou \"$tarefa\" como não feita" + (if (u.texto.isNotBlank()) ": ${u.texto}" else "")
+            else "$quem em \"$tarefa\": ${u.texto}"
+        notificar(c, 3, if (novos.size == 1) "Novo comentário" else "${novos.size} comentários novos", texto)
     }
 
     private fun notificar(c: Context, id: Int, titulo: String, texto: String) {

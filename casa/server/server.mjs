@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { criarMcp } from './mcp.mjs';
+import { criarPainel } from './painel.mjs';
 
 const db = new DatabaseSync(process.env.DB_PATH || './casa.db');
 db.exec(`
@@ -38,6 +39,21 @@ if (!colunas('tarefas').includes('horario')) db.exec('ALTER TABLE tarefas ADD CO
 if (!colunas('tarefas').includes('duracao')) db.exec('ALTER TABLE tarefas ADD COLUMN duracao INTEGER DEFAULT 30');
 // Link secreto da agenda (.ics) de cada pessoa.
 if (!colunas('membros').includes('agenda_token')) db.exec('ALTER TABLE membros ADD COLUMN agenda_token TEXT');
+// Tarefa não feita: motivo (texto, pode ser vazio), quem marcou e quando.
+if (!colunas('atribuicoes').includes('nao_feita')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita TEXT');
+if (!colunas('atribuicoes').includes('nao_feita_por')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita_por INTEGER');
+if (!colunas('atribuicoes').includes('nao_feita_em')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita_em TEXT');
+db.exec(`
+-- Comentários nas tarefas da semana (tipo 'comentario' ou 'nao_feita', este criado ao marcar/sinalizar).
+CREATE TABLE IF NOT EXISTS comentarios(id INTEGER PRIMARY KEY, casa_id INTEGER, atribuicao_id INTEGER REFERENCES atribuicoes(id) ON DELETE CASCADE,
+  membro_id INTEGER REFERENCES membros(id) ON DELETE SET NULL, tipo TEXT, texto TEXT, em TEXT);
+CREATE INDEX IF NOT EXISTS comentarios_atrib ON comentarios(atribuicao_id);
+-- Painel da casa para PC/TV: link (slug) + código; cada aparelho que entra ganha uma sessão (cookie).
+CREATE TABLE IF NOT EXISTS paineis(id INTEGER PRIMARY KEY, casa_id INTEGER UNIQUE REFERENCES casas(id) ON DELETE CASCADE,
+  slug TEXT UNIQUE, pin TEXT, criado TEXT, tentativas INTEGER DEFAULT 0, bloqueado_ate TEXT);
+CREATE TABLE IF NOT EXISTS painel_sessoes(token TEXT PRIMARY KEY, casa_id INTEGER REFERENCES casas(id) ON DELETE CASCADE,
+  origem TEXT, criado TEXT, visto TEXT);
+`);
 // Disponibilidade de cada dia da semana (segunda a domingo): 1 = livre, 0.4 = pouco, 0 = nada.
 if (!colunas('membros').includes('disponibilidade')) db.exec("ALTER TABLE membros ADD COLUMN disponibilidade TEXT DEFAULT '[1,1,1,1,1,1,1]'");
 
@@ -114,7 +130,9 @@ function distribuir(casaId, inicio = segunda()) {
   const tarefas = db.prepare('SELECT * FROM tarefas WHERE casa_id=? AND ativa=1').all(casaId);
   const condicoes = db.prepare('SELECT * FROM condicoes WHERE casa_id=?').all(casaId);
   // Mantém o que já foi feito; refaz o resto.
-  db.prepare('DELETE FROM atribuicoes WHERE casa_id=? AND semana=? AND feito_em IS NULL').run(casaId, semana);
+  // Também ficam as marcadas como não feitas e as que têm comentário, para a conversa não sumir.
+  db.prepare(`DELETE FROM atribuicoes WHERE casa_id=? AND semana=? AND feito_em IS NULL AND nao_feita IS NULL
+    AND id NOT IN (SELECT atribuicao_id FROM comentarios)`).run(casaId, semana);
   const feitas = db.prepare('SELECT * FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, semana);
 
   const dias = Array.from({ length: 7 }, (_, i) => iso(addDias(inicio, i)));
@@ -217,7 +235,8 @@ function distribuir(casaId, inicio = segunda()) {
 
 // ---------- estado ----------
 // Ordem do dia: primeiro as que têm horário (cedo → tarde), depois as sem horário.
-const listarAtribuicoes = (casaId, semana) => db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em,t.horario,t.duracao
+const listarAtribuicoes = (casaId, semana) => db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em,t.horario,t.duracao,
+  a.nao_feita,a.nao_feita_por,(SELECT COUNT(*) FROM comentarios c WHERE c.atribuicao_id=a.id) comentarios
   FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=?
   ORDER BY a.dia, t.horario IS NULL, t.horario, t.nome`).all(casaId, semana);
 
@@ -230,7 +249,7 @@ function estado(m) {
   const tarefas = db.prepare('SELECT id,nome,pontos,vezes,fixo_id,condicao_id,horario,duracao FROM tarefas WHERE casa_id=? AND ativa=1 ORDER BY nome').all(casa.id);
   const condicoes = db.prepare('SELECT id,nome,tipo,referencia,dias FROM condicoes WHERE casa_id=? ORDER BY nome').all(casa.id)
     .map(c => ({ ...c, dias: lista(c.dias, []) }));
-  // Para cada dia da semana, quais condições valem (o app mostra, ex.: 💧 nos dias com água).
+  // Para cada dia da semana, quais condições valem (o app marca, ex.: os dias com água).
   const diasCondicoes = Array.from({ length: 7 }, (_, i) => {
     const dia = iso(addDias(new Date(semana + 'T00:00:00Z'), i));
     return { dia, condicoes: condicoes.filter(c => condicaoVale({ ...c, dias: JSON.stringify(c.dias) }, dia)).map(c => c.id) };
@@ -239,12 +258,15 @@ function estado(m) {
   const placar = membros.map(x => {
     const minhas = atribuicoes.filter(a => a.membro_id === x.id);
     return { membroId: x.id, nome: x.nome, feitos: minhas.filter(a => a.feito_em).reduce((s, a) => s + a.pontos, 0),
-      previstos: minhas.reduce((s, a) => s + a.pontos, 0), saldo: Math.round(saldoAcumulado(x.id) * 10) / 10 };
+      previstos: minhas.reduce((s, a) => s + a.pontos, 0), saldo: Math.round(saldoAcumulado(x.id) * 10) / 10,
+      naoFeitas: minhas.filter(a => a.nao_feita != null && !a.feito_em).length };
   });
   const preferencias = db.prepare('SELECT tarefa_id, nivel FROM preferencias WHERE membro_id=?').all(m.id);
   const agenda = db.prepare('SELECT agenda_token FROM membros WHERE id=?').get(m.id)?.agenda_token;
+  const comentarios = db.prepare(`SELECT c.id,c.atribuicao_id,c.membro_id,c.tipo,c.texto,c.em FROM comentarios c
+    JOIN atribuicoes a ON a.id=c.atribuicao_id WHERE a.casa_id=? AND a.semana=? ORDER BY c.id`).all(casa.id, semana);
   return { eu: { id: m.id, nome: m.nome, admin: !!m.admin, agendaUrl: agenda ? urlAgenda(agenda) : null }, casa, semana, hoje: hoje(), membros, tarefas, condicoes, diasCondicoes,
-    atribuicoes, placar, preferencias };
+    atribuicoes, placar, preferencias, comentarios, painel: painel.info(casa.id) };
 }
 
 // ---------- http ----------
@@ -336,7 +358,37 @@ const rotas = {
       db.prepare('INSERT OR REPLACE INTO preferencias VALUES(?,?,?)').run(m.id, Number(tid), Math.max(-1, Math.min(1, Number(nivel))));
     return estado(m);
   },
-  'POST /api/atribuicoes/:id/concluir': (m, _, id) => marca(m, id, "UPDATE atribuicoes SET feito_em=?, membro_id=COALESCE(membro_id, ?) WHERE id=?", new Date().toISOString(), m.id),
+  'POST /api/atribuicoes/:id/concluir': (m, _, id) => marca(m, id, "UPDATE atribuicoes SET feito_em=?, membro_id=COALESCE(membro_id, ?), nao_feita=NULL, nao_feita_por=NULL, nao_feita_em=NULL WHERE id=?", new Date().toISOString(), m.id),
+  // Não feita: a própria pessoa ("não deu") ou outra pessoa da casa (sinalizar). Vira também um comentário.
+  'POST /api/atribuicoes/:id/nao-feita': (m, b, id) => {
+    const motivo = corta(String(b.motivo ?? '').trim(), 500);
+    marca(m, id, 'UPDATE atribuicoes SET nao_feita=?, nao_feita_por=?, nao_feita_em=?, feito_em=NULL WHERE id=?', motivo, m.id, new Date().toISOString());
+    db.prepare('INSERT INTO comentarios(casa_id,atribuicao_id,membro_id,tipo,texto,em) VALUES(?,?,?,?,?,?)').run(m.casa_id, id, m.id, 'nao_feita', motivo, new Date().toISOString());
+    registra({ evento: 'tarefa_nao_feita', casaId: m.casa_id, membroId: m.id, detalhes: { atribuicao: id } });
+    return estado(m);
+  },
+  'POST /api/atribuicoes/:id/reabrir': (m, _, id) => {
+    const a = db.prepare('SELECT * FROM atribuicoes WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(a, 404, 'Tarefa não encontrada');
+    exige(m.admin || m.id === a.membro_id || m.id === a.nao_feita_por, 403, 'Só quem faz a tarefa, quem sinalizou ou o administrador pode reabrir');
+    db.prepare('UPDATE atribuicoes SET nao_feita=NULL, nao_feita_por=NULL, nao_feita_em=NULL WHERE id=?').run(id);
+    return estado(m);
+  },
+  'POST /api/atribuicoes/:id/comentarios': (m, b, id) => {
+    const texto = String(b.texto ?? '').trim();
+    exige(texto, 400, 'Escreva o comentário'); exige(texto.length <= 500, 400, 'Comentário longo demais (máx. 500)');
+    exige(db.prepare('SELECT 1 FROM atribuicoes WHERE id=? AND casa_id=?').get(id, m.casa_id), 404, 'Tarefa não encontrada');
+    db.prepare('INSERT INTO comentarios(casa_id,atribuicao_id,membro_id,tipo,texto,em) VALUES(?,?,?,?,?,?)').run(m.casa_id, id, m.id, 'comentario', texto, new Date().toISOString());
+    return estado(m);
+  },
+  'DELETE /api/comentarios/:id': (m, _, id) => {
+    const c = db.prepare('SELECT * FROM comentarios WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(c, 404, 'Comentário não encontrado');
+    exige(c.membro_id === m.id || m.admin, 403, 'Só quem escreveu (ou o administrador) apaga');
+    db.prepare('DELETE FROM comentarios WHERE id=?').run(id);
+    return estado(m);
+  },
+  'POST /api/painel': m => { painel.gerar(m); return estado(m); },
+  'DELETE /api/painel': m => { painel.desligar(m); return estado(m); },
+  'DELETE /api/painel/sessoes': m => { painel.desconectar(m); return estado(m); },
   'POST /api/atribuicoes/:id/desfazer': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET feito_em=NULL WHERE id=?'),
   'POST /api/atribuicoes/:id/assumir': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET membro_id=? WHERE id=?', m.id),
 };
@@ -390,9 +442,9 @@ function paginaDownload(res) {
 <style>
 /* Identidade Grafite: tokens dia em :root, noite em prefers-color-scheme. */
 :root{--papel:#F4F5F2;--folha:#FFFFFF;--grafite:#1E2523;--grafite-suave:#5E6865;--linha:#DFE3DF;
-  --nanquim:#2E5E5A;--nanquim-escuro:#224744;--nanquim-tinta:#E2ECEA;--sobre-nanquim:#FFFFFF;--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62}
+  --nanquim:#2E5E5A;--nanquim-escuro:#224744;--nanquim-tinta:#E2ECEA;--sobre-nanquim:#FFFFFF;--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62;--marca-pauta:#F4F5F2}
 @media (prefers-color-scheme:dark){:root{--papel:#121514;--folha:#1A1E1D;--grafite:#E6EAE7;--grafite-suave:#9AA4A0;--linha:#2A302E;
-  --nanquim:#7FB5AE;--nanquim-escuro:#A3CDC7;--nanquim-tinta:#1F3331;--sobre-nanquim:#121514;--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514}}
+  --nanquim:#7FB5AE;--nanquim-escuro:#A3CDC7;--nanquim-tinta:#1F3331;--sobre-nanquim:#121514;--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514;--marca-pauta:#121514}}
 body{margin:0;background:var(--papel);color:var(--grafite);font:400 15px/23px Figtree,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
 main{background:var(--folha);border:1px solid var(--linha);border-radius:16px;padding:32px 24px;max-width:360px;margin:16px;text-align:center}
 svg{width:64px;height:64px;display:block;margin:0 auto 16px}
@@ -412,11 +464,12 @@ ${info ? '<a class="b" href="/casa.apk">Baixar para Android</a>' : ''}<p class="
 // Símbolo Grafite: quadrado nanquim, traço de lápis e ponto. As cores vêm das variáveis da página;
 // no favicon (fora da página) o próprio SVG troca para a versão escura.
 const SIMBOLO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" style="fill:var(--marca)"/>` +
+  `<path d="M7 12.5h18M7 19.5h18" style="stroke:var(--marca-pauta)" stroke-width="1" stroke-opacity=".28"/>` +
   `<path d="M9.5 24 21 9.5" style="stroke:var(--marca-traco)" stroke-width="3" stroke-linecap="round"/>` +
   `<circle cx="23.6" cy="23.2" r="1.9" style="fill:var(--marca-ponto)"/></svg>`;
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><style>` +
-  `:root{--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62}` +
-  `@media (prefers-color-scheme:dark){:root{--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514}}</style>` +
+  `:root{--marca:#2E5E5A;--marca-traco:#F4F5F2;--marca-ponto:#D6AE62;--marca-pauta:#F4F5F2}` +
+  `@media (prefers-color-scheme:dark){:root{--marca:#7FB5AE;--marca-traco:#121514;--marca-ponto:#121514;--marca-pauta:#121514}}</style>` +
   SIMBOLO.replace(/^<svg[^>]*>/, '');
 
 function baixarApk(res) {
@@ -505,6 +558,9 @@ function agendaIcs(token) {
   return linhas.map(dobra).join('\r\n') + '\r\n';
 }
 
+// Painel da casa (painel.mjs): no app e, com link + código, em PC/TV.
+const painel = criarPainel({ db, estado, listarAtribuicoes, registra, exige, Erro, hoje, iso, addDias, SIMBOLO: () => SIMBOLO, BASE_URL });
+
 // MCP para o Claude agir na casa (mcp.mjs): https://casa.vsitefy.com.br/mcp
 const mcp = criarMcp({ db, rotas, registra, lerLogs });
 
@@ -538,6 +594,13 @@ http.createServer(async (req, res) => {
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
     if (url.pathname === '/mcp') return await mcp(req, res, url);
+    if (url.pathname.startsWith('/p/') || url.pathname.startsWith('/painel/')) {
+      // O link é secreto: mascara antes de responder (o log é escrito quando a resposta termina).
+      chave = url.pathname.startsWith('/p/') ? `${req.method} /p/:link` : `${req.method} ${url.pathname}`;
+      const r = await painel.http(req, res, url);
+      membro = r.membro ?? null;
+      return;
+    }
     const partes = url.pathname.split('/');
     const idx = partes.findIndex(p => /^\d+$/.test(p));
     const id = idx > 0 ? Number(partes[idx]) : null;

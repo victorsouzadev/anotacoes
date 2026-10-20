@@ -48,6 +48,18 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
 - **Link .ics** (`POST /api/agenda` cria ou troca, `DELETE` desliga): `GET /agenda/<token>.ics` com esta semana e a
   próxima, para assinar no Google Agenda/Apple. O token não aparece no log de requisições do servidor.
 
+## Não feita, comentários e painel
+
+- **Não feita**: no detalhe da tarefa (toque na linha), a pessoa marca "não deu para fazer" (com motivo) ou outra
+  pessoa sinaliza que não foi feita (`POST /api/atribuicoes/:id/nao-feita`; `.../reabrir` desfaz). Vira comentário.
+- **Comentários**: qualquer pessoa da casa comenta em qualquer tarefa (`POST /api/atribuicoes/:id/comentarios`,
+  `DELETE /api/comentarios/:id` para quem escreveu ou o admin). Tarefas com comentário ou marcadas como não feitas
+  não são apagadas na redistribuição. Os lembretes avisam de comentários novos nas minhas tarefas.
+- **Painel** (`server/painel.mjs`): no app (aba Casa → Abrir painel, WebView autenticado pelo token) e em PC/TV por
+  link `/p/<link>` + código de 6 dígitos (5 erros bloqueiam 15 min). Cada aparelho que acerta o código fica
+  conectado por 90 dias (cookie); "Trocar" gera link e código novos e desconecta todos. O link e o código não vão
+  para o log de requisições.
+
 ## Logs
 
 - **Requisições**: uma linha JSON por chamada (rota, status, tempo, casa, membro, versão do app) no

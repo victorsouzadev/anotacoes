@@ -19,14 +19,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.ThumbDown
-import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -48,7 +49,16 @@ class MainActivity : ComponentActivity() {
             .launch(Manifest.permission.POST_NOTIFICATIONS)
         Lembretes.agendar(this)
         setContent {
-            TemaGrafite {
+            val escuro = when (vm.tema) { "claro" -> false; "escuro" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
+            TemaGrafite(escuro = escuro) {
+                val c = grafite
+                SideEffect {
+                    // Barras do sistema seguem o tema escolhido no app, não só o do sistema.
+                    window.statusBarColor = c.papel.toArgb(); window.navigationBarColor = c.folha.toArgb()
+                    androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !escuro; isAppearanceLightNavigationBars = !escuro
+                    }
+                }
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { if (vm.logado && vm.estado != null) Principal(vm) else if (vm.logado) Carregando(vm) else Boas_vindas(vm) }
             }
         }
@@ -108,6 +118,8 @@ private enum class Aba(val titulo: String, val icone: androidx.compose.ui.graphi
 @Composable
 private fun Principal(vm: CasaViewModel) {
     val e = vm.estado!!
+    if (vm.painelAberto) { PainelTela(vm); return }
+    vm.detalhe?.let { id -> e.atribuicoes.find { it.id == id }?.let { DetalheTarefa(vm, e, it); return } ?: run { vm.detalhe = null } }
     var aba by rememberSaveable { mutableStateOf(Aba.Hoje) }
     Scaffold(
         topBar = {
@@ -133,7 +145,7 @@ private fun Principal(vm: CasaViewModel) {
     }
 }
 
-private fun nomeDia(d: String): String {
+internal fun nomeDia(d: String): String {
     val x = LocalDate.parse(d)
     return x.dayOfWeek.getDisplayName(TextStyle.FULL, Locale("pt", "BR")).replaceFirstChar { it.uppercase() } + " ${x.dayOfMonth}/${x.monthValue}"
 }
@@ -143,10 +155,15 @@ private fun nomeDia(d: String): String {
 private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrarDono: Boolean = true) {
     val dono = e.membros.find { it.id == a.membroId }?.nome ?: "Ninguém"
     val minha = a.membroId == e.euId
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable { vm.detalhe = a.id }.heightIn(min = 48.dp).padding(start = 4.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Checkbox(a.feito, { vm.concluir(a) }, colors = coresCaixa())
         Text(a.tarefa, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (a.feito) grafite.grafiteSuave else grafite.grafite, textDecoration = if (a.feito) TextDecoration.LineThrough else null)
+        if (a.naoFeita != null && !a.feito) Text("não feita", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.negativo)
+        if (a.comentarios > 0) {
+            Icon(Icons.Outlined.ChatBubbleOutline, "Comentários", Modifier.padding(start = 8.dp).size(14.dp), tint = grafite.grafiteSuave)
+            Text(" ${a.comentarios}", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+        }
         if (a.horario != null) Text(a.horario, Modifier.padding(start = 8.dp), style = EstiloValor, color = grafite.grafiteSuave)
         val meta = listOfNotNull(dono.takeIf { mostrarDono }, "${a.pontos} pt").joinToString(" · ")
         Text((if (a.horario != null) " · " else "  ") + meta, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1)
@@ -170,7 +187,16 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
                         if (eu != null) Text("${eu.feitos}/${eu.previstos} pt", style = EstiloValor, color = grafite.grafiteSuave)
                     }
                     e.regrasDoDia(e.hoje).takeIf { it.isNotEmpty() }?.let { r ->
-                        Text("Hoje: " + r.joinToString(" · ") { rotuloRegra(it) }, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Hoje: ", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+                            r.forEach { MarcaRegra(it) }
+                        }
+                    }
+                    val minhasIds = minhas.map { it.id }.toSet()
+                    val novos = e.comentarios.filter { it.id > vm.vistoComentario && it.membroId != e.euId && it.atribuicaoId in minhasIds }
+                    if (novos.isNotEmpty()) Row(Modifier.padding(top = 4.dp).clickable { vm.detalhe = novos.last().atribuicaoId }, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.ChatBubbleOutline, null, Modifier.size(16.dp), tint = grafite.grafite)
+                        Text("  ${novos.size} comentário${if (novos.size > 1) "s novos" else " novo"} nas suas tarefas", style = MaterialTheme.typography.bodySmall)
                     }
                     if (eu != null) Progresso(if (eu.previstos == 0) 0f else eu.feitos / eu.previstos.toFloat(), Modifier.fillMaxWidth().padding(top = 8.dp))
                 }
@@ -178,7 +204,7 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
         }
         if (atrasadas.isNotEmpty()) { item { Titulo("Atrasadas") }; items(atrasadas, { it.id }) { LinhaAtribuicao(vm, e, it, false) } }
         item { Titulo("Hoje") }
-        if (hoje.isEmpty()) item { Text("Nada para hoje. 🎉", Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+        if (hoje.isEmpty()) item { Text("Nada para hoje.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         items(hoje, { it.id }) { LinhaAtribuicao(vm, e, it, false) }
         if (proximas.isNotEmpty()) {
             item { Titulo("Próximos dias") }
@@ -191,11 +217,11 @@ private fun Hoje(vm: CasaViewModel, e: Estado) {
 }
 
 @Composable
-private fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium)
+internal fun Titulo(t: String) = Text(t, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium)
 
 /** Legenda em caixa alta (12/16 +0.06em), para separar dias dentro de uma seção. */
 @Composable
-private fun Rotulo(t: String) = Text(t.uppercase(), Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
+internal fun Rotulo(t: String) = Text(t.uppercase(), Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), style = MaterialTheme.typography.labelSmall, color = grafite.grafiteSuave)
 
 @Composable
 private fun Semana(vm: CasaViewModel, e: Estado) {
@@ -210,8 +236,10 @@ private fun Semana(vm: CasaViewModel, e: Estado) {
         }
         lista.toSortedMap().forEach { (dia, itens) ->
             item {
-                val regras = e.regrasDoDia(dia).joinToString(" ") { rotuloRegra(it) }
-                Titulo(nomeDia(dia) + (if (dia == e.hoje) " · hoje" else "") + (if (regras.isNotEmpty()) "   $regras" else ""))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Titulo(nomeDia(dia) + (if (dia == e.hoje) " · hoje" else ""))
+                    Row(Modifier.padding(bottom = 6.dp)) { e.regrasDoDia(dia).forEach { MarcaRegra(it) } }
+                }
             }
             items(itens, { it.id }) { LinhaAtribuicao(vm, e, it) }
         }
@@ -224,7 +252,7 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
     var nova by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(contentPadding = PaddingValues(bottom = 88.dp)) {
-            item { Text("Toque para editar. 👍 gosto / 👎 evito: a divisão leva isso em conta.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave) }
+            item { Text("Toque para editar. Polegar para cima: gosto; para baixo: evito. A divisão leva isso em conta.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave) }
             items(e.tarefas, { it.id }) { t ->
                 val nivel = e.preferencias[t.id] ?: 0
                 val fixo = e.membros.find { it.id == t.fixoId }?.nome
@@ -233,7 +261,7 @@ private fun Tarefas(vm: CasaViewModel, e: Estado) {
                     Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
                         Text(t.nome, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(listOfNotNull("${t.pontos} pt", if (t.vezes == 7) "todo dia" else "${t.vezes}x/sem", t.horario?.let { "às $it" },
-                            fixo?.let { "sempre $it" }, regra?.let { rotuloRegra(it) }).joinToString(" · "),
+                            fixo?.let { "sempre $it" }, regra?.let { "só com ${it.nome.lowercase()}" }).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton(onClick = { vm.preferencia(t.id, if (nivel == 1) 0 else 1) }, Modifier.size(40.dp)) { Icon(if (nivel == 1) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp, "Gosto", Modifier.size(20.dp), tint = if (nivel == 1) grafite.grafite else grafite.grafiteSuave) }
@@ -288,7 +316,8 @@ private fun EditorTarefa(e: Estado, t: Tarefa?, vm: CasaViewModel, fechar: () ->
                     Text("Só nos dias de", Modifier.padding(top = 8.dp))
                     Row(Modifier.padding(top = 4.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(regra == null, { regra = null }, { Text("Qualquer dia") })
-                        e.condicoes.forEach { c -> FilterChip(regra == c.id, { regra = c.id }, { Text(rotuloRegra(c)) }) }
+                        e.condicoes.forEach { c -> FilterChip(regra == c.id, { regra = c.id }, { Text(c.nome) },
+                            leadingIcon = { Icon(iconeRegra(c), null, Modifier.size(16.dp)) }) }
                     }
                 }
             }
@@ -368,7 +397,9 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
             ListItem(
         colors = coresLinha(),
                 modifier = Modifier.clickable { regraEditando = c },
-                headlineContent = { Text(rotuloRegra(c)) },
+                headlineContent = { Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(iconeRegra(c), null, Modifier.size(18.dp), tint = grafite.grafiteSuave); Spacer(Modifier.width(8.dp)); Text(c.nome)
+                } },
                 supportingContent = { Text(descreverRegra(c, e.hoje) + " · $n tarefa${if (n == 1) "" else "s"}") },
             )
         }
@@ -377,10 +408,20 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                 Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Nova regra")
             }
         }
+        item { Titulo("Painel da casa") }
+        item { ConfigPainel(vm, e) }
         item { Titulo("Agenda") }
         item { ConfigAgenda(vm, e) }
         item { Titulo("Lembretes") }
         item { ConfigLembretes() }
+        item { Titulo("Aparência") }
+        item {
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("sistema" to "Sistema", "claro" to "Claro", "escuro" to "Escuro").forEach { (t, rotulo) ->
+                    FilterChip(vm.tema == t, { vm.escolherTema(t) }, { Text(rotulo) })
+                }
+            }
+        }
         item {
             Column(Modifier.padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(16.dp))
@@ -392,19 +433,26 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
     if (novaRegra || regraEditando != null) EditorRegra(vm, e, regraEditando) { novaRegra = false; regraEditando = null }
 }
 
-private val DIAS_CURTOS = listOf("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+internal val DIAS_CURTOS = listOf("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 
-private fun rotuloRegra(c: Condicao): String {
+/** Ícone monocromático da regra, escolhido pelo nome (água, luz, gás, coleta, feira; o resto é um alfinete). */
+internal fun iconeRegra(c: Condicao): ImageVector {
     val n = c.nome.lowercase()
-    val icone = when {
-        "água" in n || "agua" in n -> "💧"
-        "luz" in n || "energia" in n -> "⚡"
-        "gás" in n || "gas" in n -> "🔥"
-        "lixo" in n || "coleta" in n -> "🗑️"
-        "feira" in n -> "🥬"
-        else -> "📌"
+    return when {
+        "água" in n || "agua" in n -> Icons.Outlined.WaterDrop
+        "luz" in n || "energia" in n -> Icons.Outlined.Bolt
+        "gás" in n || "gas" in n -> Icons.Outlined.LocalFireDepartment
+        "lixo" in n || "coleta" in n -> Icons.Outlined.Delete
+        "feira" in n || "mercado" in n -> Icons.Outlined.ShoppingBasket
+        else -> Icons.Outlined.PushPin
     }
-    return "$icone ${c.nome}"
+}
+
+/** Ícone + nome da regra, em grafite-suave (sem cor: a regra não é um estado). */
+@Composable
+internal fun MarcaRegra(c: Condicao) = Row(Modifier.padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Icon(iconeRegra(c), null, Modifier.size(14.dp), tint = grafite.grafiteSuave)
+    Text(" ${c.nome}", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
 }
 
 private fun descreverRegra(c: Condicao, hoje: String): String =
@@ -596,20 +644,20 @@ private fun ConfigLembretes() {
 // Nanquim é o acento único da tela; as ações secundárias ficam em grafite.
 
 @Composable
-private fun AcaoNeutra(onClick: () -> Unit, modifier: Modifier = Modifier, cor: Color = grafite.grafite, compacta: Boolean = false, content: @Composable RowScope.() -> Unit) =
+internal fun AcaoNeutra(onClick: () -> Unit, modifier: Modifier = Modifier, cor: Color = grafite.grafite, compacta: Boolean = false, content: @Composable RowScope.() -> Unit) =
     TextButton(onClick = onClick, modifier = modifier, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = cor),
         contentPadding = if (compacta) PaddingValues(horizontal = 8.dp, vertical = 0.dp) else ButtonDefaults.TextButtonContentPadding, content = content)
 
 @Composable
-private fun AcaoPerigo(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =
+internal fun AcaoPerigo(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =
     TextButton(onClick = onClick, shape = RaioBotao, colors = ButtonDefaults.textButtonColors(contentColor = grafite.negativo), content = content)
 
 @Composable
-private fun Progresso(valor: Float, modifier: Modifier) =
+internal fun Progresso(valor: Float, modifier: Modifier) =
     LinearProgressIndicator(progress = { valor }, modifier = modifier, color = grafite.grafite, trackColor = grafite.linha)
 
 @Composable
-private fun coresCaixa() = CheckboxDefaults.colors(checkedColor = grafite.grafite, uncheckedColor = grafite.grafiteSuave, checkmarkColor = grafite.folha)
+internal fun coresCaixa() = CheckboxDefaults.colors(checkedColor = grafite.grafite, uncheckedColor = grafite.grafiteSuave, checkmarkColor = grafite.folha)
 
 @Composable
 private fun coresSlider() = SliderDefaults.colors(

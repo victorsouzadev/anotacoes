@@ -9,6 +9,7 @@ import org.junit.After
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -66,12 +67,30 @@ class FluxoTest {
             api.chamar("PUT", "/api/membros/${e.euId}", org.json.JSONObject().put("disponibilidade", org.json.JSONArray(listOf(1, 1, 0.4, 0.4, 0.4, 1, 1))))
         }
         compose.onNodeWithContentDescription("Atualizar").performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("Hoje: 💧 Água").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(" Água").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Tarefas")[0].performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("todo dia · 💧 Água", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("só com água", substring = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText("Casa")[0].performClick()
         compose.onNodeWithText("Regras da casa").performScrollTo().assertExists()
         compose.onNodeWithText("Dia sim, dia não · hoje tem", substring = true).performScrollTo().assertExists()
         compose.onNodeWithText("menos tarefa qua, qui, sex", substring = true).performScrollTo().assertExists()
+
+        // Não feita + comentário pelo detalhe da tarefa.
+        compose.onAllNodesWithText("Hoje")[0].performClick(); compose.waitForIdle()
+        val primeira = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }.let { e -> e.atribuicoes.first { it.membroId == e.euId && it.dia == e.hoje } }
+        compose.onAllNodesWithText(primeira.tarefa)[0].performClick()
+        compose.onNodeWithText("Não deu para fazer").performClick()
+        compose.onNode(hasSetTextAction() and hasText("Motivo (opcional)")).performTextInput("Faltou água")
+        compose.onNodeWithText("Confirmar").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Faltou água", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasSetTextAction() and hasText("Comentar…")).performTextInput("Faço amanhã")
+        compose.onNodeWithContentDescription("Enviar comentário").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Faço amanhã").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("não feita").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithContentDescription("Comentários")[0].assertExists()
+        val depois = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }
+        org.junit.Assert.assertEquals("Faltou água", depois.atribuicoes.first { it.id == primeira.id }.naoFeita)
+        org.junit.Assert.assertEquals(2, depois.comentarios.count { it.atribuicaoId == primeira.id })
     }
 }

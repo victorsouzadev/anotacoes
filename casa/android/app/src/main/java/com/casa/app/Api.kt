@@ -35,14 +35,19 @@ data class Membro(val id: Int, val nome: String, val peso: Double, val ausenteAt
 data class Tarefa(val id: Int, val nome: String, val pontos: Int, val vezes: Int, val fixoId: Int?, val condicaoId: Int?, val horario: String?, val duracao: Int)
 /** Regra da casa. tipo "alternado": vale em [referencia] e a cada 2 dias; "semana": nos [dias] (0 = segunda). */
 data class Condicao(val id: Int, val nome: String, val tipo: String, val referencia: String?, val dias: List<Int>)
+/** naoFeita: motivo (pode ser "") quando alguém marcou como não feita; null = não marcada. */
 data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val membroId: Int?, val dia: String, val pontos: Int, val feito: Boolean,
-    val horario: String? = null, val duracao: Int = 30)
+    val horario: String? = null, val duracao: Int = 30, val naoFeita: String? = null, val naoFeitaPor: Int? = null, val comentarios: Int = 0)
+/** tipo: "comentario" ou "nao_feita" (criado ao marcar/sinalizar como não feita). */
+data class Comentario(val id: Int, val atribuicaoId: Int, val membroId: Int?, val tipo: String, val texto: String, val em: String)
+data class Painel(val url: String, val codigo: String, val aparelhos: Int)
 data class Placar(val membroId: Int, val nome: String, val feitos: Int, val previstos: Int, val saldo: Double)
 data class Estado(
     val euId: Int, val euAdmin: Boolean, val agendaUrl: String?, val casaNome: String, val codigo: String, val modo: String,
     val semana: String, val hoje: String, val membros: List<Membro>, val tarefas: List<Tarefa>,
     val atribuicoes: List<Atribuicao>, val placar: List<Placar>, val preferencias: Map<Int, Int>,
     val condicoes: List<Condicao>, val condicoesDoDia: Map<String, List<Int>>,
+    val comentarios: List<Comentario> = emptyList(), val painel: Painel? = null,
 ) {
     fun regrasDoDia(dia: String) = condicoesDoDia[dia].orEmpty().mapNotNull { id -> condicoes.find { it.id == id } }
 }
@@ -77,8 +82,12 @@ fun JSONObject.paraEstado(): Estado {
         }.orEmpty().toMap(),
         atribuicoes = getJSONArray("atribuicoes").mapa {
             Atribuicao(it.getInt("id"), it.getInt("tarefa_id"), it.getString("tarefa"), it.intOuNull("membro_id"), it.getString("dia"), it.getInt("pontos"), !it.isNull("feito_em"),
-                it.optStrOuNull("horario"), it.optInt("duracao", 30))
+                it.optStrOuNull("horario"), it.optInt("duracao", 30), it.optStrOuNull("nao_feita"), it.optIntOuNull("nao_feita_por"), it.optInt("comentarios", 0))
         },
+        comentarios = optJSONArray("comentarios")?.mapa {
+            Comentario(it.getInt("id"), it.getInt("atribuicao_id"), it.optIntOuNull("membro_id"), it.getString("tipo"), it.optString("texto"), it.getString("em"))
+        }.orEmpty(),
+        painel = optJSONObject("painel")?.let { Painel(it.getString("url"), it.getString("codigo"), it.optInt("aparelhos")) },
         placar = getJSONArray("placar").mapa { Placar(it.getInt("membroId"), it.getString("nome"), it.getInt("feitos"), it.getInt("previstos"), it.getDouble("saldo")) },
         preferencias = getJSONArray("preferencias").mapa { it.getInt("tarefa_id") to it.getInt("nivel") }.toMap(),
     )

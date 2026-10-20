@@ -18,6 +18,18 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     var estado by mutableStateOf<Estado?>(null); private set
+    /** "sistema", "claro" ou "escuro". */
+    var tema by mutableStateOf(prefs.getString("tema", "sistema") ?: "sistema"); private set
+    fun escolherTema(t: String) { tema = t; prefs.edit().putString("tema", t).apply() }
+    /** Tarefa aberta no detalhe (comentários, não feita). */
+    var detalhe by mutableStateOf<Int?>(null)
+    var painelAberto by mutableStateOf(false)
+    /** Último comentário dos outros nas minhas tarefas que eu já vi. */
+    var vistoComentario by mutableStateOf(prefs.getInt("visto_comentario", 0)); private set
+    fun marcarComentariosVistos() {
+        val ultimo = estado?.comentarios?.maxOfOrNull { it.id } ?: return
+        if (ultimo > vistoComentario) { vistoComentario = ultimo; prefs.edit().putInt("visto_comentario", ultimo).apply() }
+    }
     var carregando by mutableStateOf(false); private set
     var erro by mutableStateOf<String?>(null)
     // Precisa ser estado do Compose: a tela inicial escolhe entre boas-vindas e app por este valor.
@@ -85,6 +97,15 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
         if (id == null) api.chamar("POST", "/api/condicoes", b) else api.chamar("PUT", "/api/condicoes/$id", b)
     }
     fun removerRegra(id: Int) = executa { api.chamar("DELETE", "/api/condicoes/$id") }
+
+    fun naoFeita(a: Atribuicao, motivo: String) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/nao-feita", JSONObject().put("motivo", motivo)) }
+    fun reabrir(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/reabrir") }
+    fun comentar(a: Atribuicao, texto: String) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/comentarios", JSONObject().put("texto", texto)) }
+    fun apagarComentario(id: Int) = executa { api.chamar("DELETE", "/api/comentarios/$id") }
+
+    fun gerarPainel() = executa { api.chamar("POST", "/api/painel") }
+    fun desligarPainel() = executa { api.chamar("DELETE", "/api/painel") }
+    fun desconectarAparelhos() = executa { api.chamar("DELETE", "/api/painel/sessoes") }
 
     // Agenda: link .ics (servidor) e sincronização com a agenda do celular (Agenda.kt).
     fun gerarLinkAgenda() = executa { api.chamar("POST", "/api/agenda") }

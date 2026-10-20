@@ -53,7 +53,7 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
   const regrasDoDia = (e, d) => (e.diasCondicoes.find(x => x.dia === d)?.condicoes ?? []).map(id => e.condicoes.find(c => c.id === id)?.nome);
   const nomeDe = (e, id) => e.membros.find(x => x.id === id)?.nome ?? 'ninguém';
   const dia = d => new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${a.horario ? ` ${a.horario}` : ''}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · ✅ feita' : ''}`;
+  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${a.horario ? ` ${a.horario}` : ''}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · feita' : a.nao_feita != null ? ` · NÃO FEITA${a.nao_feita ? ` (${a.nao_feita})` : ''}` : ''}${a.comentarios ? ` · ${a.comentarios} coment.` : ''}`;
   // "Lavar a louça ×3, Tirar o lixo"
   const agrupa = l => Object.entries(l.reduce((c, a) => ({ ...c, [a.tarefa]: (c[a.tarefa] ?? 0) + 1 }), {}))
     .map(([t, n]) => n > 1 ? `${t} ×${n}` : t).join(', ');

@@ -7,7 +7,9 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
@@ -60,6 +62,27 @@ class CapturasTest {
             for ((aba, nome) in listOf("Semana" to "3-semana", "Tarefas" to "4-tarefas", "Casa" to "5-casa")) {
                 compose.onAllNodesWithText(aba)[0].performClick(); compose.waitForIdle()
                 salva(pasta, "$tema-$nome")
+            }
+            // Detalhe de uma tarefa com comentário e "não feita".
+            compose.onAllNodesWithText("Hoje")[0].performClick(); compose.waitForIdle()
+            compose.onAllNodesWithText("Lavar a louça")[0].performClick()
+            compose.onNodeWithText("Não deu para fazer").performClick()
+            compose.onNode(hasSetTextAction() and hasText("Motivo (opcional)")).performTextInput("Faltou água de manhã")
+            compose.onNodeWithText("Confirmar").performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Faltou água de manhã", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNode(hasSetTextAction() and hasText("Comentar…")).performTextInput("Faço à noite, quando voltar")
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Enviar comentário")).performClick()
+            compose.waitUntil(10_000) { compose.onAllNodesWithText("Faço à noite, quando voltar").fetchSemanticsNodes().isNotEmpty() }
+            salva(pasta, "$tema-7-detalhe")
+            compose.onNode(androidx.compose.ui.test.hasContentDescription("Voltar")).performClick(); compose.waitForIdle()
+            salva(pasta, "$tema-8-hoje-com-marcas")
+            if (tema == "dia") {
+                // Tema escolhido no app vale mesmo com o sistema no claro.
+                compose.onAllNodesWithText("Casa")[0].performClick(); compose.waitForIdle()
+                compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(hasText("Escuro"))
+                compose.onNodeWithText("Escuro").performClick(); compose.waitForIdle()
+                salva(pasta, "$tema-9-casa-tema-escuro-no-app")
+                compose.onNodeWithText("Sistema").performClick(); compose.waitForIdle()
             }
             compose.onAllNodesWithText("Tarefas")[0].performClick(); compose.waitForIdle()
             // A janela de diálogo tem animação contínua no Robolectric: congela o relógio antes de abrir.
