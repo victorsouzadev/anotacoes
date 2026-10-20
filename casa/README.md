@@ -11,3 +11,10 @@ assumir a tarefa de outra pessoa; placar semanal.
 
 Lembretes: notificação local de manhã (tarefas do dia) e à noite (pendentes), com horários
 ajustáveis na aba Casa. O alarme consulta o servidor na hora, e é reagendado após reiniciar o aparelho.
+
+Download: **https://casa.vsitefy.com.br** (página) ou direto **https://casa.vsitefy.com.br/casa.apk**.
+Para publicar uma nova versão (o token está em `/opt/casa/.env` na VPS):
+```bash
+curl -X PUT https://casa.vsitefy.com.br/admin/apk -H "X-Upload-Token: $UPLOAD_TOKEN" \
+  --data-binary @android/app/build/outputs/apk/debug/app-debug.apk
+```

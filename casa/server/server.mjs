@@ -3,6 +3,9 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
 const db = new DatabaseSync(process.env.DB_PATH || './casa.db');
 db.exec(`
@@ -202,10 +205,63 @@ function marca(m, id, sql, ...args) {
   db.prepare(sql).run(...args, id); return estado(m);
 }
 
+// ---------- download do APK ----------
+// GET / mostra a página de download; GET /casa.apk entrega o arquivo.
+// PUT /admin/apk (header X-Upload-Token = UPLOAD_TOKEN) troca o APK publicado.
+const APK = path.join(process.env.APK_DIR || './apk', 'casa.apk');
+fs.mkdirSync(path.dirname(APK), { recursive: true });
+
+function paginaDownload(res) {
+  const info = fs.existsSync(APK) ? fs.statSync(APK) : null;
+  const detalhe = info
+    ? `${(info.size / 1048576).toFixed(1)} MB · atualizado em ${info.mtime.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`
+    : 'Ainda não há versão publicada.';
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Casa</title><style>
+:root{--bg:#f6f8f7;--fg:#1c2b24;--sub:#5b6b63;--verde:#2e7d5b;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#111815;--fg:#e6efe9;--sub:#9fb2a8;--card:#1a2420}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}
+main{background:var(--card);padding:32px 24px;border-radius:16px;max-width:360px;margin:16px;text-align:center;box-shadow:0 2px 12px #0001}
+h1{color:var(--verde);margin:0 0 4px}p{color:var(--sub);margin:8px 0}
+a.b{display:inline-block;margin:16px 0 8px;padding:14px 28px;background:var(--verde);color:#fff;border-radius:999px;text-decoration:none;font-weight:600}
+small{color:var(--sub)}</style>
+<main><h1>Casa</h1><p>Divida as tarefas de casa de forma justa.</p>
+${info ? '<a class="b" href="/casa.apk">Baixar para Android</a>' : ''}<p><small>${detalhe}</small></p>
+<p><small>Ao instalar, permita “instalar apps desconhecidos” para o navegador.</small></p></main></html>`);
+}
+
+function baixarApk(res) {
+  if (!fs.existsSync(APK)) { res.writeHead(404); return res.end('APK ainda não publicado'); }
+  res.writeHead(200, {
+    'content-type': 'application/vnd.android.package-archive',
+    'content-disposition': 'attachment; filename="casa.apk"',
+    'content-length': fs.statSync(APK).size,
+  });
+  fs.createReadStream(APK).pipe(res);
+}
+
+async function publicarApk(req) {
+  const esperado = process.env.UPLOAD_TOKEN || '';
+  const recebido = String(req.headers['x-upload-token'] || '');
+  exige(esperado && recebido.length === esperado.length &&
+    crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado)), 401, 'Token de envio inválido');
+  const tmp = APK + '.tmp';
+  await pipeline(req, fs.createWriteStream(tmp));
+  // Um APK é um zip: confere a assinatura "PK" antes de publicar.
+  const cab = Buffer.alloc(2); const fd = fs.openSync(tmp, 'r'); fs.readSync(fd, cab, 0, 2, 0); fs.closeSync(fd);
+  if (cab.toString() !== 'PK') { fs.rmSync(tmp); throw new Erro(400, 'Arquivo não é um APK'); }
+  fs.renameSync(tmp, APK);
+  return { ok: true, bytes: fs.statSync(APK).size };
+}
+
 http.createServer(async (req, res) => {
   const envia = (s, o) => { res.writeHead(s, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(o)); };
   try {
     const url = new URL(req.url, 'http://x');
+    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/download')) return paginaDownload(res);
+    if (req.method === 'GET' && url.pathname === '/casa.apk') return baixarApk(res);
+    if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     const partes = url.pathname.split('/');
     const idx = partes.findIndex(p => /^\d+$/.test(p));
     const id = idx > 0 ? Number(partes[idx]) : null;

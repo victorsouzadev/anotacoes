@@ -4,6 +4,7 @@ services:
     build: .
     container_name: casa-api
     restart: unless-stopped
+    env_file: .env   # UPLOAD_TOKEN, para publicar o APK em PUT /admin/apk
     volumes:
       - casa-data:/data
     networks:
