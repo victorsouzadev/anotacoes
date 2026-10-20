@@ -152,16 +152,33 @@ class Repo(private val context: Context, val db: DietaDb, val prefs: Prefs, priv
 
     /**
      * Guarda a foto (da câmera ou da galeria) reduzida a 1600 px no maior lado, JPEG 80, já na orientação
-     * certa, e cria o registro dela. A foto não passa por nenhuma análise: é só registro.
+     * certa, e cria o registro dela.
      */
     suspend fun guardarFoto(origem: Uri, data: LocalDate, tipo: String, rotulo: String?): Foto = withContext(Dispatchers.IO) {
         val id = UUID.randomUUID().toString()
         val destino = File(context.filesDir, "fotos/$id.jpg").also { it.parentFile?.mkdirs() }
+        val bmp = reduzir(origem, 1600)
+        destino.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+        val foto = Foto(id, data.toString(), tipo, rotulo, destino.absolutePath)
+        db.fotos().salvar(foto)
+        pedirSync()
+        foto
+    }
+
+    /** A foto como data URL JPEG de até 1024 px, o que a IA precisa para ler prato ou rótulo sem pesar no envio. */
+    suspend fun dataUrl(origem: Uri): String = withContext(Dispatchers.IO) {
+        val saida = java.io.ByteArrayOutputStream()
+        reduzir(origem, 1024).compress(Bitmap.CompressFormat.JPEG, 80, saida)
+        "data:image/jpeg;base64," + android.util.Base64.encodeToString(saida.toByteArray(), android.util.Base64.NO_WRAP)
+    }
+
+    /** Decodifica já reduzindo (inSampleSize), corrige a orientação do EXIF e limita o maior lado a [lado] px. */
+    private fun reduzir(origem: Uri, lado: Int): Bitmap {
         val bytes = context.contentResolver.openInputStream(origem)!!.use { it.readBytes() }
         val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, limites)
         var amostra = 1
-        while (max(limites.outWidth, limites.outHeight) / (amostra * 2) >= 1600) amostra *= 2
+        while (max(limites.outWidth, limites.outHeight) / (amostra * 2) >= lado) amostra *= 2
         var bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = amostra })
         val giro = when (ExifInterface(bytes.inputStream()).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
             ExifInterface.ORIENTATION_ROTATE_90 -> 90f
@@ -169,16 +186,12 @@ class Repo(private val context: Context, val db: DietaDb, val prefs: Prefs, priv
             ExifInterface.ORIENTATION_ROTATE_270 -> 270f
             else -> 0f
         }
-        val escala = 1600f / max(bmp.width, bmp.height)
+        val escala = lado.toFloat() / max(bmp.width, bmp.height)
         if (giro != 0f || escala < 1f) {
             val m = Matrix().apply { if (escala < 1f) postScale(escala, escala); postRotate(giro) }
             bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         }
-        destino.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 80, it) }
-        val foto = Foto(id, data.toString(), tipo, rotulo, destino.absolutePath)
-        db.fotos().salvar(foto)
-        pedirSync()
-        foto
+        return bmp
     }
 
     suspend fun apagarFoto(f: Foto) {

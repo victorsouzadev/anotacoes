@@ -166,6 +166,9 @@ public static class NotasApp
 
         // Ferramenta "Dieta": gamificação derivada dos registros e consulta de código de barras.
         builder.Services.AddScoped<DietaProgresso>();
+        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.FerramentasDieta>();
+        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.ChatDieta>();
+        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.ReconhecedorDeAlimento>();
         builder.Services.AddHttpClient<IOpenFoodFacts, OpenFoodFacts>(c =>
         {
             c.Timeout = TimeSpan.FromSeconds(10);
@@ -177,6 +180,7 @@ public static class NotasApp
         builder.Services.AddScoped<MetaService>();
         builder.Services.AddScoped<PlanejamentoService>();
         builder.Services.AddScoped<FerramentasFinanceiras>();
+        builder.Services.AddScoped<ChatComFerramentas>();
         builder.Services.AddScoped<ChatFinanceiro>();
         builder.Services.AddScoped<IChatModeloCliente, ChatModeloCliente>();
         // Uma resposta do chat pode encadear várias consultas; cada chamada ao
@@ -229,6 +233,17 @@ public static class NotasApp
             // (uma requisição ao LLM). O limite é por usuário autenticado, não por IP, para
             // que um token vazado não consiga queimar a chave da API em laço.
             o.AddPolicy("financas-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.User.FindFirst("sub")?.Value
+                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
+
+            // IA da Dieta (chat e reconhecimento de foto): por usuário, como a das Finanças.
+            o.AddPolicy("dieta-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                     ?? ctx.User.FindFirst("sub")?.Value
                     ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -326,6 +341,7 @@ public static class NotasApp
         app.MapSitesEndpoints();
         app.MapMoldesEndpoints();
         app.MapDietaEndpoints();
+        app.MapDietaIaEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

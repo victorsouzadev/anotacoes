@@ -115,6 +115,11 @@ class Prefs(context: Context) {
         _ultimoSync.value = agora
     }
 
+    /** Conversa do chat da Dieta (JSON [{papel, texto}]): fica só no aparelho, como o chat das Finanças no navegador. */
+    var chat: String?
+        get() = prefs.getString("chat", null)
+        set(v) = prefs.edit().putString("chat", v).apply()
+
     var lembretesAtivos: Boolean
         get() = prefs.getBoolean("lembretes", true)
         set(v) = prefs.edit().putBoolean("lembretes", v).apply()
