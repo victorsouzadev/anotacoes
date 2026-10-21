@@ -11,8 +11,8 @@ android {
         applicationId = "com.casa.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.8"
+        versionCode = 10
+        versionName = "1.9"
         // Servidor padrão (VPS); pode ser trocado na tela inicial do app.
         buildConfigField("String", "SERVIDOR", "\"https://casa.vsitefy.com.br\"")
     }
@@ -39,6 +39,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("androidx.compose.ui:ui-test-junit4")

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onde a câmera grava a foto da tarefa antes de ela ser reduzida e enviada. -->
+<paths><cache-path name="fotos" path="fotos/" /></paths>

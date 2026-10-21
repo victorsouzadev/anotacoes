@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import androidx.compose.ui.graphics.asImageBitmap
 
 class CasaViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("casa", Context.MODE_PRIVATE)
@@ -102,6 +103,25 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     fun reabrir(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/reabrir") }
     fun comentar(a: Atribuicao, texto: String) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/comentarios", JSONObject().put("texto", texto)) }
     fun apagarComentario(id: Int) = executa { api.chamar("DELETE", "/api/comentarios/$id") }
+
+    // Fotos: reduzida no celular (Fotos.kt) e enviada; "concluir" já marca a tarefa como feita.
+    val fotos = androidx.compose.runtime.mutableStateMapOf<Int, androidx.compose.ui.graphics.ImageBitmap>()
+    fun enviarFoto(a: Atribuicao, uri: android.net.Uri, concluir: Boolean) = executa {
+        val jpeg = Fotos.reduzir(getApplication(), uri)
+        val r = JSONObject(String(api.bytes("PUT", "/api/atribuicoes/${a.id}/foto", jpeg)))
+        fotos.remove(a.id)
+        if (concluir && !a.feito) api.chamar("POST", "/api/atribuicoes/${a.id}/concluir") else r
+    }
+    fun removerFoto(a: Atribuicao) = executa { fotos.remove(a.id); JSONObject(String(api.bytes("DELETE", "/api/atribuicoes/${a.id}/foto"))) }
+    fun carregarFoto(a: Atribuicao) {
+        if (!a.foto || fotos.containsKey(a.id)) return
+        viewModelScope.launch {
+            runCatching {
+                val b = api.bytes("GET", "/api/atribuicoes/${a.id}/foto")
+                android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size)?.let { bm -> fotos[a.id] = bm.asImageBitmap() }
+            }.onFailure { Registro.aviso("foto_carregar", it) }
+        }
+    }
 
     fun gerarPainel() = executa { api.chamar("POST", "/api/painel") }
     fun desligarPainel() = executa { api.chamar("DELETE", "/api/painel") }

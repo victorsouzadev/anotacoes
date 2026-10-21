@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -57,6 +58,7 @@ class CapturasTest {
             }
             compose.onNode(androidx.compose.ui.test.hasContentDescription("Atualizar")).performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithText("20:00").fetchSemanticsNodes().isNotEmpty() }
+            val apiCap = api
             compose.waitForIdle(); Thread.sleep(1500); compose.waitForIdle()
             salva(pasta, "$tema-2-hoje")
             for ((aba, nome) in listOf("Semana" to "3-semana", "Tarefas" to "4-tarefas", "Casa" to "5-casa")) {
@@ -77,6 +79,21 @@ class CapturasTest {
             compose.onNode(androidx.compose.ui.test.hasContentDescription("Voltar")).performClick(); compose.waitForIdle()
             salva(pasta, "$tema-8-hoje-com-marcas")
             if (tema == "dia") {
+                // Detalhe com foto (imagem de teste com listras, para ver o enquadramento).
+                val e2 = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }
+                val alvo = e2.atribuicoes.first { it.membroId == e2.euId && it.dia == e2.hoje && it.tarefa != "Lavar a louça" }
+                val arq = java.io.File(ApplicationProvider.getApplicationContext<Context>().cacheDir, "foto.jpg")
+                val bm = android.graphics.Bitmap.createBitmap(1200, 900, android.graphics.Bitmap.Config.ARGB_8888)
+                android.graphics.Canvas(bm).apply { drawColor(0xFFDCE6E2.toInt()); val p = android.graphics.Paint().apply { color = 0xFF5E6865.toInt(); strokeWidth = 40f }
+                    for (x in 0..2400 step 160) drawLine(x.toFloat(), 0f, x - 900f, 900f, p) }
+                arq.outputStream().use { bm.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+                tela!!.onActivity { act -> androidx.lifecycle.ViewModelProvider(act)[CasaViewModel::class.java].enviarFoto(alvo, android.net.Uri.fromFile(arq), concluir = true) }
+                compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Com foto").fetchSemanticsNodes().isNotEmpty() }
+                compose.onAllNodesWithText(alvo.tarefa)[0].performClick()
+                compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Foto da tarefa ${alvo.tarefa}").fetchSemanticsNodes().isNotEmpty() }
+                salva(pasta, "$tema-10-detalhe-com-foto")
+                compose.onNode(androidx.compose.ui.test.hasContentDescription("Voltar")).performClick(); compose.waitForIdle()
+                salva(pasta, "$tema-11-hoje-depois")
                 // Tema escolhido no app vale mesmo com o sistema no claro.
                 compose.onAllNodesWithText("Casa")[0].performClick(); compose.waitForIdle()
                 compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(hasText("Escuro"))

@@ -87,12 +87,29 @@ class FluxoTest {
         compose.onNode(hasSetTextAction() and hasText("Comentar…")).performTextInput("Faço amanhã")
         compose.onNodeWithContentDescription("Enviar comentário").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Faço amanhã").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.onNodeWithContentDescription("Voltar").performClick(); compose.waitForIdle()
+        // Não feita sai da aba Hoje e continua na Semana, com a marca e os comentários.
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("não feita").fetchSemanticsNodes().isEmpty() }
+        compose.onAllNodesWithText("Semana")[0].performClick(); compose.waitForIdle()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("não feita").fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithContentDescription("Comentários")[0].assertExists()
         val depois = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }
         org.junit.Assert.assertEquals("Faltou água", depois.atribuicoes.first { it.id == primeira.id }.naoFeita)
         org.junit.Assert.assertEquals(2, depois.comentarios.count { it.atribuicaoId == primeira.id })
+
+        // Foto: envia uma imagem pela mesma função que a câmera/galeria usam e confere no detalhe e na lista.
+        val outra = depois.atribuicoes.first { it.membroId == depois.euId && it.dia == depois.hoje && it.id != primeira.id }
+        val arq = java.io.File(ApplicationProvider.getApplicationContext<Context>().cacheDir, "foto.jpg")
+        arq.outputStream().use { android.graphics.Bitmap.createBitmap(800, 600, android.graphics.Bitmap.Config.ARGB_8888).compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, it) }
+        tela!!.onActivity { act -> androidx.lifecycle.ViewModelProvider(act)[CasaViewModel::class.java].enviarFoto(outra, android.net.Uri.fromFile(arq), concluir = true) }
+        compose.onAllNodesWithText("Hoje")[0].performClick(); compose.waitForIdle()
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Com foto").fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText(outra.tarefa)[0].performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Foto de Teste").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Foto da tarefa ${outra.tarefa}").fetchSemanticsNodes().isNotEmpty() }
+        val comFoto = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }.atribuicoes.first { it.id == outra.id }
+        org.junit.Assert.assertTrue("enviada e concluída", comFoto.foto && comFoto.feito)
+        compose.onNodeWithContentDescription("Voltar").performClick(); compose.waitForIdle()
 
         // TV: abre /tv como a TV faria, lê o código e conecta pelo app.
         val servidor = System.getenv("CASA_SERVIDOR")!!

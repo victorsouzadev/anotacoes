@@ -43,6 +43,10 @@ if (!colunas('membros').includes('agenda_token')) db.exec('ALTER TABLE membros A
 if (!colunas('atribuicoes').includes('nao_feita')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita TEXT');
 if (!colunas('atribuicoes').includes('nao_feita_por')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita_por INTEGER');
 if (!colunas('atribuicoes').includes('nao_feita_em')) db.exec('ALTER TABLE atribuicoes ADD COLUMN nao_feita_em TEXT');
+// Foto da tarefa (arquivo em FOTOS_DIR), quem mandou e quando.
+if (!colunas('atribuicoes').includes('foto')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto TEXT');
+if (!colunas('atribuicoes').includes('foto_por')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto_por INTEGER');
+if (!colunas('atribuicoes').includes('foto_em')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto_em TEXT');
 db.exec(`
 -- Comentários nas tarefas da semana (tipo 'comentario' ou 'nao_feita', este criado ao marcar/sinalizar).
 CREATE TABLE IF NOT EXISTS comentarios(id INTEGER PRIMARY KEY, casa_id INTEGER, atribuicao_id INTEGER REFERENCES atribuicoes(id) ON DELETE CASCADE,
@@ -132,7 +136,7 @@ function distribuir(casaId, inicio = segunda()) {
   // Mantém o que já foi feito; refaz o resto.
   // Também ficam as marcadas como não feitas e as que têm comentário, para a conversa não sumir.
   db.prepare(`DELETE FROM atribuicoes WHERE casa_id=? AND semana=? AND feito_em IS NULL AND nao_feita IS NULL
-    AND id NOT IN (SELECT atribuicao_id FROM comentarios)`).run(casaId, semana);
+    AND foto IS NULL AND id NOT IN (SELECT atribuicao_id FROM comentarios)`).run(casaId, semana);
   const feitas = db.prepare('SELECT * FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, semana);
 
   const dias = Array.from({ length: 7 }, (_, i) => iso(addDias(inicio, i)));
@@ -236,7 +240,8 @@ function distribuir(casaId, inicio = segunda()) {
 // ---------- estado ----------
 // Ordem do dia: primeiro as que têm horário (cedo → tarde), depois as sem horário.
 const listarAtribuicoes = (casaId, semana) => db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em,t.horario,t.duracao,
-  a.nao_feita,a.nao_feita_por,(SELECT COUNT(*) FROM comentarios c WHERE c.atribuicao_id=a.id) comentarios
+  a.nao_feita,a.nao_feita_por,(SELECT COUNT(*) FROM comentarios c WHERE c.atribuicao_id=a.id) comentarios,
+  (a.foto IS NOT NULL) foto,a.foto_por,a.foto_em
   FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=?
   ORDER BY a.dia, t.horario IS NULL, t.horario, t.nome`).all(casaId, semana);
 
@@ -424,6 +429,57 @@ function marca(m, id, sql, ...args) {
   db.prepare(sql).run(...args, id); return estado(m);
 }
 
+// ---------- fotos das tarefas ----------
+// PUT /api/atribuicoes/:id/foto (corpo = a imagem, JPEG/PNG/WebP, até 6 MB) · GET devolve · DELETE remove.
+// O app já manda a foto reduzida (lado maior 1600 px). Ficam guardadas por FOTOS_DIAS (padrão 120).
+const FOTOS = process.env.FOTOS_DIR || path.join(path.dirname(process.env.DB_PATH || './casa.db'), 'fotos');
+fs.mkdirSync(FOTOS, { recursive: true });
+const FOTO_MAX = 6 * 1024 * 1024;
+const TIPOS_FOTO = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+function tipoDaImagem(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
+  if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') return 'webp';
+  return null;
+}
+const apagaArquivoFoto = nome => { if (nome && /^[\w.-]+$/.test(nome)) fs.rm(path.join(FOTOS, nome), { force: true }, () => {}); };
+function limpaFotos() {
+  const limite = iso(addDias(new Date(), -Number(process.env.FOTOS_DIAS || 120)));
+  for (const a of db.prepare('SELECT id, foto FROM atribuicoes WHERE foto IS NOT NULL AND dia < ?').all(limite)) {
+    apagaArquivoFoto(a.foto); db.prepare('UPDATE atribuicoes SET foto=NULL, foto_por=NULL, foto_em=NULL WHERE id=?').run(a.id);
+  }
+}
+setTimeout(limpaFotos, 5000).unref(); setInterval(limpaFotos, 24 * 3600e3).unref();
+
+async function rotaFoto(req, res, m, id) {
+  const a = db.prepare('SELECT * FROM atribuicoes WHERE id=? AND casa_id=?').get(id, m.casa_id);
+  exige(a, 404, 'Tarefa não encontrada');
+  if (req.method === 'GET') {
+    exige(a.foto, 404, 'Sem foto');
+    const ext = a.foto.split('.').pop();
+    res.writeHead(200, { 'content-type': TIPOS_FOTO[ext] || 'application/octet-stream', 'cache-control': 'private, max-age=86400' });
+    return fs.createReadStream(path.join(FOTOS, a.foto)).on('error', () => res.end()).pipe(res);
+  }
+  if (req.method === 'DELETE') {
+    exige(m.admin || m.id === a.membro_id || m.id === a.foto_por, 403, 'Só quem faz a tarefa, quem mandou a foto ou o administrador remove');
+    apagaArquivoFoto(a.foto);
+    db.prepare('UPDATE atribuicoes SET foto=NULL, foto_por=NULL, foto_em=NULL WHERE id=?').run(id);
+    return estado(m);
+  }
+  exige(req.method === 'PUT', 405, 'Método não suportado');
+  const partes = []; let total = 0;
+  for await (const c of req) { total += c.length; exige(total <= FOTO_MAX, 413, 'Foto grande demais (máx. 6 MB)'); partes.push(c); }
+  const corpo = Buffer.concat(partes);
+  const ext = tipoDaImagem(corpo);
+  exige(ext, 400, 'Envie uma imagem JPEG, PNG ou WebP');
+  const nome = `${id}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  fs.writeFileSync(path.join(FOTOS, nome), corpo);
+  apagaArquivoFoto(a.foto);
+  db.prepare('UPDATE atribuicoes SET foto=?, foto_por=?, foto_em=? WHERE id=?').run(nome, m.id, new Date().toISOString(), id);
+  registra({ evento: 'foto_enviada', casaId: m.casa_id, membroId: m.id, detalhes: { atribuicao: id, bytes: corpo.length } });
+  return estado(m);
+}
+
 // ---------- download do APK ----------
 // GET / mostra a página de download; GET /casa.apk entrega o arquivo.
 // PUT /admin/apk (header X-Upload-Token = UPLOAD_TOKEN) troca o APK publicado.
@@ -544,7 +600,7 @@ function agendaIcs(token) {
   if (!m) return null;
   const e = estado(m);
   const proxima = iso(addDias(new Date(e.semana + 'T00:00:00Z'), 7));
-  const todas = [...e.atribuicoes, ...listarAtribuicoes(m.casa_id, proxima)].filter(a => a.membro_id === m.id);
+  const todas = [...e.atribuicoes, ...listarAtribuicoes(m.casa_id, proxima)].filter(a => a.membro_id === m.id && a.nao_feita == null);
   const carimbo = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
   const d8 = d => d.replace(/-/g, '');
   const linhas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Casa//Tarefas de casa//PT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
@@ -560,7 +616,7 @@ function agendaIcs(token) {
 }
 
 // Painel da casa (painel.mjs): no app e, com link + código, em PC/TV.
-const painel = criarPainel({ db, estado, listarAtribuicoes, registra, exige, Erro, hoje, iso, addDias, SIMBOLO: () => SIMBOLO, BASE_URL });
+const painel = criarPainel({ db, estado, listarAtribuicoes, registra, exige, Erro, hoje, iso, addDias, SIMBOLO: () => SIMBOLO, BASE_URL, FOTOS, TIPOS_FOTO });
 
 // MCP para o Claude agir na casa (mcp.mjs): https://casa.vsitefy.com.br/mcp
 const mcp = criarMcp({ db, rotas, registra, lerLogs });
@@ -595,9 +651,19 @@ http.createServer(async (req, res) => {
     if (req.method === 'PUT' && url.pathname === '/admin/apk') return envia(200, await publicarApk(req));
     if (req.method === 'GET' && url.pathname === '/admin/logs') { exigeAdmin(req); return envia(200, lerLogs(url)); }
     if (url.pathname === '/mcp') return await mcp(req, res, url);
+    const foto = url.pathname.match(/^\/api\/atribuicoes\/(\d+)\/foto$/);
+    if (foto) {
+      chave = `${req.method} /api/atribuicoes/:id/foto`;
+      const token = (req.headers.authorization || '').replace(/^Bearer /, '');
+      membro = token ? db.prepare('SELECT * FROM membros WHERE token=?').get(token) ?? null : null;
+      exige(membro, 401, 'Sessão inválida — entre de novo na casa');
+      const r = await rotaFoto(req, res, membro, Number(foto[1]));
+      if (r && !res.headersSent) envia(200, r);
+      return;
+    }
     if (url.pathname.startsWith('/p/') || url.pathname.startsWith('/painel/') || url.pathname === '/tv' || url.pathname === '/tv/estado') {
       // O link é secreto: mascara antes de responder (o log é escrito quando a resposta termina).
-      chave = url.pathname.startsWith('/p/') ? `${req.method} /p/:link` : `${req.method} ${url.pathname}`;
+      chave = url.pathname.startsWith('/p/') ? `${req.method} /p/:link` : `${req.method} ${url.pathname.replace(/\/\d+$/, '/:id')}`;
       const r = await painel.http(req, res, url);
       membro = r.membro ?? null;
       return;

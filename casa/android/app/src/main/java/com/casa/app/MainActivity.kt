@@ -160,6 +160,7 @@ private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrar
         Text(a.tarefa, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (a.feito) grafite.grafiteSuave else grafite.grafite, textDecoration = if (a.feito) TextDecoration.LineThrough else null)
         if (a.naoFeita != null && !a.feito) Text("não feita", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.negativo)
+        if (a.foto) Icon(Icons.Outlined.PhotoCamera, "Com foto", Modifier.padding(start = 8.dp).size(14.dp), tint = grafite.grafiteSuave)
         if (a.comentarios > 0) {
             Icon(Icons.Outlined.ChatBubbleOutline, "Comentários", Modifier.padding(start = 8.dp).size(14.dp), tint = grafite.grafiteSuave)
             Text(" ${a.comentarios}", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
@@ -174,9 +175,10 @@ private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrar
 @Composable
 private fun Hoje(vm: CasaViewModel, e: Estado) {
     val minhas = e.atribuicoes.filter { it.membroId == e.euId }
-    val hoje = minhas.filter { it.dia == e.hoje }
-    val atrasadas = minhas.filter { it.dia < e.hoje && !it.feito }
-    val proximas = minhas.filter { it.dia > e.hoje && !it.feito }.groupBy { it.dia }
+    // Não feita já está resolvida: sai das pendências (continua em Semana, no painel e nos comentários).
+    val hoje = minhas.filter { it.dia == e.hoje && it.naoFeita == null }
+    val atrasadas = minhas.filter { it.dia < e.hoje && it.pendente }
+    val proximas = minhas.filter { it.dia > e.hoje && it.pendente }.groupBy { it.dia }
     val eu = e.placar.find { it.membroId == e.euId }
     LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
         item {

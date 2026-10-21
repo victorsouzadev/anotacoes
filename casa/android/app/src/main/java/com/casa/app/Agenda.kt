@@ -64,7 +64,7 @@ object Agenda {
             val cr = c.contentResolver
             val antigo = mapa(c)
             val novo = JSONObject()
-            for (a in e.atribuicoes.filter { it.membroId == e.euId }) {
+            for (a in e.atribuicoes.filter { it.membroId == e.euId && it.naoFeita == null }) {
                 val v = valores(a, e, cal)
                 val idEvento = antigo.optJSONArray(a.id.toString())?.optLong(0)
                 val atualizou = idEvento != null && cr.update(ContentUris.withAppendedId(Events.CONTENT_URI, idEvento), v, null, null) == 1

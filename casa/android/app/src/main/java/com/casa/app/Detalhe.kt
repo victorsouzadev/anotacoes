@@ -16,6 +16,9 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,6 +45,22 @@ fun DetalheTarefa(vm: CasaViewModel, e: Estado, a: Atribuicao) {
     var marcando by remember(a.id) { mutableStateOf(false) }
     var motivo by remember(a.id) { mutableStateOf("") }
     var texto by remember(a.id) { mutableStateOf("") }
+    // Foto: câmera (arquivo do FileProvider) ou galeria; "concluirAoEnviar" = "Concluir com foto".
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var arquivoCamera by remember { mutableStateOf<android.net.Uri?>(null) }
+    var concluirAoEnviar by remember { mutableStateOf(false) }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        val u = arquivoCamera; if (ok && u != null) vm.enviarFoto(a, u, concluirAoEnviar)
+    }
+    val galeria = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { u ->
+        if (u != null) vm.enviarFoto(a, u, concluirAoEnviar)
+    }
+    val tirarFoto = { concluir: Boolean -> concluirAoEnviar = concluir; Fotos.novoArquivo(ctx).also { arquivoCamera = it; camera.launch(it) }; Unit }
+    val daGaleria = { concluir: Boolean ->
+        concluirAoEnviar = concluir
+        galeria.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+    LaunchedEffect(a.id, a.foto) { vm.carregarFoto(a) }
     LaunchedEffect(comentarios.size) { vm.marcarComentariosVistos() }
     BackHandler(onBack = fechar)
     Scaffold(
@@ -84,6 +103,31 @@ fun DetalheTarefa(vm: CasaViewModel, e: Estado, a: Atribuicao) {
                 if (a.naoFeita != null && !a.feito && (minha || a.naoFeitaPor == e.euId || e.euAdmin))
                     AcaoNeutra(onClick = { vm.reabrir(a) }, compacta = true) { Text("Reabrir") }
                 if (!minha && !a.feito) AcaoNeutra(onClick = { vm.assumir(a) }, compacta = true) { Text("Assumir") }
+            }
+            if (!a.feito && a.naoFeita == null) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                AcaoNeutra(onClick = { tirarFoto(true) }, compacta = true) {
+                    Icon(Icons.Outlined.PhotoCamera, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Concluir com foto")
+                }
+                AcaoNeutra(onClick = { daGaleria(true) }, compacta = true) { Text("Foto da galeria") }
+            }
+            // Foto da tarefa
+            if (a.foto) {
+                val img = vm.fotos[a.id]
+                Box(Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 120.dp).clip(RaioBotao)
+                    .border(1.dp, grafite.linha, RaioBotao).background(grafite.folha), contentAlignment = Alignment.Center) {
+                    if (img != null) androidx.compose.foundation.Image(img, "Foto da tarefa ${a.tarefa}", Modifier.fillMaxWidth(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.FillWidth)
+                    else CircularProgressIndicator(Modifier.size(24.dp), color = grafite.grafiteSuave, strokeWidth = 2.dp)
+                }
+                Text("Foto de ${nome(a.fotoPor)}", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+            }
+            if (a.feito) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                AcaoNeutra(onClick = { tirarFoto(false) }, compacta = true) {
+                    Icon(Icons.Outlined.PhotoCamera, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (a.foto) "Trocar foto" else "Tirar foto")
+                }
+                AcaoNeutra(onClick = { daGaleria(false) }, compacta = true) { Text("Da galeria") }
+                if (a.foto && (minha || a.fotoPor == e.euId || e.euAdmin))
+                    AcaoNeutra(onClick = { vm.removerFoto(a) }, compacta = true, cor = grafite.grafiteSuave) { Text("Remover") }
             }
             if (marcando) {
                 OutlinedTextField(motivo, { motivo = it.take(500) }, Modifier.fillMaxWidth().padding(top = 8.dp),

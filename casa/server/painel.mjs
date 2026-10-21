@@ -9,7 +9,7 @@ const DIAS_SESSAO = 90;
 const MAX_TENTATIVAS = 5, BLOQUEIO_MIN = 15;
 const COOKIE = 'casa_painel';
 
-export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Erro, hoje, iso, addDias, SIMBOLO, BASE_URL }) {
+export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Erro, hoje, iso, addDias, SIMBOLO, BASE_URL, FOTOS, TIPOS_FOTO }) {
   const agora = () => new Date().toISOString();
   const membroDaCasa = casaId => db.prepare('SELECT * FROM membros WHERE casa_id=? ORDER BY admin DESC, id LIMIT 1').get(casaId);
   const limpaVencidas = () => db.prepare('DELETE FROM painel_sessoes WHERE criado < ?').run(new Date(Date.now() - DIAS_SESSAO * 864e5).toISOString());
@@ -83,7 +83,7 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
       pessoas: e.membros.map(m => ({ id: m.id, nome: m.nome })),
       placar: e.placar,
       tarefasHoje: e.atribuicoes.filter(a => a.dia === e.hoje).map(a => ({ tarefa: a.tarefa, horario: a.horario, pontos: a.pontos, pessoa: a.membro_id,
-        estado: a.feito_em ? 'feita' : a.nao_feita != null ? 'nao_feita' : 'pendente', comentarios: a.comentarios })),
+        estado: a.feito_em ? 'feita' : a.nao_feita != null ? 'nao_feita' : 'pendente', comentarios: a.comentarios, foto: a.foto ? a.id : null })),
       dias: e.diasCondicoes.map(({ dia }) => ({ dia, regras: regrasDoDia(dia), pessoas: Object.fromEntries(e.membros.map(m => {
         const minhas = e.atribuicoes.filter(a => a.dia === dia && a.membro_id === m.id);
         return [m.id, { feitos: minhas.filter(a => a.feito_em).reduce((s, a) => s + a.pontos, 0), previstos: minhas.reduce((s, a) => s + a.pontos, 0),
@@ -175,6 +175,15 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
       res.writeHead(s ? 200 : 401, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
       res.end(JSON.stringify(s ? dados(s.casa_id) : { erro: 'Sessão do painel expirada' }));
       return { chave: 'GET /painel/dados' };
+    }
+    const foto = caminho.match(/^\/painel\/foto\/(\d+)$/);
+    if (foto && req.method === 'GET') {
+      const s = sessao(req);
+      const a = s ? db.prepare('SELECT foto FROM atribuicoes WHERE id=? AND casa_id=?').get(Number(foto[1]), s.casa_id) : null;
+      if (!a || !a.foto) { res.writeHead(s ? 404 : 401); res.end(); return { chave: 'GET /painel/foto/:id' }; }
+      res.writeHead(200, { 'content-type': TIPOS_FOTO[a.foto.split('.').pop()] || 'application/octet-stream', 'cache-control': 'private, max-age=86400' });
+      (await import('node:fs')).createReadStream((await import('node:path')).join(FOTOS, a.foto)).on('error', () => res.end()).pipe(res);
+      return { chave: 'GET /painel/foto/:id' };
     }
     if (caminho === '/painel/sair' && req.method === 'POST') {
       const t = cookies(req)[COOKIE];
@@ -332,7 +341,8 @@ function render(d) {
   $('#hoje div').innerHTML = d.pessoas.map(p => {
     const l = d.tarefasHoje.filter(t => t.pessoa === p.id);
     return '<div class="leg" style="margin-top:.5rem">' + esc(p.nome) + '</div>' + (l.length ? l.map(t =>
-      '<div class="item ' + t.estado + '"><span class="val hora">' + (t.horario || '') + '</span><span class="nome">' + esc(t.tarefa) + '</span><span class="rot">' +
+      '<div class="item ' + t.estado + '"><span class="val hora">' + (t.horario || '') + '</span><span class="nome">' + esc(t.tarefa) + '</span>' +
+      (t.foto ? '<a href="/painel/foto/' + t.foto + '" target="_blank" rel="noopener"><img class="mini" src="/painel/foto/' + t.foto + '" alt="Foto de ' + esc(t.tarefa) + '" loading="lazy"></a>' : '') + '<span class="rot">' +
       [ESTADO[t.estado], t.comentarios ? t.comentarios + ' coment.' : '', t.pontos + ' pt'].filter(Boolean).join(' · ') + '</span></div>').join('') : '<div class="rot">nada hoje</div>');
   }).join('');
   const avisos = [
@@ -417,6 +427,7 @@ html.tv{font-size:1.3vw}
 .item{display:flex;gap:.75rem;align-items:baseline;padding:.25rem 0;border-bottom:1px solid var(--linha)}.item:last-child{border-bottom:0}
 .item .hora{min-width:3.25rem;color:var(--grafite-suave)}.item .hora:empty{display:none}.item .nome{flex:1;min-width:0}
 .item.feita .nome{text-decoration:line-through;color:var(--grafite-suave)}
+.mini{width:2.5rem;height:2.5rem;object-fit:cover;border-radius:6px;border:1px solid var(--linha);display:block}
 .neg{color:var(--negativo)}
 .rolar{overflow-x:auto}
 table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:.375rem .75rem .375rem 0;border-bottom:1px solid var(--linha);white-space:nowrap}

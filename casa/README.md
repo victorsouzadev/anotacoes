@@ -64,6 +64,15 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
   no painel em modo TV (tela cheia 16:9, letras proporcionais à largura, sem rolagem). O JavaScript das páginas é
   mantido em ES2017 e o CSS tem alternativas para navegadores antigos de TV (Samsung Tizen 2018+).
 
+## Fotos e tarefas não feitas
+
+- **Foto**: no detalhe da tarefa, "Concluir com foto" (câmera) ou "Foto da galeria"; numa tarefa feita, tirar/trocar/
+  remover. O app reduz para no máximo 1600 px (JPEG, rotação corrigida) e envia em `PUT /api/atribuicoes/:id/foto`;
+  `GET` devolve e `DELETE` remove (quem faz a tarefa, quem mandou a foto ou o admin). Arquivos em `/data/fotos` no
+  volume, apagados depois de 120 dias (`FOTOS_DIAS`). O painel mostra a miniatura em "Hoje" (`/painel/foto/:id`).
+- **Não feita** sai das pendências (aba Hoje, lembretes, agenda do celular e .ics) e continua em Semana, no painel e
+  nos comentários.
+
 ## Logs
 
 - **Requisições**: uma linha JSON por chamada (rota, status, tempo, casa, membro, versão do app) no

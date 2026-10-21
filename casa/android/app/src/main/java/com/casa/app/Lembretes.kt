@@ -71,7 +71,7 @@ object Lembretes {
         }.onFailure { Registro.aviso("lembrete_falhou", it) }.getOrNull() ?: return
         Agenda.sincronizar(c, e) // aproveita a consulta para manter a agenda do celular em dia
         avisarComentarios(c, e)
-        val minhas = e.atribuicoes.filter { it.membroId == e.euId && !it.feito && it.dia <= e.hoje }
+        val minhas = e.atribuicoes.filter { it.membroId == e.euId && it.pendente && it.dia <= e.hoje }
         if (minhas.isEmpty()) return
         val titulo = if (tipo == MANHA) "Hoje você tem ${minhas.size} tarefa${if (minhas.size > 1) "s" else ""}"
         else "Ainda falta${if (minhas.size > 1) "m" else ""} ${minhas.size} tarefa${if (minhas.size > 1) "s" else ""}"

@@ -27,6 +27,24 @@ class Api(var servidor: String, var token: String?) {
             j
         } finally { c.disconnect() }
     }
+
+    /** Envia bytes (a foto) e devolve o estado; ou baixa bytes (GET). */
+    suspend fun bytes(metodo: String, caminho: String, corpo: ByteArray? = null, tipo: String = "image/jpeg"): ByteArray = withContext(Dispatchers.IO) {
+        val c = URL(servidor.trimEnd('/') + caminho).openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = metodo
+            c.connectTimeout = 10_000; c.readTimeout = 30_000
+            c.setRequestProperty("X-App-Versao", BuildConfig.VERSION_NAME)
+            token?.let { c.setRequestProperty("Authorization", "Bearer $it") }
+            if (corpo != null) { c.doOutput = true; c.setRequestProperty("Content-Type", tipo); c.setFixedLengthStreamingMode(corpo.size); c.outputStream.use { it.write(corpo) } }
+            val s = c.responseCode
+            if (s >= 400) {
+                val txt = c.errorStream?.bufferedReader()?.use { it.readText() } ?: "{}"
+                throw ApiErro(runCatching { JSONObject(txt).optString("erro") }.getOrNull()?.ifBlank { null } ?: "Erro $s", s)
+            }
+            c.inputStream.use { it.readBytes() }
+        } finally { c.disconnect() }
+    }
 }
 
 /** disponibilidade: segunda a domingo; 1 = livre, 0.4 = pouco, 0 = nada. */
@@ -37,7 +55,11 @@ data class Tarefa(val id: Int, val nome: String, val pontos: Int, val vezes: Int
 data class Condicao(val id: Int, val nome: String, val tipo: String, val referencia: String?, val dias: List<Int>)
 /** naoFeita: motivo (pode ser "") quando alguém marcou como não feita; null = não marcada. */
 data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val membroId: Int?, val dia: String, val pontos: Int, val feito: Boolean,
-    val horario: String? = null, val duracao: Int = 30, val naoFeita: String? = null, val naoFeitaPor: Int? = null, val comentarios: Int = 0)
+    val horario: String? = null, val duracao: Int = 30, val naoFeita: String? = null, val naoFeitaPor: Int? = null, val comentarios: Int = 0,
+    val foto: Boolean = false, val fotoPor: Int? = null) {
+    /** Pendente de verdade: nem feita, nem marcada como não feita. */
+    val pendente get() = !feito && naoFeita == null
+}
 /** tipo: "comentario" ou "nao_feita" (criado ao marcar/sinalizar como não feita). */
 data class Comentario(val id: Int, val atribuicaoId: Int, val membroId: Int?, val tipo: String, val texto: String, val em: String)
 /** url/codigo: link + código para PC/TV (null se desligado); tvs: TVs pareadas; enderecoTv: o endereço curto que a TV abre. */
@@ -83,7 +105,8 @@ fun JSONObject.paraEstado(): Estado {
         }.orEmpty().toMap(),
         atribuicoes = getJSONArray("atribuicoes").mapa {
             Atribuicao(it.getInt("id"), it.getInt("tarefa_id"), it.getString("tarefa"), it.intOuNull("membro_id"), it.getString("dia"), it.getInt("pontos"), !it.isNull("feito_em"),
-                it.optStrOuNull("horario"), it.optInt("duracao", 30), it.optStrOuNull("nao_feita"), it.optIntOuNull("nao_feita_por"), it.optInt("comentarios", 0))
+                it.optStrOuNull("horario"), it.optInt("duracao", 30), it.optStrOuNull("nao_feita"), it.optIntOuNull("nao_feita_por"), it.optInt("comentarios", 0),
+                it.optInt("foto", 0) == 1, it.optIntOuNull("foto_por"))
         },
         comentarios = optJSONArray("comentarios")?.mapa {
             Comentario(it.getInt("id"), it.getInt("atribuicao_id"), it.optIntOuNull("membro_id"), it.getString("tipo"), it.optString("texto"), it.getString("em"))
