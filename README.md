@@ -548,6 +548,22 @@ histórico git ficam em `data/cerebro/hub` e podem ser recriados.
 - **Serviço próprio** (`cerebro/`, .NET 10) no profile `cerebro` do compose, com o mesmo login do hub
   (JWT) e acesso só para `CEREBRO_USUARIOS`. Exige HTTPS: ver [DEPLOY.md](DEPLOY.md).
 
+### Anotação
+
+Aprovação das pré-anotações de dados pessoais que o Claude faz nos relatos do mestrado
+(pipeline em `llm-ner-pipeline`). A tela mostra o relato com as marcações: clique numa
+marcação para tirá-la, selecione um trecho para marcar (todas as repetições entram juntas),
+**Enter** aprova e passa para o próximo, **P** pula.
+
+- **Dados**: nada vai para o banco nem para o repositório. A API lê o lote em `data/anotacao`
+  (`documents.jsonl` e `claude_proposals.jsonl`, montados por
+  `scripts/claude_proposals.py pacote`) e acrescenta cada decisão ao `manual_review.jsonl`
+  dali, no formato da revisão em Streamlit. `claude_proposals.py trazer` leva as decisões
+  de volta para o run local.
+- **Acesso**: só os e-mails em `ANOTACAO_USUARIOS`, e só por HTTPS (o Caddy recusa
+  `/api/anotacao` em HTTP). Sem lote ou fora da lista, a ferramenta aparece como desligada.
+- Código: `Endpoints/AnotacaoEndpoints.cs`, `Services/Anotacao/` e `features/anotacao/`.
+
 ## Modelo de dados (visão geral)
 
 Uma **nota** (`NoteRecord`) tem metadados (`título`, `pasta`, datas) e uma lista de

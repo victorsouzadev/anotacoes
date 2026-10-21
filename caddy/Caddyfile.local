@@ -19,6 +19,15 @@
         respond "Use o endereço HTTPS do Segundo Cérebro." 403
     }
 
+    # Ferramenta "Anotação": relatos policiais reais do mestrado, também só por HTTPS.
+    @anotacao_sem_tls {
+        path /api/anotacao /api/anotacao/*
+        expression `{http.request.header.X-Forwarded-Proto} != "https" && "{$CEREBRO_PERMITIR_HTTP:nao}" != "sim"`
+    }
+    handle @anotacao_sem_tls {
+        respond "Use o endereço HTTPS do hub." 403
+    }
+
     # Rotas internas do cerebro (ex.: conferência do login do WebDAV) não saem para a internet.
     handle /cerebro/internal/* {
         respond 404

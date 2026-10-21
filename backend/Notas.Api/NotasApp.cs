@@ -175,6 +175,12 @@ public static class NotasApp
             c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Dieta/1.0 (cerebro.vsitefy.com.br)");
         });
 
+        // Ferramenta "Anotação": aprovação das pré-anotações do Claude nos relatos do mestrado.
+        // Só liga com Anotacao__RunDir apontando para uma pasta local; na VPS fica desligada.
+        builder.Services.Configure<Notas.Api.Services.Anotacao.AnotacaoOptions>(
+            builder.Configuration.GetSection(Notas.Api.Services.Anotacao.AnotacaoOptions.SectionName));
+        builder.Services.AddSingleton<Notas.Api.Services.Anotacao.AnotacaoArquivos>();
+
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();
         builder.Services.AddScoped<MetaService>();
@@ -342,6 +348,7 @@ public static class NotasApp
         app.MapMoldesEndpoints();
         app.MapDietaEndpoints();
         app.MapDietaIaEndpoints();
+        app.MapAnotacaoEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

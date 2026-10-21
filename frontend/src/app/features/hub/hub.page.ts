@@ -6,6 +6,7 @@ import { IconComponent, IconName } from '../../shared/icon';
 import { WindowsDownloadService } from '../../core/windows-download';
 import { PublicarService } from '../publicar/publicar.service';
 import { CerebroService } from '../cerebro/cerebro.service';
+import { AnotacaoService } from '../anotacao/anotacao.service';
 
 interface ToolCard {
   path: string;
@@ -33,6 +34,14 @@ const CEREBRO: ToolCard = {
   icon: 'sticky',
   title: 'Segundo Cérebro',
   description: 'Vault do Obsidian na VPS: capture ideias e links, revise a Inbox classificada pelo Claude e busque nas notas.',
+};
+
+/** Só aparece quando o servidor aponta para a pasta local de um run (Anotacao__RunDir). */
+const ANOTACAO: ToolCard = {
+  path: '/anotacao',
+  icon: 'edit',
+  title: 'Anotação',
+  description: 'Aprove ou corrija as marcações de dados pessoais que o Claude fez nos relatos.',
 };
 
 const TOOLS: ToolCard[] = [
@@ -210,7 +219,9 @@ const TOOLS: ToolCard[] = [
 export class HubPageComponent {
   private readonly podePublicar = signal(false);
   private readonly temCerebro = signal(false);
+  private readonly temAnotacao = signal(false);
   readonly tools = computed(() => [
+    ...(this.temAnotacao() ? [ANOTACAO] : []),
     ...TOOLS,
     ...(this.temCerebro() ? [CEREBRO] : []),
     ...(this.podePublicar() ? [PUBLICAR] : []),
@@ -222,8 +233,10 @@ export class HubPageComponent {
     public windows: WindowsDownloadService,
     publicar: PublicarService,
     cerebro: CerebroService,
+    anotacao: AnotacaoService,
   ) {
     windows.check();
+    void anotacao.estado().then((e) => this.temAnotacao.set(e.habilitado), () => undefined);
     void publicar.permissao().then((r) => this.podePublicar.set(r.podePublicar));
     void cerebro.disponivel().then((ok) => this.temCerebro.set(ok));
   }

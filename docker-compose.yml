@@ -40,9 +40,14 @@ services:
       # MCPs dos apps (/api/mcp/tarefas, /financas, /criativo) para o Segundo Cérebro e o Claude:
       # o token é gerado na tela do Cérebro, que grava só o hash e o e-mail do dono neste arquivo.
       - Mcp__TokenFile=/access/apps-token.json
+      # Ferramenta "Anotação" (relatos do mestrado). Só liga com o lote em data/anotacao
+      # (enviado pelo llm-ner-pipeline) e só para os e-mails de ANOTACAO_USUARIOS.
+      - Anotacao__RunDir=/anotacao
+      - Anotacao__Usuarios=${ANOTACAO_USUARIOS:-}
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites
+      - ./data/anotacao:/anotacao
       - ./data/cerebro/hub/access:/access:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]

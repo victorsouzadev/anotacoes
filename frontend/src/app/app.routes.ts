@@ -123,5 +123,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/publicar/publicar.page').then((m) => m.PublicarPageComponent),
   },
+  {
+    // Aprovação das pré-anotações do Claude (mestrado). Só funciona com a pasta do run local.
+    path: 'anotacao',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/anotacao/anotacao.page').then((m) => m.AnotacaoPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];
