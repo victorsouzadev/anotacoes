@@ -436,14 +436,9 @@ public static class DietaEndpoints
         return [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(sb.ToString())];
     }
 
-    public static string SemAcento(string s)
-    {
-        var norm = s.Normalize(NormalizationForm.FormD);
-        var sb = new StringBuilder(norm.Length);
-        foreach (var ch in norm)
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) sb.Append(char.ToLowerInvariant(ch));
-        return sb.ToString().Replace(',', ' ');
-    }
+    // CulturaBr.SemAcentos: Normalize é no-op sem ICU (modo globalization-invariant).
+    public static string SemAcento(string s) =>
+        Notas.Api.Services.CulturaBr.SemAcentos(s).ToLowerInvariant().Replace(',', ' ');
 
     // "?desde=...Z" chega como horário local do processo; o banco guarda UTC.
     private static DateTime? Utc(DateTime? d) => d?.ToUniversalTime();

@@ -13,7 +13,7 @@ namespace Notas.Api.Mcp;
 [McpServerToolType]
 public sealed class TarefasMcpTools(AppDbContext db, McpUser user, FinancasClock clock)
 {
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
 
     [McpServerTool(Name = "tarefas_resumo", ReadOnly = true, OpenWorld = false)]
     [Description("Resumo das tarefas em Markdown: atrasadas, para hoje, próximos 7 dias, sem prazo (as mais importantes), " +

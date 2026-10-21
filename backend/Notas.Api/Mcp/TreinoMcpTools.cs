@@ -12,7 +12,10 @@ namespace Notas.Api.Mcp;
 [McpServerToolType]
 public sealed class TreinoMcpTools(AppDbContext db, McpUser user, FinancasClock clock)
 {
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
+    // Números e dias da semana fixos: o mesmo texto com ou sem ICU (modo globalization-invariant).
+    private static readonly NumberFormatInfo Num = new() { NumberDecimalSeparator = ",", NumberGroupSeparator = "." };
+    private static readonly string[] DiasSemana = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
     [McpServerTool(Name = "treino_resumo", ReadOnly = true, OpenWorld = false)]
     [Description("Resumo dos treinos de corrida em Markdown: andamento do programa, atividades desde uma data, " +
@@ -46,7 +49,7 @@ public sealed class TreinoMcpTools(AppDbContext db, McpUser user, FinancasClock 
             sb.Append(dias == 7 ? "\n## Totais\n" : "");
             sb.Append($"- {dias} dias: {p.Count} treinos · {Km(p.Sum(a => a.DistanciaM))} · {Duracao(p.Sum(a => a.DuracaoSeg))}");
             var esf = p.Where(a => a.Esforco is not null).ToList();
-            if (esf.Count > 0) sb.Append($" · esforço médio {esf.Average(a => a.Esforco!.Value).ToString("0.#", Br)}/10");
+            if (esf.Count > 0) sb.Append($" · esforço médio {esf.Average(a => a.Esforco!.Value).ToString("0.#", Num)}/10");
             if (p.Any(a => a.Dor)) sb.Append($" · dor relatada em {p.Count(a => a.Dor)}");
             sb.Append('\n');
         }
@@ -90,11 +93,12 @@ public sealed class TreinoMcpTools(AppDbContext db, McpUser user, FinancasClock 
         if (a.FcMedia is { } fc) partes.Add($"FC média {fc}" + (a.FcMax is { } mx ? $" (máx. {mx})" : "") + " bpm");
         if (a.Meta is { } m) partes.Add($"meta: {m}");
         if (a.Dor) partes.Add("relatou dor");
-        var linha = $"- {Local(a.Inicio).ToString("ddd dd/MM HH:mm", Br)}: " + string.Join(" · ", partes);
+        var local = Local(a.Inicio);
+        var linha = $"- {DiasSemana[(int)local.DayOfWeek]} {local.ToString("dd/MM HH:mm", Br)}: " + string.Join(" · ", partes);
         return a.Nota is { Length: > 0 } n ? $"{linha} — {n}" : linha;
     }
 
-    private static string Km(double m) => (m / 1000).ToString("0.00", Br) + " km";
+    private static string Km(double m) => (m / 1000).ToString("0.00", Num) + " km";
 
     private static string Duracao(int s) => s >= 3600 ? $"{s / 3600}h{s % 3600 / 60:00}" : $"{s / 60}:{s % 60:00}";
 

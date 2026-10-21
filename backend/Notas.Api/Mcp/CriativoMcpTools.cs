@@ -16,7 +16,7 @@ namespace Notas.Api.Mcp;
 [McpServerToolType]
 public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sites, McpUser user)
 {
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
 
     [McpServerTool(Name = "criativo_resumo", ReadOnly = true, OpenWorld = false)]
     [Description("Resumo em Markdown para o Segundo Cérebro: sites publicados (endereço, versão no ar, último deploy) e " +
