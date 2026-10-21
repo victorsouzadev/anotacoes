@@ -44,6 +44,7 @@ builder.Services.AddSingleton<ApprovalService>();
 builder.Services.AddSingleton<LinkExtractor>();
 builder.Services.AddSingleton<Transcriber>();
 builder.Services.AddSingleton<ClaudeClassifier>();
+builder.Services.AddSingleton<DigestService>();
 
 // Serviços de fundo (singletons para o /health ler o estado deles)
 builder.Services.AddSingleton<GitSnapshotter>();

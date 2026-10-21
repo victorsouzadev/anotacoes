@@ -17,6 +17,7 @@
   ],
   "shortcuts": [
     { "name": "Gravar áudio", "url": "/capturar?gravar=1" },
+    { "name": "Resumo", "url": "/capturar?aba=resumo" },
     { "name": "Grafo", "url": "/capturar?aba=grafo" }
   ],
   "share_target": {

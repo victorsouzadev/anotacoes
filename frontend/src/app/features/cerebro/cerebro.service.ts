@@ -348,6 +348,16 @@ export class CerebroService {
     return firstValueFrom(this.http.post<{ restored: number; trashed: number; paths: string[] }>(`${BASE}/historico/restaurar-cerebro`, { versao }));
   }
 
+  // ------------------------------------------------------------- resumo analítico
+
+  resumo(): Promise<RespostaResumo> {
+    return firstValueFrom(this.http.get<RespostaResumo>(`${BASE}/resumo`));
+  }
+
+  gerarResumo(dias: number, salvar: boolean): Promise<RespostaResumo> {
+    return firstValueFrom(this.http.post<RespostaResumo>(`${BASE}/resumo/gerar`, { dias, salvar }));
+  }
+
   buscar(q: string): Promise<ResultadoBusca[]> {
     return firstValueFrom(this.http.get<ResultadoBusca[]>(`${BASE}/search`, { params: { q } }));
   }
@@ -368,4 +378,27 @@ export interface ConfigTranscricao {
   chave_invalida: boolean;
   efetivo: { ligado: boolean; origem: 'tela' | 'servidor' | 'nenhuma'; modelo: string; url: string };
   servicos: { id: string; nome: string; modelo: string; descricao: string }[];
+}
+
+/** Resumo analítico feito com uma chamada de IA sobre um recorte selecionado do vault. */
+export interface ResumoAnalitico {
+  gerado_em: string;
+  dias: number;
+  modelo: string;
+  caracteres_enviados: number;
+  notas_consideradas: number;
+  notas_enviadas: number;
+  panorama: string;
+  destaques: { titulo: string; nota: string | null; motivo: string }[];
+  pendencias: string[];
+  alertas: string[];
+  padroes: string[];
+  sugestoes: string[];
+  /** Nota salva em _sistema/ai, quando pedida. */
+  nota: string | null;
+}
+
+export interface RespostaResumo {
+  resumo: ResumoAnalitico | null;
+  limite_caracteres: number;
 }

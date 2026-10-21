@@ -35,6 +35,8 @@ public sealed record WebAppsDto(bool Ativo, List<string>? Horarios, List<string>
 /// <param name="ChaveApi">null mantém a chave salva; "" apaga; texto substitui.</param>
 public sealed record WebTranscricaoDto(string? Servico, string? Modelo, string? ChaveApi);
 
+public sealed record WebResumoDto(int? Dias, bool? Salvar);
+
 public sealed record WebAiDto(string? Provedor, string? Modelo, string? ChaveApi);
 
 /// <summary>
@@ -131,6 +133,10 @@ public static class WebEndpoints
             await sync.RunAsync("manual, pela tela", ct);
             return Results.Ok(DescribeApps(sync.Load(), a));
         });
+        // Resumo analítico: uma chamada de IA só quando você pede; a última fica guardada.
+        web.MapGet("/resumo", (DigestService d) => Results.Ok(new { resumo = d.Last(), limite_caracteres = DigestService.Budget }));
+        web.MapPost("/resumo/gerar", async (WebResumoDto dto, DigestService d, CancellationToken ct) =>
+            Results.Ok(new { resumo = await d.GenerateAsync(dto.Dias ?? 14, dto.Salvar ?? false, ct), limite_caracteres = DigestService.Budget }));
         web.MapPut("/acessos/webdav", SetWebdav);
         web.MapPost("/acessos/api-keys", CreateApiKey);
         web.MapDelete("/acessos/api-keys/{nome}", DeleteApiKey);

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { mensagemDeErro } from '../../core/erro-http';
 import { IconComponent } from '../../shared/icon';
+import { CerebroResumoComponent } from './cerebro-resumo.component';
 import { CerebroGrafoComponent } from './cerebro-grafo.component';
 import { CerebroService, Nota } from './cerebro.service';
 
@@ -30,7 +31,7 @@ const CACHE_COMPARTILHADO = 'cerebro-compartilhado';
 @Component({
   selector: 'app-cerebro-celular',
   standalone: true,
-  imports: [FormsModule, RouterLink, IconComponent, CerebroGrafoComponent],
+  imports: [FormsModule, RouterLink, IconComponent, CerebroGrafoComponent, CerebroResumoComponent],
   templateUrl: './cerebro-celular.page.html',
   styleUrls: ['./cerebro-comum.css', './cerebro-celular.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,7 +40,7 @@ export class CerebroCelularPageComponent implements OnInit {
   private readonly api = inject(CerebroService);
   private readonly router = inject(Router);
 
-  readonly aba = signal<'capturar' | 'grafo'>('capturar');
+  readonly aba = signal<'capturar' | 'resumo' | 'grafo'>('capturar');
   readonly anexos = signal<Anexo[]>([]);
   readonly gravando = signal(false);
   readonly segundos = signal(0);
@@ -67,7 +68,7 @@ export class CerebroCelularPageComponent implements OnInit {
   ngOnInit(): void {
     this.prepararPwa();
     const q = new URLSearchParams(location.search);
-    if (q.get('aba') === 'grafo') this.aba.set('grafo');
+    if (q.get('aba') === 'grafo' || q.get('aba') === 'resumo') this.aba.set(q.get('aba') as 'grafo' | 'resumo');
     if (q.get('compartilhado') === '1') void this.lerCompartilhado();
     if (q.get('compartilhado') === 'erro') this.erro.set('Não foi possível receber o que foi compartilhado. Tente de novo.');
     if (q.get('gravar') === '1') void this.gravar();

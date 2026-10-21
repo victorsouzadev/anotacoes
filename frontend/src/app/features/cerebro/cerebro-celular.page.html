@@ -63,12 +63,17 @@
           <div class="corpo">{{ n.body }}</div>
         </article>
       }
-      <app-cerebro-grafo (abrir)="abrirNota($event)" />
+      @if (aba() === 'resumo') {
+        <app-cerebro-resumo (abrir)="abrirNota($event)" />
+      } @else {
+        <app-cerebro-grafo (abrir)="abrirNota($event)" />
+      }
     </main>
   }
 
   <nav class="abas-baixo">
     <button [class.ativa]="aba() === 'capturar'" (click)="aba.set('capturar')"><app-icon name="plus" [size]="18" /> Capturar</button>
+    <button [class.ativa]="aba() === 'resumo'" (click)="aba.set('resumo'); nota.set(null)"><app-icon name="checklist" [size]="18" /> Resumo</button>
     <button [class.ativa]="aba() === 'grafo'" (click)="aba.set('grafo')"><app-icon name="globe" [size]="18" /> Grafo</button>
   </nav>
 </div>

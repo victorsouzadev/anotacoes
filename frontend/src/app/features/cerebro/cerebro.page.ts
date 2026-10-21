@@ -14,8 +14,9 @@ import { CerebroHistoricoComponent } from './cerebro-historico.component';
 import { CerebroAppsComponent } from './cerebro-apps.component';
 import { CerebroGrafoComponent } from './cerebro-grafo.component';
 import { CerebroTranscricaoComponent } from './cerebro-transcricao.component';
+import { CerebroResumoComponent } from './cerebro-resumo.component';
 
-type Aba = 'inbox' | 'notas' | 'grafo' | 'historico' | 'conectar' | 'config';
+type Aba = 'inbox' | 'resumo' | 'notas' | 'grafo' | 'historico' | 'conectar' | 'config';
 
 /** Enquanto houver captura na fila, a lista se atualiza sozinha neste intervalo. */
 const INTERVALO_FILA_MS = 5000;
@@ -23,7 +24,7 @@ const INTERVALO_FILA_MS = 5000;
 @Component({
   selector: 'app-cerebro-page',
   standalone: true,
-  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent, CerebroHistoricoComponent, CerebroAppsComponent, CerebroGrafoComponent, CerebroTranscricaoComponent],
+  imports: [RouterLink, FormsModule, IconComponent, DatePipe, CerebroConectarComponent, CerebroIaComponent, CerebroNotasComponent, CerebroHistoricoComponent, CerebroAppsComponent, CerebroGrafoComponent, CerebroTranscricaoComponent, CerebroResumoComponent],
   templateUrl: './cerebro.page.html',
   styleUrls: ['./cerebro-comum.css', './cerebro.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

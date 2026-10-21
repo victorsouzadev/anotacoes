@@ -1,0 +1,64 @@
+<p class="ajuda intro">
+  A IA lê um <strong>recorte</strong> do Cérebro, não ele inteiro: Inbox pendente, resumos dos apps, os diários e as
+  notas mais relevantes do período (por recência, links e pasta), só o começo de cada uma, mais os checklists abertos.
+  É uma chamada só, e o último resumo fica guardado até você gerar outro.
+</p>
+@if (erro()) { <p class="alerta erro">{{ erro() }}</p> }
+
+<div class="barra card">
+  <label>Período
+    <select [(ngModel)]="dias" name="dias">
+      <option [ngValue]="7">7 dias</option>
+      <option [ngValue]="14">14 dias</option>
+      <option [ngValue]="30">30 dias</option>
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" [(ngModel)]="salvar" name="salvar" /> Salvar como nota em <code>_sistema/ai</code></label>
+  <button class="botao primario pequeno" (click)="gerar()" [disabled]="gerando()">
+    <app-icon name="refresh" [size]="12" /> {{ gerando() ? 'Analisando…' : resumo() ? 'Gerar de novo' : 'Gerar resumo' }}
+  </button>
+</div>
+
+@if (carregando()) {
+  <p class="vazio">Carregando…</p>
+} @else if (!resumo()) {
+  <p class="vazio">Nenhum resumo ainda. Escolha o período e toque em <strong>Gerar resumo</strong>.</p>
+} @else {
+  @let r = resumo()!;
+  <p class="meta">
+    {{ r.gerado_em | date: 'dd/MM/yyyy HH:mm' }} · últimos {{ r.dias }} dias · {{ r.notas_enviadas }} de {{ r.notas_consideradas }} notas
+    · ~{{ tokens(r) }} tokens enviados · {{ r.modelo }}
+    @if (r.nota) { · <button type="button" class="link" (click)="abrir.emit(r.nota)">ver nota salva</button> }
+  </p>
+
+  <section class="card panorama"><h3>Panorama</h3><p>{{ r.panorama }}</p></section>
+
+  @if (r.destaques.length) {
+    <section class="card"><h3>Destaques</h3>
+      <ul class="lista">
+        @for (d of r.destaques; track $index) {
+          <li>
+            @if (d.nota) { <button type="button" class="link forte" (click)="abrir.emit(d.nota)">{{ d.titulo }}</button> }
+            @else { <strong>{{ d.titulo }}</strong> }
+            <span class="motivo"> — {{ d.motivo }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  <div class="grade">
+    @if (r.pendencias.length) {
+      <section class="card"><h3>Pendências</h3><ul class="lista">@for (p of r.pendencias; track $index) { <li>{{ p }}</li> }</ul></section>
+    }
+    @if (r.alertas.length) {
+      <section class="card alertas"><h3>Alertas</h3><ul class="lista">@for (a of r.alertas; track $index) { <li>{{ a }}</li> }</ul></section>
+    }
+    @if (r.padroes.length) {
+      <section class="card"><h3>Padrões</h3><ul class="lista">@for (p of r.padroes; track $index) { <li>{{ p }}</li> }</ul></section>
+    }
+    @if (r.sugestoes.length) {
+      <section class="card"><h3>Sugestões</h3><ul class="lista">@for (s of r.sugestoes; track $index) { <li>{{ s }}</li> }</ul></section>
+    }
+  </div>
+}
