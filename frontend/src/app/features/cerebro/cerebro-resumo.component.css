@@ -1,0 +1,14 @@
+:host { display: flex; flex-direction: column; gap: 12px; }
+.intro { margin: 0; }
+.barra { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 14px; }
+.barra label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.meta { margin: 0; font-size: 12px; color: var(--text-muted); }
+section h3 { margin: 0 0 8px; font-size: 14px; }
+section { padding: 12px 14px; }
+.panorama p { margin: 0; line-height: 1.5; }
+.lista { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.45; }
+.motivo { color: var(--text-muted); }
+.forte { font-weight: 600; }
+.alertas h3 { color: var(--atencao); }
+.grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.link { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; text-align: left; }

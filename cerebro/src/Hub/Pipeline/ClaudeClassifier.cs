@@ -92,9 +92,7 @@ public sealed class ClaudeClassifier
             ["required"] = new JsonArray("title", "summary", "tags", "folder", "links", "confidence")
         };
 
-        var input = ai.Provider == AiProvider.Anthropic
-            ? await CallAnthropicAsync(ai, system, user, schema, ct)
-            : await CallOpenRouterAsync(ai, system, user, schema, ct);
+        var input = await CallToolAsync(ai, ToolName, "Registra a classificação do item capturado.", system, user, schema, 1024, ct);
 
         var allowedLinks = candidates
             .Select(c => Path.GetFileNameWithoutExtension(c.Path))
@@ -116,20 +114,29 @@ public sealed class ClaudeClassifier
         return result;
     }
 
-    private async Task<JsonNode> CallAnthropicAsync(EffectiveAi ai, string system, string user, JsonObject schema, CancellationToken ct)
+    /// <summary>
+    /// Uma chamada com tool forçada: o modelo só responde pelo schema. Serve à classificação e ao resumo analítico.
+    /// </summary>
+    public Task<JsonNode> CallToolAsync(EffectiveAi ai, string tool, string description, string system, string user,
+        JsonObject schema, int maxTokens, CancellationToken ct) =>
+        ai.Provider == AiProvider.Anthropic
+            ? CallAnthropicAsync(ai, tool, description, system, user, schema, maxTokens, ct)
+            : CallOpenRouterAsync(ai, tool, description, system, user, schema, maxTokens, ct);
+
+    private async Task<JsonNode> CallAnthropicAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct)
     {
         var payload = new JsonObject
         {
             ["model"] = ai.Model,
-            ["max_tokens"] = 1024,
+            ["max_tokens"] = maxTokens,
             ["system"] = system,
             ["tools"] = new JsonArray(new JsonObject
             {
-                ["name"] = ToolName,
-                ["description"] = "Registra a classificação do item capturado.",
+                ["name"] = tool,
+                ["description"] = description,
                 ["input_schema"] = schema
             }),
-            ["tool_choice"] = new JsonObject { ["type"] = "tool", ["name"] = ToolName },
+            ["tool_choice"] = new JsonObject { ["type"] = "tool", ["name"] = tool },
             ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = user })
         };
 
@@ -147,12 +154,12 @@ public sealed class ClaudeClassifier
             ?? throw new InvalidOperationException("Resposta da Anthropic sem tool_use.");
     }
 
-    private async Task<JsonNode> CallOpenRouterAsync(EffectiveAi ai, string system, string user, JsonObject schema, CancellationToken ct)
+    private async Task<JsonNode> CallOpenRouterAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct)
     {
         var payload = new JsonObject
         {
             ["model"] = ai.Model,
-            ["max_tokens"] = 1024,
+            ["max_tokens"] = maxTokens,
             ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = system },
                 new JsonObject { ["role"] = "user", ["content"] = user }),
@@ -161,12 +168,12 @@ public sealed class ClaudeClassifier
                 ["type"] = "function",
                 ["function"] = new JsonObject
                 {
-                    ["name"] = ToolName,
-                    ["description"] = "Registra a classificação do item capturado.",
+                    ["name"] = tool,
+                    ["description"] = description,
                     ["parameters"] = schema
                 }
             }),
-            ["tool_choice"] = new JsonObject { ["type"] = "function", ["function"] = new JsonObject { ["name"] = ToolName } },
+            ["tool_choice"] = new JsonObject { ["type"] = "function", ["function"] = new JsonObject { ["name"] = tool } },
             // Só roteia para provedores que aceitam tools: sem isso, um modelo sem suporte responde em texto livre.
             ["provider"] = new JsonObject { ["require_parameters"] = true }
         };

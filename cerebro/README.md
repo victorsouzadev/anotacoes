@@ -73,6 +73,16 @@ Android, faça login e toque em **Instalar app** (ou ⋮ → Instalar app).
 - **Endpoints:** `POST /api/v1/web/captures/arquivo` (multipart: `arquivo`, `texto`, `tags`, `origem`)
   e `GET /api/v1/web/grafo`.
 
+## Resumo analítico (aba Resumo)
+
+A aba **Resumo** pede à IA da Inbox (mesmo provedor e chave de Configurações) uma análise do Cérebro: panorama,
+destaques com link para a nota, pendências, alertas, padrões e sugestões. Para gastar pouco token, a seleção é
+feita no servidor, sem IA (`Pipeline/DigestService.cs`): Inbox pendente (título e resumo), resumos dos apps, até 7
+diários, as 18 notas do período com maior pontuação (recência, backlinks, pasta), só o começo de cada uma, e os
+checklists abertos, com teto de 24 mil caracteres (~6 mil tokens) e uma chamada só. O último resumo fica guardado
+(`GET /api/v1/web/resumo`) e só é refeito pelo botão (`POST /api/v1/web/resumo/gerar` `{dias, salvar}`);
+com `salvar`, vira nota em `_sistema/ai`.
+
 ## Editar pela tela, log e restauração (abas Notas e Histórico)
 
 Na aba **Notas** você cria, edita (Markdown com frontmatter), move, renomeia e exclui notas. Excluir manda
