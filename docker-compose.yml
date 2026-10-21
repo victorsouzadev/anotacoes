@@ -155,6 +155,9 @@ services:
       - Hub__OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Hub__Transcription__ApiKey=${CEREBRO_OPENAI_API_KEY:-}
       - Hub__AutoMoveLowRisk=${CEREBRO_AUTO_MOVER:-false}
+      # App Casa (serviço à parte): o mesmo MCP_TOKEN do casa-api. Vazio = a Casa fica fora da rotina dos apps.
+      - Hub__Casa__McpUrl=${CASA_MCP_URL:-https://casa.vsitefy.com.br/mcp}
+      - Hub__Casa__McpToken=${CASA_MCP_TOKEN:-}
       # Login único do hub: o mesmo JWT_SECRET do serviço "api", e só estes e-mails.
       - Hub__Web__JwtSecret=${JWT_SECRET:-}
       - Hub__Web__Usuarios=${CEREBRO_USUARIOS:-}

@@ -45,6 +45,11 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
             UserId = uid, Descricao = "Mercado", Valor = 150.5m, Tipo = TipoTransacao.Despesa,
             Categoria = Categoria.Alimentacao, Data = hoje, Competencia = new DateOnly(hoje.Year, hoje.Month, 1),
         });
+        db.TreinoAtividades.Add(new TreinoAtividade
+        {
+            Id = Guid.NewGuid().ToString(), UserId = uid, Inicio = DateTime.UtcNow.AddHours(-3), Tipo = "livre", Titulo = "Corrida livre",
+            DuracaoSeg = 1950, DistanciaM = 5000, Esforco = 6, UpdatedAt = DateTime.UtcNow,
+        });
         await db.SaveChangesAsync();
     }
 
@@ -110,6 +115,10 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         var dieta = (await Rpc("dieta", Listar)).Body;
         Assert.Contains("\"dieta_registrar_refeicao\"", dieta);
         Assert.DoesNotContain("\"tarefas_", dieta);
+
+        var treino = (await Rpc("treino", Listar)).Body;
+        Assert.Contains("\"treino_resumo\"", treino);
+        Assert.DoesNotContain("\"dieta_", treino);
         Assert.Equal(HttpStatusCode.NotFound, (await Rpc("outro", Listar)).Status);
     }
 
@@ -131,6 +140,11 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
         var dieta = (await Rpc("dieta", Chamar("dieta_resumo"))).Body;
         Assert.Contains("Meta: 2000 kcal", dieta);
+
+        var treino = (await Rpc("treino", Chamar("treino_resumo"))).Body;
+        Assert.Contains("Corrida livre (livre)", treino);
+        Assert.Contains("5,00 km", treino);
+        Assert.Contains("6:30/km", treino);
     }
 
     [Fact]

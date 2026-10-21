@@ -99,7 +99,7 @@
         </ul>
 
         <div class="valor">
-          <span class="rotulo">Token <small>(o mesmo para os três)</small></span>
+          <span class="rotulo">Token <small>(o mesmo para todos)</small></span>
           <code class="segredo">{{ revelado('apps') ? v('apps') : (a.apps.mascarado || '—') }}</code>
           @if (a.apps.configurado) {
             <button type="button" class="botao pequeno" (click)="alternar('apps')"><app-icon name="eye" [size]="12" /> {{ revelado('apps') ? 'Ocultar' : 'Mostrar' }}</button>

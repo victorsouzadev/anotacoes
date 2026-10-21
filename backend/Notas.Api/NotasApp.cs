@@ -200,7 +200,7 @@ public static class NotasApp
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites, imagens e dieta). Só leitura, " +
+                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites, imagens, dieta e treinos de corrida). Só leitura, " +
                 "exceto os registros rápidos da dieta (refeição, peso e água).")
             .WithHttpTransport(o =>
             {
@@ -217,7 +217,8 @@ public static class NotasApp
             .WithTools<Notas.Api.Mcp.TarefasMcpTools>()
             .WithTools<Notas.Api.Mcp.FinancasMcpTools>()
             .WithTools<Notas.Api.Mcp.CriativoMcpTools>()
-            .WithTools<Notas.Api.Mcp.DietaMcpTools>();
+            .WithTools<Notas.Api.Mcp.DietaMcpTools>()
+            .WithTools<Notas.Api.Mcp.TreinoMcpTools>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -348,8 +349,9 @@ public static class NotasApp
         app.MapMoldesEndpoints();
         app.MapDietaEndpoints();
         app.MapDietaIaEndpoints();
+        app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta)$)}");
+        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 
