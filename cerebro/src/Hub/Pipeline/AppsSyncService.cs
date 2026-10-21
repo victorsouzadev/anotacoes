@@ -11,22 +11,27 @@ using ModelContextProtocol.Protocol;
 
 namespace Hub.Pipeline;
 
-/// <summary>Um app do hub que o Cérebro sincroniza pelo MCP dele.</summary>
-public sealed record HubApp(string Id, string Name, string Tool, string Note, string Description);
+/// <summary>
+/// Um app do hub que o Cérebro sincroniza pelo MCP dele. Since = a ferramenta aceita "desde" (o horário da
+/// última sincronização). External = app fora do notas-api, com endereço e token próprios em HubOptions.
+/// </summary>
+public sealed record HubApp(string Id, string Name, string Tool, string Note, string Description, bool Since = true, bool External = false);
 
 /// <summary>
-/// Rotina que busca dados dos apps do hub (Tarefas, Finanças, Criativo, Dieta) pelos MCPs deles, em horários
-/// configuráveis (padrão 08:00 e 20:00), e grava um resumo de cada um em _sistema/apps/. O MCP do
-/// notas-api age como o dono do Cérebro (token gerado na tela, aba Conectar).
+/// Rotina que busca dados dos apps do hub (Tarefas, Finanças, Criativo, Dieta, Treino e Casa) pelos MCPs deles,
+/// em horários configuráveis (padrão 08:00 e 20:00), e grava um resumo de cada um em _sistema/apps/. O MCP do
+/// notas-api age como o dono do Cérebro (token gerado na tela, aba Conectar); a Casa usa o token dela.
 /// </summary>
 public sealed class AppsSyncService : BackgroundService
 {
     public static readonly IReadOnlyList<HubApp> Apps =
     [
         new("tarefas", "Tarefas", "tarefas_resumo", "Tarefas (app)", "Atrasadas, hoje, próximos 7 dias, concluídas e projetos."),
-        new("financas", "Finanças", "financas_resumo", "Finanças (app)", "Mês atual e anterior, saúde financeira e metas."),
+        new("financas", "Finanças", "financas_resumo", "Finanças (app)", "Mês atual e anterior, saúde financeira e metas.", Since: false),
         new("criativo", "Publicar e Imagens", "criativo_resumo", "Publicar e Imagens (app)", "Sites publicados e projetos do Editor de Imagens."),
         new("dieta", "Dieta", "dieta_resumo", "Dieta (app)", "Calorias, macros e água de hoje e ontem, peso, nível, sequências e desafio da semana."),
+        new("treino", "Treino Corrida", "treino_resumo", "Treino Corrida (app)", "Andamento do programa, treinos desde a última sincronização, totais de 7 e 30 dias e recordes."),
+        new("casa", "Casa", "casa_resumo", "Casa (app)", "Pessoas, placar da semana e as tarefas de casa de hoje e atrasadas.", Since: false, External: true),
     ];
 
     private const string Key = "apps-sync";
@@ -141,11 +146,13 @@ public sealed class AppsSyncService : BackgroundService
         try
         {
             var s = Load();
-            var token = _access.AppsToken
-                ?? throw new InvalidOperationException("Gere o token dos apps na aba Conectar antes de sincronizar.");
+            var enabled = Apps.Where(a => s.AppEnabled(a.Id)).ToList();
+            var token = _access.AppsToken;
+            if (token is null && enabled.Any(a => !a.External))
+                throw new InvalidOperationException("Gere o token dos apps na aba Conectar antes de sincronizar.");
             var since = s.Last?.At;
             var results = new List<AppResult>();
-            foreach (var app in Apps.Where(a => s.AppEnabled(a.Id)))
+            foreach (var app in enabled)
                 results.Add(await SyncAppAsync(app, token, since, ct));
 
             var run = new LastRun(DateTimeOffset.UtcNow, trigger, results);
@@ -163,11 +170,12 @@ public sealed class AppsSyncService : BackgroundService
         finally { _running.Release(); }
     }
 
-    private async Task<AppResult> SyncAppAsync(HubApp app, string token, DateTimeOffset? since, CancellationToken ct)
+    private async Task<AppResult> SyncAppAsync(HubApp app, string? token, DateTimeOffset? since, CancellationToken ct)
     {
         try
         {
-            var content = await CallAsync(app, token, since, ct);
+            var (url, bearer) = Endpoint(app, token);
+            var content = await CallAsync(app, url, bearer, since, ct);
             var rel = $"{VaultLayout.Apps}/{app.Note}.md";
             var now = _clock.Now;
             var fm = new FrontMatter()
@@ -190,33 +198,51 @@ public sealed class AppsSyncService : BackgroundService
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             _log.LogWarning(ex, "Sincronização do app {App} falhou.", app.Id);
-            return new AppResult(app.Id, false, Short(ex), null);
+            return new AppResult(app.Id, false, Short(app, ex), null);
         }
     }
 
-    /// <summary>Chama a ferramenta de resumo do app pelo MCP (Streamable HTTP, rede interna).</summary>
-    internal async Task<string> CallAsync(HubApp app, string token, DateTimeOffset? since, CancellationToken ct)
+    /// <summary>Endereço e token do MCP do app: o do notas-api (rede interna) ou o próprio, para apps externos.</summary>
+    internal (Uri Url, string Token) Endpoint(HubApp app, string? appsToken)
+    {
+        if (!app.External)
+            return (new Uri($"{_options.AppsMcpUrl.TrimEnd('/')}/{app.Id}"),
+                appsToken ?? throw new InvalidOperationException("Gere o token dos apps na aba Conectar."));
+        var ext = app.Id switch
+        {
+            "casa" => _options.Casa,
+            _ => throw new InvalidOperationException($"App externo sem configuração: {app.Id}."),
+        };
+        if (!ext.Configured)
+            throw new InvalidOperationException($"O app {app.Name} não está configurado no servidor (defina {app.Id.ToUpperInvariant()}_MCP_TOKEN no .env do hub).");
+        return (new Uri(ext.McpUrl), ext.McpToken);
+    }
+
+    /// <summary>Chama a ferramenta de resumo do app pelo MCP (Streamable HTTP).</summary>
+    internal async Task<string> CallAsync(HubApp app, Uri url, string token, DateTimeOffset? since, CancellationToken ct)
     {
         var transport = new HttpClientTransport(new HttpClientTransportOptions
         {
-            Endpoint = new Uri($"{_options.AppsMcpUrl.TrimEnd('/')}/{app.Id}"),
+            Endpoint = url,
             Name = $"cerebro-{app.Id}",
             TransportMode = HttpTransportMode.StreamableHttp,
             AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = $"Bearer {token}" },
         }, _loggers);
         await using var client = await McpClient.CreateAsync(transport, null, _loggers, ct);
         var args = new Dictionary<string, object?>();
-        if (since is { } s && app.Id != "financas") args["desde"] = s.UtcDateTime.ToString("O");
+        if (since is { } s && app.Since) args["desde"] = s.UtcDateTime.ToString("O");
         var result = await client.CallToolAsync(app.Tool, args, cancellationToken: ct);
         var text = string.Join("\n", result.Content.OfType<TextContentBlock>().Select(c => c.Text));
         if (result.IsError == true) throw new InvalidOperationException(text.Length > 0 ? text : "O app devolveu erro.");
         return text;
     }
 
-    private static string Short(Exception ex)
+    private static string Short(HubApp app, Exception ex)
     {
         var msg = ex.Message;
-        if (ex is HttpRequestException { StatusCode: { } code })
+        if (app.External && ex is HttpRequestException { StatusCode: { } ext } && (int)ext is 401 or 503)
+            msg = $"O app {app.Name} recusou o token: confira {app.Id.ToUpperInvariant()}_MCP_TOKEN no .env do hub (HTTP {(int)ext}).";
+        else if (ex is HttpRequestException { StatusCode: { } code })
             msg = (int)code switch
             {
                 401 => "Token recusado pelo app: gere o token dos apps de novo na aba Conectar.",

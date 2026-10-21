@@ -50,6 +50,17 @@ public sealed class HubOptions
 
     /// <summary>Base dos MCPs dos apps do hub pela rede interna do Docker (sem token em URL pública).</summary>
     public string AppsMcpUrl { get; set; } = "http://api:8080/api/mcp";
+
+    /// <summary>App Casa: serviço à parte, com MCP e token próprios (MCP_TOKEN do casa-api). Sem token, fica de fora.</summary>
+    public ExternalAppOptions Casa { get; set; } = new() { McpUrl = "https://casa.vsitefy.com.br/mcp" };
+}
+
+/// <summary>App fora do notas-api: endereço do MCP e token (vai só no cabeçalho Authorization, nunca na URL).</summary>
+public sealed class ExternalAppOptions
+{
+    public string McpUrl { get; set; } = "";
+    public string McpToken { get; set; } = "";
+    public bool Configured => !string.IsNullOrWhiteSpace(McpUrl) && !string.IsNullOrWhiteSpace(McpToken);
 }
 
 /// <summary>

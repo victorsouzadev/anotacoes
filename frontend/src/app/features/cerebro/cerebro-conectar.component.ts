@@ -29,11 +29,13 @@ export class CerebroConectarComponent {
   readonly clienteOps = signal<Cliente>('code');
   readonly clienteApps = signal<Cliente>('code');
 
-  /** MCPs dos apps do hub: o mesmo token serve para os três. */
+  /** MCPs dos apps do hub: o mesmo token serve para todos. */
   readonly mcpsApps = [
     { id: 'tarefas', nome: 'Tarefas', servidor: 'hub-tarefas', descricao: 'tarefas atrasadas, de hoje e da semana, concluídas e projetos' },
     { id: 'financas', nome: 'Finanças', servidor: 'hub-financas', descricao: 'resumo do mês, lançamentos, evolução, saúde financeira, metas e recorrentes' },
     { id: 'criativo', nome: 'Publicar e Imagens', servidor: 'hub-criativo', descricao: 'sites publicados e projetos do Editor de Imagens' },
+    { id: 'dieta', nome: 'Dieta', servidor: 'hub-dieta', descricao: 'calorias, macros, água, peso e registros rápidos de refeição' },
+    { id: 'treino', nome: 'Treino Corrida', servidor: 'hub-treino', descricao: 'programa, treinos de corrida, totais e recordes' },
   ];
 
   readonly cmdCodeApps = computed(() =>

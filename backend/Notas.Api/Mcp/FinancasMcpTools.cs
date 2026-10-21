@@ -37,7 +37,7 @@ public sealed class FinancasMcpTools(FerramentasFinanceiras ferramentas, Financa
         return sb.ToString().TrimEnd();
     }
 
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
 
     /// <summary>O JSON do resumo_mes em Markdown legível no Obsidian (cai para o JSON se o formato mudar).</summary>
     internal static string MesEmMarkdown(string json)
@@ -46,7 +46,7 @@ public sealed class FinancasMcpTools(FerramentasFinanceiras ferramentas, Financa
         {
             var o = JsonNode.Parse(json)!.AsObject();
             if (o["erro"] is { } erro) return $"Erro: {erro}\n";
-            string V(string k) => (o[k]?.GetValue<decimal>() ?? 0).ToString("C", Br);
+            string V(string k) => "R$ " + Notas.Api.Services.CulturaBr.Dinheiro(o[k]?.GetValue<decimal>() ?? 0);
             var sb = new StringBuilder()
                 .Append($"- Receitas: {V("receitas")}\n- Despesas: {V("despesas")} (consumo {V("consumo")})\n- Saldo: **{V("saldo")}**\n")
                 .Append($"- Lançamentos: {o["lancamentos"]}");
@@ -56,7 +56,7 @@ public sealed class FinancasMcpTools(FerramentasFinanceiras ferramentas, Financa
             {
                 sb.Append("\n| Categoria | Total | Lançamentos |\n|---|---:|---:|\n");
                 foreach (var c in cats)
-                    sb.Append($"| {c!["categoria"]} | {c["total"]!.GetValue<decimal>().ToString("C", Br)} | {c["quantidade"]} |\n");
+                    sb.Append($"| {c!["categoria"]} | R$ {Notas.Api.Services.CulturaBr.Dinheiro(c["total"]!.GetValue<decimal>())} | {c["quantidade"]} |\n");
             }
             return sb.ToString();
         }

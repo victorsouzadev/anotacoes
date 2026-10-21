@@ -16,7 +16,7 @@ namespace Notas.Api.Mcp;
 [McpServerToolType]
 public sealed class DietaMcpTools(AppDbContext db, McpUser user, DietaProgresso prog)
 {
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
 
     [McpServerTool(Name = "dieta_resumo", ReadOnly = true, OpenWorld = false)]
     [Description("Resumo da dieta em Markdown: hoje e ontem (calorias, macros e água contra a meta), média dos últimos 7 dias, " +

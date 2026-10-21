@@ -27,6 +27,10 @@ inicial, sem exigir outro login nem outro deploy.
   links públicos de progresso com escopos. App Android nativo próprio
   ([`mobile/dieta`](mobile/dieta/README.md)), API em `/api/dieta` e MCP
   `/api/mcp/dieta`, que o Segundo Cérebro sincroniza.
+- **Treino** — recebe os treinos do app Android Treino Corrida (repositório
+  `treino-corrida`, offline-first; a conta do hub é opcional): API em `/api/treino`
+  e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
+  Cérebro sincroniza.
 
 - **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
   com margem em mm, remoção de fundo, divisão de uma folha em elementos separados

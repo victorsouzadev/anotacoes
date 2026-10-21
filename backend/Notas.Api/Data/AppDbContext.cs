@@ -84,6 +84,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DietaPlanoItem> DietaPlano => Set<DietaPlanoItem>();
     public DbSet<DietaFoto> DietaFotos => Set<DietaFoto>();
     public DbSet<DietaCompartilhamento> DietaCompartilhamentos => Set<DietaCompartilhamento>();
+    public DbSet<TreinoAtividade> TreinoAtividades => Set<TreinoAtividade>();
+    public DbSet<TreinoPlano> TreinoPlanos => Set<TreinoPlano>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -180,6 +182,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.UserId, x.Data });
             e.HasIndex(x => new { x.UserId, x.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TreinoAtividade>(e =>
+        {
+            e.ToTable("treino_atividades");
+            e.Property(x => x.Titulo).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Tipo).HasMaxLength(10);
+            e.Property(x => x.Meta).HasMaxLength(200);
+            e.Property(x => x.Nota).HasMaxLength(2000);
+            e.HasIndex(x => new { x.UserId, x.Inicio });
+            e.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TreinoPlano>(e =>
+        {
+            e.ToTable("treino_planos");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Programa).IsRequired().HasMaxLength(200);
+            e.Property(x => x.ProximaSessao).HasMaxLength(200);
+            e.HasOne<User>().WithOne().HasForeignKey<TreinoPlano>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<DietaPeso>(e =>

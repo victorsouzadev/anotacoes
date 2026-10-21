@@ -44,6 +44,7 @@ do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
 | `/api/mcp/financas` | `financas_resumo`, `financas_resumo_mes`, `financas_buscar_transacoes`, `financas_evolucao`, `financas_saude`, `financas_metas`, `financas_recorrentes`, `financas_compromissos` (as mesmas consultas do chat financeiro) |
 | `/api/mcp/criativo` | `criativo_resumo`, `criativo_sites`, `criativo_projetos_imagem` |
 | `/api/mcp/dieta` | `dieta_resumo`, `dieta_dia`, `dieta_periodo`, `dieta_buscar_alimento` e os registros rápidos `dieta_registrar_refeicao`, `dieta_registrar_peso`, `dieta_registrar_agua` (os únicos que escrevem) |
+| `/api/mcp/treino` | `treino_resumo`, `treino_atividades` (dados que o app Android Treino Corrida envia para `/api/treino`) |
 
 - **Token:** gerado em **Conectar → Apps do hub**. O Cérebro grava só o SHA-256 e o e-mail em
   `data/cerebro/hub/access/apps-token.json`, montado só leitura no `api` (`Mcp__TokenFile`). Sem o
@@ -52,6 +53,10 @@ do dono do Cérebro (o primeiro de `CEREBRO_USUARIOS`):
   quais apps entram e **Sincronizar agora**. A cada execução o Cérebro chama `<app>_resumo` pela rede
   interna (`http://api:8080/api/mcp`, `Hub__AppsMcpUrl`), regrava `_sistema/apps/<App> (app).md` e anota
   no diário. Se o serviço estava fora no horário, roda quando voltar (só o horário mais recente).
+- **Casa:** serviço à parte (`casa-api`), com MCP próprio. Entra na rotina como app externo: o Cérebro
+  chama `casa_resumo` em `CASA_MCP_URL` (padrão `https://casa.vsitefy.com.br/mcp`) com o
+  `CASA_MCP_TOKEN` do `.env` (o mesmo `MCP_TOKEN` do casa-api), só no cabeçalho `Authorization`.
+  Sem o token, a Casa aparece com erro na última execução e as outras seguem normalmente.
 - **Claude:** a mesma tela traz os comandos do Claude Code e as URLs do Claude web para cada MCP.
 
 ## App no celular (Android) e grafo

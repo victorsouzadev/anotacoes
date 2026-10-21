@@ -1581,6 +1581,106 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("financas_transacoes_excluidas", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.TreinoAtividade", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("DistanciaM")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("Dor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DuracaoSeg")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Esforco")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FcMax")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("FcMedia")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Inicio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("MaiorCorridaSeg")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Meta")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Inicio");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("treino_atividades", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.TreinoPlano", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Programa")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProximaSessao")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Semana")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SemanasTotal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SessoesFeitas")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SessoesTotal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("treino_planos", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.User", b =>
                 {
                     b.Property<string>("Id")
@@ -1988,6 +2088,24 @@ namespace Notas.Api.Data.Migrations
                     b.HasOne("Notas.Api.Data.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.TreinoAtividade", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.TreinoPlano", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithOne()
+                        .HasForeignKey("Notas.Api.Data.TreinoPlano", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

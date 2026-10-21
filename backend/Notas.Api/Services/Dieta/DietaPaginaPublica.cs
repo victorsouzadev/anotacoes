@@ -12,7 +12,7 @@ namespace Notas.Api.Services.Dieta;
 /// </summary>
 public static class DietaPaginaPublica
 {
-    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
     private static readonly Dictionary<string, string> NomeRefeicao = new()
     {
         ["cafe"] = "Café da manhã", ["almoco"] = "Almoço", ["lanche"] = "Lanche", ["jantar"] = "Jantar", ["ceia"] = "Ceia",

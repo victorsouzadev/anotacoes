@@ -15,9 +15,11 @@ public sealed class AppsSyncTests : IDisposable
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "cerebro-apps-" + Guid.NewGuid().ToString("N"));
     private readonly AppsSyncService _sync;
 
+    private readonly HubOptions _o;
+
     public AppsSyncTests()
     {
-        var o = new HubOptions { DataPath = Path.Combine(_dir, "hub"), VaultPath = Path.Combine(_dir, "vault") };
+        var o = _o = new HubOptions { DataPath = Path.Combine(_dir, "hub"), VaultPath = Path.Combine(_dir, "vault") };
         o.Web.JwtSecret = "segredo-jwt-de-teste-com-32-bytes!!";
         var opts = Options.Create(o);
         var db = new HubDb(opts);
@@ -68,4 +70,31 @@ public sealed class AppsSyncTests : IDisposable
     [InlineData("08:00:00")]
     public void Horario_invalido_e_recusado(string horario) =>
         Assert.Throws<ArgumentException>(() => _sync.Configure(true, [horario], []));
+
+    [Fact]
+    public void Treino_e_casa_entram_na_rotina()
+    {
+        Assert.Contains(AppsSyncService.Apps, a => a.Id == "treino" && a.Tool == "treino_resumo" && a.Since && !a.External);
+        Assert.Contains(AppsSyncService.Apps, a => a.Id == "casa" && a.Tool == "casa_resumo" && !a.Since && a.External);
+        Assert.DoesNotContain(AppsSyncService.Apps, a => a.Id == "financas" && a.Since);
+    }
+
+    [Fact]
+    public void Apps_do_hub_vao_pela_rede_interna_e_a_casa_pelo_endereco_proprio()
+    {
+        var treino = AppsSyncService.Apps.First(a => a.Id == "treino");
+        var (url, token) = _sync.Endpoint(treino, "token-dos-apps");
+        Assert.Equal("http://api:8080/api/mcp/treino", url.ToString());
+        Assert.Equal("token-dos-apps", token);
+
+        var casa = AppsSyncService.Apps.First(a => a.Id == "casa");
+        // Sem CASA_MCP_TOKEN a Casa fica de fora, com um erro que diz o que configurar.
+        var ex = Assert.Throws<InvalidOperationException>(() => _sync.Endpoint(casa, "token-dos-apps"));
+        Assert.Contains("CASA_MCP_TOKEN", ex.Message);
+
+        _o.Casa.McpToken = "token-da-casa";
+        (url, token) = _sync.Endpoint(casa, null);
+        Assert.Equal("https://casa.vsitefy.com.br/mcp", url.ToString());
+        Assert.Equal("token-da-casa", token);
+    }
 }
