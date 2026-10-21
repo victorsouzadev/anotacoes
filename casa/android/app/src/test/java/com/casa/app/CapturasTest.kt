@@ -55,6 +55,8 @@ class CapturasTest {
                 val e = api.chamar("GET", "/api/estado").paraEstado()
                 for ((t, h) in listOf("Lavar a louça" to "20:00", "Cozinhar o jantar" to "19:30"))
                     api.chamar("PUT", "/api/tarefas/${e.tarefas.first { it.nome == t }.id}", org.json.JSONObject().put("horario", h))
+                e.atribuicoes.firstOrNull { it.membroId == e.euId && it.dia == e.hoje && it.tarefa == "Trocar roupa de cama" }
+                    ?.let { api.chamar("POST", "/api/atribuicoes/${it.id}/iniciar") }
             }
             compose.onNode(androidx.compose.ui.test.hasContentDescription("Atualizar")).performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithText("20:00").fetchSemanticsNodes().isNotEmpty() }

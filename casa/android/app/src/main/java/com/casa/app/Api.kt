@@ -56,7 +56,9 @@ data class Condicao(val id: Int, val nome: String, val tipo: String, val referen
 /** naoFeita: motivo (pode ser "") quando alguém marcou como não feita; null = não marcada. */
 data class Atribuicao(val id: Int, val tarefaId: Int, val tarefa: String, val membroId: Int?, val dia: String, val pontos: Int, val feito: Boolean,
     val horario: String? = null, val duracao: Int = 30, val naoFeita: String? = null, val naoFeitaPor: Int? = null, val comentarios: Int = 0,
-    val foto: Boolean = false, val fotoPor: Int? = null) {
+    val foto: Boolean = false, val fotoPor: Int? = null, val iniciadaEm: String? = null, val feitoEm: String? = null) {
+    /** Em andamento: iniciada (botão opcional "Iniciar") e ainda não concluída. */
+    val emAndamento get() = iniciadaEm != null && !feito
     /** Pendente de verdade: nem feita, nem marcada como não feita. */
     val pendente get() = !feito && naoFeita == null
 }
@@ -106,7 +108,7 @@ fun JSONObject.paraEstado(): Estado {
         atribuicoes = getJSONArray("atribuicoes").mapa {
             Atribuicao(it.getInt("id"), it.getInt("tarefa_id"), it.getString("tarefa"), it.intOuNull("membro_id"), it.getString("dia"), it.getInt("pontos"), !it.isNull("feito_em"),
                 it.optStrOuNull("horario"), it.optInt("duracao", 30), it.optStrOuNull("nao_feita"), it.optIntOuNull("nao_feita_por"), it.optInt("comentarios", 0),
-                it.optInt("foto", 0) == 1, it.optIntOuNull("foto_por"))
+                it.optInt("foto", 0) == 1, it.optIntOuNull("foto_por"), it.optStrOuNull("iniciada_em"), it.optStrOuNull("feito_em"))
         },
         comentarios = optJSONArray("comentarios")?.mapa {
             Comentario(it.getInt("id"), it.getInt("atribuicao_id"), it.optIntOuNull("membro_id"), it.getString("tipo"), it.optString("texto"), it.getString("em"))

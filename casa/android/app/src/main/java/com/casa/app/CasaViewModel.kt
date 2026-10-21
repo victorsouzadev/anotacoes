@@ -22,6 +22,11 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     /** "sistema", "claro" ou "escuro". */
     var tema by mutableStateOf(prefs.getString("tema", "sistema") ?: "sistema"); private set
     fun escolherTema(t: String) { tema = t; prefs.edit().putString("tema", t).apply() }
+    /** Botão "Iniciar" é opcional: cada aparelho escolhe se mostra. */
+    var mostrarIniciar by mutableStateOf(prefs.getBoolean("mostrar_iniciar", true)); private set
+    fun escolherMostrarIniciar(v: Boolean) { mostrarIniciar = v; prefs.edit().putBoolean("mostrar_iniciar", v).apply() }
+    fun iniciar(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/iniciar") }
+    fun cancelarInicio(a: Atribuicao) = executa { api.chamar("POST", "/api/atribuicoes/${a.id}/cancelar-inicio") }
     /** Tarefa aberta no detalhe (comentários, não feita). */
     var detalhe by mutableStateOf<Int?>(null)
     var painelAberto by mutableStateOf(false)

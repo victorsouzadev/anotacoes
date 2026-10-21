@@ -53,7 +53,7 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
   const regrasDoDia = (e, d) => (e.diasCondicoes.find(x => x.dia === d)?.condicoes ?? []).map(id => e.condicoes.find(c => c.id === id)?.nome);
   const nomeDe = (e, id) => e.membros.find(x => x.id === id)?.nome ?? 'ninguém';
   const dia = d => new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${a.horario ? ` ${a.horario}` : ''}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · feita' : a.nao_feita != null ? ` · NÃO FEITA${a.nao_feita ? ` (${a.nao_feita})` : ''}` : ''}${a.comentarios ? ` · ${a.comentarios} coment.` : ''}${a.foto ? ' · com foto' : ''}`;
+  const linhaAtrib = (e, a) => `[${a.id}] ${dia(a.dia)}${a.horario ? ` ${a.horario}` : ''}${regrasDoDia(e, a.dia).length ? ` (${regrasDoDia(e, a.dia).join(', ')})` : ''} · ${a.tarefa} (${a.pontos} pt) · ${nomeDe(e, a.membro_id)}${a.feito_em ? ' · feita' : a.nao_feita != null ? ` · NÃO FEITA${a.nao_feita ? ` (${a.nao_feita})` : ''}` : ''}${a.comentarios ? ` · ${a.comentarios} coment.` : ''}${a.foto ? ' · com foto' : ''}${a.iniciada_em && !a.feito_em ? ' · em andamento' : ''}`;
   // "Lavar a louça ×3, Tirar o lixo"
   const agrupa = l => Object.entries(l.reduce((c, a) => ({ ...c, [a.tarefa]: (c[a.tarefa] ?? 0) + 1 }), {}))
     .map(([t, n]) => n > 1 ? `${t} ×${n}` : t).join(', ');
@@ -106,6 +106,14 @@ export function criarMcp({ db, rotas, registra, lerLogs }) {
       exec: (m, a) => {
         const e = rotas[`POST /api/atribuicoes/:id/${a.desfazer ? 'desfazer' : 'concluir'}`](m, {}, a.atribuicao_id);
         return `${a.desfazer ? 'Desfeita' : 'Feita'}: ${linhaAtrib(e, e.atribuicoes.find(x => x.id === a.atribuicao_id))}`;
+      },
+    },
+    iniciar_tarefa: {
+      descricao: 'Marca uma tarefa da semana como em andamento (opcional; iniciar a de outra pessoa é assumi-la). cancelar=true desfaz o início.',
+      esquema: obj({ atribuicao_id: int, cancelar: bool }, ['atribuicao_id']),
+      exec: (m, a) => {
+        const e = rotas[`POST /api/atribuicoes/:id/${a.cancelar ? 'cancelar-inicio' : 'iniciar'}`](m, {}, a.atribuicao_id);
+        return `${a.cancelar ? 'Início cancelado' : 'Em andamento'}: ${linhaAtrib(e, e.atribuicoes.find(x => x.id === a.atribuicao_id))}`;
       },
     },
     passar_tarefa: {

@@ -83,7 +83,7 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
       pessoas: e.membros.map(m => ({ id: m.id, nome: m.nome })),
       placar: e.placar,
       tarefasHoje: e.atribuicoes.filter(a => a.dia === e.hoje).map(a => ({ tarefa: a.tarefa, horario: a.horario, pontos: a.pontos, pessoa: a.membro_id,
-        estado: a.feito_em ? 'feita' : a.nao_feita != null ? 'nao_feita' : 'pendente', comentarios: a.comentarios, foto: a.foto ? a.id : null })),
+        estado: a.feito_em ? 'feita' : a.nao_feita != null ? 'nao_feita' : a.iniciada_em ? 'andamento' : 'pendente', iniciada: a.iniciada_em, comentarios: a.comentarios, foto: a.foto ? a.id : null })),
       dias: e.diasCondicoes.map(({ dia }) => ({ dia, regras: regrasDoDia(dia), pessoas: Object.fromEntries(e.membros.map(m => {
         const minhas = e.atribuicoes.filter(a => a.dia === dia && a.membro_id === m.id);
         return [m.id, { feitos: minhas.filter(a => a.feito_em).reduce((s, a) => s + a.pontos, 0), previstos: minhas.reduce((s, a) => s + a.pontos, 0),
@@ -337,13 +337,13 @@ function render(d) {
   $('#placar .grade-pessoas').innerHTML = d.placar.map(p =>
     '<div><div class="linha"><b>' + esc(p.nome) + '</b><span class="val">' + p.feitos + '/' + p.previstos + ' pt</span></div>' + barra(p.feitos, p.previstos) +
     '<div class="rot">saldo ' + (p.saldo > 0 ? '+' : '') + p.saldo + (p.naoFeitas ? ' · <span class="neg">' + p.naoFeitas + ' não feita' + (p.naoFeitas > 1 ? 's' : '') + '</span>' : '') + '</div></div>').join('');
-  const ESTADO = { feita: 'feita', nao_feita: 'não feita', pendente: '' };
+  const ESTADO = { feita: 'feita', nao_feita: 'não feita', pendente: '', andamento: 'em andamento' };
   $('#hoje div').innerHTML = d.pessoas.map(p => {
     const l = d.tarefasHoje.filter(t => t.pessoa === p.id);
     return '<div class="leg" style="margin-top:.5rem">' + esc(p.nome) + '</div>' + (l.length ? l.map(t =>
       '<div class="item ' + t.estado + '"><span class="val hora">' + (t.horario || '') + '</span><span class="nome">' + esc(t.tarefa) + '</span>' +
       (t.foto ? '<a href="/painel/foto/' + t.foto + '" target="_blank" rel="noopener"><img class="mini" src="/painel/foto/' + t.foto + '" alt="Foto de ' + esc(t.tarefa) + '" loading="lazy"></a>' : '') + '<span class="rot">' +
-      [ESTADO[t.estado], t.comentarios ? t.comentarios + ' coment.' : '', t.pontos + ' pt'].filter(Boolean).join(' · ') + '</span></div>').join('') : '<div class="rot">nada hoje</div>');
+      [t.estado === 'andamento' ? 'em andamento desde ' + hora(t.iniciada) : ESTADO[t.estado], t.comentarios ? t.comentarios + ' coment.' : '', t.pontos + ' pt'].filter(Boolean).join(' · ') + '</span></div>').join('') : '<div class="rot">nada hoje</div>');
   }).join('');
   const avisos = [
     ...d.naoFeitas.map(n => '<div class="item"><span class="neg rot" style="min-width:5.5rem">não feita</span><span class="nome">' + esc(n.tarefa) + ' <span class="rot">· ' + esc(n.pessoa) + ' · ' + dia(n.dia) + '</span>' +
@@ -427,6 +427,7 @@ html.tv{font-size:1.3vw}
 .item{display:flex;gap:.75rem;align-items:baseline;padding:.25rem 0;border-bottom:1px solid var(--linha)}.item:last-child{border-bottom:0}
 .item .hora{min-width:3.25rem;color:var(--grafite-suave)}.item .hora:empty{display:none}.item .nome{flex:1;min-width:0}
 .item.feita .nome{text-decoration:line-through;color:var(--grafite-suave)}
+.item.andamento .nome{font-weight:600}
 .mini{width:2.5rem;height:2.5rem;object-fit:cover;border-radius:6px;border:1px solid var(--linha);display:block}
 .neg{color:var(--negativo)}
 .rolar{overflow-x:auto}

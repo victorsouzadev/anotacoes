@@ -47,6 +47,8 @@ if (!colunas('atribuicoes').includes('nao_feita_em')) db.exec('ALTER TABLE atrib
 if (!colunas('atribuicoes').includes('foto')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto TEXT');
 if (!colunas('atribuicoes').includes('foto_por')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto_por INTEGER');
 if (!colunas('atribuicoes').includes('foto_em')) db.exec('ALTER TABLE atribuicoes ADD COLUMN foto_em TEXT');
+// Início opcional: quando e por quem a tarefa foi iniciada (a duração sai de feito_em − iniciada_em).
+if (!colunas('atribuicoes').includes('iniciada_em')) db.exec('ALTER TABLE atribuicoes ADD COLUMN iniciada_em TEXT');
 db.exec(`
 -- Comentários nas tarefas da semana (tipo 'comentario' ou 'nao_feita', este criado ao marcar/sinalizar).
 CREATE TABLE IF NOT EXISTS comentarios(id INTEGER PRIMARY KEY, casa_id INTEGER, atribuicao_id INTEGER REFERENCES atribuicoes(id) ON DELETE CASCADE,
@@ -136,7 +138,7 @@ function distribuir(casaId, inicio = segunda()) {
   // Mantém o que já foi feito; refaz o resto.
   // Também ficam as marcadas como não feitas e as que têm comentário, para a conversa não sumir.
   db.prepare(`DELETE FROM atribuicoes WHERE casa_id=? AND semana=? AND feito_em IS NULL AND nao_feita IS NULL
-    AND foto IS NULL AND id NOT IN (SELECT atribuicao_id FROM comentarios)`).run(casaId, semana);
+    AND foto IS NULL AND iniciada_em IS NULL AND id NOT IN (SELECT atribuicao_id FROM comentarios)`).run(casaId, semana);
   const feitas = db.prepare('SELECT * FROM atribuicoes WHERE casa_id=? AND semana=?').all(casaId, semana);
 
   const dias = Array.from({ length: 7 }, (_, i) => iso(addDias(inicio, i)));
@@ -241,7 +243,7 @@ function distribuir(casaId, inicio = segunda()) {
 // Ordem do dia: primeiro as que têm horário (cedo → tarde), depois as sem horário.
 const listarAtribuicoes = (casaId, semana) => db.prepare(`SELECT a.id,a.tarefa_id,t.nome tarefa,a.membro_id,a.dia,a.pontos,a.feito_em,t.horario,t.duracao,
   a.nao_feita,a.nao_feita_por,(SELECT COUNT(*) FROM comentarios c WHERE c.atribuicao_id=a.id) comentarios,
-  (a.foto IS NOT NULL) foto,a.foto_por,a.foto_em
+  (a.foto IS NOT NULL) foto,a.foto_por,a.foto_em,a.iniciada_em
   FROM atribuicoes a JOIN tarefas t ON t.id=a.tarefa_id WHERE a.casa_id=? AND a.semana=?
   ORDER BY a.dia, t.horario IS NULL, t.horario, t.nome`).all(casaId, semana);
 
@@ -396,6 +398,15 @@ const rotas = {
   'DELETE /api/painel/sessoes': m => { painel.desconectar(m); return estado(m); },
   'POST /api/tv': (m, b) => { painel.conectarTv(m, b.codigo); return estado(m); },
   'POST /api/atribuicoes/:id/desfazer': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET feito_em=NULL WHERE id=?'),
+  // Iniciar (opcional): marca "em andamento". Iniciar a tarefa de outra pessoa é assumi-la.
+  'POST /api/atribuicoes/:id/iniciar': (m, _, id) => {
+    const a = db.prepare('SELECT * FROM atribuicoes WHERE id=? AND casa_id=?').get(id, m.casa_id); exige(a, 404, 'Tarefa não encontrada');
+    exige(!a.feito_em, 400, 'A tarefa já foi feita');
+    db.prepare('UPDATE atribuicoes SET iniciada_em=?, membro_id=?, nao_feita=NULL, nao_feita_por=NULL, nao_feita_em=NULL WHERE id=?')
+      .run(new Date().toISOString(), m.id, id);
+    return estado(m);
+  },
+  'POST /api/atribuicoes/:id/cancelar-inicio': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET iniciada_em=NULL WHERE id=? AND feito_em IS NULL'),
   'POST /api/atribuicoes/:id/assumir': (m, _, id) => marca(m, id, 'UPDATE atribuicoes SET membro_id=? WHERE id=?', m.id),
 };
 function condicaoDaCasa(m, id) {

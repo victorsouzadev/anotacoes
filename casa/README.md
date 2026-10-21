@@ -70,6 +70,9 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
   remover. O app reduz para no máximo 1600 px (JPEG, rotação corrigida) e envia em `PUT /api/atribuicoes/:id/foto`;
   `GET` devolve e `DELETE` remove (quem faz a tarefa, quem mandou a foto ou o admin). Arquivos em `/data/fotos` no
   volume, apagados depois de 120 dias (`FOTOS_DIAS`). O painel mostra a miniatura em "Hoje" (`/painel/foto/:id`).
+- **Iniciar** (opcional, pode ser escondido em Casa → Aparência, por aparelho): ▶ na linha ou "Iniciar" no detalhe
+  marca a tarefa como em andamento (`POST /api/atribuicoes/:id/iniciar`, `.../cancelar-inicio`); iniciar a de outra
+  pessoa é assumi-la. A lista e o painel mostram "em andamento"; concluída, o detalhe mostra quanto levou.
 - **Não feita** sai das pendências (aba Hoje, lembretes, agenda do celular e .ics) e continua em Semana, no painel e
   nos comentários.
 

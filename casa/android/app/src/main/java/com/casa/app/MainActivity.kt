@@ -160,6 +160,10 @@ private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrar
         Text(a.tarefa, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (a.feito) grafite.grafiteSuave else grafite.grafite, textDecoration = if (a.feito) TextDecoration.LineThrough else null)
         if (a.naoFeita != null && !a.feito) Text("não feita", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall, color = grafite.negativo)
+        if (a.emAndamento) instante(a.iniciadaEm)?.let { inicio ->
+            Text("em andamento · ${duracao(inicio, agoraQueAnda())}", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodySmall,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+        }
         if (a.foto) Icon(Icons.Outlined.PhotoCamera, "Com foto", Modifier.padding(start = 8.dp).size(14.dp), tint = grafite.grafiteSuave)
         if (a.comentarios > 0) {
             Icon(Icons.Outlined.ChatBubbleOutline, "Comentários", Modifier.padding(start = 8.dp).size(14.dp), tint = grafite.grafiteSuave)
@@ -169,6 +173,9 @@ private fun LinhaAtribuicao(vm: CasaViewModel, e: Estado, a: Atribuicao, mostrar
         val meta = listOfNotNull(dono.takeIf { mostrarDono }, "${a.pontos} pt").joinToString(" · ")
         Text((if (a.horario != null) " · " else "  ") + meta, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave, maxLines = 1)
         if (!minha && !a.feito) AcaoNeutra(onClick = { vm.assumir(a) }, Modifier.padding(start = 4.dp).height(32.dp), compacta = true) { Text("Assumir") }
+        // Início opcional: só nas minhas pendentes, se o botão estiver ligado neste aparelho.
+        if (minha && vm.mostrarIniciar && a.pendente && !a.emAndamento)
+            IconButton(onClick = { vm.iniciar(a) }, Modifier.size(36.dp)) { Icon(Icons.Outlined.PlayArrow, "Iniciar ${a.tarefa}", Modifier.size(20.dp), tint = grafite.grafiteSuave) }
     }
 }
 
@@ -422,6 +429,15 @@ private fun CasaTela(vm: CasaViewModel, e: Estado) {
                 listOf("sistema" to "Sistema", "claro" to "Claro", "escuro" to "Escuro").forEach { (t, rotulo) ->
                     FilterChip(vm.tema == t, { vm.escolherTema(t) }, { Text(rotulo) })
                 }
+            }
+        }
+        item {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Botão Iniciar nas tarefas")
+                    Text("Opcional: marca a tarefa como em andamento e mostra quanto tempo levou.", style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+                }
+                Switch(vm.mostrarIniciar, { vm.escolherMostrarIniciar(it) }, colors = coresChave())
             }
         }
         item {

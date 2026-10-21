@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
@@ -31,6 +32,20 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val HORA = DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.of("America/Sao_Paulo"))
+private val SO_HORA = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("America/Sao_Paulo"))
+
+/** "12 min", "1 h 05 min". */
+internal fun duracao(desdeMs: Long, ateMs: Long): String {
+    val min = ((ateMs - desdeMs) / 60_000).coerceAtLeast(0)
+    return if (min < 60) "$min min" else "${min / 60} h %02d min".format(min % 60)
+}
+internal fun instante(iso: String?) = iso?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+
+/** Hora atual que se atualiza a cada 30 s (para o tempo "em andamento"). */
+@Composable
+internal fun agoraQueAnda(): Long = produceState(System.currentTimeMillis()) {
+    while (true) { kotlinx.coroutines.delay(30_000); value = System.currentTimeMillis() }
+}.value
 
 /**
  * Tela de detalhe de uma tarefa da semana (tela cheia, com voltar): concluir, assumir, marcar como não feita (a própria pessoa,
@@ -84,8 +99,14 @@ fun DetalheTarefa(vm: CasaViewModel, e: Estado, a: Atribuicao) {
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(listOfNotNull(nomeDia(a.dia), a.horario, nome(a.membroId), "${a.pontos} pt").joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+            val inicio = instante(a.iniciadaEm)
             when {
-                a.feito -> Text("Feita", Modifier.padding(top = 4.dp), color = grafite.grafiteSuave)
+                a.feito -> Text("Feita" + (instante(a.feitoEm)?.takeIf { inicio != null }?.let { fim -> " · levou ${duracao(inicio!!, fim)}" } ?: ""),
+                    Modifier.padding(top = 4.dp), color = grafite.grafiteSuave)
+                a.emAndamento && inicio != null -> {
+                    val agora = agoraQueAnda()
+                    Text("Em andamento desde ${SO_HORA.format(Instant.ofEpochMilli(inicio))} · ${duracao(inicio, agora)}", Modifier.padding(top = 4.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                }
                 a.naoFeita != null -> Text(
                     (if (a.naoFeitaPor == a.membroId) "${nome(a.naoFeitaPor)} não conseguiu fazer" else "${nome(a.naoFeitaPor)} sinalizou que não foi feita") +
                         (if (a.naoFeita.isNotBlank()) ": ${a.naoFeita}" else ""),
@@ -97,6 +118,10 @@ fun DetalheTarefa(vm: CasaViewModel, e: Estado, a: Atribuicao) {
                 if (a.feito) OutlinedButton(onClick = { vm.concluir(a) }, shape = RaioBotao, colors = ButtonDefaults.outlinedButtonColors(contentColor = grafite.grafite),
                     border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha)) { Text("Desfazer") }
                 else Button(onClick = { vm.concluir(a) }, shape = RaioBotao) { Text("Concluir") }
+                if (vm.mostrarIniciar && a.pendente && !a.emAndamento) AcaoNeutra(onClick = { vm.iniciar(a) }, compacta = true) {
+                    Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(if (minha) "Iniciar" else "Iniciar (assumir)")
+                }
+                if (a.emAndamento) AcaoNeutra(onClick = { vm.cancelarInicio(a) }, compacta = true, cor = grafite.grafiteSuave) { Text("Cancelar início") }
                 if (!a.feito && a.naoFeita == null) AcaoNeutra(onClick = { marcando = !marcando }, compacta = true) {
                     Text(if (minha) "Não deu para fazer" else "Sinalizar não feita")
                 }

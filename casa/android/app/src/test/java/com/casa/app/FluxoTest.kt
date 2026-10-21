@@ -111,6 +111,24 @@ class FluxoTest {
         org.junit.Assert.assertTrue("enviada e concluída", comFoto.foto && comFoto.feito)
         compose.onNodeWithContentDescription("Voltar").performClick(); compose.waitForIdle()
 
+        // Iniciar (opcional): ▶ na linha → "em andamento"; concluir mostra quanto levou; desligar esconde o botão.
+        val eI = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }
+        val inic = eI.atribuicoes.first { it.membroId == eI.euId && it.dia == eI.hoje && it.pendente }
+        compose.onNodeWithContentDescription("Iniciar ${inic.tarefa}").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("em andamento", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        org.junit.Assert.assertNotNull(kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }.atribuicoes.first { it.id == inic.id }.iniciadaEm)
+        compose.onAllNodesWithText(inic.tarefa)[0].performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Em andamento desde", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Concluir").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Feita · levou", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Voltar").performClick(); compose.waitForIdle()
+        compose.onAllNodesWithText("Casa")[0].performClick(); compose.waitForIdle()
+        compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(hasText("Botão Iniciar nas tarefas"))
+        tela!!.onActivity { act -> androidx.lifecycle.ViewModelProvider(act)[CasaViewModel::class.java].escolherMostrarIniciar(false) }
+        compose.onAllNodesWithText("Hoje")[0].performClick(); compose.waitForIdle()
+        org.junit.Assert.assertTrue(compose.onAllNodesWithContentDescription("Iniciar", substring = true).fetchSemanticsNodes().isEmpty())
+        tela!!.onActivity { act -> androidx.lifecycle.ViewModelProvider(act)[CasaViewModel::class.java].escolherMostrarIniciar(true) }
+
         // TV: abre /tv como a TV faria, lê o código e conecta pelo app.
         val servidor = System.getenv("CASA_SERVIDOR")!!
         val tv = java.net.URL("$servidor/tv").openConnection() as java.net.HttpURLConnection
