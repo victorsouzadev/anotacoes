@@ -81,7 +81,7 @@ feita no servidor, sem IA (`Pipeline/DigestService.cs`): Inbox pendente (título
 diários, as 18 notas do período com maior pontuação (recência, backlinks, pasta), só o começo de cada uma, e os
 checklists abertos, com teto de 24 mil caracteres (~6 mil tokens) e uma chamada só. O último resumo fica guardado
 (`GET /api/v1/web/resumo`) e só é refeito pelo botão (`POST /api/v1/web/resumo/gerar` `{dias, salvar}`);
-com `salvar`, vira nota em `_sistema/ai`.
+com `salvar`, vira nota em `_sistema/ai`. No app do celular (`/capturar`) a mesma análise fica na aba **Resumo** (atalho `/capturar?aba=resumo`).
 
 ## Editar pela tela, log e restauração (abas Notas e Histórico)
 
