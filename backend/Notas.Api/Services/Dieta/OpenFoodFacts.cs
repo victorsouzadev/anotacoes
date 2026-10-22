@@ -48,8 +48,8 @@ public sealed class OpenFoodFacts(HttpClient http, ILogger<OpenFoodFacts> log) :
         {
             var q = Uri.EscapeDataString($"{texto} countries_tags:\"en:brazil\"");
             using var resp = await http.GetAsync(
-                $"https://search.openfoodfacts.org/search?q={q}&page_size={Math.Clamp(limite * 2, 5, 50)}" +
-                "&fields=code,product_name,product_name_pt,brands,nutriments,serving_quantity,product_quantity", ct);
+                $"https://search.openfoodfacts.org/search?q={q}&page_size=50" +
+                "&fields=code,product_name,product_name_pt,brands,nutriments,serving_quantity,product_quantity,completeness", ct);
             if (!resp.IsSuccessStatusCode) return [];
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStreamAsync(ct));
             var lista = new List<ProdutoOff>();
@@ -63,6 +63,7 @@ public sealed class OpenFoodFacts(HttpClient http, ILogger<OpenFoodFacts> log) :
                 var marca = p.TryGetProperty("brands", out var b)
                     ? b.ValueKind == JsonValueKind.Array ? string.Join(", ", b.EnumerateArray().Select(m => m.GetString())) : b.GetString()
                     : null;
+                if (!Confiavel(n, marca, NumOuNulo(p, "completeness") ?? 0)) continue;
                 lista.Add(new ProdutoOff(nome.Trim(), Num(n, "energy-kcal_100g"), Num(n, "proteins_100g"), Num(n, "carbohydrates_100g"),
                     Num(n, "fat_100g"), Num(n, "fiber_100g"), Num(n, "sodium_100g") * 1000, NumOuNulo(p, "serving_quantity"),
                     Texto(p, "code"), string.IsNullOrWhiteSpace(marca) ? null : marca, NumOuNulo(p, "product_quantity")));
@@ -75,6 +76,18 @@ public sealed class OpenFoodFacts(HttpClient http, ILogger<OpenFoodFacts> log) :
             log.LogWarning(e, "Open Food Facts: busca falhou para {Texto}", texto);
             return [];
         }
+    }
+
+    /// <summary>
+    /// A base é colaborativa: muita "Barra de cereal" sem marca vem com os valores de uma unidade no lugar de 100 g.
+    /// Fica fora o cadastro sem marca e pouco preenchido, e o que tem calorias que não batem com os macros (±35%).
+    /// </summary>
+    public static bool Confiavel(JsonElement n, string? marca, double completude)
+    {
+        if (string.IsNullOrWhiteSpace(marca) && completude < 0.5) return false;
+        var kcal = Num(n, "energy-kcal_100g");
+        var calculado = 4 * Num(n, "proteins_100g") + 4 * Num(n, "carbohydrates_100g") + 9 * Num(n, "fat_100g");
+        return calculado <= 0 || Math.Abs(calculado - kcal) <= kcal * 0.35;
     }
 
     private static double? NumOuNulo(JsonElement e, string nome) =>
