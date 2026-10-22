@@ -378,12 +378,14 @@ public static class DietaEndpoints
             return Results.Content(html, "text/html; charset=utf-8");
         });
 
-        pub.MapGet("/fotos/{id}", async (string token, string id, AppDbContext db, CancellationToken ct) =>
+        pub.MapGet("/fotos/{id}", async (string token, string id, AppDbContext db, DietaProgresso prog, CancellationToken ct) =>
         {
             if (await Valido(token, db, ct) is not { } c) return Results.NotFound();
             var escopos = c.Escopos.Split(',');
             var f = await db.DietaFotos.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.UserId == c.UserId && x.DeletedAt == null, ct);
-            if (f is null || !escopos.Contains(f.Tipo == "corpo" ? DietaEscopos.FotosCorpo : DietaEscopos.FotosRefeicao)) return Results.NotFound();
+            var liberada = f is not null && (escopos.Contains(f.Tipo == "corpo" ? DietaEscopos.FotosCorpo : DietaEscopos.FotosRefeicao)
+                || (f.Tipo == "refeicao" && escopos.Contains(DietaEscopos.Hoje) && f.Data == prog.Hoje()));
+            if (!liberada) return Results.NotFound();
             return Results.File(f.Conteudo, f.ContentType);
         });
 

@@ -185,6 +185,7 @@ fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit) {
 }
 
 private val ESCOPOS = listOf(
+    "hoje" to "Só o dia de hoje (refeições, metas e fotos do dia)",
     "conquistas" to "Nível, XP, sequências, conquistas e heatmap",
     "peso" to "Peso e gráfico",
     "macros" to "Calorias e macros (14 dias)",
@@ -215,6 +216,10 @@ fun CompartilharTela(vm: DietaViewModel, voltar: () -> Unit) {
                 }
             }
             Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                // Atalho: cria e compartilha na hora um link só com o dia atual (vale 2 dias).
+                BotaoSecundario(onClick = {
+                    vm.criarLink("Meu dia", listOf("hoje"), 2) { compartilharTexto(context, "Meu dia na dieta: ${it.url}") }
+                }) { Text("Compartilhar só hoje") }
                 BotaoSecundario(onClick = { marcados.clear(); marcados.addAll(listOf("macros", "diario", "peso", "exportar")); titulo = "Para o(a) nutricionista" }) {
                     Text("Modo nutricionista")
                 }

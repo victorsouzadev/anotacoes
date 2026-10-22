@@ -175,6 +175,38 @@ public class DietaApiTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Link_so_de_hoje_mostra_o_dia_e_libera_so_as_fotos_de_hoje()
+    {
+        (await Registrar(_client, "taco-1", 150, _hoje)).EnsureSuccessStatusCode();
+        (await Registrar(_client, "taco-1", 100, _hoje.AddDays(-1))).EnsureSuccessStatusCode();
+        async Task<string> Foto(DateOnly d)
+        {
+            var id = Guid.NewGuid().ToString();
+            using var form = new MultipartFormDataContent
+            {
+                { new StringContent(id), "id" }, { new StringContent(d.ToString("yyyy-MM-dd")), "data" },
+                { new StringContent("refeicao"), "tipo" }, { new StringContent("almoco"), "rotulo" },
+            };
+            var arq = new ByteArrayContent([0xFF, 0xD8, 0xFF, 0xD9]);
+            arq.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+            form.Add(arq, "arquivo", "f.jpg");
+            (await _client.PostAsync("/api/dieta/fotos", form)).EnsureSuccessStatusCode();
+            return id;
+        }
+        var deHoje = await Foto(_hoje);
+        var deOntem = await Foto(_hoje.AddDays(-1));
+        var link = await (await _client.PostAsJsonAsync("/api/dieta/compartilhamentos", new { titulo = "Hoje", escopos = new[] { "hoje" } })).Content.ReadFromJsonAsync<JsonElement>();
+        var url = new Uri(link.GetProperty("url").GetString()!).AbsolutePath;
+        var anon = _factory.CreateClient();
+        var html = await anon.GetStringAsync(url);
+        Assert.Contains("Hoje ·", html);
+        Assert.Contains("186 <small>", html);
+        Assert.DoesNotContain("Diário", html);
+        Assert.Equal(HttpStatusCode.OK, (await anon.GetAsync(url + "fotos/" + deHoje)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync(url + "fotos/" + deOntem)).StatusCode);
+    }
+
+    [Fact]
     public async Task Sem_login_401()
     {
         Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync("/api/dieta/progresso")).StatusCode);
