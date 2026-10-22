@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/icon';
 import { mensagemDeErro } from '../../core/erro-http';
 import { AnotacaoService, DocumentoAnotacao, TIPOS, Tipo } from './anotacao.service';
-import { Marcacao, aparar, ocorrencias, partir } from './trechos';
+import { Marcacao, aparar, limiteValido, moverLimite, ocorrencias, partir } from './trechos';
 
 /** Uma cor por tipo, com transparência: funciona no tema claro e no escuro. */
 const MATIZ: Record<Tipo, number> = {
@@ -69,6 +69,19 @@ const MATIZ: Record<Tipo, number> = {
                   @for (t of tipos; track t) { <option [value]="t">{{ t }}</option> }
                 </select>
                 <span class="valor">{{ trecho(m) }}</span>
+                @if (!m.removida) {
+                  <span class="ajuste" title="Ajustar o começo">
+                    <button type="button" class="icone" (click)="mover(m, 'inicio', 1)" title="Começo: tirar 1 letra">▸</button>
+                    <button type="button" class="icone" (click)="mover(m, 'inicio', -1)" title="Começo: incluir 1 letra">◂</button>
+                  </span>
+                  <span class="ajuste" title="Ajustar o fim">
+                    <button type="button" class="icone" (click)="mover(m, 'fim', -1)" title="Fim: tirar 1 letra (Shift: 5)">◂</button>
+                    <button type="button" class="icone" (click)="mover(m, 'fim', 1)" title="Fim: incluir 1 letra (Shift: 5)">▸</button>
+                  </span>
+                  @if (selecao()) {
+                    <button type="button" class="icone texto" (click)="usarSelecao(m)" title="Trocar o trecho pelo texto selecionado">usar seleção</button>
+                  }
+                }
                 <button type="button" class="icone" (click)="alternar(m)" [title]="m.removida ? 'Devolver' : 'Tirar'">
                   <app-icon [name]="m.removida ? 'undo' : 'x'" [size]="14" />
                 </button>
@@ -127,6 +140,8 @@ const MATIZ: Record<Tipo, number> = {
     .lista li.removida .valor { text-decoration: line-through; color: var(--text-muted); }
     .lista .valor { flex: 1; overflow-wrap: anywhere; }
     .lista .vazio { color: var(--text-muted); }
+    .ajuste { display: inline-flex; gap: 2px; }
+    .icone.texto { font-size: 11px; padding: 4px 8px; }
     .icone { display: flex; border: 1px solid var(--border); background: var(--bg); color: var(--text-muted); border-radius: 6px; padding: 4px; cursor: pointer; }
     .acoes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; }
     .acoes input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
@@ -193,6 +208,37 @@ export class AnotacaoPageComponent {
 
   alternar(m: Marcacao): void {
     this.marcacoes.update((ms) => ms.map((x) => (x.id === m.id ? { ...x, removida: !x.removida } : x)));
+  }
+
+  /** Move uma ponta da marcação; com Shift pressionado o passo é de 5 letras. */
+  mover(m: Marcacao, ponta: 'inicio' | 'fim', passo: number): void {
+    const texto = this.doc()?.texto;
+    if (!texto) return;
+    const delta = this.shift ? passo * 5 : passo;
+    const novo = moverLimite(texto, this.marcacoes(), m.id, ponta, delta);
+    if (novo) this.definir(m.id, novo[0], novo[1]);
+  }
+
+  /** Troca o trecho da marcação pelo texto selecionado (útil quando precisa mudar muito). */
+  usarSelecao(m: Marcacao): void {
+    const s = this.selecao();
+    const texto = this.doc()?.texto;
+    if (!s || !texto || !limiteValido(texto, this.marcacoes(), m.id, s.inicio, s.fim)) return;
+    this.definir(m.id, s.inicio, s.fim);
+    this.selecao.set(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
+  private definir(id: number, inicio: number, fim: number): void {
+    this.marcacoes.update((ms) => ms.map((x) => (x.id === id ? { ...x, inicio, fim } : x)));
+  }
+
+  private shift = false;
+
+  @HostListener('document:keydown', ['$event'])
+  @HostListener('document:keyup', ['$event'])
+  registrarShift(e: KeyboardEvent): void {
+    this.shift = e.shiftKey;
   }
 
   trocarTipo(m: Marcacao, tipo: string): void {

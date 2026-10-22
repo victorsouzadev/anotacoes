@@ -69,6 +69,30 @@ export function ocorrencias(texto: string, trecho: string): Array<[number, numbe
   return achadas;
 }
 
+/**
+ * Move uma ponta de uma marcação em `delta` caracteres. Devolve null quando o resultado
+ * seria inválido: marcação vazia, fora do texto ou invadindo outra marcação ativa.
+ */
+export function moverLimite(
+  texto: string,
+  marcacoes: Marcacao[],
+  id: number,
+  ponta: 'inicio' | 'fim',
+  delta: number,
+): [number, number] | null {
+  const alvo = marcacoes.find((m) => m.id === id);
+  if (!alvo) return null;
+  const inicio = ponta === 'inicio' ? alvo.inicio + delta : alvo.inicio;
+  const fim = ponta === 'fim' ? alvo.fim + delta : alvo.fim;
+  return limiteValido(texto, marcacoes, id, inicio, fim) ? [inicio, fim] : null;
+}
+
+/** Vale quando cabe no texto, não é vazio e não toca outra marcação ativa. */
+export function limiteValido(texto: string, marcacoes: Marcacao[], id: number, inicio: number, fim: number): boolean {
+  if (inicio < 0 || fim > texto.length || inicio >= fim) return false;
+  return !marcacoes.some((m) => m.id !== id && !m.removida && inicio < m.fim && fim > m.inicio);
+}
+
 /** Ajusta a seleção para não começar nem terminar em espaço. */
 export function aparar(texto: string, inicio: number, fim: number): [number, number] {
   while (inicio < fim && /\s/.test(texto[inicio])) inicio++;
