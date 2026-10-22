@@ -35,7 +35,8 @@ public static class DietaIaEndpoints
         // modo: prato (foto do prato), texto (descrição) ou rotulo (foto da tabela nutricional).
         app.MapPost("/api/dieta/ia/reconhecer", async (DietaReconhecerRequest req, ClaimsPrincipal user, ReconhecedorDeAlimento rec, CancellationToken ct) =>
         {
-            var modo = req.Modo ?? "";
+            // "embalagem" é o nome novo de "rotulo" (frente, verso ou tabela da embalagem): mesmo caminho.
+            var modo = req.Modo == "embalagem" ? "rotulo" : req.Modo ?? "";
             var texto = req.Texto?.Trim();
             if (modo is not ("prato" or "texto" or "rotulo")
                 || (modo == "texto" && string.IsNullOrEmpty(texto))

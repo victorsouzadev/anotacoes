@@ -107,6 +107,19 @@ public static class DietaEndpoints
             return Results.Ok(ToDto(a));
         });
 
+        // Produtos industrializados vendidos no Brasil (Open Food Facts). Não grava: o app salva o que a pessoa escolher.
+        g.MapGet("/alimentos/produtos", async (string? q, IOpenFoodFacts off, CancellationToken ct) =>
+        {
+            var texto = q?.Trim() ?? "";
+            if (texto.Length is < 3 or > 100) return Results.Ok(Array.Empty<DietaAlimentoDto>());
+            var achados = await off.Pesquisar(texto, 20, ct);
+            return Results.Ok(achados.Select(p => new DietaAlimentoDto(
+                "off-" + (p.Codigo ?? Guid.NewGuid().ToString("N")), p.Marca is null ? p.Nome : $"{p.Nome} ({p.Marca})",
+                p.Kcal, p.Proteina, p.Carbo, p.Gordura, p.Fibra, p.Sodio,
+                p.PesoG ?? p.PorcaoG ?? 100, p.PesoG is not null ? "1 embalagem" : p.PorcaoG is not null ? "1 porção" : null,
+                p.Codigo, "off", null, false, false, DateTime.UtcNow, null)));
+        });
+
         // Código de barras: primeiro nos alimentos do usuário, depois na Open Food Facts (e guarda).
         g.MapGet("/alimentos/codigo/{codigo}", async (string codigo, ClaimsPrincipal user, AppDbContext db, IOpenFoodFacts off, CancellationToken ct) =>
         {
