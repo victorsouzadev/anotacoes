@@ -239,3 +239,17 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         }
     }
 }
+
+public class OpenFoodFactsFiltroTests
+{
+    private static System.Text.Json.JsonElement N(double kcal, double p, double c, double g) =>
+        System.Text.Json.JsonDocument.Parse($$"""{"energy-kcal_100g":{{kcal}},"proteins_100g":{{p}},"carbohydrates_100g":{{c}},"fat_100g":{{g}}}""").RootElement;
+
+    [Fact]
+    public void Descarta_sem_marca_pouco_preenchido_e_calorias_que_nao_batem()
+    {
+        Assert.False(Notas.Api.Services.Dieta.OpenFoodFacts.Confiavel(N(81, 1, 14, 2), null, 0.2));
+        Assert.True(Notas.Api.Services.Dieta.OpenFoodFacts.Confiavel(N(380, 6, 70, 8), "Nutry", 0.3));
+        Assert.False(Notas.Api.Services.Dieta.OpenFoodFacts.Confiavel(N(100, 10, 60, 22), "Mindy", 0.8));
+    }
+}
