@@ -78,6 +78,11 @@ fun MaisTela(vm: DietaViewModel, ir: (String) -> Unit) {
             ListItem(headlineContent = { Text(titulo) }, supportingContent = { Text(sub) }, leadingContent = { Icon(icone, null) },
                 modifier = Modifier.clickable { ir(rota) })
         }
+        val tema by vm.tema.collectAsStateWithLifecycle()
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+            Titulo("Aparência")
+            Escolha(listOf("sistema" to "Sistema", "claro" to "Claro", "escuro" to "Escuro"), tema) { vm.mudarTema(it) }
+        }
         item("perfil", Icons.Filled.Person, "Perfil e metas", "Calorias, macros e água")()
         item("plano", Icons.AutoMirrored.Filled.ListAlt, "Plano alimentar", "Cardápio previsto e adesão")()
         item("alimentos", Icons.Filled.Fastfood, "Meus alimentos e receitas", "Cadastros próprios e favoritos")()
