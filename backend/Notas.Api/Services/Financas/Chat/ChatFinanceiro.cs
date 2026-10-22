@@ -65,7 +65,8 @@ public delegate Task<string> ExecutarFerramenta(string nome, JsonObject? args, C
 public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cliente)
 {
     private const int MaxRodadas = 10;
-    private const int MaxTokens = 4096;
+    // O raciocínio dos modelos que "pensam" sai do mesmo max_tokens da resposta: com 4096 a resposta podia vir cortada.
+    private const int MaxTokens = 12000;
 
     public async Task<RespostaChat> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, string prompt,
         IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, CancellationToken ct, string? imagem = null)

@@ -23,8 +23,12 @@ public record ReconhecimentoDieta(List<ItemReconhecido> Itens, RotuloReconhecido
 /// possível); foto da tabela nutricional vira um alimento com valores por 100 g. Nada é gravado aqui: o app mostra
 /// para a pessoa conferir e só então registra.
 /// </summary>
-public class ReconhecedorDeAlimento(ILlmExtractorFactory llm, IChatModeloCliente cliente, AppDbContext db)
+public class ReconhecedorDeAlimento(ILlmExtractorFactory llm, IChatModeloCliente cliente, AppDbContext db,
+    ILogger<ReconhecedorDeAlimento> logger)
 {
+    // Folga para modelos que ainda raciocinam um pouco antes do JSON; a resposta em si fica em ~1000 tokens.
+    private const int MaxTokens = 6000;
+
     public async Task<ReconhecimentoDieta> ReconhecerAsync(string userId, string modo, string? texto, string? imagem, CancellationToken ct)
     {
         var cred = await llm.ResolverCredenciaisAsync(userId, ct);
@@ -81,14 +85,17 @@ public class ReconhecedorDeAlimento(ILlmExtractorFactory llm, IChatModeloCliente
     private async Task<JsonObject> Perguntar(CredenciaisLlm cred, string prompt, string? imagem, CancellationToken ct)
     {
         string texto;
+        bool cortado;
         if (cred.Provedor == "anthropic")
         {
             var res = await cliente.EnviarAsync(cred, new JsonObject
             {
-                ["model"] = cred.Modelo, ["max_tokens"] = 1500,
+                ["model"] = cred.Modelo, ["max_tokens"] = MaxTokens,
                 ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = prompt }),
             }, ct);
-            texto = string.Join("", (res["content"] as JsonArray ?? []).OfType<JsonObject>().Select(b => b["text"]?.GetValue<string>()));
+            texto = string.Join("", (res["content"] as JsonArray ?? []).OfType<JsonObject>()
+                .Where(b => b["type"]?.GetValue<string>() == "text").Select(b => b["text"]?.GetValue<string>()));
+            cortado = res["stop_reason"]?.GetValue<string>() == "max_tokens";
         }
         else
         {
@@ -96,13 +103,18 @@ public class ReconhecedorDeAlimento(ILlmExtractorFactory llm, IChatModeloCliente
                 ? JsonValue.Create(prompt)!
                 : new JsonArray(new JsonObject { ["type"] = "text", ["text"] = prompt },
                     new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = imagem } });
+            // Modelos que "pensam" (Gemini 3, por exemplo) gastam o max_tokens raciocinando e o JSON chegava cortado.
+            // Esta tarefa é de extração: raciocínio baixo responde mais rápido, mais barato e inteiro.
             var res = await cliente.EnviarAsync(cred, new JsonObject
             {
-                ["model"] = cred.Modelo, ["max_tokens"] = 1500, ["temperature"] = 0,
+                ["model"] = cred.Modelo, ["max_tokens"] = MaxTokens, ["temperature"] = 0,
+                ["reasoning"] = new JsonObject { ["effort"] = "low" },
                 ["response_format"] = new JsonObject { ["type"] = "json_object" },
                 ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = conteudo }),
             }, ct);
-            texto = (res["choices"] as JsonArray)?.FirstOrDefault()?["message"]?["content"]?.GetValue<string>() ?? "";
+            var escolha = (res["choices"] as JsonArray)?.FirstOrDefault();
+            texto = escolha?["message"]?["content"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : "";
+            cortado = escolha?["finish_reason"]?.ToString() == "length";
         }
         // Alguns modelos embrulham o JSON em ```; pega do primeiro { ao último }.
         var a = texto.IndexOf('{');
@@ -112,7 +124,11 @@ public class ReconhecedorDeAlimento(ILlmExtractorFactory llm, IChatModeloCliente
             if (a >= 0 && b > a && JsonNode.Parse(texto[a..(b + 1)]) is JsonObject o) return o;
         }
         catch (JsonException) { }
-        throw new ChatIndisponivelException("A IA não devolveu um resultado legível. Tente outra foto ou descreva em texto.");
+        logger.LogWarning("Reconhecimento: resposta ilegível do modelo {Modelo} (cortada: {Cortado}): {Inicio}",
+            cred.Modelo, cortado, texto.Length > 300 ? texto[..300] : texto);
+        throw new ChatIndisponivelException(cortado
+            ? "A resposta da IA veio cortada. Tente de novo; se repetir, escolha outro modelo em Configurações de IA."
+            : "A IA não devolveu um resultado legível. Tente outra foto ou descreva em texto.");
     }
 
     private static string? Str(JsonObject o, string k) => o[k] is JsonValue v && v.TryGetValue<string>(out var s) && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;

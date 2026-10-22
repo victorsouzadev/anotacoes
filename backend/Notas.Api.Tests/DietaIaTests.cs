@@ -130,6 +130,8 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         Assert.Equal("taco-1", itens[0].GetProperty("alimento").GetProperty("id").GetString());
         Assert.Equal(JsonValueKind.Null, itens[1].GetProperty("alimento").ValueKind);
         Assert.Equal(200, itens[1].GetProperty("estimado").GetProperty("kcal").GetDouble());
+        // Raciocínio baixo: modelos que "pensam" gastavam o max_tokens e o JSON chegava cortado.
+        Assert.Equal("low", _modelo.Recebidos[^1]["reasoning"]?["effort"]?.GetValue<string>());
     }
 
     [Fact]
@@ -150,6 +152,23 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         Assert.Equal(30, rot.GetProperty("porcaoG").GetDouble());
         // A foto foi junto, no formato multimodal.
         Assert.Contains("image_url", _modelo.Recebidos[^1].ToJsonString());
+    }
+
+    [Fact]
+    public async Task Resposta_cortada_por_tamanho_avisa_em_vez_de_dizer_ilegivel()
+    {
+        await ConfigurarIa();
+        _modelo.Roteiro = _ => new JsonObject
+        {
+            ["choices"] = new JsonArray(new JsonObject
+            {
+                ["finish_reason"] = "length",
+                ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = "{\"itens\":[{\"nome\":\"Arroz\",\"gra" },
+            }),
+        };
+        var res = await _client.PostAsJsonAsync("/api/dieta/ia/reconhecer", new { modo = "texto", texto = "arroz" });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        Assert.Contains("cortada", await res.Content.ReadAsStringAsync());
     }
 
     [Fact]
