@@ -61,6 +61,9 @@ data class MsgChat(val papel: String, val texto: String, val comFoto: Boolean = 
 /** Item reconhecido pela IA. [alimento] = o que casou na base (TACO ou próprio); senão vale a [estimativa] da IA. */
 data class ItemIa(val nome: String, val gramas: Double, val alimento: Alimento?, val estimativa: Alimento)
 
+/** Produto lido da embalagem. fonte: openfoodfacts, rotulo (tabela da foto) ou estimativa (IA). */
+data class ProdutoIa(val alimento: Alimento, val fonte: String)
+
 data class Link(val id: String, val titulo: String, val escopos: List<String>, val url: String, val expiraEm: String?, val revogado: Boolean)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -143,8 +146,8 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** modo: prato (foto), texto (descrição) ou rotulo (foto da tabela nutricional). */
-    fun reconhecer(modo: String, texto: String?, foto: Uri?, itens: (List<ItemIa>) -> Unit, rotulo: (Alimento) -> Unit) = viewModelScope.launch {
+    /** modo: prato (foto), texto (descrição) ou embalagem (frente, verso ou tabela nutricional do produto). */
+    fun reconhecer(modo: String, texto: String?, foto: Uri?, itens: (List<ItemIa>) -> Unit, rotulo: (ProdutoIa) -> Unit) = viewModelScope.launch {
         if (!a.api.logado) { avisar("Entre com a conta do hub (Mais → Conta) para usar a IA."); return@launch }
         pensando.value = true
         try {
@@ -152,9 +155,10 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
             foto?.let { corpo.put("imagem", repo.dataUrl(it)) }
             val r = a.api.chamar("POST", "/api/dieta/ia/reconhecer", corpo) as JSONObject
             r.optJSONObject("rotulo")?.let { j ->
-                rotulo(Alimento(java.util.UUID.randomUUID().toString(), j.getString("nome"), j.getDouble("kcal"), j.getDouble("proteina"),
+                val fonte = j.optString("fonte", "rotulo")
+                rotulo(ProdutoIa(Alimento(java.util.UUID.randomUUID().toString(), j.getString("nome"), j.getDouble("kcal"), j.getDouble("proteina"),
                     j.getDouble("carbo"), j.getDouble("gordura"), j.getDouble("fibra"), j.getDouble("sodio"), j.getDouble("porcaoG"),
-                    j.optStringOrNull("porcaoNome")))
+                    j.optStringOrNull("porcaoNome"), j.optStringOrNull("codigoBarras"), if (fonte == "openfoodfacts") "off" else "manual"), fonte))
                 return@launch
             }
             val lista = r.getJSONArray("itens").objetos().map { j ->
@@ -215,6 +219,43 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
 
     fun lancar(bloco: suspend () -> Unit) = viewModelScope.launch {
         try { bloco() } catch (e: Exception) { avisar(e.message ?: "Algo deu errado.") }
+    }
+
+    // ---------- Produtos industrializados (Open Food Facts) ----------
+    val produtos = MutableStateFlow<List<Alimento>>(emptyList())
+    val buscandoProdutos = MutableStateFlow(false)
+
+    /** Busca produtos no servidor (que consulta a Open Food Facts). Sem login ou sem rede, a lista fica vazia. */
+    suspend fun buscarProdutos(texto: String) {
+        if (!a.api.logado || texto.trim().length < 3) { produtos.value = emptyList(); return }
+        buscandoProdutos.value = true
+        try {
+            val r = a.api.chamar("GET", "/api/dieta/alimentos/produtos?q=" + java.net.URLEncoder.encode(texto.trim(), "UTF-8")) as JSONArray
+            produtos.value = r.objetos().map(Json::alimento)
+        } catch (e: Exception) {
+            produtos.value = emptyList()
+        } finally {
+            buscandoProdutos.value = false
+        }
+    }
+
+    /**
+     * Produto vindo da busca na Open Food Facts ainda não existe no aparelho: vira alimento do usuário (com o código de
+     * barras, para a próxima leitura achar direto) antes de registrar, entrar numa receita ou no plano.
+     */
+    suspend fun garantirSalvo(al: Alimento): Alimento {
+        if (!al.id.startsWith("off-")) return al
+        al.codigoBarras?.let { c -> db.alimentos().porCodigo(c)?.let { return it } }
+        val novo = al.copy(id = java.util.UUID.randomUUID().toString(), proprio = true, fonte = "off")
+        repo.salvarAlimento(novo)
+        return novo
+    }
+
+    /** Registra o produto reconhecido na embalagem e guarda nos alimentos do usuário para as próximas vezes. */
+    fun registrarProduto(refeicao: String, al: Alimento, gramas: Double) = lancar {
+        repo.salvarAlimento(al)
+        repo.registrar(dia.value, refeicao, al, gramas)
+        avisar("${al.nome} adicionado e salvo nos seus alimentos.")
     }
 
     /** Código de barras: alimento próprio já salvo, senão o servidor consulta a Open Food Facts. */

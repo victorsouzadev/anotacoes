@@ -16,6 +16,7 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 {
     private readonly TasksApiFactory _factory;
     private readonly ModeloFalso _modelo = new();
+    private readonly OffFalso _off = new();
     private WebApplicationFactory<Program> _app = null!;
     private HttpClient _client = null!;
 
@@ -23,7 +24,11 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _app = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddScoped<IChatModeloCliente>(_ => _modelo)));
+        _app = _factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.AddScoped<IChatModeloCliente>(_ => _modelo);
+            s.AddSingleton<Notas.Api.Services.Dieta.IOpenFoodFacts>(_off);
+        }));
         _client = _app.CreateClient();
         var res = await _client.PostAsJsonAsync("/api/auth/register", new { email = $"dietaia_{Guid.NewGuid():N}@example.com", password = "Sup3rSecret!" });
         res.EnsureSuccessStatusCode();
@@ -177,6 +182,49 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         await ConfigurarIa();
         var res = await _client.PostAsJsonAsync("/api/dieta/ia/reconhecer", new { modo = "prato", imagem = "https://exemplo.com/x.jpg" });
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Embalagem_usa_a_open_food_facts_so_quando_a_marca_bate()
+    {
+        await ConfigurarIa();
+        var foto = "data:image/jpeg;base64,/9j/4AAQ";
+        _modelo.Roteiro = _ => Texto("""{"nome":"Doce de amendoim Casadinho","marca":"Mindy","peso_liquido_g":21,"codigo_barras":null,"tabela_visivel":false,"por100g":{"kcal":480,"proteina":10,"carbo":60,"gordura":22,"fibra":3,"sodio_mg":100}}""");
+
+        // Só há um "Casadinho" de outra marca: não serve, fica a estimativa da IA.
+        _off.Produtos = [new("Casadinho", 100, 1, 20, 1, 0, 0, null, "789000", "Outra", null)];
+        var r = (await (await _client.PostAsJsonAsync("/api/dieta/ia/reconhecer", new { modo = "embalagem", imagem = foto })).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("rotulo");
+        Assert.Equal("estimativa", r.GetProperty("fonte").GetString());
+        Assert.Equal(480, r.GetProperty("kcal").GetDouble());
+        Assert.Equal(21, r.GetProperty("porcaoG").GetDouble());
+        Assert.Equal("1 embalagem", r.GetProperty("porcaoNome").GetString());
+
+        // Com a marca certa na base, valem os valores dela.
+        _off.Produtos = [new("Casadinho", 470, 9, 58, 23, 2, 90, null, "7891111", "Mindy", 21)];
+        r = (await (await _client.PostAsJsonAsync("/api/dieta/ia/reconhecer", new { modo = "embalagem", imagem = foto })).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("rotulo");
+        Assert.Equal("openfoodfacts", r.GetProperty("fonte").GetString());
+        Assert.Equal(470, r.GetProperty("kcal").GetDouble());
+        Assert.Equal("7891111", r.GetProperty("codigoBarras").GetString());
+    }
+
+    [Fact]
+    public async Task Busca_de_produtos_devolve_itens_da_open_food_facts_sem_gravar()
+    {
+        _off.Produtos = [new("Paçoca", 500, 13, 60, 24.5, 4, 275, null, "7897047000192", "Moreninha do Rio", 22)];
+        var lista = await _client.GetFromJsonAsync<JsonElement>("/api/dieta/alimentos/produtos?q=pacoca");
+        Assert.Equal("off-7897047000192", lista[0].GetProperty("id").GetString());
+        Assert.Equal("Paçoca (Moreninha do Rio)", lista[0].GetProperty("nome").GetString());
+        Assert.Equal(22, lista[0].GetProperty("porcaoG").GetDouble());
+        Assert.Equal(0, (await _client.GetFromJsonAsync<JsonElement>("/api/dieta/alimentos/meus")).GetArrayLength());
+    }
+
+    private sealed class OffFalso : Notas.Api.Services.Dieta.IOpenFoodFacts
+    {
+        public List<Notas.Api.Services.Dieta.ProdutoOff> Produtos { get; set; } = [];
+        public Task<Notas.Api.Services.Dieta.ProdutoOff?> Buscar(string codigo, CancellationToken ct) =>
+            Task.FromResult(Produtos.FirstOrDefault(p => p.Codigo == codigo));
+        public Task<List<Notas.Api.Services.Dieta.ProdutoOff>> Pesquisar(string texto, int limite, CancellationToken ct) =>
+            Task.FromResult(Produtos.Take(limite).ToList());
     }
 
     private sealed class ModeloFalso : IChatModeloCliente

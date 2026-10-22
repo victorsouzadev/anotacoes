@@ -3,6 +3,8 @@ package com.organizador.dieta.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -59,7 +61,8 @@ fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novo
     var modoFoto by remember { mutableStateOf("prato") }
     var descrevendo by remember { mutableStateOf(false) }
     var reconhecidos by remember { mutableStateOf<List<ItemIa>?>(null) }
-    val aoRotulo: (Alimento) -> Unit = { vm.rascunho = it; novoAlimento() }
+    var produto by remember { mutableStateOf<ProdutoIa?>(null) }
+    val aoRotulo: (ProdutoIa) -> Unit = { produto = it }
     val pedirFoto = rememberFoto { uri -> vm.reconhecer(modoFoto, null, uri, { reconhecidos = it }, aoRotulo) }
 
     Scaffold(topBar = {
@@ -73,7 +76,8 @@ fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novo
                         DropdownMenuItem(text = { Text("Foto do prato") }, onClick = { menuIa = false; modoFoto = "prato"; pedirFoto(true) })
                         DropdownMenuItem(text = { Text("Prato da galeria") }, onClick = { menuIa = false; modoFoto = "prato"; pedirFoto(false) })
                         DropdownMenuItem(text = { Text("Descrever o que comi") }, onClick = { menuIa = false; descrevendo = true })
-                        DropdownMenuItem(text = { Text("Foto da tabela nutricional") }, onClick = { menuIa = false; modoFoto = "rotulo"; pedirFoto(true) })
+                        DropdownMenuItem(text = { Text("Foto da embalagem") }, onClick = { menuIa = false; modoFoto = "embalagem"; pedirFoto(true) })
+                        DropdownMenuItem(text = { Text("Embalagem da galeria") }, onClick = { menuIa = false; modoFoto = "embalagem"; pedirFoto(false) })
                     }
                 }
                 IconButton(onClick = novoAlimento) { Icon(Icons.Filled.Add, "Novo alimento") }
@@ -110,9 +114,57 @@ fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novo
             dismissButton = { BotaoTexto(onClick = { descrevendo = false }) { Text("Cancelar") } },
         )
     }
+    produto?.let { p ->
+        ProdutoDialog(p,
+            aoRegistrar = { g -> vm.registrarProduto(refeicao, p.alimento, g); produto = null },
+            aoEditar = { vm.rascunho = p.alimento; produto = null; novoAlimento() },
+            aoFechar = { produto = null })
+    }
     reconhecidos?.let { itens ->
         ReconhecidosDialog(itens, aoConfirmar = { vm.registrarItens(refeicao, it); reconhecidos = null }, aoFechar = { reconhecidos = null })
     }
+}
+
+/** Produto lido da embalagem: mostra de onde vieram os valores e registra com um toque (1 embalagem por padrão). */
+@Composable
+private fun ProdutoDialog(p: ProdutoIa, aoRegistrar: (Double) -> Unit, aoEditar: () -> Unit, aoFechar: () -> Unit) {
+    val a = p.alimento
+    var emPorcao by remember { mutableStateOf(a.porcaoNome != null) }
+    var texto by remember { mutableStateOf(if (emPorcao) "1" else fmt(a.porcaoG)) }
+    val n = texto.replace(',', '.').toDoubleOrNull()
+    val gramas = n?.let { if (emPorcao) it * a.porcaoG else it }
+    AlertDialog(
+        onDismissRequest = aoFechar,
+        title = { Text(a.nome) },
+        text = {
+            Column {
+                Sub(when (p.fonte) {
+                    "openfoodfacts" -> "Valores da Open Food Facts (achado pela marca ou pelo código de barras)."
+                    "rotulo" -> "Valores lidos da tabela nutricional da foto."
+                    else -> "Tabela não visível: valores estimados pela IA para esse tipo de produto. Confira ou edite."
+                })
+                Spacer(Modifier.height(8.dp))
+                Text("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}", style = EstiloValor)
+                Spacer(Modifier.height(8.dp))
+                if (a.porcaoNome != null) Escolha(listOf(true to "${a.porcaoNome} (${fmt(a.porcaoG)} g)", false to "gramas"), emPorcao) {
+                    texto = if (it) "1" else fmt(a.porcaoG); emPorcao = it
+                }
+                OutlinedTextField(texto, { texto = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text(if (emPorcao) "Quantidade" else "Gramas") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                if (gramas != null && gramas > 0) Sub("${fmt(gramas)} g · ${Calculos.porcao(a, gramas).kcal.toInt()} kcal")
+            }
+        },
+        confirmButton = {
+            BotaoTexto(enabled = gramas != null && gramas in 1.0..5000.0, cor = grafite.nanquim, onClick = { aoRegistrar(gramas!!) }) { Text("Registrar") }
+        },
+        dismissButton = {
+            Row {
+                BotaoTexto(onClick = aoEditar) { Text("Editar dados") }
+                BotaoTexto(onClick = aoFechar) { Text("Cancelar") }
+            }
+        },
+    )
 }
 
 /** Confere o que a IA reconheceu: marca o que entra e ajusta as gramas antes de registrar. */
@@ -158,6 +210,14 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
     val alimentos by vm.alimentos.collectAsStateWithLifecycle()
     val recentes by vm.recentes.collectAsStateWithLifecycle()
     var busca by remember { mutableStateOf("") }
+    val produtos by vm.produtos.collectAsStateWithLifecycle()
+    val buscandoProdutos by vm.buscandoProdutos.collectAsStateWithLifecycle()
+    // Espera a pessoa parar de digitar antes de consultar a Open Food Facts.
+    androidx.compose.runtime.LaunchedEffect(busca) {
+        kotlinx.coroutines.delay(600)
+        vm.buscarProdutos(busca)
+    }
+    val escolher: (Alimento) -> Unit = { a -> vm.lancar { aoEscolher(vm.garantirSalvo(a)) } }
 
     val lista = remember(busca, alimentos, recentes) {
         if (busca.isBlank()) {
@@ -181,14 +241,14 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
             )
             IconButton(onClick = {
                 GmsBarcodeScanning.getClient(context).startScan()
-                    .addOnSuccessListener { b -> b.rawValue?.let { vm.buscarCodigo(it, aoEscolher) } }
+                    .addOnSuccessListener { b -> b.rawValue?.let { vm.buscarCodigo(it, escolher) } }
                     .addOnFailureListener { vm.avisar("Leitor de código indisponível: ${it.message}") }
             }) { Icon(Icons.Filled.QrCodeScanner, "Ler código de barras") }
         }
         if (busca.isBlank()) Sub("Favoritos, recentes e seus alimentos", Modifier.padding(horizontal = 16.dp))
         LazyColumn {
             items(lista, key = { it.id }) { a ->
-                Row(Modifier.fillMaxWidth().clickable { aoEscolher(a) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(a.nome)
                         Sub("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}" +
@@ -200,7 +260,24 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
                 }
                 HorizontalDivider()
             }
-            if (lista.isEmpty() && busca.isNotBlank()) item { Sub("Nada encontrado. Use + para cadastrar.", Modifier.padding(16.dp)) }
+            // Produtos industrializados: só os que ainda não estão salvos no aparelho (mesmo código de barras).
+            val codigos = alimentos.mapNotNull { it.codigoBarras }.toSet()
+            val novos = if (busca.isBlank()) emptyList() else produtos.filter { it.codigoBarras !in codigos }
+            if (novos.isNotEmpty() || buscandoProdutos) item {
+                Sub(if (buscandoProdutos) "Procurando produtos industrializados…" else "Produtos industrializados (Open Food Facts)",
+                    Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp))
+            }
+            items(novos, key = { it.id }) { a ->
+                Column(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Text(a.nome)
+                    Sub("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}" +
+                        (a.porcaoNome?.let { " · $it = ${fmt(a.porcaoG)} g" } ?: ""))
+                }
+                HorizontalDivider()
+            }
+            if (lista.isEmpty() && novos.isEmpty() && !buscandoProdutos && busca.isNotBlank()) item {
+                Sub("Nada encontrado. Tire uma foto da embalagem (botão de IA, no alto) ou use + para cadastrar.", Modifier.padding(16.dp))
+            }
         }
     }
 }
