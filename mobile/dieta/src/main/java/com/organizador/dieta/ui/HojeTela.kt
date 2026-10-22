@@ -78,7 +78,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                 Column1(Modifier.weight(1f).clickable { vm.dia.value = Datas.hoje() }) {
                     Text(
                         if (dia == Datas.hoje()) "Hoje" else Datas.curta(dia),
-                        style = MaterialTheme.typography.titleLarge, maxLines = 1, softWrap = false,
+                        style = MaterialTheme.typography.headlineMedium, maxLines = 1, softWrap = false,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                     progresso?.let { Sub("${it.sequencia} dias seguidos · nível ${it.nivel}", Modifier, maxLines = 1) }
@@ -92,7 +92,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                 val restante = metas.kcal - totais.kcal
                 Text(
                     if (restante >= 0) "${restante.roundToInt()} kcal restantes" else "${(-restante).roundToInt()} kcal acima da meta",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = if (restante >= 0) grafite.grafite else grafite.atencao,
                 )
                 Spacer(Modifier.height(8.dp))

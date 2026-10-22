@@ -65,7 +65,7 @@ import java.util.UUID
 @Composable
 private fun Tela(titulo: String, voltar: () -> Unit, conteudo: @Composable () -> Unit) {
     Scaffold(topBar = {
-        TopAppBar(title = { Text(titulo) }, navigationIcon = { IconButton(onClick = voltar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") } })
+        TopAppBar(title = { Text(titulo, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, navigationIcon = { IconButton(onClick = voltar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") } })
     }) { pad -> Column(Modifier.padding(pad).verticalScroll(rememberScrollState())) { conteudo() } }
 }
 
@@ -73,7 +73,7 @@ private fun Tela(titulo: String, voltar: () -> Unit, conteudo: @Composable () ->
 fun MaisTela(vm: DietaViewModel, ir: (String) -> Unit) {
     val email by vm.email.collectAsStateWithLifecycle()
     Column {
-        Text("Mais", Modifier.padding(16.dp), style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+        Text("Mais", Modifier.padding(16.dp), style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         fun item(rota: String, icone: ImageVector, titulo: String, sub: String): @Composable () -> Unit = {
             ListItem(headlineContent = { Text(titulo) }, supportingContent = { Text(sub) }, leadingContent = { Icon(icone, null) },
                 modifier = Modifier.clickable { ir(rota) })
