@@ -213,6 +213,9 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sair() = viewModelScope.launch { a.api.sair() }
     val servidor: String get() = prefs.servidor
+    val tema = prefs.tema
+    fun mudarTema(t: String) = prefs.salvarTema(t)
+
     var lembretes: Boolean
         get() = prefs.lembretesAtivos
         set(v) { prefs.lembretesAtivos = v }

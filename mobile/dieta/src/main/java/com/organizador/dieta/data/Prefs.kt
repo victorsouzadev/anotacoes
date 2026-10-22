@@ -120,6 +120,14 @@ class Prefs(context: Context) {
         get() = prefs.getString("chat", null)
         set(v) = prefs.edit().putString("chat", v).apply()
 
+    /** Tema: sistema (segue o aparelho), claro ou escuro. StateFlow para a troca valer na hora. */
+    private val _tema = MutableStateFlow(prefs.getString("tema", null) ?: "sistema")
+    val tema: StateFlow<String> = _tema.asStateFlow()
+    fun salvarTema(t: String) {
+        prefs.edit().putString("tema", t).apply()
+        _tema.value = t
+    }
+
     var lembretesAtivos: Boolean
         get() = prefs.getBoolean("lembretes", true)
         set(v) = prefs.edit().putBoolean("lembretes", v).apply()

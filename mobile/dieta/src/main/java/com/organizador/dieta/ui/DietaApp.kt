@@ -42,7 +42,8 @@ private val ABAS = listOf(
 
 @Composable
 fun DietaApp(vm: DietaViewModel = viewModel()) {
-    DietaTema {
+    val tema by vm.tema.collectAsStateWithLifecycle()
+    DietaTema(tema) {
         val nav = rememberNavController()
         val snack = remember { SnackbarHostState() }
         val aviso by vm.aviso.collectAsStateWithLifecycle()

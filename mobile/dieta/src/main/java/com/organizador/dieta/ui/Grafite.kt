@@ -106,8 +106,18 @@ private val Formas = Shapes(
 
 /** Segue o modo do sistema, sem cor dinâmica. */
 @Composable
-fun DietaTema(content: @Composable () -> Unit) {
-    val t = if (isSystemInDarkTheme()) GrafiteCores.Noite else GrafiteCores.Dia
+fun DietaTema(tema: String = "sistema", content: @Composable () -> Unit) {
+    val escuro = when (tema) { "claro" -> false; "escuro" -> true; else -> isSystemInDarkTheme() }
+    val t = if (escuro) GrafiteCores.Noite else GrafiteCores.Dia
+    // Ícones da barra de status/navegação acompanham o tema escolhido, não só o do aparelho.
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) androidx.compose.runtime.SideEffect {
+        val janela = (view.context as? android.app.Activity)?.window ?: return@SideEffect
+        androidx.core.view.WindowCompat.getInsetsController(janela, view).apply {
+            isAppearanceLightStatusBars = !escuro
+            isAppearanceLightNavigationBars = !escuro
+        }
+    }
     val base = if (t == GrafiteCores.Noite) darkColorScheme() else lightColorScheme()
     val cores = base.copy(
         background = t.papel, onBackground = t.grafite,
