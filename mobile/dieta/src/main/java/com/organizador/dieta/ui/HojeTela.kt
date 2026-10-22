@@ -16,6 +16,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
@@ -67,8 +71,8 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
 
     LazyColumn {
         item {
-            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { vm.dia.value = dia.minusDays(1) }) { Icon(Icons.Filled.ChevronLeft, "Dia anterior") }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconeBotao(Icons.Filled.ChevronLeft, "Dia anterior", { vm.dia.value = dia.minusDays(1) }, cor = grafite.grafite, tamanho = 24.dp)
                 // Com a fonte do sistema grande, o título encolhe com reticências e a sequência desce para baixo dele,
                 // em vez de quebrar "Hoje" em duas linhas.
                 Column1(Modifier.weight(1f).clickable { vm.dia.value = Datas.hoje() }) {
@@ -79,8 +83,8 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                     )
                     progresso?.let { Sub("${it.sequencia} dias seguidos · nível ${it.nivel}", Modifier, maxLines = 1) }
                 }
-                IconButton(onClick = { vm.sincronizar() }, enabled = !sincronizando) { Icon(Icons.Filled.Sync, "Sincronizar") }
-                IconButton(onClick = { vm.dia.value = dia.plusDays(1) }, enabled = dia < Datas.hoje()) { Icon(Icons.Filled.ChevronRight, "Próximo dia") }
+                IconeBotao(Icons.Filled.Sync, "Sincronizar", { vm.sincronizar() }, enabled = !sincronizando)
+                IconeBotao(Icons.Filled.ChevronRight, "Próximo dia", { vm.dia.value = dia.plusDays(1) }, cor = grafite.grafite, tamanho = 24.dp, enabled = dia < Datas.hoje())
             }
         }
         item {
@@ -111,7 +115,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Titulo("Água", Modifier.weight(1f))
                     agua.lastOrNull()?.let { ultima ->
-                        IconButton(onClick = { vm.lancar { vm.repo.desfazerAgua(ultima) } }) { Icon(Icons.AutoMirrored.Filled.Undo, "Desfazer") }
+                        IconeBotao(Icons.AutoMirrored.Filled.Undo, "Desfazer", { vm.lancar { vm.repo.desfazerAgua(ultima) } })
                     }
                 }
                 BarraMeta("", totalAgua.toDouble(), metas.aguaMl, "ml")
@@ -131,42 +135,44 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
             val t = itens.fold(Totais()) { acc, r -> acc + r }
             var menu by remember { mutableStateOf(false) }
             Cartao {
+                // Cabeçalho numa linha: nome, total da refeição, menu (foto/repetir) e o "+" (a única ação em nanquim).
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column1(Modifier.weight(1f)) {
-                        Titulo(nome)
-                        if (itens.isNotEmpty()) Macros(t.kcal, t.proteina, t.carbo, t.gordura)
-                    }
-                    IconButton(onClick = { fotoPara = codigo; pedirFoto(true) }) { Icon(Icons.Filled.PhotoCamera, "Foto da refeição") }
+                    Text(nome, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    if (itens.isNotEmpty()) Text("${t.kcal.roundToInt()} kcal", style = EstiloValor.copy(fontSize = 13.sp), color = grafite.grafiteSuave)
                     Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.ContentCopy, "Repetir") }
+                        IconeBotao(Icons.Filled.MoreVert, "Mais opções", { menu = true })
                         DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("Repetir de ontem") }, onClick = {
+                            DropdownMenuItem(text = { Text("Foto da refeição") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) },
+                                onClick = { menu = false; fotoPara = codigo; pedirFoto(true) })
+                            DropdownMenuItem(text = { Text("Foto da galeria") }, leadingIcon = { Icon(Icons.Filled.PhotoLibrary, null) },
+                                onClick = { menu = false; fotoPara = codigo; pedirFoto(false) })
+                            DropdownMenuItem(text = { Text("Repetir de ontem") }, leadingIcon = { Icon(Icons.Filled.ContentCopy, null) }, onClick = {
                                 menu = false
                                 vm.lancar { if (vm.repo.repetir(dia.minusDays(1), dia, codigo) == 0) vm.avisar("Nada no $nome de ontem.") }
                             })
-                            DropdownMenuItem(text = { Text("Foto da galeria") }, onClick = { menu = false; fotoPara = codigo; pedirFoto(false) })
                         }
                     }
-                    IconButton(onClick = { adicionar(codigo) }) { Icon(Icons.Filled.Add, "Adicionar", tint = grafite.nanquim) }
+                    IconeBotao(Icons.Filled.Add, "Adicionar", { adicionar(codigo) }, cor = grafite.nanquim, tamanho = 22.dp)
                 }
+                if (itens.isNotEmpty()) Sub("P ${fmt(t.proteina)} g · C ${fmt(t.carbo)} g · G ${fmt(t.gordura)} g", maxLines = 1)
                 if (fotosRef.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                         items(fotosRef, key = { it.id }) { f ->
-                            AsyncImage(File(f.caminho), null, Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                            AsyncImage(File(f.caminho), null, Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)), contentScale = ContentScale.Crop)
                         }
                     }
                 }
-                itens.forEachIndexed { i, r ->
-                    if (i > 0) HorizontalDivider()
-                    Row(Modifier.fillMaxWidth().clickable { editando = r }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                itens.forEach { r ->
+                    Row(Modifier.fillMaxWidth().clickable { editando = r }.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column1(Modifier.weight(1f)) {
-                            Text(r.nome, maxLines = 2)
-                            Sub("${fmt(r.quantidadeG)} g · ${r.kcal.roundToInt()} kcal · P ${fmt(r.proteina)} g")
+                            Text(r.nome, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Sub("${fmt(r.quantidadeG)} g · ${r.kcal.roundToInt()} kcal · P ${fmt(r.proteina)} g", maxLines = 1)
                         }
-                        IconButton(onClick = { vm.lancar { vm.repo.apagar(r) } }) { Icon(Icons.Filled.Delete, "Remover") }
+                        IconeBotao(Icons.Filled.Close, "Remover", { vm.lancar { vm.repo.apagar(r) } }, tamanho = 18.dp)
                     }
                 }
-                if (itens.isEmpty()) BotaoTexto(onClick = { adicionar(codigo) }) { Text("Adicionar alimento") }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.organizador.dieta.data.Alimento
 import com.organizador.dieta.data.Calculos
@@ -42,27 +44,35 @@ import kotlin.math.roundToInt
 fun Cartao(modifier: Modifier = Modifier, conteudo: @Composable () -> Unit) {
     // Folha sobre papel, borda linha de 1 px, sem sombra.
     Card(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = grafite.folha, contentColor = grafite.grafite),
         border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha),
         elevation = CardDefaults.cardElevation(0.dp),
-    ) { Column(Modifier.padding(16.dp)) { conteudo() } }
+    ) { Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) { conteudo() } }
 }
+
+/** Botão de ícone compacto (36 dp de toque, ícone de 20 dp) para as linhas densas do diário. */
+@Composable
+fun IconeBotao(icone: androidx.compose.ui.graphics.vector.ImageVector, descricao: String, onClick: () -> Unit,
+               cor: Color = grafite.grafiteSuave, tamanho: androidx.compose.ui.unit.Dp = 20.dp, enabled: Boolean = true) =
+    androidx.compose.material3.IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
+        androidx.compose.material3.Icon(icone, descricao, Modifier.size(tamanho), tint = if (enabled) cor else grafite.linha)
+    }
 
 /** Barra "consumido / meta". [destaque] = a barra principal (grafite); as outras em grafite-suave. Passou de 110% vira atenção. */
 @Composable
 fun BarraMeta(rotulo: String, valor: Double, meta: Int, unidade: String, destaque: Boolean = false) {
     val frac = if (meta > 0) (valor / meta).toFloat() else 0f
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(rotulo, style = MaterialTheme.typography.bodyMedium)
-            Text("${valor.roundToInt()} / $meta $unidade", style = EstiloValor)
+            Text(rotulo, style = MaterialTheme.typography.bodySmall)
+            Text("${valor.roundToInt()} / $meta $unidade", style = EstiloValor.copy(fontSize = 13.sp, lineHeight = 18.sp))
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         LinearProgressIndicator(
             progress = { frac.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(8.dp),
+            modifier = Modifier.fillMaxWidth().height(6.dp),
             color = if (frac > 1.1f) grafite.atencao else if (destaque) grafite.grafite else grafite.grafiteSuave,
             trackColor = grafite.linha,
         )

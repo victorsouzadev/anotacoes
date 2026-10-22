@@ -65,7 +65,7 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
                                 }
                             },
                             icon = { Icon(aba.icone, null) },
-                            label = { Text(aba.nome, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                            label = { Text(aba.nome, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
                         )
                     }
                 }
