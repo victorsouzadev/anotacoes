@@ -50,7 +50,7 @@ fun MeusAlimentosTela(vm: DietaViewModel, voltar: () -> Unit, editar: (String) -
     val meus by vm.meusAlimentos.collectAsStateWithLifecycle()
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text("Meus alimentos e receitas") },
+            title = { Text("Meus alimentos e receitas", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = voltar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") } },
             actions = { IconButton(onClick = { editar("novo") }) { Icon(Icons.Filled.Add, "Novo") } },
         )
@@ -58,8 +58,8 @@ fun MeusAlimentosTela(vm: DietaViewModel, voltar: () -> Unit, editar: (String) -
         LazyColumn(Modifier.padding(pad)) {
             if (meus.isEmpty()) item { Sub("Nenhum ainda. Cadastre alimentos, receitas, ou favorite itens da TACO na busca.", Modifier.padding(16.dp)) }
             items(meus, key = { it.id }) { a ->
-                Column(Modifier.fillMaxWidth().clickable { editar(a.id) }.padding(16.dp)) {
-                    Text((if (a.favorito) "★ " else "") + a.nome)
+                Column(Modifier.fillMaxWidth().clickable { editar(a.id) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text((if (a.favorito) "★ " else "") + a.nome, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium, maxLines = 1)
                     Sub("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}" + if (a.fonte == "receita") " · receita" else "")
                 }
                 HorizontalDivider()
@@ -102,7 +102,7 @@ fun AlimentoTela(vm: DietaViewModel, id: String, voltar: () -> Unit) {
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(if (original == null) "Novo alimento" else "Editar") },
+            title = { Text(if (original == null) "Novo alimento" else "Editar", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = voltar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") } },
             actions = {
                 if (original != null) IconButton(onClick = { vm.lancar { vm.repo.apagarAlimento(original) }; voltar() }) { Icon(Icons.Filled.Delete, "Excluir") }

@@ -3,6 +3,8 @@ package com.organizador.dieta.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
@@ -67,7 +69,7 @@ fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novo
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text("Adicionar ao ${nomeRefeicao(refeicao).lowercase()}") },
+            title = { Text("Adicionar ao ${nomeRefeicao(refeicao).lowercase()}", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
             navigationIcon = { IconButton(onClick = voltar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") } },
             actions = {
                 Box {
@@ -234,10 +236,11 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
     }
 
     Column(modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = busca, onValueChange = { busca = it }, singleLine = true, modifier = Modifier.weight(1f),
-                placeholder = { Text("Buscar alimento (ex.: frango grelhado)") }, leadingIcon = { Icon(Icons.Filled.Search, null) },
+                placeholder = { Text("Buscar alimento", maxLines = 1) }, leadingIcon = { Icon(Icons.Filled.Search, null, Modifier.size(20.dp)) },
+                textStyle = MaterialTheme.typography.bodyMedium,
             )
             IconButton(onClick = {
                 GmsBarcodeScanning.getClient(context).startScan()
@@ -248,15 +251,13 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
         if (busca.isBlank()) Sub("Favoritos, recentes e seus alimentos", Modifier.padding(horizontal = 16.dp))
         LazyColumn {
             items(lista, key = { it.id }) { a ->
-                Row(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(a.nome)
+                        Text(a.nome, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         Sub("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}" +
-                            (if (a.fonte == "taco") " · TACO" else if (a.fonte == "receita") " · receita" else ""))
+                            (if (a.fonte == "taco") " · TACO" else if (a.fonte == "receita") " · receita" else ""), maxLines = 1)
                     }
-                    IconButton(onClick = { vm.lancar { vm.repo.alternarFavorito(a) } }) {
-                        Icon(if (a.favorito) Icons.Filled.Star else Icons.Filled.StarBorder, "Favorito")
-                    }
+                    IconeBotao(if (a.favorito) Icons.Filled.Star else Icons.Filled.StarBorder, "Favorito", { vm.lancar { vm.repo.alternarFavorito(a) } })
                 }
                 HorizontalDivider()
             }
@@ -268,8 +269,8 @@ fun BuscaAlimento(vm: DietaViewModel, modifier: Modifier = Modifier, aoEscolher:
                     Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp))
             }
             items(novos, key = { it.id }) { a ->
-                Column(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    Text(a.nome)
+                Column(Modifier.fillMaxWidth().clickable { escolher(a) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Text(a.nome, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Sub("100 g: ${fmt(a.kcal)} kcal · P ${fmt(a.proteina)} · C ${fmt(a.carbo)} · G ${fmt(a.gordura)}" +
                         (a.porcaoNome?.let { " · $it = ${fmt(a.porcaoG)} g" } ?: ""))
                 }

@@ -1,6 +1,10 @@
 package com.organizador.dieta.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -60,7 +64,7 @@ fun ProgressoTela(vm: DietaViewModel) {
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(16.dp, 16.dp, 8.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Progresso", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            Text("Progresso", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
             IconButton(onClick = {
                 val dias = semana.groupBy { it.data }.mapValues { (_, rs) -> rs.fold(Totais()) { t, r -> t + r } }
                 val arq = CardProgresso.gerar(context, progresso, dias.values.toList(), metas, pesos.map { LocalDate.parse(it.data) to it.kg })
@@ -104,8 +108,8 @@ fun ProgressoTela(vm: DietaViewModel) {
         Cartao {
             Titulo("Peso")
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(pesoTexto, { pesoTexto = it }, Modifier.weight(1f), label = { Text("Peso de hoje (kg)") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                OutlinedTextField(pesoTexto, { pesoTexto = it }, Modifier.weight(1f), placeholder = { Text("Peso de hoje (kg)") }, singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                 Spacer(Modifier.width(8.dp))
                 val kg = pesoTexto.replace(',', '.').toDoubleOrNull()
                 Button(enabled = kg != null && kg in 20.0..400.0, onClick = {
@@ -122,8 +126,8 @@ fun ProgressoTela(vm: DietaViewModel) {
             }
             pesos.takeLast(5).reversed().forEach { ps ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${LocalDate.parse(ps.data).format(DateTimeFormatter.ofPattern("dd/MM"))} — ${fmt(ps.kg)} kg", Modifier.weight(1f))
-                    IconButton(onClick = { vm.lancar { vm.repo.apagarPeso(ps) } }) { Icon(Icons.Filled.Close, "Apagar") }
+                    Text("${LocalDate.parse(ps.data).format(DateTimeFormatter.ofPattern("dd/MM"))} — ${fmt(ps.kg)} kg", Modifier.weight(1f), style = EstiloValor.copy(fontSize = 13.sp))
+                    IconeBotao(Icons.Filled.Close, "Apagar", { vm.lancar { vm.repo.apagarPeso(ps) } }, tamanho = 18.dp)
                 }
             }
         }
@@ -131,18 +135,19 @@ fun ProgressoTela(vm: DietaViewModel) {
         p?.let {
             Cartao {
                 Titulo("Conquistas (${it.conquistas.count { c -> c.em != null }}/${it.conquistas.size})")
-                Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    it.conquistas.forEach { c ->
-                        val ok = c.em != null
-                        Surface(shape = MaterialTheme.shapes.medium, color = grafite.folha, contentColor = if (ok) grafite.grafite else grafite.grafiteSuave,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, grafite.linha)) {
-                            Column(Modifier.padding(10.dp).width(140.dp)) {
-                                Text(c.nome + if (ok) "" else " (bloqueada)", style = MaterialTheme.typography.titleSmall)
-                                Sub(c.descricao)
-                                c.em?.let { em -> Sub("em ${LocalDate.parse(em).format(DateTimeFormatter.ofPattern("dd/MM/yy"))}") }
-                            }
+                // Lista densa: desbloqueadas primeiro, uma linha de nome e uma de descrição; bloqueadas em grafite-suave.
+                it.conquistas.sortedBy { c -> if (c.em != null) 0 else 1 }.forEach { c ->
+                    val ok = c.em != null
+                    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(if (ok) Icons.Filled.EmojiEvents else Icons.Filled.Lock, null, Modifier.size(16.dp),
+                                tint = if (ok) grafite.grafite else grafite.grafiteSuave)
+                            Spacer(Modifier.width(6.dp))
+                            Text(c.nome, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+                                color = if (ok) grafite.grafite else grafite.grafiteSuave, maxLines = 1)
+                            c.em?.let { em -> Text(LocalDate.parse(em).format(DateTimeFormatter.ofPattern("dd/MM")), style = EstiloValor.copy(fontSize = 12.sp), color = grafite.grafiteSuave) }
                         }
+                        Sub(c.descricao, Modifier.padding(start = 22.dp), maxLines = 1)
                     }
                 }
             }

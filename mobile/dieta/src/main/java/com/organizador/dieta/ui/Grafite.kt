@@ -79,8 +79,10 @@ private val Tipografia = Typography(
     displaySmall = ts(Newsreader, 500, 36, 40),
     headlineLarge = ts(Newsreader, 500, 36, 40),
     headlineMedium = ts(Newsreader, 500, 26, 32),
-    headlineSmall = ts(Newsreader, 500, 26, 32),
-    titleLarge = ts(Newsreader, 500, 26, 32),
+    // Títulos de diálogo (headlineSmall) e da barra de topo (titleLarge) em Figtree: em Newsreader 26 eles quebravam
+    // em duas linhas com a fonte do sistema grande ("Adicionar ao / jantar").
+    headlineSmall = ts(Figtree, 600, 18, 24),
+    titleLarge = ts(Figtree, 600, 18, 24),
     titleMedium = ts(Figtree, 600, 17, 24),
     titleSmall = ts(Figtree, 600, 17, 24),
     bodyLarge = ts(Figtree, 400, 15, 23),

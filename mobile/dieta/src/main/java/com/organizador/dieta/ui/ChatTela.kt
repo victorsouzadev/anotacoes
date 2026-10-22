@@ -82,7 +82,7 @@ fun ChatTela(vm: DietaViewModel) {
 
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp, 12.dp, 8.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Assistente", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            Text("Assistente", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
             if (mensagens.isNotEmpty()) IconButton(onClick = { vm.limparChat() }) { Icon(Icons.Filled.DeleteSweep, "Nova conversa") }
         }
         LazyColumn(Modifier.weight(1f), state = lista, verticalArrangement = Arrangement.spacedBy(8.dp)) {
