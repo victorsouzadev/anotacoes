@@ -31,6 +31,33 @@ public static class DietaPaginaPublica
           .Append($"<title>{E(c.Titulo)}</title><style>").Append(Css).Append("</style></head><body><main>")
           .Append($"<h1>{E(c.Titulo)}</h1><p class=\"sub\">Atualizado em {hoje.ToString("dd/MM/yyyy", Br)}</p>");
 
+        if (escopos.Contains(DietaEscopos.Hoje))
+        {
+            var dia = (await prog.Dias(uid, hoje, hoje, metas, ct))[0];
+            var regs = await db.DietaRegistros.AsNoTracking()
+                .Where(r => r.UserId == uid && r.DeletedAt == null && r.Data == hoje).OrderBy(r => r.CreatedAt).ToListAsync(ct);
+            var fotos = await db.DietaFotos.AsNoTracking()
+                .Where(f => f.UserId == uid && f.DeletedAt == null && f.Tipo == "refeicao" && f.Data == hoje)
+                .OrderBy(f => f.CreatedAt).Select(f => new { f.Id, f.Rotulo }).ToListAsync(ct);
+            sb.Append($"<section class=\"card\"><h2>Hoje · {E(hoje.ToString("dddd, dd/MM", Br))}</h2>");
+            sb.Append($"<p class=\"grande mono\">{dia.Kcal:0} <small>/ {metas.Kcal} kcal</small></p>");
+            sb.Append($"<div class=\"bar\" style=\"margin:0 0 10px\"><i style=\"width:{Math.Min(100, metas.Kcal > 0 ? dia.Kcal * 100 / metas.Kcal : 0).ToString("0", CultureInfo.InvariantCulture)}%\"></i></div>");
+            sb.Append(Barra("Proteína", dia.Proteina, metas.ProteinaG, "g", dia.ProteinaNaMeta));
+            sb.Append(Barra("Carboidrato", dia.Carbo, metas.CarboG, "g", false));
+            sb.Append(Barra("Gordura", dia.Gordura, metas.GorduraG, "g", false));
+            sb.Append(Barra("Água", dia.AguaMl, metas.AguaMl, "ml", dia.AguaNaMeta));
+            if (regs.Count == 0) sb.Append("<p class=\"sub\">Nada registrado ainda hoje.</p>");
+            else Refeicoes(sb, regs);
+            if (fotos.Count > 0)
+            {
+                sb.Append("<div class=\"fotos mini\">");
+                foreach (var f in fotos)
+                    sb.Append($"<figure><img loading=\"lazy\" src=\"fotos/{E(f.Id)}\" alt=\"\"><figcaption>{E(NomeRefeicao.GetValueOrDefault(f.Rotulo ?? "", f.Rotulo ?? ""))}</figcaption></figure>");
+                sb.Append("</div>");
+            }
+            sb.Append("</section>");
+        }
+
         if (escopos.Contains(DietaEscopos.Conquistas))
         {
             var p = await prog.Calcular(uid, ct);
@@ -66,10 +93,13 @@ public static class DietaPaginaPublica
             if (pesos.Count == 0) sb.Append("<p class=\"sub\">Sem pesagens ainda.</p>");
             else
             {
+                // Com uma pesagem só não há variação nem gráfico: mostrar "0,0 kg" e um gráfico vazio confundia.
                 var dif = pesos[^1].Kg - pesos[0].Kg;
-                sb.Append($"""<div class="kpis"><div class="kpi"><b>{pesos[^1].Kg.ToString("0.0", Br)} kg</b><span>atual</span></div>""" +
-                          $"""<div class="kpi"><b>{(dif > 0 ? "+" : "")}{dif.ToString("0.0", Br)} kg</b><span>desde {pesos[0].Data.ToString("dd/MM", Br)}</span></div></div>""");
-                sb.Append(GraficoPeso(pesos.Select(x => (x.Data, x.Kg)).ToList()));
+                sb.Append($"""<div class="kpis"><div class="kpi"><b>{pesos[^1].Kg.ToString("0.0", Br)} kg</b><span>atual · {pesos[^1].Data.ToString("dd/MM", Br)}</span></div>""");
+                if (pesos.Count > 1)
+                    sb.Append($"""<div class="kpi"><b>{(dif > 0 ? "+" : "")}{dif.ToString("0.0", Br)} kg</b><span>desde {pesos[0].Data.ToString("dd/MM", Br)}</span></div>""");
+                sb.Append("</div>");
+                if (pesos.Select(x => x.Data).Distinct().Count() > 1) sb.Append(GraficoPeso(pesos.Select(x => (x.Data, x.Kg)).ToList()));
             }
             sb.Append("</section>");
         }
@@ -98,13 +128,15 @@ public static class DietaPaginaPublica
                 .Where(r => r.UserId == uid && r.DeletedAt == null && r.Data > hoje.AddDays(-14))
                 .OrderByDescending(r => r.Data).ThenBy(r => r.CreatedAt).ToListAsync(ct);
             sb.Append("<section class=\"card\"><h2>Diário — últimos 14 dias</h2>");
+            var primeiro = true;
             foreach (var dia in regs.GroupBy(r => r.Data))
             {
-                sb.Append($"<div class=\"dia\"><h3>{dia.Key.ToString("dddd, dd/MM", Br)} — {dia.Sum(r => r.Kcal):0} kcal</h3><ul>");
-                foreach (var refeicao in dia.GroupBy(r => r.Refeicao).OrderBy(x => Array.IndexOf(Endpoints.DietaEndpoints.Refeicoes, x.Key)))
-                    sb.Append($"<li><b>{E(NomeRefeicao.GetValueOrDefault(refeicao.Key, refeicao.Key))}:</b> " +
-                              string.Join(", ", refeicao.Select(r => $"{E(r.Nome)} ({r.QuantidadeG:0} g)")) + "</li>");
-                sb.Append("</ul></div>");
+                // Um dia por bloco recolhível; só o mais recente vem aberto.
+                sb.Append($"<details class=\"dia\"{(primeiro ? " open" : "")}><summary><span>{E(dia.Key.ToString("dddd, dd/MM", Br))}</span>" +
+                          $"<span class=\"mono\">{dia.Sum(r => r.Kcal):0} / {metas.Kcal} kcal</span></summary>");
+                Refeicoes(sb, dia.ToList());
+                sb.Append("</details>");
+                primeiro = false;
             }
             if (regs.Count == 0) sb.Append("<p class=\"sub\">Nada registrado no período.</p>");
             sb.Append("</section>");
@@ -133,6 +165,26 @@ public static class DietaPaginaPublica
 
         sb.Append("</main></body></html>");
         return sb.ToString();
+    }
+
+    /// <summary>Refeições em blocos: cabeçalho com o total e uma linha por item (nome, gramas, kcal).</summary>
+    private static void Refeicoes(StringBuilder sb, List<DietaRegistro> regs)
+    {
+        foreach (var refeicao in regs.GroupBy(r => r.Refeicao).OrderBy(x => Array.IndexOf(Endpoints.DietaEndpoints.Refeicoes, x.Key)))
+        {
+            sb.Append($"<div class=\"ref\"><div class=\"ref-cab\"><b>{E(NomeRefeicao.GetValueOrDefault(refeicao.Key, refeicao.Key))}</b>" +
+                      $"<span class=\"mono\">{refeicao.Sum(r => r.Kcal):0} kcal</span></div>");
+            foreach (var r in refeicao)
+                sb.Append($"<div class=\"item\"><span>{E(r.Nome)}</span><span class=\"mono\">{r.QuantidadeG:0} g</span><span class=\"mono\">{r.Kcal:0}</span></div>");
+            sb.Append("</div>");
+        }
+    }
+
+    private static string Barra(string rotulo, double valor, int meta, string unidade, bool ok)
+    {
+        var pct = meta > 0 ? Math.Min(100, valor * 100 / meta) : 0;
+        return $"<div class=\"meta\"><div><span>{rotulo}</span><span class=\"mono{(ok ? " ok" : "")}\">{valor:0} / {meta} {unidade}</span></div>" +
+               $"<div class=\"bar\"><i style=\"width:{pct.ToString("0", CultureInfo.InvariantCulture)}%\"></i></div></div>";
     }
 
     private static string GraficoPeso(List<(DateOnly Data, double Kg)> pontos)
@@ -188,7 +240,17 @@ public static class DietaPaginaPublica
             .l1{opacity:.25}.l2{opacity:.5}.l3{opacity:.75}
             .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
             .fotos figure{margin:0}.fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
-            .dia{margin:0 0 12px}.dia h3{font:600 15px/23px Figtree,system-ui,sans-serif;margin:0 0 4px}.dia ul{margin:0;padding-left:20px}
+            .dia{border-top:1px solid var(--linha);padding:8px 0}
+            .dia summary{display:flex;justify-content:space-between;gap:8px;cursor:pointer;font-weight:600;list-style:none}
+            .dia summary::-webkit-details-marker{display:none}
+            .ref{margin:8px 0 0}
+            .ref-cab{display:flex;justify-content:space-between;gap:8px;font-size:14px;line-height:20px}
+            .item{display:grid;grid-template-columns:1fr auto 3.5em;gap:8px;font-size:14px;line-height:20px;color:var(--grafite-suave);padding:2px 0 2px 8px}
+            .item span:not(:first-child){text-align:right}
+            .meta{margin:6px 0}.meta>div:first-child{display:flex;justify-content:space-between;font-size:14px}
+            .grande{font-size:28px;line-height:36px;margin:0 0 4px}.grande small{font-size:15px;color:var(--grafite-suave)}
+            .fotos.mini{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));margin-top:12px}
+            .mono.ok{color:var(--positivo)}
             svg text{fill:var(--grafite-suave);font:500 24px "IBM Plex Mono",monospace}
             a{color:var(--nanquim)}a:hover{color:var(--nanquim-escuro)}
             """;

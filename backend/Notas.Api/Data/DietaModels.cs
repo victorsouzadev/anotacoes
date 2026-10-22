@@ -147,6 +147,8 @@ public static class DietaEscopos
     public const string FotosCorpo = "fotos_corpo";
     public const string Conquistas = "conquistas";
     public const string Exportar = "exportar";
+    /// <summary>Só o dia atual: totais contra a meta, refeições item a item e as fotos de refeição do dia.</summary>
+    public const string Hoje = "hoje";
 
-    public static readonly string[] Todos = [Peso, Macros, Diario, FotosRefeicao, FotosCorpo, Conquistas, Exportar];
+    public static readonly string[] Todos = [Hoje, Peso, Macros, Diario, FotosRefeicao, FotosCorpo, Conquistas, Exportar];
 }
