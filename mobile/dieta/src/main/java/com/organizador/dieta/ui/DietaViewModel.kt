@@ -57,7 +57,9 @@ data class Progresso(
     }
 }
 
-data class MsgChat(val papel: String, val texto: String, val comFoto: Boolean = false)
+/** [opcoes]: respostas prontas da pergunta da IA (botões); [multipla] = dá para marcar várias. */
+data class MsgChat(val papel: String, val texto: String, val comFoto: Boolean = false,
+                   val opcoes: List<String> = emptyList(), val multipla: Boolean = false)
 
 /** Item reconhecido pela IA. [alimento] = o que casou na base (TACO ou próprio); senão vale a [estimativa] da IA. */
 data class ItemIa(val nome: String, val gramas: Double, val alimento: Alimento?, val estimativa: Alimento)
@@ -117,12 +119,18 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
     var rascunho: Alimento? = null
 
     private fun carregarChat(): List<MsgChat> = runCatching {
-        JSONArray(prefs.chat ?: "[]").objetos().map { MsgChat(it.getString("papel"), it.getString("texto"), it.optBoolean("comFoto")) }
+        JSONArray(prefs.chat ?: "[]").objetos().map {
+            MsgChat(it.getString("papel"), it.getString("texto"), it.optBoolean("comFoto"),
+                it.optJSONArray("opcoes")?.let { a -> List(a.length()) { i -> a.getString(i) } }.orEmpty(), it.optBoolean("multipla"))
+        }
     }.getOrDefault(emptyList())
 
     private fun salvarChat(l: List<MsgChat>) {
         chat.value = l
-        prefs.chat = JSONArray(l.takeLast(60).map { JSONObject().put("papel", it.papel).put("texto", it.texto).put("comFoto", it.comFoto) }).toString()
+        prefs.chat = JSONArray(l.takeLast(60).map {
+            JSONObject().put("papel", it.papel).put("texto", it.texto).put("comFoto", it.comFoto)
+                .put("opcoes", JSONArray(it.opcoes)).put("multipla", it.multipla)
+        }).toString()
     }
 
     fun limparChat() {
@@ -164,7 +172,9 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
             if (entrevista.value) corpo.put("modo", "entrevista")
             foto?.let { corpo.put("imagem", repo.dataUrl(it)) }
             val r = a.api.chamar("POST", "/api/dieta/chat", corpo) as JSONObject
-            salvarChat(chat.value + MsgChat("assistente", r.getString("resposta")))
+            val p = r.optJSONObject("pergunta")
+            val opcoes = p?.optJSONArray("opcoes")?.let { a -> List(a.length()) { i -> a.getString(i) } }.orEmpty()
+            salvarChat(chat.value + MsgChat("assistente", r.getString("resposta"), opcoes = opcoes, multipla = p?.optBoolean("multipla") == true))
             if (r.optBoolean("alterou")) sincronizar(silencioso = true)
         } catch (e: Exception) {
             avisar(e.message ?: "A IA não respondeu.")

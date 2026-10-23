@@ -69,7 +69,8 @@ public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cli
     private const int MaxTokens = 12000;
 
     public async Task<RespostaChat> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, string prompt,
-        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, CancellationToken ct, string? imagem = null)
+        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, CancellationToken ct, string? imagem = null,
+        Func<bool>? encerrar = null)
     {
         var cred = await llm.ResolverCredenciaisAsync(userId, ct);
         if (cred.Provedor == "heuristico" || string.IsNullOrWhiteSpace(cred.Chave))
@@ -80,14 +81,15 @@ public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cli
 
         var consultas = new List<string>();
         return cred.Provedor == "anthropic"
-            ? await AnthropicAsync(cred, historico, prompt, definicoes, executar, consultas, ct)
-            : await OpenAiAsync(cred, historico, prompt, definicoes, executar, consultas, imagem, ct);
+            ? await AnthropicAsync(cred, historico, prompt, definicoes, executar, consultas, encerrar, ct)
+            : await OpenAiAsync(cred, historico, prompt, definicoes, executar, consultas, imagem, encerrar, ct);
     }
 
     // ------------------------------------------------------------ Anthropic
 
     private async Task<RespostaChat> AnthropicAsync(CredenciaisLlm cred, IReadOnlyList<MensagemChat> historico, string prompt,
-        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, List<string> consultas, CancellationToken ct)
+        IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, List<string> consultas, Func<bool>? encerrar,
+        CancellationToken ct)
     {
         var mensagens = new JsonArray(historico.Select(m => (JsonNode)new JsonObject
         {
@@ -131,6 +133,10 @@ public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cli
                 });
             }
             mensagens.Add(new JsonObject { ["role"] = "user", ["content"] = resultados });
+            // Ferramenta que encerra a vez (ex.: perguntar ao usuário): devolve o texto que veio junto da chamada.
+            if (encerrar?.Invoke() == true)
+                return new RespostaChat(string.Join("\n", conteudo.OfType<JsonObject>()
+                    .Where(b => b["type"]?.GetValue<string>() == "text").Select(b => b["text"]?.GetValue<string>())).Trim(), consultas);
         }
         throw new ChatIndisponivelException("A pergunta exigiu consultas demais. Tente algo mais específico.");
     }
@@ -139,7 +145,7 @@ public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cli
 
     private async Task<RespostaChat> OpenAiAsync(CredenciaisLlm cred, IReadOnlyList<MensagemChat> historico, string prompt,
         IReadOnlyList<DefinicaoFerramenta> definicoes, ExecutarFerramenta executar, List<string> consultas, string? imagem,
-        CancellationToken ct)
+        Func<bool>? encerrar, CancellationToken ct)
     {
         var mensagens = new JsonArray { new JsonObject { ["role"] = "system", ["content"] = prompt } };
         for (var i = 0; i < historico.Count; i++)
@@ -197,6 +203,8 @@ public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cli
                         : await executar(nome, args, ct),
                 });
             }
+            if (encerrar?.Invoke() == true)
+                return new RespostaChat((msg["content"] is JsonValue tv && tv.TryGetValue<string>(out var parcial) ? parcial : "").Trim(), consultas);
         }
         throw new ChatIndisponivelException("A pergunta exigiu consultas demais. Tente algo mais específico.");
     }

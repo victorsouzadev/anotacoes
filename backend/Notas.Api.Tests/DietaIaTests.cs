@@ -145,6 +145,26 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Perguntar_encerra_a_vez_e_devolve_respostas_prontas()
+    {
+        await ConfigurarIa();
+        _modelo.Roteiro = _ => Chamada("perguntar", new
+        {
+            pergunta = "Quantas refeições você prefere fazer por dia?",
+            opcoes = new[] { "3", "4", "5", "6", "" },
+        });
+        var res = await _client.PostAsJsonAsync("/api/dieta/chat", new { modo = "entrevista", mensagens = new[] { new { papel = "usuario", texto = "Me entreviste" } } });
+        res.EnsureSuccessStatusCode();
+        var r = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Single(_modelo.Recebidos); // não chamou o modelo de novo depois da pergunta
+        Assert.Equal("Quantas refeições você prefere fazer por dia?", r.GetProperty("resposta").GetString());
+        var p = r.GetProperty("pergunta");
+        Assert.Equal(4, p.GetProperty("opcoes").GetArrayLength());
+        Assert.False(p.GetProperty("multipla").GetBoolean());
+        Assert.Contains("perguntar", _modelo.Recebidos[0].ToJsonString());
+    }
+
+    [Fact]
     public async Task Item_do_plano_sem_opcao_vale_opcao_1()
     {
         var res = await _client.PutAsJsonAsync("/api/dieta/plano/pl-antigo", new
