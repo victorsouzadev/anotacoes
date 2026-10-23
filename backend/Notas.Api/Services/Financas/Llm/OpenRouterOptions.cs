@@ -12,6 +12,10 @@ public class OpenRouterOptions
 
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1/chat/completions";
 
+    // Reservas do chat: a OpenRouter usa a próxima quando o modelo do usuário está sem capacidade (429/5xx).
+    // Preço parecido com o Gemini Flash; vazio desliga.
+    public string[] ModelosReserva { get; set; } = ["google/gemini-3.7-flash", "openai/gpt-5.4-mini"];
+
     // A OpenRouter usa estes dois cabeçalhos para atribuir o tráfego a um app.
     // Sem acento de propósito: cabeçalho HTTP só aceita ASCII, e um valor com
     // acento faz a requisição inteira falhar antes de sair da máquina.
