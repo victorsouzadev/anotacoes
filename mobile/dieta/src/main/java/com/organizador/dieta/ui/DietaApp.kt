@@ -1,5 +1,6 @@
 package com.organizador.dieta.ui
 
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -72,7 +73,9 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
                 }
             },
         ) { pad ->
-            NavHost(nav, startDestination = "hoje", modifier = Modifier.padding(pad)) {
+            // consumeWindowInsets: a barra de baixo já ocupa parte da altura do teclado; sem isso o imePadding do chat
+            // soma as duas e sobra um vão entre o campo de texto e o teclado.
+            NavHost(nav, startDestination = "hoje", modifier = Modifier.padding(pad).consumeWindowInsets(pad)) {
                 composable("hoje") { HojeTela(vm, adicionar = { r -> nav.navigate("adicionar/$r") }) }
                 composable("adicionar/{refeicao}", listOf(navArgument("refeicao") { type = NavType.StringType })) {
                     AdicionarTela(vm, it.arguments?.getString("refeicao") ?: "almoco", voltar = { nav.popBackStack() },
