@@ -1,7 +1,10 @@
 package com.organizador.dieta.ui
 
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -107,6 +111,11 @@ fun ChatTela(vm: DietaViewModel) {
                 }
             }
             items(mensagens) { m -> Balao(m) }
+            // Respostas prontas só da última pergunta da IA; responder por texto continua valendo.
+            val ultima = mensagens.lastOrNull()
+            if (ultima != null && ultima.papel == "assistente" && ultima.opcoes.isNotEmpty() && !pensando) item(key = "respostas-${mensagens.size}") {
+                RespostasProntas(ultima) { enviar(it) }
+            }
             if (pensando) item {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = grafite.grafiteSuave)
@@ -115,7 +124,7 @@ fun ChatTela(vm: DietaViewModel) {
                 }
             }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (mensagens.isEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SUGESTOES.forEach { s -> AssistChip(onClick = { enviar(s) }, label = { Text(s) }, enabled = !pensando) }
         }
         foto?.let { uri ->
@@ -137,6 +146,32 @@ fun ChatTela(vm: DietaViewModel) {
                 Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = if (texto.isNotBlank() && !pensando) grafite.nanquim else grafite.grafiteSuave)
             }
         }
+    }
+}
+
+/** Botões de resposta: um toque envia; na pergunta de múltipla escolha, marca e envia junto. */
+@Composable
+private fun RespostasProntas(m: MsgChat, enviar: (String) -> Unit) {
+    val marcadas = remember(m) { mutableStateListOf<String>() }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            m.opcoes.forEach { op ->
+                val sel = op in marcadas
+                Text(
+                    op,
+                    Modifier.clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, if (sel) grafite.grafite else grafite.linha, RoundedCornerShape(16.dp))
+                        .background(if (sel) grafite.nanquimTinta else grafite.folha)
+                        .clickable { if (!m.multipla) enviar(op) else if (sel) marcadas.remove(op) else marcadas.add(op) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        if (m.multipla) BotaoSecundario(onClick = { enviar(marcadas.joinToString(", ")) }, Modifier.padding(top = 6.dp), enabled = marcadas.isNotEmpty()) {
+            Text(if (marcadas.isEmpty()) "Marque uma ou mais" else "Enviar (${marcadas.size})")
+        }
+        Sub("Ou escreva sua resposta abaixo.", Modifier.padding(top = 4.dp))
     }
 }
 
