@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.LocalSize
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
@@ -72,13 +73,15 @@ class PlanoWidget : GlanceAppWidget() {
                 Rotulo(if (p.opcoes.size > 1) "Opção ${op.numero} de ${p.opcoes.size}" else "Opção ${op.numero}", tamanho = 11.sp)
                 Spacer(GlanceModifier.height(4.dp))
                 // Até 4 itens; o resto vira "+ N". Lista simples (Column): os launchers da Samsung falham com LazyColumn.
-                op.itens.take(4).forEach { item ->
+                // Quantos itens cabem: ~18 dp por linha além do cabeçalho e dos botões.
+                val cabem = ((LocalSize.current.height.value - 110) / 18).toInt().coerceIn(2, 8)
+                op.itens.take(cabem).forEach { item ->
                     Row(GlanceModifier.fillMaxWidth()) {
                         Text(item.nome, GlanceModifier.defaultWeight(), style = TextStyle(color = CoresWidget.grafite, fontSize = 12.sp), maxLines = 1)
                         Valor("${item.quantidadeG.roundToInt()} g", tamanho = 11.sp)
                     }
                 }
-                if (op.itens.size > 4) Rotulo("+ ${op.itens.size - 4} itens", tamanho = 11.sp)
+                if (op.itens.size > cabem) Rotulo("+ ${op.itens.size - cabem} itens", tamanho = 11.sp)
                 Spacer(GlanceModifier.defaultWeight())
                 Row(GlanceModifier.fillMaxWidth()) {
                     Pilula("Registrar", actionRunCallback<RegistrarOpcao>(actionParametersOf(refeicaoKey to p.codigo, opcaoKey to op.numero)),

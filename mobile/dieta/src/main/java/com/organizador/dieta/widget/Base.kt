@@ -16,6 +16,9 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ColumnScope
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.width
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -23,6 +26,7 @@ import androidx.glance.layout.padding
 import androidx.glance.text.FontFamily
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 
@@ -51,10 +55,21 @@ fun Titulo(texto: String, modifier: GlanceModifier = GlanceModifier, tamanho: Te
 fun Numero(texto: String, cor: ColorProvider = CoresWidget.grafite, tamanho: TextUnit = 26.sp) =
     Text(texto, style = TextStyle(color = cor, fontSize = tamanho, fontFamily = FontFamily.Serif), maxLines = 1)
 
-/** Valor em mono (como o IBM Plex Mono do app). */
+/** Valor numérico. Sem mono: a mono do sistema (Samsung) espaça demais e "1,0 L" vira "1 , 0  L". */
 @Composable
 fun Valor(texto: String, modifier: GlanceModifier = GlanceModifier, cor: ColorProvider = CoresWidget.grafite, tamanho: TextUnit = 12.sp) =
-    Text(texto, modifier, style = TextStyle(color = cor, fontSize = tamanho, fontFamily = FontFamily.Monospace), maxLines = 1)
+    Text(texto, modifier, style = TextStyle(color = cor, fontSize = tamanho, fontWeight = FontWeight.Medium), maxLines = 1)
+
+/** Rótulo à esquerda, "valor / meta" à direita e uma barra fina embaixo. */
+@Composable
+fun LinhaMeta(rotulo: String, valor: String, fracao: Float, tamanho: TextUnit = 12.sp) {
+    Row(GlanceModifier.fillMaxWidth()) {
+        Rotulo(rotulo, GlanceModifier.defaultWeight(), tamanho = tamanho)
+        Valor(valor, tamanho = tamanho)
+    }
+    Spacer(GlanceModifier.height(3.dp))
+    Barra(fracao, destaque = false, altura = 4.dp)
+}
 
 @Composable
 fun Barra(fracao: Float, destaque: Boolean = true, altura: Dp = 6.dp) = LinearProgressIndicator(
@@ -66,14 +81,31 @@ fun Barra(fracao: Float, destaque: Boolean = true, altura: Dp = 6.dp) = LinearPr
 
 /** Botão em pílula. [principal] = nanquim (a ação única do widget); os outros em tinta clara. */
 @Composable
-fun Pilula(texto: String, acao: Action, modifier: GlanceModifier = GlanceModifier, principal: Boolean = false) {
+fun Pilula(texto: String, acao: Action, modifier: GlanceModifier = GlanceModifier, principal: Boolean = false,
+           tamanho: TextUnit = 13.sp, vertical: Dp = 7.dp) {
     Box(
         modifier.cornerRadius(16.dp).background(if (principal) CoresWidget.nanquim else CoresWidget.nanquimTinta)
-            .clickable(acao).padding(horizontal = 10.dp, vertical = 7.dp),
+            .clickable(acao).padding(horizontal = 4.dp, vertical = vertical),
         contentAlignment = Alignment.Center,
     ) {
-        Text(texto, style = TextStyle(color = if (principal) CoresWidget.sobreNanquim else CoresWidget.grafite, fontSize = 13.sp,
-            fontWeight = FontWeight.Medium), maxLines = 1)
+        Text(texto, style = TextStyle(color = if (principal) CoresWidget.sobreNanquim else CoresWidget.grafite, fontSize = tamanho,
+            fontWeight = FontWeight.Medium, textAlign = TextAlign.Center), maxLines = 1)
+    }
+}
+
+/** Quadradinhos dos últimos dias, como o heatmap do Progresso (grafite com 0 a 100% de opacidade). */
+@Composable
+fun Heatmap(niveis: List<Int>, lado: Dp = 12.dp) {
+    val d = com.organizador.dieta.ui.GrafiteCores.Dia
+    val n = com.organizador.dieta.ui.GrafiteCores.Noite
+    val cores = listOf(CoresWidget.linha) + listOf(0.25f, 0.5f, 0.75f, 1f).map {
+        androidx.glance.color.ColorProvider(day = d.grafite.copy(alpha = it), night = n.grafite.copy(alpha = it))
+    }
+    Row(GlanceModifier.fillMaxWidth()) {
+        niveis.forEachIndexed { i, nv ->
+            if (i > 0) Spacer(GlanceModifier.width(3.dp))
+            Box(GlanceModifier.defaultWeight().height(lado).cornerRadius(3.dp).background(cores[nv.coerceIn(0, 4)])) {}
+        }
     }
 }
 
