@@ -116,6 +116,9 @@ fun ChatTela(vm: DietaViewModel) {
             if (ultima != null && ultima.papel == "assistente" && ultima.opcoes.isNotEmpty() && !pensando) item(key = "respostas-${mensagens.size}") {
                 RespostasProntas(ultima) { enviar(it) }
             }
+            if (!pensando && ultima?.papel == "usuario") item(key = "tentar") {
+                BotaoTexto(onClick = { vm.tentarDeNovo() }, Modifier.padding(horizontal = 12.dp)) { Text("Sem resposta. Tentar de novo") }
+            }
             if (pensando) item {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = grafite.grafiteSuave)

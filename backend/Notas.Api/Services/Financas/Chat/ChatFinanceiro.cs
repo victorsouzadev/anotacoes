@@ -20,38 +20,71 @@ public interface IChatModeloCliente
 }
 
 public class ChatModeloCliente(IHttpClientFactory httpFactory, IOptions<AnthropicOptions> anthropic,
-    IOptions<OpenRouterOptions> openRouter) : IChatModeloCliente
+    IOptions<OpenRouterOptions> openRouter, ILogger<ChatModeloCliente> log) : IChatModeloCliente
 {
+    // 429 e 502/503 costumam ser passageiros (limite por minuto do provedor por trás da OpenRouter): tenta de novo
+    // algumas vezes antes de desistir, respeitando o Retry-After quando vier.
+    private static readonly TimeSpan[] Esperas = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5)];
+
     public async Task<JsonObject> EnviarAsync(CredenciaisLlm cred, JsonObject corpo, CancellationToken ct)
     {
         var anth = cred.Provedor == "anthropic";
-        using var req = new HttpRequestMessage(HttpMethod.Post, anth ? anthropic.Value.BaseUrl : openRouter.Value.BaseUrl);
-        if (anth)
-        {
-            req.Headers.Add("x-api-key", cred.Chave);
-            req.Headers.Add("anthropic-version", anthropic.Value.ApiVersion);
-        }
-        else
-        {
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cred.Chave);
-            req.Headers.Add("X-Title", "Notas Financas");
-        }
-        req.Content = new StringContent(corpo.ToJsonString(), Encoding.UTF8, "application/json");
+        // OpenRouter: se o modelo escolhido estiver sem capacidade, ela passa para o próximo da lista sozinha.
+        if (!anth && corpo["models"] is null && openRouter.Value.ModelosReserva is { Length: > 0 } reserva)
+            corpo["models"] = new JsonArray([.. new[] { cred.Modelo }.Concat(reserva).Where(m => !string.IsNullOrWhiteSpace(m))
+                .Distinct().Take(3).Select(m => (JsonNode)JsonValue.Create(m)!)]);
 
-        using var res = await httpFactory.CreateClient(nameof(ChatModeloCliente)).SendAsync(req, ct);
-        var texto = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
+        for (var tentativa = 0; ; tentativa++)
         {
-            var motivo = (int)res.StatusCode switch
+            using var req = new HttpRequestMessage(HttpMethod.Post, anth ? anthropic.Value.BaseUrl : openRouter.Value.BaseUrl);
+            if (anth)
+            {
+                req.Headers.Add("x-api-key", cred.Chave);
+                req.Headers.Add("anthropic-version", anthropic.Value.ApiVersion);
+            }
+            else
+            {
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", cred.Chave);
+                req.Headers.Add("X-Title", "Notas Financas");
+            }
+            req.Content = new StringContent(corpo.ToJsonString(), Encoding.UTF8, "application/json");
+
+            using var res = await httpFactory.CreateClient(nameof(ChatModeloCliente)).SendAsync(req, ct);
+            var texto = await res.Content.ReadAsStringAsync(ct);
+            if (res.IsSuccessStatusCode)
+                return JsonNode.Parse(texto) as JsonObject
+                       ?? throw new ChatIndisponivelException("Resposta inesperada do provedor de IA.");
+
+            var status = (int)res.StatusCode;
+            log.LogWarning("Provedor de IA ({Provedor}, {Modelo}) respondeu HTTP {Status} na tentativa {Tentativa}: {Corpo}",
+                cred.Provedor, cred.Modelo, status, tentativa + 1, texto.Length > 600 ? texto[..600] : texto);
+            if (status is 429 or 502 or 503 && tentativa < Esperas.Length)
+            {
+                var espera = res.Headers.RetryAfter?.Delta is { } d && d <= TimeSpan.FromSeconds(10) ? d : Esperas[tentativa];
+                await Task.Delay(espera, ct);
+                continue;
+            }
+            var detalhe = MensagemDoProvedor(texto);
+            var motivo = status switch
             {
                 401 or 403 => "o provedor de IA recusou a chave configurada",
-                429 => "limite de uso do provedor de IA atingido; tente de novo em instantes",
-                _ => $"o provedor de IA respondeu HTTP {(int)res.StatusCode}",
+                402 => "sem créditos no provedor de IA (OpenRouter); adicione créditos ou troque a chave",
+                429 => "o provedor de IA está limitando as chamadas agora; tente de novo em alguns minutos",
+                _ => $"o provedor de IA respondeu HTTP {status}",
             };
-            throw new ChatIndisponivelException($"Não foi possível responder: {motivo}.");
+            throw new ChatIndisponivelException($"Não foi possível responder: {motivo}." + (detalhe is null ? "" : $" ({detalhe})"));
         }
-        return JsonNode.Parse(texto) as JsonObject
-               ?? throw new ChatIndisponivelException("Resposta inesperada do provedor de IA.");
+    }
+
+    /// <summary>A mensagem de erro que a OpenRouter/Anthropic manda ({"error":{"message":...}}), encurtada.</summary>
+    private static string? MensagemDoProvedor(string corpo)
+    {
+        try
+        {
+            var m = JsonNode.Parse(corpo)?["error"]?["message"]?.GetValue<string>()?.Trim();
+            return string.IsNullOrEmpty(m) ? null : m.Length > 160 ? m[..160] + "…" : m;
+        }
+        catch (Exception) { return null; }
     }
 }
 

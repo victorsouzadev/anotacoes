@@ -161,10 +161,20 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Manda a conversa (até 30 mensagens) e a foto opcional; se a IA alterou metas/plano/registros, sincroniza. */
-    fun enviarChat(texto: String, foto: Uri?) = viewModelScope.launch {
-        if (!a.api.logado) { avisar("Entre com a conta do hub (Mais → Conta) para usar a IA."); return@launch }
-        val historico = chat.value + MsgChat("usuario", texto, foto != null)
-        salvarChat(historico)
+    fun enviarChat(texto: String, foto: Uri?) {
+        if (!a.api.logado) { avisar("Entre com a conta do hub (Mais → Conta) para usar a IA."); return }
+        salvarChat(chat.value + MsgChat("usuario", texto, foto != null))
+        responder(foto)
+    }
+
+    /** A última mensagem ficou sem resposta (erro do provedor): pede de novo sem repetir a mensagem. */
+    fun tentarDeNovo() {
+        if (pensando.value || chat.value.lastOrNull()?.papel != "usuario") return
+        responder(null)
+    }
+
+    private fun responder(foto: Uri?) = viewModelScope.launch {
+        val historico = chat.value
         pensando.value = true
         try {
             sincronizar(silencioso = true).join()
