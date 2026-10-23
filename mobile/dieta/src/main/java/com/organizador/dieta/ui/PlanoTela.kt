@@ -89,7 +89,8 @@ fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit, entrevista: () -> Unit) {
             Triple(cod to nome, itens.groupBy { it.opcao }.toSortedMap(), herdado)
         }
         val escolhidas = porRefeicao.mapNotNull { (ref, opcoes, _) ->
-            if (opcoes.isEmpty()) null else opcoes[selecao["$diaSemana/${ref.first}"]] ?: opcoes.values.first()
+            // selecao[...] é nulo antes de escolher; TreeMap (toSortedMap) lança NPE em get(null), por isso o let.
+            if (opcoes.isEmpty()) null else selecao["$diaSemana/${ref.first}"]?.let { opcoes[it] } ?: opcoes.values.first()
         }
         val dia = totais(escolhidas.flatten())
 
