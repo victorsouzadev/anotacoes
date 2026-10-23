@@ -55,7 +55,7 @@ import com.organizador.dieta.data.Calculos
 import com.organizador.dieta.data.nomeRefeicao
 
 @Composable
-fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novoAlimento: () -> Unit) {
+fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novoAlimento: () -> Unit, abrirCamera: Boolean = false) {
     val dia by vm.dia.collectAsStateWithLifecycle()
     val pensando by vm.pensando.collectAsStateWithLifecycle()
     var escolhido by remember { mutableStateOf<Alimento?>(null) }
@@ -66,6 +66,11 @@ fun AdicionarTela(vm: DietaViewModel, refeicao: String, voltar: () -> Unit, novo
     var produto by remember { mutableStateOf<ProdutoIa?>(null) }
     val aoRotulo: (ProdutoIa) -> Unit = { produto = it }
     val pedirFoto = rememberFoto { uri -> vm.reconhecer(modoFoto, null, uri, { reconhecidos = it }, aoRotulo) }
+    // Vindo do widget "Foto do prato": abre a câmera uma vez, já no modo prato.
+    var cameraAberta by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(abrirCamera) {
+        if (abrirCamera && !cameraAberta) { cameraAberta = true; modoFoto = "prato"; pedirFoto(true) }
+    }
 
     Scaffold(topBar = {
         TopAppBar(

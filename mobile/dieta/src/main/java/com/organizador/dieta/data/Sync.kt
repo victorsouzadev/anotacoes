@@ -174,6 +174,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val app = applicationContext as DietaApplication
         return try {
             app.sincronizador.sincronizar()
+            com.organizador.dieta.widget.Widgets.atualizar(app)
             Result.success()
         } catch (e: ApiException) {
             if (e.status == 401 || e.status in 400..499) Result.failure() else Result.retry()
