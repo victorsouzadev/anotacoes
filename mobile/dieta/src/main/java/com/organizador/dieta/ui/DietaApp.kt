@@ -42,7 +42,7 @@ private val ABAS = listOf(
 )
 
 @Composable
-fun DietaApp(vm: DietaViewModel = viewModel()) {
+fun DietaApp(vm: DietaViewModel = viewModel(), abrir: kotlinx.coroutines.flow.MutableStateFlow<String?>? = null) {
     val tema by vm.tema.collectAsStateWithLifecycle()
     DietaTema(tema) {
         val nav = rememberNavController()
@@ -50,6 +50,18 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
         val aviso by vm.aviso.collectAsStateWithLifecycle()
         LaunchedEffect(aviso) {
             aviso?.let { snack.showSnackbar(it); vm.aviso.value = null }
+        }
+        // Atalho de widget: volta para hoje e abre o destino pedido (foto/x abre o adicionar com a câmera).
+        val destino = abrir?.collectAsStateWithLifecycle()?.value
+        LaunchedEffect(destino) {
+            val d = destino ?: return@LaunchedEffect
+            abrir.value = null
+            vm.dia.value = com.organizador.dieta.data.Datas.hoje()
+            val rota = if (d.startsWith("foto/")) "adicionar/${d.removePrefix("foto/")}?camera=true" else d
+            nav.navigate(rota) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = d in ABAS.map { it.rota } }
+                launchSingleTop = true
+            }
         }
         val atual = nav.currentBackStackEntryAsState().value?.destination?.route
         Scaffold(
@@ -77,9 +89,12 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
             // soma as duas e sobra um vão entre o campo de texto e o teclado.
             NavHost(nav, startDestination = "hoje", modifier = Modifier.padding(pad).consumeWindowInsets(pad)) {
                 composable("hoje") { HojeTela(vm, adicionar = { r -> nav.navigate("adicionar/$r") }) }
-                composable("adicionar/{refeicao}", listOf(navArgument("refeicao") { type = NavType.StringType })) {
+                composable("adicionar/{refeicao}?camera={camera}", listOf(
+                    navArgument("refeicao") { type = NavType.StringType },
+                    navArgument("camera") { type = NavType.BoolType; defaultValue = false },
+                )) {
                     AdicionarTela(vm, it.arguments?.getString("refeicao") ?: "almoco", voltar = { nav.popBackStack() },
-                        novoAlimento = { nav.navigate("alimento/novo") })
+                        novoAlimento = { nav.navigate("alimento/novo") }, abrirCamera = it.arguments?.getBoolean("camera") == true)
                 }
                 composable("chat") { ChatTela(vm) }
                 composable("progresso") { ProgressoTela(vm) }

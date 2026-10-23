@@ -147,6 +147,9 @@ interface RegistroDao {
     @Query("SELECT * FROM registros WHERE data = :data AND deletedAt IS NULL ORDER BY createdAt")
     fun doDia(data: String): Flow<List<Registro>>
 
+    @Query("SELECT * FROM registros WHERE data = :data AND deletedAt IS NULL")
+    suspend fun doDiaLista(data: String): List<Registro>
+
     @Query("SELECT * FROM registros WHERE data = :data AND refeicao = :refeicao AND deletedAt IS NULL")
     suspend fun daRefeicao(data: String, refeicao: String): List<Registro>
 
@@ -207,6 +210,9 @@ interface AguaDao {
 interface PlanoDao {
     @Query("SELECT * FROM plano WHERE deletedAt IS NULL ORDER BY diaSemana, refeicao, opcao")
     fun todos(): Flow<List<PlanoItem>>
+
+    @Query("SELECT * FROM plano WHERE deletedAt IS NULL")
+    suspend fun ativos(): List<PlanoItem>
 
     @Query("SELECT * FROM plano WHERE id = :id")
     suspend fun porId(id: String): PlanoItem?

@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Dieta</string>
+    <string name="widget_resumo">Resumo do dia</string>
+    <string name="widget_resumo_desc">Calorias restantes, proteína e água de hoje</string>
+    <string name="widget_agua">Água</string>
+    <string name="widget_agua_desc">Água do dia com botões para registrar</string>
+    <string name="widget_plano">Próxima refeição</string>
+    <string name="widget_plano_desc">A próxima refeição do plano para registrar com um toque</string>
+    <string name="widget_atalhos">Registro rápido</string>
+    <string name="widget_atalhos_desc">Atalhos para cada refeição e foto do prato</string>
+    <string name="widget_sequencia">Sequência</string>
+    <string name="widget_sequencia_desc">Dias seguidos, nível e desafio da semana</string>
 </resources>

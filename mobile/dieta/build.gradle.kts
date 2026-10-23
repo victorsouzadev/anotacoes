@@ -93,6 +93,8 @@ dependencies {
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // Widgets da tela inicial (mesma versão do app de Tarefas).
+    implementation("androidx.glance:glance-appwidget:1.1.1")
 
     // Leitor de código de barras do Google Play services: abre a própria tela de câmera, sem permissão no app.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")

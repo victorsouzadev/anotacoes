@@ -24,6 +24,63 @@
             </intent-filter>
         </activity>
 
+        <!-- Widgets da tela inicial (Jetpack Glance), ver widget/Widgets.kt. -->
+        <receiver
+            android:name=".widget.ResumoWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_resumo">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_resumo" />
+        </receiver>
+        <receiver
+            android:name=".widget.AguaWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_agua">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_agua" />
+        </receiver>
+        <receiver
+            android:name=".widget.PlanoWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_plano">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_plano" />
+        </receiver>
+        <receiver
+            android:name=".widget.AtalhosWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_atalhos">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_atalhos" />
+        </receiver>
+        <receiver
+            android:name=".widget.SequenciaWidgetReceiver"
+            android:exported="false"
+            android:label="@string/widget_sequencia">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_sequencia" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.arquivos"
