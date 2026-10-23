@@ -21,12 +21,15 @@ data class Perfil(
     val metaGorduraG: Int = 0,
     val metaAguaMl: Int = 0,
     val updatedAt: Long = 0,
+    /** O que a entrevista da IA levantou (rotina, gostos, restrições). Escrito pelo chat no servidor. */
+    val preferencias: String? = null,
 ) {
     fun json(): JSONObject = JSONObject()
         .put("alturaCm", alturaCm).put("nascimento", nascimento ?: JSONObject.NULL).put("sexo", sexo)
         .put("atividade", atividade).put("objetivo", objetivo).put("metaKcal", metaKcal)
         .put("metaProteinaG", metaProteinaG).put("metaCarboG", metaCarboG).put("metaGorduraG", metaGorduraG)
         .put("metaAguaMl", metaAguaMl).put("updatedAt", Datas.iso(updatedAt))
+        .apply { preferencias?.let { put("preferencias", it) } }
 
     companion object {
         fun de(j: JSONObject) = Perfil(
@@ -41,6 +44,7 @@ data class Perfil(
             metaGorduraG = j.optInt("metaGorduraG"),
             metaAguaMl = j.optInt("metaAguaMl"),
             updatedAt = j.optStringOrNull("updatedAt")?.let(Datas::epoch) ?: 0,
+            preferencias = j.optStringOrNull("preferencias"),
         )
     }
 }
@@ -127,6 +131,11 @@ class Prefs(context: Context) {
         prefs.edit().putString("tema", t).apply()
         _tema.value = t
     }
+
+    /** Chat em modo entrevista (montando o plano alimentar); sobrevive a fechar o app no meio. */
+    var entrevista: Boolean
+        get() = prefs.getBoolean("entrevista", false)
+        set(v) = prefs.edit().putBoolean("entrevista", v).apply()
 
     var lembretesAtivos: Boolean
         get() = prefs.getBoolean("lembretes", true)

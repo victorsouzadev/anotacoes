@@ -1,5 +1,6 @@
 package com.organizador.dieta.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,7 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
     val fotos by vm.fotosDia.collectAsStateWithLifecycle()
     val metas by vm.metas.collectAsStateWithLifecycle()
     val plano by vm.plano.collectAsStateWithLifecycle()
+    val alimentos by vm.alimentos.collectAsStateWithLifecycle()
     val progresso by vm.progresso.collectAsStateWithLifecycle()
     val sincronizando by vm.sincronizando.collectAsStateWithLifecycle()
     val totais = registros.fold(Totais()) { t, r -> t + r }
@@ -156,6 +158,28 @@ fun HojeTela(vm: DietaViewModel, adicionar: (String) -> Unit) {
                     IconeBotao(Icons.Filled.Add, "Adicionar", { adicionar(codigo) }, cor = grafite.nanquim, tamanho = 22.dp)
                 }
                 if (itens.isNotEmpty()) Sub("P ${fmt(t.proteina)} g · C ${fmt(t.carbo)} g · G ${fmt(t.gordura)} g", maxLines = 1)
+                // Refeição ainda vazia: as opções do plano (o dia da semana tem prioridade sobre "todos os dias") para registrar com um toque.
+                if (itens.isEmpty()) {
+                    val ds = Datas.diaSemana(dia)
+                    val previstos = plano.filter { it.refeicao == codigo && it.diaSemana == ds }
+                        .ifEmpty { plano.filter { it.refeicao == codigo && it.diaSemana == -1 } }
+                    previstos.groupBy { it.opcao }.toSortedMap().forEach { (n, op) ->
+                        val kcal = op.sumOf { p -> alimentos.firstOrNull { it.id == p.alimentoId }?.let { it.kcal * p.quantidadeG / 100 } ?: 0.0 }
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, grafite.linha, RoundedCornerShape(8.dp))
+                                .clickable { vm.registrarOpcao(codigo, op) }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column1(Modifier.weight(1f)) {
+                                Text("Opção $n" + if (kcal > 0) " · ${kcal.roundToInt()} kcal" else "", style = MaterialTheme.typography.labelLarge)
+                                Sub(op.joinToString(", ") { "${it.nome} ${fmt(it.quantidadeG)} g" }, maxLines = 2)
+                                op.firstNotNullOfOrNull { it.observacao }?.let { Sub(it, maxLines = 2) }
+                            }
+                            IconeBotao(Icons.Filled.Add, "Registrar opção $n", { vm.registrarOpcao(codigo, op) }, tamanho = 18.dp)
+                        }
+                    }
+                }
                 if (fotosRef.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                         items(fotosRef, key = { it.id }) { f ->

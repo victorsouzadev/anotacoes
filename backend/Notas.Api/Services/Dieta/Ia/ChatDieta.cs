@@ -15,12 +15,41 @@ public class ChatDieta(ChatComFerramentas chat, FerramentasDieta ferramentas, Di
     private static readonly string[] DiasDaSemana =
         ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
-    public async Task<RespostaChatDieta> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, string? imagem, CancellationToken ct)
+    public async Task<RespostaChatDieta> ResponderAsync(string userId, IReadOnlyList<MensagemChat> historico, string? imagem, CancellationToken ct,
+        string? modo = null)
     {
-        var r = await chat.ResponderAsync(userId, historico, PromptDoSistema(), FerramentasDieta.Definicoes,
+        var prompt = PromptDoSistema() + (modo == "entrevista" ? PromptEntrevista : "");
+        var r = await chat.ResponderAsync(userId, historico, prompt, FerramentasDieta.Definicoes,
             (nome, args, c) => ferramentas.ExecutarAsync(userId, nome, args, c), ct, imagem);
         return new RespostaChatDieta(r.Resposta, r.Consultas, r.Consultas.Any(FerramentasDieta.Escrita.Contains));
     }
+
+    /// <summary>
+    /// Modo entrevista: em vez de despejar um cardápio genérico, a IA conhece a rotina e os gostos da pessoa (uma pergunta
+    /// por vez), guarda as respostas no perfil e só então monta um plano com variações que ela consiga seguir.
+    /// </summary>
+    public const string PromptEntrevista = """
+
+        MODO ENTREVISTA PARA O PLANO ALIMENTAR
+        Objetivo: montar o plano mais aderente possível à vida real da pessoa. Siga estas etapas:
+        1. Comece consultando perfil_e_metas (e plano_atual). Se já houver preferências guardadas, resuma o que sabe em
+           2-3 linhas e pergunte só o que faltar ou o que ela quiser mudar.
+        2. Entrevista: UMA pergunta curta por mensagem, com 2 a 4 exemplos de resposta para facilitar. Cubra, nesta ordem
+           e pulando o que já souber: objetivo e prazo; horários (acorda, trabalha, dorme) e quantas refeições prefere;
+           onde come cada refeição (casa, marmita, restaurante/bandejão, delivery) e tempo para cozinhar; alimentos que ama
+           e que não come de jeito nenhum; restrições, alergias, intolerâncias e condições de saúde; orçamento; treino
+           (tipo e horário); bebidas (café com açúcar, refrigerante, álcool) e doces; como é o fim de semana.
+           No máximo ~10 perguntas; se a pessoa disser "pode montar", pare e monte com o que tem.
+        3. Ao terminar, chame salvar_preferencias com um resumo objetivo de tudo (inclua o que já estava guardado).
+        4. Proposta: plano para todos os dias (dia_semana -1) e, se o fim de semana for diferente, itens próprios para
+           sábado (6) e domingo (0). Para cada refeição, 2 ou 3 opções (opcao 1, 2, 3) equivalentes em calorias e proteína,
+           com alimentos que ela gosta e que cabem na rotina e no orçamento. Use buscar_alimento para cada item e
+           observacao para trocas simples ("pode trocar o arroz por 150 g de batata"). Mostre a proposta em tabela curta
+           por refeição com o total aproximado de kcal e proteína do dia, e pergunte se pode aplicar ou o que ajustar.
+        5. Só depois do "pode": definir_plano com todos os itens (e definir_metas, se combinarem metas novas).
+           Depois, explique em 2 linhas como usar: na tela Hoje, cada refeição mostra as opções do plano para registrar
+           com um toque.
+        """;
 
     public string PromptDoSistema()
     {

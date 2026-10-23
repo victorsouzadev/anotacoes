@@ -2,9 +2,11 @@ using Notas.Api.Services.Dieta;
 
 namespace Notas.Api.Dtos;
 
+// Preferencias nulo = não mexe (o app antigo não manda; quem grava é a entrevista do chat).
 public record DietaPerfilDto(
     double AlturaCm, DateOnly? Nascimento, string Sexo, double Atividade, string Objetivo,
-    int MetaKcal, int MetaProteinaG, int MetaCarboG, int MetaGorduraG, int MetaAguaMl, DateTime UpdatedAt);
+    int MetaKcal, int MetaProteinaG, int MetaCarboG, int MetaGorduraG, int MetaAguaMl, DateTime UpdatedAt,
+    string? Preferencias = null);
 
 public record DietaPerfilResposta(DietaPerfilDto? Perfil, double? PesoAtual, MetasDieta Metas, MetasDieta Sugestao);
 
@@ -37,8 +39,11 @@ public record DietaPesoUpsert(DateOnly Data, double Kg, DateTime UpdatedAt, Date
 public record DietaAguaDto(string Id, DateOnly Data, int Ml, DateTime UpdatedAt, DateTime? DeletedAt);
 public record DietaAguaUpsert(DateOnly Data, int Ml, DateTime UpdatedAt, DateTime? DeletedAt);
 
-public record DietaPlanoDto(string Id, int DiaSemana, string Refeicao, string? AlimentoId, string Nome, double QuantidadeG, DateTime UpdatedAt, DateTime? DeletedAt);
-public record DietaPlanoUpsert(int DiaSemana, string Refeicao, string? AlimentoId, string Nome, double QuantidadeG, DateTime UpdatedAt, DateTime? DeletedAt);
+public record DietaPlanoDto(string Id, int DiaSemana, string Refeicao, string? AlimentoId, string Nome, double QuantidadeG, DateTime UpdatedAt, DateTime? DeletedAt,
+    int Opcao, string? Observacao);
+// Opcao e Observacao opcionais: versões antigas do app não mandam (valem 1 e nulo).
+public record DietaPlanoUpsert(int DiaSemana, string Refeicao, string? AlimentoId, string Nome, double QuantidadeG, DateTime UpdatedAt, DateTime? DeletedAt,
+    int Opcao = 1, string? Observacao = null);
 
 public record DietaFotoDto(string Id, DateOnly Data, string Tipo, string? Rotulo, string ContentType, int SizeBytes, DateTime CreatedAt, DateTime? DeletedAt);
 

@@ -14,6 +14,7 @@ import com.organizador.dieta.data.Foto
 import com.organizador.dieta.data.Json
 import com.organizador.dieta.data.Metas
 import com.organizador.dieta.data.Perfil
+import com.organizador.dieta.data.PlanoItem
 import com.organizador.dieta.data.objetos
 import com.organizador.dieta.data.optStringOrNull
 import java.io.File
@@ -124,7 +125,32 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
         prefs.chat = JSONArray(l.takeLast(60).map { JSONObject().put("papel", it.papel).put("texto", it.texto).put("comFoto", it.comFoto) }).toString()
     }
 
-    fun limparChat() = salvarChat(emptyList())
+    fun limparChat() {
+        salvarChat(emptyList())
+        encerrarEntrevista()
+    }
+
+    /** Modo entrevista: a IA pergunta sobre rotina e gostos (uma pergunta por vez) antes de montar o plano com opções. */
+    val entrevista = MutableStateFlow(prefs.entrevista)
+
+    fun iniciarEntrevista() {
+        if (pensando.value) return
+        salvarChat(emptyList())
+        prefs.entrevista = true
+        entrevista.value = true
+        enviarChat("Quero montar um plano alimentar completo, com opções para cada refeição. Me entreviste para chegar no plano que eu consiga seguir.", null)
+    }
+
+    fun encerrarEntrevista() {
+        prefs.entrevista = false
+        entrevista.value = false
+    }
+
+    /** Registra uma opção do plano inteira na refeição do dia. */
+    fun registrarOpcao(refeicao: String, itens: List<PlanoItem>) = lancar {
+        val fora = repo.registrarOpcao(dia.value, refeicao, itens)
+        if (fora > 0) avisar("$fora item(ns) sem alimento cadastrado ficaram de fora; adicione pelo +.")
+    }
 
     /** Manda a conversa (até 30 mensagens) e a foto opcional; se a IA alterou metas/plano/registros, sincroniza. */
     fun enviarChat(texto: String, foto: Uri?) = viewModelScope.launch {
@@ -135,6 +161,7 @@ class DietaViewModel(app: Application) : AndroidViewModel(app) {
         try {
             sincronizar(silencioso = true).join()
             val corpo = JSONObject().put("mensagens", JSONArray(historico.takeLast(30).map { JSONObject().put("papel", it.papel).put("texto", it.texto) }))
+            if (entrevista.value) corpo.put("modo", "entrevista")
             foto?.let { corpo.put("imagem", repo.dataUrl(it)) }
             val r = a.api.chamar("POST", "/api/dieta/chat", corpo) as JSONObject
             salvarChat(chat.value + MsgChat("assistente", r.getString("resposta")))

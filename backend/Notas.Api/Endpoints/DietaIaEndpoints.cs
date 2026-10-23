@@ -4,7 +4,7 @@ using Notas.Api.Services.Financas.Chat;
 
 namespace Notas.Api.Endpoints;
 
-public record DietaChatRequest(List<MensagemChat>? Mensagens, string? Imagem);
+public record DietaChatRequest(List<MensagemChat>? Mensagens, string? Imagem, string? Modo = null);
 public record DietaReconhecerRequest(string? Modo, string? Texto, string? Imagem);
 
 /// <summary>IA da Dieta: chat que consulta e altera a dieta, e reconhecimento de alimentos por foto ou texto.</summary>
@@ -29,7 +29,7 @@ public static class DietaIaEndpoints
             if (mensagens.Count == 0 || mensagens[^1].Papel != "usuario")
                 return Results.BadRequest(new { error = "Envie uma pergunta." });
             if (ImagemInvalida(req.Imagem)) return Results.BadRequest(new { error = "Imagem inválida (JPEG/PNG/WebP em data URL, até 4 MB)." });
-            return await Tratar(() => chat.ResponderAsync(user.UserId(), mensagens, req.Imagem, ct), ct);
+            return await Tratar(() => chat.ResponderAsync(user.UserId(), mensagens, req.Imagem, ct, req.Modo), ct);
         }).RequireAuthorization().RequireRateLimiting("dieta-ia");
 
         // modo: prato (foto do prato), texto (descrição) ou rotulo (foto da tabela nutricional).

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fastfood
 import androidx.compose.material.icons.filled.Person
@@ -32,6 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -60,6 +62,7 @@ import com.organizador.dieta.data.REFEICOES
 import com.organizador.dieta.data.nomeRefeicao
 import java.text.DateFormat
 import java.util.Date
+import kotlin.math.roundToInt
 import java.util.UUID
 
 @Composable
@@ -145,31 +148,48 @@ fun PerfilTela(vm: DietaViewModel, voltar: () -> Unit) {
 }
 
 @Composable
-fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit) {
+fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit, entrevista: () -> Unit) {
     val plano by vm.plano.collectAsStateWithLifecycle()
+    val alimentos by vm.alimentos.collectAsStateWithLifecycle()
+    val perfil by vm.perfil.collectAsStateWithLifecycle()
     var diaSemana by remember { mutableStateOf(-1) }
     var refeicao by remember { mutableStateOf("almoco") }
+    var opcao by remember { mutableStateOf(1) }
     var buscando by remember { mutableStateOf(false) }
     var escolhido by remember { mutableStateOf<Alimento?>(null) }
     Tela("Plano alimentar", voltar) {
         Column(Modifier.padding(16.dp)) {
-            Sub("O cardápio previsto. A tela Hoje mostra quantas refeições do plano você registrou (adesão).")
+            Sub("O cardápio previsto, com opções por refeição. Na tela Hoje, cada refeição mostra as opções para registrar com um toque.")
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = entrevista, Modifier.fillMaxWidth()) { Text("Montar plano com a IA (entrevista)") }
+            perfil.preferencias?.let { Sub("A IA já sabe: $it", maxLines = 3) }
             Spacer(Modifier.height(8.dp))
             Escolha(DIAS_SEMANA, diaSemana) { diaSemana = it }
             Spacer(Modifier.height(8.dp))
             REFEICOES.forEach { (cod, nome) ->
-                val itens = plano.filter { it.diaSemana == diaSemana && it.refeicao == cod }
+                val opcoes = plano.filter { it.diaSemana == diaSemana && it.refeicao == cod }.groupBy { it.opcao }.toSortedMap()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Titulo(nome, Modifier.weight(1f))
-                    BotaoTexto(onClick = { refeicao = cod; buscando = true }) { Text("Adicionar") }
-                }
-                itens.forEach { p ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${p.nome} — ${fmt(p.quantidadeG)} g", Modifier.weight(1f))
-                        IconButton(onClick = { vm.lancar { vm.repo.apagarPlano(p) } }) { Icon(Icons.Filled.Close, "Remover") }
+                    BotaoTexto(onClick = { refeicao = cod; opcao = (opcoes.keys.maxOrNull() ?: 0) + 1; buscando = true }) {
+                        Text(if (opcoes.isEmpty()) "Adicionar" else "Nova opção")
                     }
                 }
-                HorizontalDivider()
+                opcoes.forEach { (n, itens) ->
+                    if (opcoes.size > 1 || n > 1) Row(verticalAlignment = Alignment.CenterVertically) {
+                        val kcal = itens.sumOf { p -> alimentos.firstOrNull { it.id == p.alimentoId }?.let { it.kcal * p.quantidadeG / 100 } ?: 0.0 }
+                        Text("Opção $n" + if (kcal > 0) " · ${kcal.roundToInt()} kcal" else "", Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge, color = grafite.grafiteSuave)
+                        IconeBotao(Icons.Filled.Add, "Adicionar à opção $n", { refeicao = cod; opcao = n; buscando = true }, tamanho = 18.dp)
+                    }
+                    itens.forEach { p ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${p.nome} — ${fmt(p.quantidadeG)} g", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            IconeBotao(Icons.Filled.Close, "Remover", { vm.lancar { vm.repo.apagarPlano(p) } }, tamanho = 18.dp)
+                        }
+                    }
+                    itens.firstNotNullOfOrNull { it.observacao }?.let { Sub(it) }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp), color = grafite.linha)
             }
         }
     }
@@ -178,7 +198,7 @@ fun PlanoTela(vm: DietaViewModel, voltar: () -> Unit) {
     }
     escolhido?.let { a ->
         QuantidadeDialog(a, aoConfirmar = { g ->
-            vm.lancar { vm.repo.salvarPlano(PlanoItem(UUID.randomUUID().toString(), diaSemana, refeicao, a.id, a.nome, g)) }
+            vm.lancar { vm.repo.salvarPlano(PlanoItem(UUID.randomUUID().toString(), diaSemana, refeicao, a.id, a.nome, g, opcao = opcao)) }
             escolhido = null
         }, aoFechar = { escolhido = null })
     }
