@@ -108,6 +108,55 @@ public class DietaIaTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Entrevista_guarda_preferencias_e_grava_plano_com_opcoes()
+    {
+        await ConfigurarIa();
+        var passo = 0;
+        _modelo.Roteiro = _ => passo++ switch
+        {
+            0 => Chamada("salvar_preferencias", new { texto = "Almoça no bandejão; não come peixe." }),
+            1 => Chamada("definir_plano", new
+            {
+                itens = new object[]
+                {
+                    new { dia_semana = -1, refeicao = "cafe", alimento_id = "taco-1", nome = "", gramas = 100, opcao = 1 },
+                    new { dia_semana = -1, refeicao = "cafe", nome = "Pão com ovo", gramas = 120, opcao = 2, observacao = "pode trocar o pão por tapioca" },
+                },
+            }),
+            _ => Texto("Plano com duas opções no café."),
+        };
+        var res = await _client.PostAsJsonAsync("/api/dieta/chat", new { modo = "entrevista", mensagens = new[] { new { papel = "usuario", texto = "pode" } } });
+        res.EnsureSuccessStatusCode();
+        Assert.Contains("MODO ENTREVISTA", _modelo.Recebidos[0].ToJsonString());
+
+        var perfil = await _client.GetFromJsonAsync<JsonElement>("/api/dieta/perfil");
+        Assert.Contains("bandej", perfil.GetProperty("perfil").GetProperty("preferencias").GetString());
+
+        var plano = (await _client.GetFromJsonAsync<JsonElement>("/api/dieta/plano")).EnumerateArray()
+            .Where(p => p.GetProperty("deletedAt").ValueKind == JsonValueKind.Null).ToList();
+        Assert.Contains(plano, p => p.GetProperty("opcao").GetInt32() == 1);
+        var op2 = Assert.Single(plano, p => p.GetProperty("opcao").GetInt32() == 2);
+        Assert.Contains("tapioca", op2.GetProperty("observacao").GetString());
+
+        // Chat normal não recebe o roteiro da entrevista.
+        passo = 2;
+        await _client.PostAsJsonAsync("/api/dieta/chat", new { mensagens = new[] { new { papel = "usuario", texto = "oi" } } });
+        Assert.DoesNotContain("MODO ENTREVISTA", _modelo.Recebidos[^1].ToJsonString());
+    }
+
+    [Fact]
+    public async Task Item_do_plano_sem_opcao_vale_opcao_1()
+    {
+        var res = await _client.PutAsJsonAsync("/api/dieta/plano/pl-antigo", new
+        {
+            diaSemana = -1, refeicao = "almoco", nome = "Arroz", quantidadeG = 100, updatedAt = DateTime.UtcNow,
+        });
+        res.EnsureSuccessStatusCode();
+        var item = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, item.GetProperty("opcao").GetInt32());
+    }
+
+    [Fact]
     public async Task Ferramenta_com_argumento_invalido_devolve_erro_ao_modelo_sem_quebrar()
     {
         await ConfigurarIa();

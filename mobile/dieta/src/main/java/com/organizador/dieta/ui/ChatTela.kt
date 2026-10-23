@@ -66,6 +66,7 @@ private val SUGESTOES = listOf(
 fun ChatTela(vm: DietaViewModel) {
     val mensagens by vm.chat.collectAsStateWithLifecycle()
     val pensando by vm.pensando.collectAsStateWithLifecycle()
+    val entrevista by vm.entrevista.collectAsStateWithLifecycle()
     var texto by remember { mutableStateOf("") }
     var foto by remember { mutableStateOf<Uri?>(null) }
     var menuFoto by remember { mutableStateOf(false) }
@@ -85,11 +86,21 @@ fun ChatTela(vm: DietaViewModel) {
             Text("Assistente", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
             if (mensagens.isNotEmpty()) IconButton(onClick = { vm.limparChat() }) { Icon(Icons.Filled.DeleteSweep, "Nova conversa") }
         }
+        if (entrevista) Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp).border(1.dp, grafite.linha, RoundedCornerShape(8.dp)).padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Sub("Entrevista do plano alimentar: responda e, quando quiser, peça \"pode montar\".", Modifier.weight(1f))
+            BotaoTexto(onClick = { vm.encerrarEntrevista() }) { Text("Encerrar") }
+        }
         LazyColumn(Modifier.weight(1f), state = lista, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (mensagens.isEmpty()) item {
                 Column(Modifier.padding(16.dp)) {
                     Text("Peça para montar ou ajustar sua dieta, revisar metas ou analisar sua semana. " +
                         "O assistente usa seus dados reais e pergunta antes de alterar o plano ou as metas.")
+                    Spacer(Modifier.padding(4.dp))
+                    BotaoSecundario(onClick = { vm.iniciarEntrevista() }, enabled = !pensando) { Text("Montar plano com entrevista") }
+                    Sub("A IA pergunta sobre sua rotina, gostos e restrições e monta um plano com 2 ou 3 opções por refeição.")
                     Spacer(Modifier.padding(4.dp))
                     Sub("Usa a chave de IA configurada no hub (Configurações de IA). Para mandar foto, a da OpenRouter. " +
                         "Não substitui acompanhamento de nutricionista.")
@@ -148,9 +159,14 @@ private fun Balao(m: MsgChat) {
 
 /** Markdown mínimo do que o modelo costuma mandar: **negrito**, títulos (#) e marcadores (-, *). Tabelas ficam como texto. */
 private fun markdown(t: String): AnnotatedString = buildAnnotatedString {
-    t.lines().forEachIndexed { i, bruta ->
-        if (i > 0) append('\n')
-        var l = bruta
+    var primeira = true
+    t.lines().forEach { bruta ->
+        // Tabela markdown: some a linha separadora (|---|) e as barras viram " · ", para caber na tela.
+        val tl = bruta.trim()
+        if (tl.startsWith("|") && tl.replace(Regex("[|:\\-\\s]"), "").isEmpty()) return@forEach
+        if (!primeira) append('\n')
+        primeira = false
+        var l = if (tl.startsWith("|")) tl.trim('|').split('|').joinToString(" · ") { it.trim() } else bruta
         val titulo = l.trimStart().startsWith("#")
         if (titulo) l = l.trimStart().trimStart('#').trim()
         if (l.trimStart().startsWith("- ") || l.trimStart().startsWith("* ")) l = "•" + l.trimStart().substring(1)

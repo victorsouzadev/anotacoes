@@ -1,6 +1,7 @@
 package com.organizador.dieta.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -10,6 +11,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 // Espelho local das tabelas dieta_* do backend. Datas de calendário como "yyyy-MM-dd" (igual ao JSON da
@@ -91,6 +94,10 @@ data class PlanoItem(
     val updatedAt: Long = System.currentTimeMillis(),
     val deletedAt: Long? = null,
     val sujo: Boolean = true,
+    /** Variação da refeição (1, 2, 3…): opções equivalentes entre si; a pessoa escolhe uma no dia. */
+    @ColumnInfo(defaultValue = "1") val opcao: Int = 1,
+    /** Dica de troca ("pode trocar o arroz por batata"), vale para a opção inteira. */
+    val observacao: String? = null,
 )
 
 @Entity(tableName = "fotos", indices = [Index("data")])
@@ -198,7 +205,7 @@ interface AguaDao {
 
 @Dao
 interface PlanoDao {
-    @Query("SELECT * FROM plano WHERE deletedAt IS NULL ORDER BY diaSemana, refeicao")
+    @Query("SELECT * FROM plano WHERE deletedAt IS NULL ORDER BY diaSemana, refeicao, opcao")
     fun todos(): Flow<List<PlanoItem>>
 
     @Query("SELECT * FROM plano WHERE id = :id")
@@ -240,7 +247,7 @@ interface FotoDao {
 
 @Database(
     entities = [Alimento::class, Registro::class, Peso::class, Agua::class, PlanoItem::class, Foto::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class DietaDb : RoomDatabase() {
@@ -253,6 +260,14 @@ abstract class DietaDb : RoomDatabase() {
 
     companion object {
         fun criar(context: Context): DietaDb =
-            Room.databaseBuilder(context.applicationContext, DietaDb::class.java, "dieta.db").build()
+            Room.databaseBuilder(context.applicationContext, DietaDb::class.java, "dieta.db").addMigrations(V1_V2).build()
+
+        /** 1.8: opções (variações) por refeição no plano. */
+        private val V1_V2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE plano ADD COLUMN opcao INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE plano ADD COLUMN observacao TEXT")
+            }
+        }
     }
 }

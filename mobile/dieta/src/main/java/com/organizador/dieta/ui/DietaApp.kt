@@ -83,7 +83,15 @@ fun DietaApp(vm: DietaViewModel = viewModel()) {
                 composable("fotos") { FotosTela(vm) }
                 composable("mais") { MaisTela(vm, ir = { nav.navigate(it) }) }
                 composable("perfil") { PerfilTela(vm, voltar = { nav.popBackStack() }) }
-                composable("plano") { PlanoTela(vm, voltar = { nav.popBackStack() }) }
+                composable("plano") {
+                    PlanoTela(vm, voltar = { nav.popBackStack() }, entrevista = {
+                        vm.iniciarEntrevista()
+                        nav.navigate("chat") {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                        }
+                    })
+                }
                 composable("alimentos") { MeusAlimentosTela(vm, voltar = { nav.popBackStack() }, editar = { id -> nav.navigate("alimento/$id") }) }
                 composable("alimento/{id}", listOf(navArgument("id") { type = NavType.StringType })) {
                     AlimentoTela(vm, it.arguments?.getString("id") ?: "novo", voltar = { nav.popBackStack() })

@@ -377,6 +377,9 @@ namespace Notas.Api.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Preferencias")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Sexo")
                         .IsRequired()
                         .HasMaxLength(1)
@@ -436,6 +439,12 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("Observacao")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Opcao")
+                        .HasColumnType("INTEGER");
 
                     b.Property<double>("QuantidadeG")
                         .HasColumnType("REAL");

@@ -20,6 +20,11 @@ public class DietaPerfil
     public int MetaCarboG { get; set; }
     public int MetaGorduraG { get; set; }
     public int MetaAguaMl { get; set; }
+    /// <summary>
+    /// O que a pessoa contou na entrevista do plano (rotina, gostos, aversões, restrições, orçamento…), em texto livre.
+    /// O chat lê antes de sugerir qualquer coisa, para não repetir perguntas.
+    /// </summary>
+    public string? Preferencias { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -103,6 +108,10 @@ public class DietaPlanoItem
     public string? AlimentoId { get; set; }
     public string Nome { get; set; } = "";
     public double QuantidadeG { get; set; }
+    /// <summary>Variação da refeição (1, 2, 3…): cada opção é um conjunto de itens equivalente nas metas; a pessoa escolhe uma por dia.</summary>
+    public int Opcao { get; set; } = 1;
+    /// <summary>Dica de troca ou preparo, ex.: "pode trocar por batata-doce".</summary>
+    public string? Observacao { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? DeletedAt { get; set; }
 }

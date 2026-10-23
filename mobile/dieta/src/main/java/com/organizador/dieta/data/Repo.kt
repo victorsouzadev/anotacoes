@@ -136,6 +136,21 @@ class Repo(private val context: Context, val db: DietaDb, val prefs: Prefs, priv
         pedirSync()
     }
 
+    /** Registra no dia todos os itens de uma opção do plano. Devolve quantos itens ficaram de fora (sem alimento cadastrado). */
+    suspend fun registrarOpcao(data: LocalDate, refeicao: String, itens: List<PlanoItem>): Int {
+        var fora = 0
+        itens.forEach { p ->
+            val a = p.alimentoId?.let { db.alimentos().porId(it) }
+            if (a == null || a.deletedAt != null) fora++
+            else db.registros().salvar(Calculos.porcao(a, p.quantidadeG).let { t ->
+                Registro(UUID.randomUUID().toString(), data.toString(), refeicao, a.id, a.nome, p.quantidadeG,
+                    t.kcal, t.proteina, t.carbo, t.gordura, t.fibra, null)
+            })
+        }
+        pedirSync()
+        return fora
+    }
+
     suspend fun apagarPlano(p: PlanoItem) {
         db.plano().salvar(p.copy(deletedAt = agora(), updatedAt = agora(), sujo = true))
         pedirSync()
@@ -246,7 +261,9 @@ object Json {
 
     fun plano(p: PlanoItem) = JSONObject().put("diaSemana", p.diaSemana).put("refeicao", p.refeicao).put("alimentoId", p.alimentoId ?: JSONObject.NULL)
         .put("nome", p.nome).put("quantidadeG", p.quantidadeG).put("updatedAt", Datas.iso(p.updatedAt)).put("deletedAt", d(p.deletedAt))
+        .put("opcao", p.opcao).put("observacao", p.observacao ?: JSONObject.NULL)
 
     fun plano(j: JSONObject) = PlanoItem(j.getString("id"), j.getInt("diaSemana"), j.getString("refeicao"), j.optStringOrNull("alimentoId"),
-        j.getString("nome"), j.getDouble("quantidadeG"), ms(j, "updatedAt") ?: 0, ms(j, "deletedAt"), false)
+        j.getString("nome"), j.getDouble("quantidadeG"), ms(j, "updatedAt") ?: 0, ms(j, "deletedAt"), false,
+        j.optInt("opcao", 1).coerceAtLeast(1), j.optStringOrNull("observacao"))
 }

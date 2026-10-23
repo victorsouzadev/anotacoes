@@ -54,6 +54,7 @@ public static class DietaEndpoints
             perfil.MetaCarboG = req.MetaCarboG;
             perfil.MetaGorduraG = req.MetaGorduraG;
             perfil.MetaAguaMl = req.MetaAguaMl;
+            if (req.Preferencias is not null) perfil.Preferencias = req.Preferencias.Length > 4000 ? req.Preferencias[..4000] : req.Preferencias;
             perfil.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToDto(perfil));
@@ -242,7 +243,8 @@ public static class DietaEndpoints
         g.MapPut("/plano/{id}", async (string id, DietaPlanoUpsert req, ClaimsPrincipal user, AppDbContext db, CancellationToken ct) =>
         {
             var nome = req.Nome?.Trim() ?? "";
-            if (req.DiaSemana is < -1 or > 6 || !Refeicoes.Contains(req.Refeicao) || nome.Length is 0 or > 200 || req.QuantidadeG is < 0 or > 5000)
+            if (req.DiaSemana is < -1 or > 6 || !Refeicoes.Contains(req.Refeicao) || nome.Length is 0 or > 200 || req.QuantidadeG is < 0 or > 5000
+                || req.Opcao is < 1 or > 9 || req.Observacao?.Length > 300)
                 return Results.BadRequest(new { error = "Item do plano inválido." });
             var userId = user.UserId();
             var p = await db.DietaPlano.FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -250,6 +252,7 @@ public static class DietaEndpoints
             if (p is null) db.DietaPlano.Add(p = new DietaPlanoItem { Id = id, UserId = userId });
             else if (p.UpdatedAt >= req.UpdatedAt) return Results.Ok(ToDto(p));
             (p.DiaSemana, p.Refeicao, p.AlimentoId, p.Nome, p.QuantidadeG, p.DeletedAt) = (req.DiaSemana, req.Refeicao, req.AlimentoId, nome, req.QuantidadeG, req.DeletedAt);
+            (p.Opcao, p.Observacao) = (req.Opcao, string.IsNullOrWhiteSpace(req.Observacao) ? null : req.Observacao.Trim());
             p.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
             await db.SaveChangesAsync(ct);
             return Results.Ok(ToDto(p));
@@ -461,7 +464,7 @@ public static class DietaEndpoints
     private static bool Negativo(params double[] v) => v.Any(x => x < 0 || double.IsNaN(x) || x > 100000);
 
     private static DietaPerfilDto ToDto(DietaPerfil p) => new(p.AlturaCm, p.Nascimento, p.Sexo, p.Atividade, p.Objetivo,
-        p.MetaKcal, p.MetaProteinaG, p.MetaCarboG, p.MetaGorduraG, p.MetaAguaMl, p.UpdatedAt);
+        p.MetaKcal, p.MetaProteinaG, p.MetaCarboG, p.MetaGorduraG, p.MetaAguaMl, p.UpdatedAt, p.Preferencias);
 
     public static DietaAlimentoDto ToDto(DietaAlimento a) => new(a.Id, a.Nome, a.Kcal, a.Proteina, a.Carbo, a.Gordura, a.Fibra, a.Sodio,
         a.PorcaoG, a.PorcaoNome, a.CodigoBarras, a.Fonte, a.Itens, a.Favorito, a.UserId != null, a.UpdatedAt, a.DeletedAt);
@@ -469,7 +472,8 @@ public static class DietaEndpoints
     public static DietaRegistroDto ToDto(DietaRegistro r) => new(r.Id, r.Data, r.Refeicao, r.AlimentoId, r.Nome, r.QuantidadeG,
         r.Kcal, r.Proteina, r.Carbo, r.Gordura, r.Fibra, r.FotoId, r.CreatedAt, r.UpdatedAt, r.DeletedAt);
 
-    private static DietaPlanoDto ToDto(DietaPlanoItem p) => new(p.Id, p.DiaSemana, p.Refeicao, p.AlimentoId, p.Nome, p.QuantidadeG, p.UpdatedAt, p.DeletedAt);
+    private static DietaPlanoDto ToDto(DietaPlanoItem p) => new(p.Id, p.DiaSemana, p.Refeicao, p.AlimentoId, p.Nome, p.QuantidadeG, p.UpdatedAt, p.DeletedAt,
+        p.Opcao, p.Observacao);
 
     private static DietaCompartilhamentoDto ToDto(DietaCompartilhamento c, HttpRequest http) => new(c.Id, c.Titulo,
         c.Escopos.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),

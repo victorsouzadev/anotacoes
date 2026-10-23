@@ -20,7 +20,7 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
 
     /// <summary>Ferramentas que gravam: se o modelo chamou alguma, o app sincroniza depois da resposta.</summary>
     public static readonly HashSet<string> Escrita =
-        ["definir_metas", "definir_plano", "adicionar_item_plano", "remover_item_plano", "registrar_refeicao", "criar_alimento"];
+        ["definir_metas", "definir_plano", "adicionar_item_plano", "remover_item_plano", "registrar_refeicao", "criar_alimento", "salvar_preferencias"];
 
     private static readonly string Refeicoes = string.Join(", ", DietaEndpoints.Refeicoes);
 
@@ -31,7 +31,11 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
             Schema(new() { ["de"] = Texto("Data inicial AAAA-MM-DD"), ["ate"] = Texto("Data final AAAA-MM-DD") }, "de", "ate")),
         new("dia", "O que foi registrado num dia, por refeição, com os valores de cada item.",
             Schema(new() { ["data"] = Texto("AAAA-MM-DD") }, "data")),
-        new("plano_atual", "O plano alimentar (cardápio previsto) com ids, dia da semana (-1 = todos, 0 = domingo … 6 = sábado), refeição e gramas.", Schema(new())),
+        new("plano_atual", "O plano alimentar (cardápio previsto) com ids, dia da semana (-1 = todos, 0 = domingo … 6 = sábado), refeição, opção (variação), gramas e observação.", Schema(new())),
+        new("salvar_preferencias",
+            "Guarda no perfil, em texto corrido, o que a pessoa contou sobre rotina, horários, gostos, aversões, restrições, alergias, "
+            + "orçamento, onde come, tempo de preparo e treino. Substitui o texto anterior: inclua o que já havia e continua valendo.",
+            Schema(new() { ["texto"] = Texto("Resumo objetivo das preferências, até ~1500 caracteres") }, "texto")),
         new("buscar_alimento",
             "Procura alimentos na tabela TACO e nos cadastrados pelo usuário. Devolve id e valores por 100 g. "
             + "Use antes de montar plano ou registrar, para usar ids reais.",
@@ -44,7 +48,8 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
             })),
         new("definir_plano",
             "Substitui o plano alimentar. Com dia_semana, troca só os itens daquele dia; sem, troca o plano inteiro. "
-            + $"Refeições: {Refeicoes}. Use alimento_id de buscar_alimento sempre que houver.",
+            + $"Refeições: {Refeicoes}. Use alimento_id de buscar_alimento sempre que houver. Cada refeição pode ter "
+            + "variações: itens com a mesma opcao formam uma opção completa (1, 2, 3…), e as opções devem ser equivalentes em calorias e proteína.",
             Schema(new()
             {
                 ["dia_semana"] = Inteiro("Opcional: -1 todos os dias, 0 domingo … 6 sábado"),
@@ -56,6 +61,8 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
                         ["dia_semana"] = Inteiro("-1 todos os dias, 0 domingo … 6 sábado"),
                         ["refeicao"] = Texto(Refeicoes), ["alimento_id"] = Texto("Id de buscar_alimento"),
                         ["nome"] = Texto("Nome do alimento"), ["gramas"] = new JsonObject { ["type"] = "number" },
+                        ["opcao"] = Inteiro("Variação da refeição: 1, 2, 3… (padrão 1)"),
+                        ["observacao"] = Texto("Opcional: troca ou preparo, ex.: 'pode trocar por batata-doce'"),
                     }, "dia_semana", "refeicao", "nome", "gramas"),
                 },
             }, "itens")),
@@ -64,6 +71,7 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
             {
                 ["dia_semana"] = Inteiro("-1 todos os dias, 0 domingo … 6 sábado"), ["refeicao"] = Texto(Refeicoes),
                 ["alimento_id"] = Texto("Id de buscar_alimento"), ["nome"] = Texto("Nome"), ["gramas"] = new JsonObject { ["type"] = "number" },
+                ["opcao"] = Inteiro("Variação da refeição (padrão 1)"), ["observacao"] = Texto("Opcional: troca ou preparo"),
             }, "dia_semana", "refeicao", "nome", "gramas")),
         new("remover_item_plano", "Remove um item do plano pelo id (de plano_atual).", Schema(new() { ["id"] = Texto("Id do item") }, "id")),
         new("registrar_refeicao", "Registra no diário um alimento comido. Os valores saem do alimento pela quantidade.",
@@ -99,6 +107,7 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
                 "remover_item_plano" => await RemoverPlano(userId, Str(a, "id") ?? "", ct),
                 "registrar_refeicao" => await Registrar(userId, a!, ct),
                 "criar_alimento" => await CriarAlimento(userId, a!, ct),
+                "salvar_preferencias" => await SalvarPreferencias(userId, Str(a, "texto") ?? "", ct),
                 _ => new { erro = $"ferramenta desconhecida: {nome}" },
             };
             var json = JsonSerializer.Serialize(r, Json);
@@ -136,6 +145,7 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
         return new
         {
             perfil = perfil is null ? null : new { perfil.AlturaCm, idade, perfil.Sexo, perfil.Atividade, perfil.Objetivo },
+            preferencias = perfil?.Preferencias,
             pesoAtualKg = peso, metas, sugestao = DietaMetas.Sugerir(perfil, peso, prog.Hoje()),
             metasFixadasPeloUsuario = perfil is null ? null : new { perfil.MetaKcal, perfil.MetaProteinaG, perfil.MetaCarboG, perfil.MetaGorduraG, perfil.MetaAguaMl },
         };
@@ -160,7 +170,8 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
 
     private async Task<object> Plano(string userId, CancellationToken ct) =>
         await db.DietaPlano.AsNoTracking().Where(p => p.UserId == userId && p.DeletedAt == null)
-            .OrderBy(p => p.DiaSemana).Select(p => new { p.Id, p.DiaSemana, p.Refeicao, p.AlimentoId, p.Nome, gramas = p.QuantidadeG })
+            .OrderBy(p => p.DiaSemana).ThenBy(p => p.Refeicao).ThenBy(p => p.Opcao)
+            .Select(p => new { p.Id, p.DiaSemana, p.Refeicao, p.Opcao, p.AlimentoId, p.Nome, gramas = p.QuantidadeG, p.Observacao })
             .ToListAsync(ct);
 
     private async Task<object> DefinirMetas(string userId, JsonObject? a, CancellationToken ct)
@@ -222,7 +233,20 @@ public class FerramentasDieta(AppDbContext db, DietaProgresso prog)
         {
             Id = Guid.NewGuid().ToString(), UserId = userId, DiaSemana = dia, Refeicao = refeicao, AlimentoId = alimentoId,
             Nome = nome, QuantidadeG = gramas, UpdatedAt = agora,
+            Opcao = Math.Clamp(Int(a, "opcao") ?? 1, 1, 9),
+            Observacao = Str(a, "observacao") is { } o ? (o.Length > 300 ? o[..300] : o.Trim()) : null,
         };
+    }
+
+    private async Task<object> SalvarPreferencias(string userId, string texto, CancellationToken ct)
+    {
+        if (texto.Trim().Length == 0) throw new ArgumentException("texto vazio");
+        var perfil = await db.DietaPerfis.FirstOrDefaultAsync(p => p.UserId == userId, ct);
+        if (perfil is null) db.DietaPerfis.Add(perfil = new DietaPerfil { UserId = userId });
+        perfil.Preferencias = texto.Length > 4000 ? texto[..4000] : texto.Trim();
+        perfil.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new { ok = true };
     }
 
     private async Task<object> RemoverPlano(string userId, string id, CancellationToken ct)
