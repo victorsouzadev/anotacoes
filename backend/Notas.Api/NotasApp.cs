@@ -12,6 +12,7 @@ using Notas.Api.Services.Dieta;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Financas.Chat;
+using Notas.Api.Services.Estudio;
 using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Moldes;
 using Notas.Api.Services.Seguranca;
@@ -146,6 +147,25 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
+        // Ferramenta "Estúdio": gerações de imagem, vídeo, áudio e 3D no fal.ai (e mundos na World Labs),
+        // biblioteca de arquivos em disco e montagens com o ffmpeg. A fila anda em segundo plano
+        // (EstudioWorker); a chave é de cada usuário, com a do servidor (Estudio__FalKey) como padrão.
+        builder.Services.Configure<EstudioOptions>(builder.Configuration.GetSection(EstudioOptions.SectionName));
+        builder.Services.AddHttpClient(FalCliente.NomeHttp, c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(10);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Estudio/1.0");
+        });
+        builder.Services.AddSingleton<Catalogo>();
+        builder.Services.AddSingleton<EstudioArmazenamento>();
+        builder.Services.AddSingleton<Ffmpeg>();
+        builder.Services.AddSingleton<FalCliente>();
+        builder.Services.AddSingleton<WorldLabsCliente>();
+        builder.Services.AddScoped<EstudioMidias>();
+        builder.Services.AddScoped<EstudioGeracoes>();
+        builder.Services.AddScoped<EstudioProcessador>();
+        builder.Services.AddHostedService<EstudioWorker>();
+
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -260,6 +280,17 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
+            // Gerações do Estúdio custam dinheiro por chamada: por usuário, como as outras IAs.
+            o.AddPolicy("estudio-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                    ?? ctx.User.FindFirst("sub")?.Value
+                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 30,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
+
             // Importar arquivo custa muito mais que interpretar uma frase: uma foto de
             // cupom vale milhares de tokens e um PDF de extrato, dezenas de milhares.
             // O limite é bem mais apertado que o do lançamento por texto.
@@ -345,6 +376,7 @@ public static class NotasApp
         app.MapConfiguracaoIaEndpoints();
         app.MapTasksEndpoints();
         app.MapImagemEndpoints();
+        app.MapEstudioEndpoints();
         app.MapSitesEndpoints();
         app.MapMoldesEndpoints();
         app.MapDietaEndpoints();

@@ -221,7 +221,8 @@ public sealed class Catalogo
         if (v is null) return null;
         return v.GetValueKind() switch
         {
-            JsonValueKind.Number => v.GetValue<double>(),
+            // GetValue<double>() falha num JsonValue criado a partir de int: o texto JSON serve para os dois.
+            JsonValueKind.Number => double.Parse(v.ToJsonString(), CultureInfo.InvariantCulture),
             JsonValueKind.String when double.TryParse(v.GetValue<string>().TrimEnd('s'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) => d,
             _ => null,
         };

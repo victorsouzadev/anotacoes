@@ -17,7 +17,24 @@ public sealed class EstudioMidias(
         [".usdz"] = "model/vnd.usdz+zip", [".stl"] = "model/stl",
         [".ply"] = "application/octet-stream", [".spz"] = "application/octet-stream", [".splat"] = "application/octet-stream", [".ksplat"] = "application/octet-stream",
         [".zip"] = "application/zip",
+        // Documentos dos craft apps.
+        [".pdf"] = "application/pdf",
+        [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        [".odt"] = "application/vnd.oasis.opendocument.text", [".rtf"] = "application/rtf",
+        [".md"] = "text/markdown", [".txt"] = "text/plain", [".csv"] = "text/csv", [".html"] = "text/html", [".json"] = "application/json",
+        [".dxf"] = "image/vnd.dxf", [".dwg"] = "image/vnd.dwg",
+        [".psd"] = "image/vnd.adobe.photoshop", [".psb"] = "image/vnd.adobe.photoshop",
+        [".tif"] = "image/tiff", [".tiff"] = "image/tiff", [".exr"] = "image/x-exr",
+        [".dng"] = "image/x-adobe-dng", [".cr2"] = "image/x-canon-cr2", [".nef"] = "image/x-nikon-nef", [".arw"] = "image/x-sony-arw",
+        [".raf"] = "image/x-fuji-raf", [".rw2"] = "image/x-panasonic-rw2", [".pef"] = "image/x-pentax-pef", [".orf"] = "image/x-olympus-orf",
+        [".mid"] = "audio/midi", [".midi"] = "audio/midi", [".lottie"] = "application/zip", [".srt"] = "text/plain", [".vtt"] = "text/vtt",
     };
+
+    /// <summary>Arquivos que os navegadores (e o ffmpeg) não mostram como imagem: ficam como documento do app que os abre.</summary>
+    private static readonly HashSet<string> ImagensDocumento =
+        [".psd", ".psb", ".dxf", ".dwg", ".exr", ".dng", ".cr2", ".nef", ".arw", ".raf", ".rw2", ".pef", ".orf", ".tif", ".tiff"];
 
     private static readonly HashSet<string> Extensoes3d = [".glb", ".gltf", ".obj", ".fbx", ".usdz", ".stl"];
     private static readonly HashSet<string> ExtensoesSplat = [".ply", ".spz", ".splat", ".ksplat"];
@@ -27,11 +44,12 @@ public sealed class EstudioMidias(
         var ext = extensao.ToLowerInvariant();
         if (Extensoes3d.Contains(ext)) return "modelo3d";
         if (ExtensoesSplat.Contains(ext)) return "mundo";
+        if (ImagensDocumento.Contains(ext)) return "documento";
         if (contentType.StartsWith("image/")) return "imagem";
         if (contentType.StartsWith("video/")) return "video";
         if (contentType.StartsWith("audio/")) return "audio";
         if (contentType.StartsWith("model/")) return "modelo3d";
-        return "outro";
+        return "documento";
     }
 
     public static string ExtensaoDe(string? contentType, string? nomeOuUrl)
@@ -41,6 +59,8 @@ public sealed class EstudioMidias(
             var caminho = Uri.TryCreate(nomeOuUrl, UriKind.Absolute, out var u) ? u.AbsolutePath : nomeOuUrl;
             var ext = Path.GetExtension(caminho);
             if (ext.Length is > 1 and <= 7 && TiposPorExtensao.ContainsKey(ext)) return ext.ToLowerInvariant();
+            // Formato próprio de um craft app (projeto do FilmCraft, documento do VectorCraft…): mantém a extensão.
+            if (ext.Length is > 1 and <= 10 && ext.Skip(1).All(char.IsAsciiLetterOrDigit)) return ext.ToLowerInvariant();
         }
         if (!string.IsNullOrEmpty(contentType))
         {
