@@ -130,6 +130,9 @@ const BORDER_STYLES: { id: BorderStyle; label: string }[] = [
   { id: 'tracejada', label: 'Tracejada' },
 ];
 
+/** Retângulo em pixels da arte original. */
+interface CropRect { x: number; y: number; w: number; h: number }
+
 interface Piece {
   canvas: HTMLCanvasElement;
   paths: Polygon[];
@@ -243,7 +246,7 @@ const SHAPES: { id: CutShape; label: string }[] = [
 
 type PieceQuality = 'preview' | 'full';
 
-type PcTool = 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir';
+type PcTool = 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir' | 'cortar';
 type PcTab = 'imagens' | 'ajustes' | 'folha' | 'exportar';
 
 const MODES: { id: EditorMode; label: string }[] = [
@@ -260,6 +263,7 @@ const PC_TOOLS: { id: PcTool; icon: IlIconName; label: string; key: string; help
   { id: 'borracha', icon: 'eraser', label: 'Borracha de contorno', key: 'E', help: 'Arraste pra apagar a borda (a arte fica)' },
   { id: 'corte', icon: 'cut', label: 'Remover linha de corte', key: 'C', help: 'Clique dentro da linha que sobra' },
   { id: 'dividir', icon: 'split', label: 'Dividir em elementos', key: 'D', help: 'Uma folha com vários desenhos vira um item por desenho' },
+  { id: 'cortar', icon: 'rect', label: 'Cortar em partes', key: 'R', help: 'Arraste retângulos: cada um vira um item separado' },
 ];
 
 const PC_TABS: { id: PcTab; label: string }[] = [
@@ -469,7 +473,16 @@ function loadPrefs(): Prefs {
                       <il-num label="Juntar até" title="Pedaços a menos que isso viram um elemento só" unit="mm" [value]="splitGapMm()" [step]="0.05" [min]="0" [max]="maxSplitGapMm" [decimals]="2" (valueChange)="onSplitGapInput(ev($event.value))" />
                       <il-num label="Fundo" title="Tolerância do fundo" [value]="splitTolerance()" [min]="5" [max]="120" [decimals]="0" (valueChange)="onSplitToleranceInput(ev($event.value))" />
                       <button type="button" class="il-btn" (click)="autoSplit()"><il-icon name="sparkle" [size]="13" /> Escolher sozinho</button>
-                      <button type="button" class="il-btn il-primary" [disabled]="splitFound().length < 2" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
+                      <button type="button" class="il-btn il-primary" [disabled]="splitFound().length < 2 || aiBusy()" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
+                    </div>
+                  }
+                  @case ('cortar') {
+                    <div class="il-cb-group">
+                      @if (cropRects().length) {
+                        <button type="button" class="il-btn" (click)="undoCropRect()">Desfazer</button>
+                        <button type="button" class="il-btn" (click)="clearCropRects()">Limpar</button>
+                      }
+                      <button type="button" class="il-btn il-primary" [disabled]="!cropRects().length || aiBusy()" (click)="cropSelected()">Cortar em {{ cropRects().length }}</button>
                     </div>
                   }
                 }
@@ -627,8 +640,20 @@ function loadPrefs(): Prefs {
                           <p class="il-note">{{ splitSummary() }}</p>
                           <div class="il-row">
                             <button type="button" class="il-btn il-grow" (click)="autoSplit()"><il-icon name="sparkle" [size]="13" /> Escolher sozinho</button>
-                            <button type="button" class="il-btn il-primary il-grow" [disabled]="splitFound().length < 2" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
+                            <button type="button" class="il-btn il-primary il-grow" [disabled]="splitFound().length < 2 || aiBusy()" (click)="splitSelected()">Dividir em {{ splitFound().length }}</button>
                           </div>
+                        }
+                        <button type="button" class="il-btn il-wide" [class.il-on]="tool() === 'cortar'" (click)="setTool('cortar')"><il-icon name="rect" [size]="14" /> {{ tool() === 'cortar' ? 'Fechar corte' : 'Cortar em partes' }}</button>
+                        @if (tool() === 'cortar') {
+                          <p class="il-note">Arraste sobre a imagem pra marcar cada parte. Cada retângulo vira um item separado, com seu próprio contorno.</p>
+                          <div class="il-row">
+                            <button type="button" class="il-btn il-grow" [disabled]="!cropRects().length" (click)="undoCropRect()">Desfazer</button>
+                            <button type="button" class="il-btn il-primary il-grow" [disabled]="!cropRects().length || aiBusy()" (click)="cropSelected()">Cortar em {{ cropRects().length }}</button>
+                          </div>
+                        }
+                        @if ((tool() === 'dividir' || tool() === 'cortar') && upscale.disponivel()) {
+                          <label class="il-check" data-help="Depois de separar, a IA remove o fundo de cada parte, uma por vez"><input type="checkbox" [checked]="aiEachPiece()" (change)="aiEachPiece.set($any($event.target).checked)" /> Remover fundo com IA em cada parte</label>
+                          @if (aiProgress()) { <p class="il-note">{{ aiProgress() }}</p> }
                         }
                         <label class="il-check"><input type="checkbox" [checked]="sel.mirrored" (change)="onMirrorChange($event)" /> Espelhar (só pra vinil termocolante)</label>
                         <button type="button" class="il-btn il-wide" (click)="vectorizeSelected()"><il-icon name="trace" [size]="14" /> Vetorizar na Ilustração</button>
@@ -885,6 +910,7 @@ function loadPrefs(): Prefs {
     .pc-stage canvas { margin: auto; flex: none; }
     .pc-stage[data-tool='fundo'] canvas, .pc-stage[data-tool='corte'] canvas { cursor: crosshair; }
     .pc-stage[data-tool='borracha'] canvas { cursor: cell; touch-action: none; }
+    .pc-stage[data-tool='cortar'] canvas { cursor: crosshair; touch-action: none; }
     .pc-swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--il-line-strong); }
     .pc-swatch.il-on { outline: 2px solid var(--il-blue); outline-offset: 1px; }
     .pc-wide-b { font-size: 10px; }
@@ -935,6 +961,11 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   draftOffer = signal<ProjectDraft | null>(null);
   aiBusy = signal(false);
   aiError = signal('');
+  /** Retângulos marcados pra "Cortar em partes", em pixels da arte original. */
+  cropRects = signal<CropRect[]>([]);
+  /** Depois de dividir ou cortar, passa a IA de fundo em cada parte. */
+  aiEachPiece = signal(false);
+  aiProgress = signal('');
   private dirty = false;
   private draftTimer?: ReturnType<typeof setTimeout>;
   private applyingProject = false;
@@ -962,7 +993,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   private nestCache: { key: string; placed: PlacedPiece[]; overflow: PackInput[] } | null = null;
   private maskCache = new WeakMap<HTMLCanvasElement, NestShape & { key: number }>();
   private maskSeq = 0;
-  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir'>('nenhuma');
+  tool = signal<'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir' | 'cortar'>('nenhuma');
   tolerance = signal(40);
   brushMm = signal(this.prefs.brushMm);
   cutHint = signal('');
@@ -1016,6 +1047,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   private renderQueued = false;
   private erasing = false;
+  private cropStart: { x: number; y: number } | null = null;
+  private cropDraft: CropRect | null = null;
   /** Enquanto true, a prévia é montada em meia resolução pra responder na hora. */
   private interacting = false;
   private interactionTimer?: ReturnType<typeof setTimeout>;
@@ -1316,7 +1349,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     // vira item tem de sair na resolução original
     const plano = planSplit(sel.source, this.splitOptions(sel, 1));
     if (plano.elements.length < 2) return;
-    const pedacos = plano.elements.map((el) => plano.crop(el));
+    // Com a IA em cada parte, o pedaço sai retangular e com o fundo original:
+    // quem decide o recorte é a IA, não a leitura pela cor.
+    const pedacos = plano.elements.map((el) => (this.aiEachPiece() && this.upscale.disponivel()
+      ? cropCanvas(sel.source, el) : plano.crop(el)));
+    this.replaceWithPieces(sel, pedacos);
+  }
+
+  /** Troca a imagem selecionada pelas partes, cada uma no tamanho real que já
+   * tinha dentro da folha e herdando os ajustes de corte; com a opção ligada,
+   * a IA tira o fundo de cada uma em seguida. */
+  private replaceWithPieces(sel: ImportedImage, pedacos: HTMLCanvasElement[]): void {
 
     const base = this.baseName(sel);
     const herdado: Partial<ImportedImage> = {
@@ -1335,7 +1378,50 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     this.tool.set('nenhuma');
     this.splitPlan = null;
     this.splitFound.set([]);
+    this.cropRects.set([]);
     this.scheduleRender();
+    if (this.aiEachPiece() && this.upscale.disponivel()) void this.aiCutoutAll(novos.map((n) => n.id));
+  }
+
+  /** Remove o fundo com IA de cada parte, uma por vez (o serviço é um só). */
+  private async aiCutoutAll(ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i++) {
+      this.aiProgress.set(`Removendo o fundo com IA: parte ${i + 1} de ${ids.length}…`);
+      await this.aiCutoutItem(ids[i]);
+      if (this.aiError()) break;
+    }
+    this.aiProgress.set('');
+  }
+
+  // ---------- cortar em partes ----------
+
+  cropSelected(): void {
+    const sel = this.selected();
+    const rects = this.cropRects();
+    if (!sel || !rects.length) return;
+    this.replaceWithPieces(sel, rects.map((r) => cropCanvas(sel.source, r)));
+  }
+
+  undoCropRect(): void {
+    this.cropRects.update((list) => list.slice(0, -1));
+    this.scheduleRender();
+  }
+
+  clearCropRects(): void {
+    this.cropRects.set([]);
+    this.scheduleRender();
+  }
+
+  private cropRectTo(event: PointerEvent, sel: ImportedImage): CropRect | null {
+    const p = this.artPointFrom(event, sel);
+    if (!p || !this.cropStart) return null;
+    const W = sel.source.width;
+    const H = sel.source.height;
+    const x0 = Math.max(0, Math.min(W, Math.min(p.x, this.cropStart.x)));
+    const y0 = Math.max(0, Math.min(H, Math.min(p.y, this.cropStart.y)));
+    const x1 = Math.max(0, Math.min(W, Math.max(p.x, this.cropStart.x)));
+    const y1 = Math.max(0, Math.min(H, Math.max(p.y, this.cropStart.y)));
+    return { x: Math.floor(x0), y: Math.floor(y0), w: Math.ceil(x1 - x0), h: Math.ceil(y1 - y0) };
   }
 
   // ---------- edição da imagem selecionada ----------
@@ -1387,6 +1473,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       case 'borracha': return 'Arraste sobre o contorno pra apagá-lo — a arte não é afetada.';
       case 'corte': return 'Clique dentro de uma linha tracejada pra tirá-la do corte.';
       case 'dividir': return this.splitSummary();
+      case 'cortar': return 'Arraste retângulos sobre a imagem: cada um vira um item separado.';
       default: return 'A linha tracejada vermelha é a linha de corte que sai no SVG · Ctrl+roda dá zoom';
     }
   }
@@ -1697,12 +1784,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   // ---------- ferramentas sobre a peça (fundo e borracha) ----------
 
-  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir'): void {
+  setTool(tool: 'nenhuma' | 'fundo' | 'borracha' | 'corte' | 'dividir' | 'cortar'): void {
     const next = this.tool() === tool ? 'nenhuma' : tool;
     if (next !== 'nenhuma') this.view.set('peca');
     this.tool.set(next);
     this.cutHint.set('');
     this.refreshSplitPreview(next === 'dividir');
+    if (next !== 'cortar') this.cropRects.set([]);
     this.scheduleRender();
   }
 
@@ -1764,6 +1852,16 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onPreviewPointerDown(event: PointerEvent): void {
+    if (this.tool() === 'cortar') {
+      const sel = this.selected();
+      const p = sel && this.artPointFrom(event, sel);
+      if (!p) return;
+      event.preventDefault();
+      (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+      this.cropStart = p;
+      this.cropDraft = null;
+      return;
+    }
     if (this.tool() !== 'borracha') return;
     event.preventDefault();
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
@@ -1772,11 +1870,29 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   }
 
   onPreviewPointerMove(event: PointerEvent): void {
+    if (this.cropStart) {
+      const sel = this.selected();
+      if (!sel) return;
+      this.cropDraft = this.cropRectTo(event, sel);
+      this.scheduleRender();
+      return;
+    }
     if (!this.erasing) return;
     this.eraseAt(event);
   }
 
   onPreviewPointerUp(event: PointerEvent): void {
+    if (this.cropStart) {
+      const sel = this.selected();
+      const r = sel && this.cropRectTo(event, sel);
+      this.cropStart = null;
+      this.cropDraft = null;
+      (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
+      // arrasto curto é clique sem querer, não uma parte
+      if (r && r.w >= 8 && r.h >= 8) this.cropRects.update((list) => [...list, r]);
+      this.scheduleRender();
+      return;
+    }
     if (!this.erasing) return;
     this.erasing = false;
     (event.target as HTMLElement).releasePointerCapture?.(event.pointerId);
@@ -1849,9 +1965,15 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   async aiCutoutSelected(): Promise<void> {
     const sel = this.selected();
     if (!sel || this.aiBusy()) return;
+    this.setTool('nenhuma');
+    await this.aiCutoutItem(sel.id);
+  }
+
+  private async aiCutoutItem(id: string): Promise<void> {
+    const sel = this.images().find((i) => i.id === id);
+    if (!sel || this.aiBusy()) return;
     this.aiBusy.set(true);
     this.aiError.set('');
-    this.setTool('nenhuma');
     try {
       const cut = await aiCutout(this.upscale, sel.original);
       const source = document.createElement('canvas');
@@ -2171,7 +2293,10 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext('2d')!;
     ctx.drawImage(piece.canvas, 0, 0);
     this.strokeCutPaths(ctx, piece.cuts, Math.max(1.5, canvas.width / 500));
-    if (this.tool() === 'dividir') this.strokeSplitBoxes(ctx, sel, piece);
+    if (this.tool() === 'dividir') this.strokeSplitBoxes(ctx, sel, piece, this.splitFound());
+    if (this.tool() === 'cortar') {
+      this.strokeSplitBoxes(ctx, sel, piece, this.cropDraft ? [...this.cropRects(), this.cropDraft] : this.cropRects());
+    }
     this.applyZoom(canvas, this.pieceStage?.nativeElement);
     // Gravado aqui, e não calculado no template: a resolução da prévia depende
     // da largura do palco, e o arredondamento mudava entre duas verificações.
@@ -2181,8 +2306,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Marca na prévia cada elemento que a divisão encontrou, numerado na ordem
    * em que vai entrar na lista. Nas coordenadas da peça: a arte mora deslocada
    * pela margem e, quando espelhada, invertida. */
-  private strokeSplitBoxes(ctx: CanvasRenderingContext2D, item: ImportedImage, piece: Piece): void {
-    const elementos = this.splitFound();
+  private strokeSplitBoxes(ctx: CanvasRenderingContext2D, item: ImportedImage, piece: Piece, elementos: CropRect[]): void {
     const escala = piece.scale;
     const larguraArte = item.source.width * escala;
     const linha = Math.max(1.5, ctx.canvas.width / 400);
@@ -3394,4 +3518,13 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       default: return 'Tema: automático (clique para escuro)';
     }
   }
+}
+
+/** Cópia retangular da arte, sem mexer nos pixels (o fundo vem junto). */
+function cropCanvas(source: HTMLCanvasElement, r: CropRect): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, r.w);
+  out.height = Math.max(1, r.h);
+  out.getContext('2d')!.drawImage(source, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+  return out;
 }
