@@ -57,10 +57,10 @@ const TOOLS: ToolCard[] = [
     downloadLabel: 'Baixar app Android (.apk)',
   },
   {
-    path: '/imagens',
-    icon: 'image',
-    title: 'Editor de Imagens',
-    description: 'Print & cut pra ScanNCut (contorno, remoção de fundo, folha A4/A3) e moldes SVG: encaixe fotos nos buracos do molde, em camadas com ordem e transparência.',
+    path: '/estudio',
+    icon: 'sparkles',
+    title: 'Estúdio',
+    description: 'Os 13 craft apps do ArtCraft (foto, vetor, vídeo, áudio, texto, planilha, PDF, CAD…), geração de imagem, vídeo, áudio e 3D por IA e o Editor de Imagens.',
     windows: true,
   },
   {

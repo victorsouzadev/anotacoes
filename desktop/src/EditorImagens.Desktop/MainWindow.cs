@@ -82,7 +82,7 @@ public sealed class MainWindow : Window
             AbrirFora(e.Uri);
         };
         core.DownloadStarting += AoBaixar;
-        core.Navigate(servidor.Url + "/imagens");
+        core.Navigate(servidor.Url + "/estudio");
     }
 
     private bool Interno(string uri) =>

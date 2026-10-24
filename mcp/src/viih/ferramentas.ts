@@ -107,7 +107,7 @@ export function registrarFerramentasViih(server: McpServer): void {
       });
       const cabem = escolhido.cresce ? 9 : escolhido.fotos;
       return texto({
-        link: `${config.webUrl}/imagens?projeto=${id}`,
+        link: `${config.webUrl}/estudio/editor?projeto=${id}`,
         modelo: { id: escolhido.id, tipo: escolhido.grupo, nome: escolhido.nome },
         porque: plano.explicacao,
         textosDaArte: textos,
