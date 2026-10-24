@@ -116,6 +116,9 @@ interface ImportedImage {
   /** A foto de antes do recorte por IA (o recorte vira o original). Só na
    * sessão: salvar as duas dobraria o projeto. */
   preAi?: { canvas: HTMLCanvasElement; dataUrl: string };
+  /** De onde a parte saiu ao dividir/cortar: a folha (grupo) e a posição, em
+   * pixels da folha. É o que permite juntar partes de volta no lugar certo. */
+  splitFrom?: { group: string; x: number; y: number; w: number; h: number };
   /** Acabamento da borda impressa (não muda a linha de corte). */
   borderStyle: BorderStyle;
   /** Sombra suave da arte sobre a borda. */
@@ -569,6 +572,9 @@ function loadPrefs(): Prefs {
                   </div></div>
                   @for (item of images(); track item.id) {
                     <div class="il-item" [class.il-on]="item.id === selectedId()">
+                      @if (item.splitFrom) {
+                        <input type="checkbox" class="pc-join" title="Marcar pra juntar" [attr.aria-label]="'Marcar ' + item.name + ' pra juntar'" [checked]="joinIds().has(item.id)" (change)="toggleJoin(item.id)" />
+                      }
                       <button type="button" class="il-item-main" (click)="select(item.id)">
                         <img class="il-item-thumb il-checker" [src]="item.thumbUrl" [alt]="item.name" />
                         <span class="il-item-text">
@@ -579,6 +585,12 @@ function loadPrefs(): Prefs {
                       @if (item.copies > 1) { <span class="il-badge">×{{ item.copies }}</span> }
                       <button type="button" class="il-ib il-ib-sm il-danger" title="Remover" aria-label="Remover" (click)="remove(item.id)"><il-icon name="x" [size]="12" /></button>
                     </div>
+                  }
+                  @if (hasSplitParts()) {
+                    <div class="il-sec"><div class="il-sec-body">
+                      <p class="il-note">{{ joinHint() }}</p>
+                      <button type="button" class="il-btn il-primary il-wide" [disabled]="!canJoin()" (click)="joinParts()">Juntar {{ joinIds().size }} partes</button>
+                    </div></div>
                   }
                 }
                 @case ('ajustes') {
@@ -912,6 +924,7 @@ function loadPrefs(): Prefs {
     .pc-stage canvas { margin: auto; flex: none; }
     .pc-stage[data-tool='fundo'] canvas, .pc-stage[data-tool='corte'] canvas { cursor: crosshair; }
     .pc-stage[data-tool='borracha'] canvas { cursor: cell; touch-action: none; }
+    .pc-join { margin: 0 2px 0 6px; flex: none; }
     .pc-stage[data-tool='cortar'] canvas { cursor: crosshair; touch-action: none; }
     .pc-swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--il-line-strong); }
     .pc-swatch.il-on { outline: 2px solid var(--il-blue); outline-offset: 1px; }
@@ -968,6 +981,8 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
   /** Depois de dividir ou cortar, passa a IA de fundo em cada parte. */
   aiEachPiece = signal(false);
   aiProgress = signal('');
+  /** Partes marcadas na lista pra "Juntar partes". */
+  joinIds = signal<Set<string>>(new Set());
   private dirty = false;
   private draftTimer?: ReturnType<typeof setTimeout>;
   private applyingProject = false;
@@ -1259,6 +1274,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
 
   remove(id: string): void {
     this.images.update((list) => list.filter((i) => i.id !== id));
+    if (this.joinIds().has(id)) this.joinIds.update((set) => new Set([...set].filter((x) => x !== id)));
     this.pieceCache.delete(id);
     if (this.selectedId() === id) {
       this.selectedId.set(this.images()[0]?.id ?? null);
@@ -1356,13 +1372,17 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     // quem decide o recorte é a IA, não a leitura pela cor.
     const pedacos = plano.elements.map((el) => (this.aiEachPiece() && this.upscale.disponivel()
       ? cropCanvas(sel.source, el) : plano.crop(el)));
-    this.replaceWithPieces(sel, pedacos);
+    this.replaceWithPieces(sel, pedacos, plano.elements);
   }
 
   /** Troca a imagem selecionada pelas partes, cada uma no tamanho real que já
    * tinha dentro da folha e herdando os ajustes de corte; com a opção ligada,
    * a IA tira o fundo de cada uma em seguida. */
-  private replaceWithPieces(sel: ImportedImage, pedacos: HTMLCanvasElement[]): void {
+  private replaceWithPieces(sel: ImportedImage, pedacos: HTMLCanvasElement[], origens: { x: number; y: number }[]): void {
+    // parte de parte continua no mesmo grupo, com a posição somada
+    const group = sel.splitFrom?.group ?? sel.id;
+    const ox = sel.splitFrom?.x ?? 0;
+    const oy = sel.splitFrom?.y ?? 0;
 
     const base = this.baseName(sel);
     const herdado: Partial<ImportedImage> = {
@@ -1374,6 +1394,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       ...herdado,
       // cada elemento nasce no tamanho real que já tinha dentro da folha
       widthMm: Math.max(1, (sel.widthMm * canvas.width) / sel.source.width),
+      splitFrom: { group, x: ox + origens[i].x, y: oy + origens[i].y, w: canvas.width, h: canvas.height },
     }));
 
     this.remove(sel.id);
@@ -1402,7 +1423,70 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     const sel = this.selected();
     const rects = this.cropRects();
     if (!sel || !rects.length) return;
-    this.replaceWithPieces(sel, rects.map((r) => cropCanvas(sel.source, r)));
+    this.replaceWithPieces(sel, rects.map((r) => cropCanvas(sel.source, r)), rects);
+  }
+
+  // ---------- juntar partes ----------
+
+  hasSplitParts(): boolean {
+    return this.images().some((i) => i.splitFrom);
+  }
+
+  toggleJoin(id: string): void {
+    this.joinIds.update((set) => {
+      const next = new Set(set);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  private joinSelection(): ImportedImage[] {
+    const ids = this.joinIds();
+    return this.images().filter((i) => ids.has(i.id) && i.splitFrom);
+  }
+
+  canJoin(): boolean {
+    const parts = this.joinSelection();
+    return parts.length >= 2 && parts.every((p) => p.splitFrom!.group === parts[0].splitFrom!.group);
+  }
+
+  joinHint(): string {
+    const parts = this.joinSelection();
+    if (parts.length >= 2 && !this.canJoin()) return 'Só dá pra juntar partes que saíram da mesma imagem.';
+    return 'Marque as partes que deveriam ser uma só e junte: elas voltam pro lugar que tinham na imagem.';
+  }
+
+  /** Junta as partes marcadas numa só, cada uma na posição que tinha na folha.
+   * O resultado continua sendo parte do grupo: dá pra juntar mais ou dividir de novo. */
+  joinParts(): void {
+    if (!this.canJoin()) return;
+    const parts = this.joinSelection();
+    const x0 = Math.min(...parts.map((p) => p.splitFrom!.x));
+    const y0 = Math.min(...parts.map((p) => p.splitFrom!.y));
+    const x1 = Math.max(...parts.map((p) => p.splitFrom!.x + p.splitFrom!.w));
+    const y1 = Math.max(...parts.map((p) => p.splitFrom!.y + p.splitFrom!.h));
+    const canvas = document.createElement('canvas');
+    canvas.width = x1 - x0;
+    canvas.height = y1 - y0;
+    const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
+    // no tamanho que a parte tinha na folha, mesmo que tenha sido ampliada depois
+    for (const p of parts) ctx.drawImage(p.source, p.splitFrom!.x - x0, p.splitFrom!.y - y0, p.splitFrom!.w, p.splitFrom!.h);
+
+    const first = parts[0];
+    const novo = this.addArt(first.name, canvas, {
+      marginMm: first.marginMm, gapMm: first.gapMm, color: first.color, shape: first.shape,
+      mirrored: first.mirrored, copies: first.copies, outerOnly: first.outerOnly,
+      smoothing: first.smoothing, keepCorners: first.keepCorners, fillHoles: first.fillHoles,
+      // mesma escala de pixels das partes
+      widthMm: Math.max(1, (first.widthMm * canvas.width) / first.splitFrom!.w),
+      bgRemoved: parts.some((p) => p.bgRemoved),
+      splitFrom: { group: first.splitFrom!.group, x: x0, y: y0, w: canvas.width, h: canvas.height },
+    });
+    for (const p of parts) this.remove(p.id);
+    this.joinIds.set(new Set());
+    this.selectedId.set(novo.id);
+    this.scheduleRender();
   }
 
   undoCropRect(): void {
