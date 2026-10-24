@@ -214,6 +214,8 @@ const SPLIT_GAP_CANDIDATES_MM = [0, 0.2, 0.35, 0.5, 0.75, 1, 1.5, 2, 3];
 const MAX_SPLIT_GAP_MM = 3;
 /** Área mínima, em mm², pra um pedaço virar elemento ao dividir. */
 const SPLIT_MIN_AREA_MM2 = 4;
+/** Pedaço mais fino que isso (raio inscrito) é sombra ou brilho, não desenho. */
+const SPLIT_MIN_THICKNESS_MM = 0.4;
 /** Largura em que a prévia da divisão lê a arte: o bastante pra marcar os
  * elementos com fidelidade e leve o bastante pra acompanhar o controle. */
 const SPLIT_PREVIEW_WIDTH = 900;
@@ -1307,6 +1309,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
       gapPx: Math.round(this.splitGapMm() * ppm),
       minAreaPx: Math.max(16, Math.round(SPLIT_MIN_AREA_MM2 * ppm * ppm)),
       padPx: Math.max(1, Math.round(ppm)),
+      minThicknessPx: Math.max(1.5, SPLIT_MIN_THICKNESS_MM * ppm),
       autoGapCandidatesPx: auto ? SPLIT_GAP_CANDIDATES_MM.map((mm) => Math.round(mm * ppm)) : undefined,
     };
   }

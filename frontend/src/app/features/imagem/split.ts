@@ -24,6 +24,10 @@ export interface SplitOptions {
   minAreaPx?: number;
   /** Folga, em px, deixada em volta do recorte. */
   padPx?: number;
+  /** Espessura mínima (raio inscrito, px) pra um pedaço contar como desenho.
+   * Abaixo disso é linha solta — a sombra ou o brilho fino em volta de um
+   * adesivo — e fica fora. */
+  minThicknessPx?: number;
 }
 
 export interface SplitElement {
@@ -130,6 +134,91 @@ function groupByProximity(mask: AlphaMask, threshold: number, boxes: Box[], gap:
   return [...porGrupo.values()];
 }
 
+/** Tira os pedaços finos demais pra serem desenho. Numa folha de adesivos
+ * cada um tem borda branca (a cor do fundo) e, em volta dela, uma sombra
+ * esmaecida de 2–3 px; a leitura pela cor pega essa sombra como arcos soltos,
+ * e cada arco virava um "elemento" — ou, juntando por vão, colava os adesivos.
+ * A espessura separa os dois: o raio do maior círculo que cabe no pedaço. */
+function dropThin(mask: AlphaMask, threshold: number, labels: Int32Array, boxes: Box[], minThickness: number): Box[] {
+  if (minThickness <= 0) return boxes;
+  const { w, h } = mask;
+  const fundo = new Float32Array(w * h);
+  for (let i = 0; i < fundo.length; i++) fundo[i] = mask.data[i] >= threshold ? 0 : 1;
+  const dist2 = squaredDistanceToArt(fundo, w, h);
+  const maior = new Float32Array(boxes.length + 1);
+  for (let i = 0; i < labels.length; i++) {
+    const l = labels[i];
+    if (l && dist2[i] > maior[l]) maior[l] = dist2[i];
+  }
+  return boxes.filter((b) => maior[b.labels[0]] >= minThickness * minThickness);
+}
+
+/** Junta ao pedaço o que ele CERCA: a sombra de um adesivo às vezes é grossa
+ * o bastante pra sobreviver ao filtro de espessura, e aí é um anel em volta do
+ * desenho, separado dele pela borda branca. Tudo que fica dentro do anel, sem
+ * saída pra fora, é do mesmo adesivo. O anel é engordado em `closePx` antes do
+ * teste pra fechar as falhas de um ou dois pixels da sombra esmaecida. */
+const ENCLOSED_BOX_SHARE = 0.7;
+const CRUMB_SHARE = 0.02;
+
+function mergeEnclosed(labels: Int32Array, w: number, boxes: Box[], closePx: number): Box[] {
+  // pela caixa, não pelos pixels: o anel tem menos pixels que o desenho que cerca
+  const caixa = (b: Box): number => (b.x1 - b.x0 + 1) * (b.y1 - b.y0 + 1);
+  const ordem = boxes.slice().sort((a, b) => caixa(b) - caixa(a));
+  const engolido = new Set<Box>();
+  const resultado: Box[] = [];
+  for (const a of ordem) {
+    if (engolido.has(a)) continue;
+    const dentro = ordem.filter((b) => b !== a && !engolido.has(b)
+      && b.x0 >= a.x0 && b.y0 >= a.y0 && b.x1 <= a.x1 && b.y1 <= a.y1);
+    if (!dentro.length) { resultado.push(a); continue; }
+    const bw = a.x1 - a.x0 + 1;
+    const bh = a.y1 - a.y0 + 1;
+    const doA = new Set(a.labels);
+    const cov = new Float32Array(bw * bh);
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) if (doA.has(labels[(a.y0 + y) * w + a.x0 + x])) cov[y * bw + x] = 1;
+    }
+    const dist2 = squaredDistanceToArt(cov, bw, bh);
+    const raio2 = closePx * closePx;
+    // inunda, dentro da caixa de A, o que está longe de A a partir da borda
+    const fora = new Uint8Array(bw * bh);
+    const fila = new Int32Array(bw * bh);
+    let cabeca = 0;
+    let cauda = 0;
+    const semear = (x: number, y: number): void => {
+      const k = y * bw + x;
+      if (fora[k] || dist2[k] <= raio2) return;
+      fora[k] = 1;
+      fila[cauda++] = k;
+    };
+    for (let x = 0; x < bw; x++) { semear(x, 0); semear(x, bh - 1); }
+    for (let y = 0; y < bh; y++) { semear(0, y); semear(bw - 1, y); }
+    while (cabeca < cauda) {
+      const k = fila[cabeca++];
+      const x = k % bw;
+      const y = (k / bw) | 0;
+      if (x > 0) semear(x - 1, y);
+      if (x < bw - 1) semear(x + 1, y);
+      if (y > 0) semear(x, y - 1);
+      if (y < bh - 1) semear(x, y + 1);
+    }
+    let atual = a;
+    for (const b of dentro) {
+      const k = (((b.seed / w) | 0) - a.y0) * bw + (b.seed % w) - a.x0;
+      // anel com falha larga não cerca, mas caixa dentro de caixa ocupando
+      // quase toda ela é o mesmo adesivo (o anel e o desenho que ele contorna);
+      // e um caco minúsculo dentro da caixa de um adesivo é pedaço dele
+      const ocupa = caixa(b) / (bw * bh);
+      if (fora[k] && ocupa < ENCLOSED_BOX_SHARE && b.area > a.area * CRUMB_SHARE) continue;
+      atual = merge(atual, b);
+      engolido.add(b);
+    }
+    resultado.push(atual);
+  }
+  return resultado;
+}
+
 /** Escolhe sozinho o vão que separa a folha.
  *
  * Não existe um valor bom pra todo mundo, e é o que quebrava na prática: numa
@@ -166,9 +255,11 @@ export function suggestGapPx(mask: AlphaMask, options: SplitOptions = {}): numbe
 /** Elementos da máscara, em ordem de leitura (de cima pra baixo, da esquerda
  * pra direita), com a caixa já folgada e presa aos limites da imagem. */
 export function findElements(mask: AlphaMask, options: SplitOptions = {}): SplitElement[] {
-  const { alphaThreshold = 128, gapPx = 0, minAreaPx = 64, padPx = 0 } = options;
-  const { boxes } = labelComponents(mask, alphaThreshold);
-  const grupos = groupByProximity(mask, alphaThreshold, boxes, gapPx).filter((g) => g.area >= minAreaPx);
+  const { alphaThreshold = 128, gapPx = 0, minAreaPx = 64, padPx = 0, minThicknessPx = 0 } = options;
+  const { labels, boxes } = labelComponents(mask, alphaThreshold);
+  const solidos = mergeEnclosed(labels, mask.w, dropThin(mask, alphaThreshold, labels, boxes, minThicknessPx),
+    Math.max(2, Math.ceil(minThicknessPx * 2)));
+  const grupos = groupByProximity(mask, alphaThreshold, solidos, gapPx).filter((g) => g.area >= minAreaPx);
 
   const elementos = grupos.map((g) => {
     const x0 = Math.max(0, Math.floor(g.x0 - padPx));
