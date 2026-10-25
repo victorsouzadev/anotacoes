@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { IconComponent } from '../../shared/icon';
 import { mensagemDeErro } from '../../core/erro-http';
+import { DesktopMcp, DesktopService } from '../../core/desktop';
 import { EstudioService } from './estudio.service';
 import { EstudioConfig, dolares } from './estudio.models';
 import { ESTUDIO_CSS } from './shared/estilos';
@@ -63,6 +64,31 @@ import { ESTUDIO_CSS } from './shared/estilos';
           <button type="button" class="e-btn e-pri" [disabled]="salvando()" (click)="salvarGasto()">Salvar limites</button>
         </section>
 
+        @if (desktop.enabled) {
+          <section class="e-card ec-bloco">
+            <h2>Conectar ao Claude <span class="e-tag">MCP neste PC</span></h2>
+            @if (mcp(); as m) {
+              @if (m.ativo) {
+                <p class="e-muted">O Claude Desktop e o Claude Code usam o Estúdio por este endereço enquanto o programa estiver aberto.</p>
+                <p class="ec-estado"><app-icon name="check" [size]="14" /> {{ m.url }}</p>
+                <span class="ec-rotulo">Claude Code (terminal)</span>
+                <pre class="ec-cod">{{ m.claudeCode }}</pre>
+                <button type="button" class="e-btn" (click)="copiar(m.claudeCode)">Copiar comando</button>
+                <span class="ec-rotulo">Claude Desktop (claude_desktop_config.json, precisa do Node.js)</span>
+                <pre class="ec-cod">{{ m.claudeDesktop }}</pre>
+                <div class="ec-linha">
+                  <button type="button" class="e-btn" (click)="copiar(m.claudeDesktop)">Copiar configuração</button>
+                  <button type="button" class="e-btn e-perigo" [disabled]="salvando()" (click)="renovarMcp()">Trocar token</button>
+                </div>
+              } @else {
+                <p class="e-muted">A porta {{ porta(m.url) }} está ocupada por outro programa, então o MCP local não subiu. Feche o que estiver usando-a e reabra o Estúdio.</p>
+              }
+            } @else {
+              <p class="e-muted">Carregando…</p>
+            }
+          </section>
+        }
+
         <section class="e-card ec-bloco">
           <h2>Servidor</h2>
           <p class="e-muted">ffmpeg (montagem de vídeo, quadros, troca de fundo, miniaturas): {{ c.ffmpegDisponivel ? 'disponível' : 'não instalado' }}.</p>
@@ -84,11 +110,15 @@ import { ESTUDIO_CSS } from './shared/estilos';
     .ec-linha .e-input { flex: 1 1 260px; }
     .ec-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
     .ec-ok { color: var(--positivo); font-size: 13px; }
+    .ec-rotulo { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .ec-cod { margin: 0; padding: 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 12px; white-space: pre-wrap; word-break: break-all; }
     a { color: var(--accent); }
   `],
 })
 export class EstudioConfigPageComponent {
   private readonly api = inject(EstudioService);
+  readonly desktop = inject(DesktopService);
+  readonly mcp = signal<DesktopMcp | null>(null);
   readonly cfg = signal<EstudioConfig | null>(null);
   readonly chaveFal = signal('');
   readonly chaveWl = signal('');
@@ -101,6 +131,33 @@ export class EstudioConfigPageComponent {
 
   constructor() {
     void this.api.config().then((c) => this.aplicar(c), (e) => this.erro.set(mensagemDeErro(e, 'Não consegui abrir as configurações')));
+    if (this.desktop.enabled) void this.desktop.mcp().then((m) => this.mcp.set(m), () => undefined);
+  }
+
+  porta(url: string): string {
+    return new URL(url).port;
+  }
+
+  async copiar(texto: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.ok.set('Copiado.');
+    } catch {
+      this.erro.set('Não consegui copiar; selecione o texto e copie à mão.');
+    }
+  }
+
+  async renovarMcp(): Promise<void> {
+    if (!confirm('Trocar o token? O Claude para de acessar o Estúdio até você colar a configuração nova.')) return;
+    this.salvando.set(true);
+    try {
+      this.mcp.set(await this.desktop.renewMcp());
+      this.ok.set('Token trocado. Atualize a configuração no Claude.');
+    } catch (e) {
+      this.erro.set(mensagemDeErro(e, 'Não consegui trocar o token'));
+    } finally {
+      this.salvando.set(false);
+    }
   }
 
   async salvar(body: { chaveFal?: string; chaveWorldLabs?: string }): Promise<void> {

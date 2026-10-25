@@ -184,3 +184,8 @@ jobs:
             fi
             rm -rf "$base/crafts-novo"
             ls "$base/crafts"
+            # Pacote com todos os apps publicados (sem as versões pré-comprimidas) para o
+            # instalador do Windows, que os serve de dentro do próprio programa.
+            mkdir -p "$base/crafts-web"
+            tar -czf "$base/crafts-web/crafts-web.tar.gz.novo" --exclude='*.br' --exclude='*.gz' --exclude='*.antigo' -C "$base" crafts
+            mv -f "$base/crafts-web/crafts-web.tar.gz.novo" "$base/crafts-web/crafts-web.tar.gz"

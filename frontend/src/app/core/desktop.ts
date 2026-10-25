@@ -63,6 +63,15 @@ export interface DesktopPrinter {
   calibracao: { dxMm: number; dyMm: number; escalaX: number; escalaY: number };
 }
 
+/** MCP do Estúdio neste PC: endereço fixo no 127.0.0.1 e como ligar no Claude. */
+export interface DesktopMcp {
+  ativo: boolean;
+  url: string;
+  token: string;
+  claudeCode: string;
+  claudeDesktop: string;
+}
+
 export interface DesktopFont {
   id: string;
   nome: string;
@@ -176,6 +185,15 @@ export class DesktopService {
 
   writeToFolder(nome: string, dados: string): Promise<{ caminho: string }> {
     return this.post('pasta/gravar', { nome, dados });
+  }
+
+  mcp(): Promise<DesktopMcp> {
+    return this.get('mcp');
+  }
+
+  /** Troca o token do MCP local (o antigo para de valer). */
+  renewMcp(): Promise<DesktopMcp> {
+    return this.post('mcp/renovar');
   }
 }
 

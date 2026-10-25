@@ -28,7 +28,7 @@ public sealed class MainWindow : Window
     {
         this.servidor = servidor;
         this.host = host;
-        Title = "Editor de Imagens";
+        Title = "Estúdio";
         Icon = BitmapFrame.Create(new Uri("pack://application:,,,/icone.ico"));
         Width = host.Config.JanelaLargura ?? 1400;
         Height = host.Config.JanelaAltura ?? 900;

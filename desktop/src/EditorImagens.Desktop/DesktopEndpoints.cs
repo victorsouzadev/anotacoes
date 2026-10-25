@@ -43,6 +43,11 @@ public static class DesktopEndpoints
             arquivoInicial = host.ConsumirArquivoInicial(),
         }));
 
+        // ---------- MCP local (Claude Desktop / Claude Code no mesmo PC) ----------
+
+        g.MapGet("/mcp", (DesktopHost host) => Results.Ok(DadosMcp(McpLocal.Garantir(host.Config), host.McpAtivo)));
+        g.MapPost("/mcp/renovar", (DesktopHost host) => Results.Ok(DadosMcp(McpLocal.Renovar(host.Config), host.McpAtivo)));
+
         // ---------- projetos (.edimg) ----------
 
         g.MapPost("/projeto/abrir", async (DesktopHost host) =>
@@ -142,4 +147,20 @@ public static class DesktopEndpoints
             return Results.Json(new { error = "Não consegui ler esse projeto: o arquivo está danificado ou é de outro programa." }, statusCode: 422);
         }
     }
+
+    /// <summary>Endereço, token e como ligar no Claude (os dois MCPs do PC: Estúdio e Tarefas/Finanças…).</summary>
+    private static object DadosMcp(string token, bool ativo) => new
+    {
+        ativo,
+        url = McpLocal.Url(),
+        token,
+        claudeCode = $"claude mcp add --transport http estudio {McpLocal.Url()} --header \"Authorization: Bearer {token}\"",
+        claudeDesktop = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["mcpServers"] = new Dictionary<string, object>
+            {
+                ["estudio"] = new { command = "npx", args = new[] { "-y", "mcp-remote@0.14.3", McpLocal.Url(), "--header", $"Authorization: Bearer {token}" } },
+            },
+        }, new JsonSerializerOptions { WriteIndented = true }),
+    };
 }

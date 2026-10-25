@@ -111,6 +111,14 @@
         }
     }
 
+    # Os mesmos craft apps num pacote só (crafts-web.tar.gz, sem os .br/.gz), que o workflow
+    # "Desktop (Windows)" baixa para embutir no instalador. Regravado a cada publicação dos crafts.
+    handle /downloads/crafts-web/* {
+        root * /srv-downloads
+        header Cache-Control "no-cache"
+        file_server
+    }
+
     # APK do app Dieta, gravado pelo workflow "Android (Dieta)" em /opt/notas-vps/downloads/android.
     handle /downloads/android/* {
         root * /srv-downloads

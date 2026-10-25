@@ -397,7 +397,25 @@ public static class NotasApp
         if (!string.IsNullOrEmpty(options?.WebRoot))
         {
             app.UseDefaultFiles();
-            app.UseStaticFiles();
+            var tipos = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+            // Arquivos que os builds dos craft apps trazem e o mapa padrão não conhece.
+            tipos.Mappings[".glb"] = "model/gltf-binary";
+            tipos.Mappings[".gltf"] = "model/gltf+json";
+            tipos.Mappings[".ktx2"] = "image/ktx2";
+            tipos.Mappings[".hdr"] = "image/vnd.radiance";
+            tipos.Mappings[".wgsl"] = "text/plain";
+            tipos.Mappings[".data"] = "application/octet-stream";
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                ContentTypeProvider = tipos,
+                // Craft apps do Estúdio em wwwroot/crafts/<id>/: o cabeçalho diz à tela que o build
+                // existe (sem ele, o fallback abaixo devolveria o index.html do hub).
+                OnPrepareResponse = ctx =>
+                {
+                    var partes = ctx.Context.Request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                    if (partes is { Length: >= 2 } && partes[0] == "crafts") ctx.Context.Response.Headers["X-Craft-App"] = partes[1];
+                },
+            });
             app.MapFallbackToFile("index.html");
         }
 
