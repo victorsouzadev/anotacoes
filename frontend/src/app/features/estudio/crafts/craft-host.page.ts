@@ -87,7 +87,7 @@ import { destinoDoSalvar, lerMensagem, mensagemAbrir } from './ponte';
     .ch-aviso { padding: 8px 14px; background: color-mix(in srgb, var(--atencao) 14%, var(--surface)); font-size: 13px; border-bottom: 1px solid var(--border); }
     .ch-corpo { flex: 1; min-height: 0; display: flex; position: relative; }
     .ch-iframe { flex: 1; border: none; width: 100%; height: 100%; background: #f3f3f3; }
-    .ch-vazio { margin: 40px auto; max-width: 560px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+    .ch-vazio { margin: 40px auto; align-self: flex-start; max-width: 560px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
     .ch-vazio h2 { font-size: 17px; margin: 6px 0 0; }
     .ch-vazio p { margin: 0; font-size: 13.5px; }
     .ch-vazio a:not(.e-btn) { color: var(--accent); }

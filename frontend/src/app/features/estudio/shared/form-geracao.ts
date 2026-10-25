@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, EventEmitter, Input, OnInit, Output, computed, effect, inject, signal, untracked } from '@angular/core';
 import { IconComponent } from '../../../shared/icon';
 import { mensagemDeErro } from '../../../core/erro-http';
@@ -167,8 +168,10 @@ export class FormGeracaoComponent implements OnInit {
   /** Arquivos que a tela já traz (ex.: ?entrada= da biblioteca, o render do palco). */
   @Input() entradasIniciais: Record<string, Midia[]> = {};
   @Input() opInicial: string | null = null;
+  /** Parâmetros já preenchidos (ex.: o prompt do plano do storyboard). */
+  @Input() parametrosIniciais: Record<string, Valor> = {};
   /** Chamado antes de enviar: a tela pode acrescentar entradas (ex.: subir a máscara pintada). */
-  @Input() antesDeGerar?: (pedido: { entradas: Record<string, string[]>; parametros: Record<string, Valor> }) => Promise<void>;
+  @Input() antesDeGerar?: (pedido: { operacao: string; entradas: Record<string, string[]>; parametros: Record<string, Valor> }) => Promise<void>;
   @Output() gerado = new EventEmitter<Job>();
 
   readonly catalogo = signal<ModeloCatalogo[]>([]);
@@ -257,6 +260,7 @@ export class FormGeracaoComponent implements OnInit {
     const modelo = this.modelos().find((m) => primeiraOp in m.ops);
     this.op.set(primeiraOp);
     if (modelo) this.trocarModelo(modelo.id);
+    if (Object.keys(this.parametrosIniciais).length) this.params.update((p) => ({ ...p, ...this.parametrosIniciais }));
     this.encaixarIniciais();
   }
 
@@ -334,7 +338,8 @@ export class FormGeracaoComponent implements OnInit {
       const job = await this.api.gerar(pedido);
       this.gerado.emit(job);
     } catch (e) {
-      this.erro.set(mensagemDeErro(e, 'Não consegui gerar'));
+      // Erro da própria tela (ex.: "pinte a área") vem como Error simples, sem resposta HTTP.
+      this.erro.set(e instanceof Error && !(e instanceof HttpErrorResponse) ? e.message : mensagemDeErro(e, 'Não consegui gerar'));
     } finally {
       this.enviando.set(false);
     }
@@ -403,6 +408,11 @@ export class FormGeracaoComponent implements OnInit {
         const destino = s.entradas.find((e) => this.tiposDaEntrada(e).includes(m.tipo) && !(this.config.ocultas ?? []).includes(e) && !(atuais[e]?.length && !this.ehLista(e)));
         if (destino && !(atuais[destino] ?? []).some((x) => x.id === m.id)) atuais[destino] = [...(atuais[destino] ?? []), m];
       }
+    }
+    // Referências a mais do que o modelo aceita ficam de fora (o servidor recusaria o pedido).
+    for (const k of Object.keys(atuais)) {
+      const max = this.maxDe(k);
+      if (max && atuais[k].length > max) atuais[k] = atuais[k].slice(0, max);
     }
     this.entradas.set(atuais);
   }
