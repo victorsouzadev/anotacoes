@@ -34,6 +34,9 @@ public class EstudioOptions
     /// <summary>Intervalo entre consultas a uma geração em andamento.</summary>
     public int ConsultaSegundos { get; set; } = 3;
 
+    /// <summary>Serviço que roda as CLIs dos craft apps sem janela (MCP remoto). Vazio = desligado.</summary>
+    public string? CraftsMcpUrl { get; set; }
+
     /// <summary>Desliga o processamento em segundo plano (testes que só olham a fila).</summary>
     public bool WorkerDesligado { get; set; }
 }

@@ -75,24 +75,60 @@ jobs:
         run: |
           curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" | tar xz -C "$HOME/.cargo/bin"
           trunk --version
-      - name: Compilar ${{ matrix.app }}
+      - name: Compilar ${{ matrix.app }} (web)
         env:
           CRAFTS_FONTES: ${{ github.workspace }}/fontes
-        run: bash estudio/crafts/build.sh "${{ matrix.app }}" "saida/${{ matrix.app }}" --cli
+        run: bash estudio/crafts/build.sh "${{ matrix.app }}" "saida/${{ matrix.app }}"
       - uses: actions/upload-artifact@v4
         with:
           name: craft-${{ matrix.app }}
           path: saida/${{ matrix.app }}
           retention-days: 7
 
+  # A linha de comando de cada app, para o MCP remoto (serviço crafts-mcp, Alpine): compilada
+  # em Alpine para sair com musl e rodar lá sem glibc.
+  cli:
+    needs: lista
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container: rust:1-alpine
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        app: ${{ fromJson(needs.lista.outputs.apps) }}
+    steps:
+      - name: Dependências
+        run: apk add --no-cache bash git jq perl musl-dev pkgconf openssl-dev openssl-libs-static alsa-lib-dev fontconfig-dev freetype-dev eudev-dev libxkbcommon-dev wayland-dev zstd-dev
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fontes/${{ matrix.app }}
+          key: cli-${{ matrix.app }}
+      - name: Compilar ${{ matrix.app }}-cli
+        env:
+          CRAFTS_FONTES: ${{ github.workspace }}/fontes
+        run: |
+          git config --global --add safe.directory '*'
+          bash estudio/crafts/build.sh "${{ matrix.app }}" "saida/${{ matrix.app }}" --so-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.app }}
+          path: saida/${{ matrix.app }}/cli
+          retention-days: 7
+
   publicar:
-    needs: [lista, compilar]
+    needs: [lista, compilar, cli]
     if: ${{ always() && needs.compilar.result != 'cancelled' && (github.event_name == 'push' || inputs.publicar) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: craft-*
+          path: artefatos
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
           path: artefatos
       - name: Monta as pastas
         run: |
@@ -101,7 +137,10 @@ jobs:
             id="${d#artefatos/craft-}"
             [ -f "$d/web/index.html" ] || { echo "::warning::$id sem build web"; continue; }
             cp -r "$d/web" "envio/crafts/$id"
-            if [ -f "$d/cli/$id-cli" ]; then cp "$d/cli/$id-cli" envio/crafts-cli/ && chmod +x "envio/crafts-cli/$id-cli"; fi
+          done
+          for d in artefatos/cli-*; do
+            id="${d#artefatos/cli-}"
+            if [ -f "$d/$id-cli" ]; then cp "$d/$id-cli" envio/crafts-cli/ && chmod +x "envio/crafts-cli/$id-cli"; else echo "::warning::$id sem CLI"; fi
           done
           ls -la envio/crafts envio/crafts-cli
           du -sh envio/*

@@ -165,6 +165,8 @@ public static class NotasApp
         builder.Services.AddScoped<EstudioGeracoes>();
         builder.Services.AddScoped<EstudioProcessador>();
         builder.Services.AddHostedService<EstudioWorker>();
+        // MCP remoto dos craft apps: a API confere o token e repassa ao serviço crafts-mcp.
+        builder.Services.AddHttpClient(Notas.Api.Mcp.CraftsMcp.NomeHttp, c => c.Timeout = TimeSpan.FromMinutes(3));
 
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
@@ -213,15 +215,17 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
-        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas, /criativo e /dieta.
+        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas, /criativo, /dieta, /treino e /estudio.
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites, imagens, dieta e treinos de corrida). Só leitura, " +
-                "exceto os registros rápidos da dieta (refeição, peso e água).")
+                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites, imagens, dieta e treinos de corrida) e o Estúdio " +
+                "(geração de imagem, vídeo, áudio e 3D por IA, biblioteca de arquivos e documentos das ferramentas). Só leitura, " +
+                "exceto os registros rápidos da dieta (refeição, peso e água) e as ferramentas do Estúdio. Gerações custam dinheiro: " +
+                "acima do limite do usuário, peça a confirmação dele antes de chamar estudio_gerar com confirmar=true.")
             .WithHttpTransport(o =>
             {
                 o.Stateless = true;
@@ -238,7 +242,8 @@ public static class NotasApp
             .WithTools<Notas.Api.Mcp.FinancasMcpTools>()
             .WithTools<Notas.Api.Mcp.CriativoMcpTools>()
             .WithTools<Notas.Api.Mcp.DietaMcpTools>()
-            .WithTools<Notas.Api.Mcp.TreinoMcpTools>();
+            .WithTools<Notas.Api.Mcp.TreinoMcpTools>()
+            .WithTools<Notas.Api.Mcp.EstudioMcpTools>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -383,7 +388,8 @@ public static class NotasApp
         app.MapDietaIaEndpoints();
         app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
+        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino|estudio)$)}");
+        Notas.Api.Mcp.CraftsMcp.MapCraftsMcp(app);
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

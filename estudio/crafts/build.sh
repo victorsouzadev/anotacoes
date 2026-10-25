@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Compila um craft app do ArtCraft para o Estúdio: o build web (WebAssembly) que o hub abre em
-# /crafts/<id>/ e, com --cli, a linha de comando (MCP sem janela) para Linux.
+# /crafts/<id>/ e, com --cli, a linha de comando (MCP sem janela) para Linux. Com --so-cli,
+# só a linha de comando (o workflow a compila num container Alpine, para rodar no crafts-mcp).
 #
-#   estudio/crafts/build.sh <id> <pasta-de-saída> [--cli]
+#   estudio/crafts/build.sh <id> <pasta-de-saída> [--cli | --so-cli]
 #
 # Precisa de: git, jq, Rust estável com o alvo wasm32-unknown-unknown, trunk (apps "trunk"),
 # wasm-bindgen-cli na versão do Cargo.lock (apps "xtask"; o script instala), gzip e brotli.
@@ -37,6 +38,7 @@ if compgen -G "$aqui/patches/$id/*.patch" > /dev/null; then
   done
 fi
 
+if [ "$cli" != "--so-cli" ]; then
 web="$saida/web"
 rm -rf "$web" && mkdir -p "$web"
 case "$modo" in
@@ -73,8 +75,9 @@ find "$web" -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.css' -o -name 
 jq -n --arg id "$id" --arg versao "$versao" --arg commit "$commit" --arg em "$(date -u +%FT%TZ)" \
   '{id: $id, versao: $versao, commit: $commit, compiladoEm: $em}' > "$web/craft.json"
 echo "Web: $(du -sh "$web" | cut -f1) em $web"
+fi
 
-if [ "$cli" = "--cli" ]; then
+if [ "$cli" = "--cli" ] || [ "$cli" = "--so-cli" ]; then
   (cd "$fonte" && cargo build --release --locked -p "$id-cli")
   mkdir -p "$saida/cli"
   cp "${CARGO_TARGET_DIR:-$fonte/target}/release/$id-cli" "$saida/cli/"
