@@ -161,10 +161,13 @@ public static class DesktopEndpoints
             claudeCode = string.Join('\n', apps.Select(a => $"claude mcp add --transport http {a} {McpLocal.Url(a)} --header \"Authorization: Bearer {token}\"")),
             claudeDesktop = JsonSerializer.Serialize(new Dictionary<string, object>
             {
+                // O token vai por variável: o Claude Desktop no Windows quebra argumentos com espaço
+                // ("Authorization: Bearer …"), como avisa o próprio mcp-remote.
                 ["mcpServers"] = apps.ToDictionary(a => a, a => (object)new
                 {
                     command = "npx",
-                    args = new[] { "-y", "mcp-remote@0.14.3", McpLocal.Url(a), "--header", $"Authorization: Bearer {token}" },
+                    args = new[] { "-y", "mcp-remote@0.14.3", McpLocal.Url(a), "--header", "Authorization:${AUTH_HEADER}" },
+                    env = new Dictionary<string, string> { ["AUTH_HEADER"] = $"Bearer {token}" },
                 }),
             }, new JsonSerializerOptions { WriteIndented = true }),
         };
