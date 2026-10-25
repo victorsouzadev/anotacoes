@@ -28,7 +28,7 @@ const COMANDO_TESTE = process.env.CRAFTS_COMANDO_TESTE;
 export const APPS = {
   photocraft: { args: ['mcp'], raizes: true },
   vectorcraft: { args: ['mcp', '--headless'], raizes: true },
-  filmcraft: { args: ['mcp'], raizes: true },
+  filmcraft: { args: ['mcp'], raizes: false },
   lightcraft: { args: ['mcp'], raizes: false },
   pdfcraft: { args: ['mcp'], raizes: true },
   effectcraft: { args: ['mcp'], raizes: false },
