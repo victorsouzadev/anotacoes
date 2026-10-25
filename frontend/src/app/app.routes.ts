@@ -87,19 +87,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
   },
-  // O Editor de Imagens virou um app do Estúdio; o endereço antigo (e os links ?projeto= do MCP) continua valendo.
-  { path: 'imagens', redirectTo: 'estudio/editor' },
   {
-    // Fora da barra do Estúdio: o editor tem a própria barra e ocupa a tela toda.
-    path: 'estudio/editor',
+    path: 'imagens',
     canActivate: [authGuard],
     loadComponent: () => import('./features/imagem/image-editor.page').then((m) => m.ImageEditorPageComponent),
-  },
-  {
-    path: 'estudio',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/estudio/estudio-shell').then((m) => m.EstudioShellComponent),
-    loadChildren: () => import('./features/estudio/estudio.routes').then((m) => m.ESTUDIO_ROUTES),
   },
   {
     path: 'bolo-3d',

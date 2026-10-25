@@ -16,9 +16,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
 #   - icu-data-full: o icu-libs sozinho traz só os dados do locale raiz, então
 #     GetCultureInfo("pt-BR") passa mas os meses saem em inglês ("Sep/26" em vez
 #     de "set./26"). Os dados de locale estão neste pacote separado.
-#   - ffmpeg: o Estúdio mede vídeos, faz miniaturas, tira quadros, troca fundo e monta a
-#     linha do tempo do editor de vídeo.
-RUN apk add --no-cache tzdata icu-libs icu-data-full ffmpeg
+RUN apk add --no-cache tzdata icu-libs icu-data-full
 # A imagem base define DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true; instalar o
 # icu-libs sem desligar essa variável não muda nada.
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false

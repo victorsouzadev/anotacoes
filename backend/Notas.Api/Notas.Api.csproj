@@ -21,7 +21,4 @@
   <ItemGroup>
     <EmbeddedResource Include="Data/Seed/taco.csv" LogicalName="Notas.Api.Data.Seed.taco.csv" />
   </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="Services/Estudio/catalogo.json" LogicalName="Notas.Api.Services.Estudio.catalogo.json" />
-  </ItemGroup>
 </Project>

@@ -12,7 +12,6 @@ using Notas.Api.Services.Dieta;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Financas.Chat;
-using Notas.Api.Services.Estudio;
 using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Moldes;
 using Notas.Api.Services.Seguranca;
@@ -147,29 +146,6 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
 
-        // Ferramenta "Estúdio": gerações de imagem, vídeo, áudio e 3D no fal.ai (e mundos na World Labs),
-        // biblioteca de arquivos em disco e montagens com o ffmpeg. A fila anda em segundo plano
-        // (EstudioWorker); a chave é de cada usuário, com a do servidor (Estudio__FalKey) como padrão.
-        builder.Services.Configure<EstudioOptions>(builder.Configuration.GetSection(EstudioOptions.SectionName));
-        builder.Services.AddHttpClient(FalCliente.NomeHttp, c =>
-        {
-            c.Timeout = TimeSpan.FromMinutes(10);
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Estudio/1.0");
-        });
-        builder.Services.AddSingleton<Catalogo>();
-        builder.Services.AddSingleton<EstudioArmazenamento>();
-        builder.Services.AddSingleton<Ffmpeg>();
-        builder.Services.AddSingleton<FalCliente>();
-        builder.Services.AddSingleton<WorldLabsCliente>();
-        builder.Services.AddScoped<EstudioMidias>();
-        builder.Services.AddScoped<EstudioGeracoes>();
-        builder.Services.AddScoped<EstudioProcessador>();
-        builder.Services.AddHostedService<EstudioWorker>();
-        // MCP dos craft apps: a API confere o token e repassa ao serviço crafts-mcp (VPS) ou roda as
-        // CLIs ela mesma (programa do Windows, Estudio:CraftsCliDir).
-        builder.Services.AddHttpClient(Notas.Api.Mcp.CraftsMcp.NomeHttp, c => c.Timeout = TimeSpan.FromMinutes(3));
-        builder.Services.AddSingleton<Notas.Api.Mcp.CraftsLocal>();
-
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -217,8 +193,7 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
-        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas, /criativo, /dieta e /treino
-        // (o Estúdio tem os seus à parte, um por craft app: /api/mcp/crafts/{app}, em CraftsMcp).
+        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas, /criativo e /dieta.
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
@@ -276,17 +251,6 @@ public static class NotasApp
 
             // IA da Dieta (chat e reconhecimento de foto): por usuário, como a das Finanças.
             o.AddPolicy("dieta-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
-                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                    ?? ctx.User.FindFirst("sub")?.Value
-                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 30,
-                    Window = TimeSpan.FromMinutes(1),
-                }));
-
-            // Gerações do Estúdio custam dinheiro por chamada: por usuário, como as outras IAs.
-            o.AddPolicy("estudio-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                     ?? ctx.User.FindFirst("sub")?.Value
                     ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -381,7 +345,6 @@ public static class NotasApp
         app.MapConfiguracaoIaEndpoints();
         app.MapTasksEndpoints();
         app.MapImagemEndpoints();
-        app.MapEstudioEndpoints();
         app.MapSitesEndpoints();
         app.MapMoldesEndpoints();
         app.MapDietaEndpoints();
@@ -389,7 +352,6 @@ public static class NotasApp
         app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
-        Notas.Api.Mcp.CraftsMcp.MapCraftsMcp(app);
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 
@@ -397,25 +359,7 @@ public static class NotasApp
         if (!string.IsNullOrEmpty(options?.WebRoot))
         {
             app.UseDefaultFiles();
-            var tipos = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
-            // Arquivos que os builds dos craft apps trazem e o mapa padrão não conhece.
-            tipos.Mappings[".glb"] = "model/gltf-binary";
-            tipos.Mappings[".gltf"] = "model/gltf+json";
-            tipos.Mappings[".ktx2"] = "image/ktx2";
-            tipos.Mappings[".hdr"] = "image/vnd.radiance";
-            tipos.Mappings[".wgsl"] = "text/plain";
-            tipos.Mappings[".data"] = "application/octet-stream";
-            app.UseStaticFiles(new StaticFileOptions
-            {
-                ContentTypeProvider = tipos,
-                // Craft apps do Estúdio em wwwroot/crafts/<id>/: o cabeçalho diz à tela que o build
-                // existe (sem ele, o fallback abaixo devolveria o index.html do hub).
-                OnPrepareResponse = ctx =>
-                {
-                    var partes = ctx.Context.Request.Path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                    if (partes is { Length: >= 2 } && partes[0] == "crafts") ctx.Context.Response.Headers["X-Craft-App"] = partes[1];
-                },
-            });
+            app.UseStaticFiles();
             app.MapFallbackToFile("index.html");
         }
 

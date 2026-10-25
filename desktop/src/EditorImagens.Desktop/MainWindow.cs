@@ -28,7 +28,7 @@ public sealed class MainWindow : Window
     {
         this.servidor = servidor;
         this.host = host;
-        Title = "Estúdio";
+        Title = "Editor de Imagens";
         Icon = BitmapFrame.Create(new Uri("pack://application:,,,/icone.ico"));
         Width = host.Config.JanelaLargura ?? 1400;
         Height = host.Config.JanelaAltura ?? 900;
@@ -82,7 +82,7 @@ public sealed class MainWindow : Window
             AbrirFora(e.Uri);
         };
         core.DownloadStarting += AoBaixar;
-        core.Navigate(servidor.Url + "/estudio");
+        core.Navigate(servidor.Url + "/imagens");
     }
 
     private bool Interno(string uri) =>

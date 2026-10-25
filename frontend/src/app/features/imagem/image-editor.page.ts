@@ -337,7 +337,7 @@ function loadPrefs(): Prefs {
     <il-studio-base-styles /><il-studio-chrome-styles />
     <div class="page">
       <header class="il-appbar">
-        <a class="ab-home" routerLink="/estudio" title="Voltar ao Estúdio" aria-label="Voltar ao Estúdio"><app-icon name="grid" [size]="15" /></a>
+        @if (!desktop.enabled) { <a class="ab-home" routerLink="/" title="Voltar ao início" aria-label="Voltar ao início"><app-icon name="grid" [size]="15" /></a> }
         <span class="ab-title"><span class="ab-mark"><app-icon name="image" [size]="12" /></span> Editor de Imagens</span>
         <nav class="ab-modes" role="tablist" aria-label="Modo">
           @for (m of modes; track m.id) {
@@ -1087,7 +1087,7 @@ export class ImageEditorPageComponent implements AfterViewInit, OnDestroy {
     public materials: CutMaterialsService,
   ) {
     this.bridge.register((target, payload) => void this.receive(target, payload));
-    // Link direto pra um projeto (/estudio/editor?projeto=id; o antigo /imagens redireciona) — é o que o MCP devolve.
+    // Link direto pra um projeto (/imagens?projeto=id) — é o que o MCP devolve.
     const linked = inject(ActivatedRoute).snapshot.queryParamMap.get('projeto');
     if (linked) setTimeout(() => void this.openProject(linked));
     effect(() => {

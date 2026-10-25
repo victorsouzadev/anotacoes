@@ -73,10 +73,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ImageLibraryItem> ImageLibrary => Set<ImageLibraryItem>();
     public DbSet<ImagePreferences> ImagePreferences => Set<ImagePreferences>();
     public DbSet<ImageSocialTemplate> ImageSocialTemplates => Set<ImageSocialTemplate>();
-    public DbSet<EstudioConfig> EstudioConfigs => Set<EstudioConfig>();
-    public DbSet<EstudioMidia> EstudioMidias => Set<EstudioMidia>();
-    public DbSet<EstudioJob> EstudioJobs => Set<EstudioJob>();
-    public DbSet<EstudioQuadro> EstudioQuadros => Set<EstudioQuadro>();
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
@@ -311,53 +307,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.Thumb).IsRequired();
             e.HasIndex(t => new { t.UserId, t.UpdatedAt });
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<EstudioConfig>(e =>
-        {
-            e.ToTable("estudio_config");
-            e.HasKey(c => c.UserId);
-            e.Property(c => c.ChaveFalSufixo).HasMaxLength(8);
-            e.Property(c => c.ChaveWorldLabsSufixo).HasMaxLength(8);
-            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<EstudioMidia>(e =>
-        {
-            e.ToTable("estudio_midias");
-            e.Property(m => m.Tipo).IsRequired().HasMaxLength(20);
-            e.Property(m => m.Nome).IsRequired().HasMaxLength(300);
-            e.Property(m => m.ContentType).IsRequired().HasMaxLength(120);
-            e.Property(m => m.Arquivo).IsRequired().HasMaxLength(400);
-            e.Property(m => m.Origem).HasMaxLength(20);
-            e.Property(m => m.Pasta).HasMaxLength(120);
-            e.HasIndex(m => new { m.UserId, m.CriadoEm });
-            e.HasIndex(m => m.JobId);
-            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<EstudioJob>(e =>
-        {
-            e.ToTable("estudio_jobs");
-            e.Property(j => j.App).HasMaxLength(40);
-            e.Property(j => j.ModeloId).HasMaxLength(80);
-            e.Property(j => j.Operacao).HasMaxLength(40);
-            e.Property(j => j.Provedor).HasMaxLength(20);
-            e.Property(j => j.Endpoint).HasMaxLength(200);
-            e.Property(j => j.Status).HasMaxLength(20);
-            e.HasIndex(j => new { j.UserId, j.CriadoEm });
-            e.HasIndex(j => j.Status);
-            e.HasOne<User>().WithMany().HasForeignKey(j => j.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<EstudioQuadro>(e =>
-        {
-            e.ToTable("estudio_quadros");
-            e.Property(q => q.Tipo).IsRequired().HasMaxLength(20);
-            e.Property(q => q.Nome).IsRequired().HasMaxLength(300);
-            e.Property(q => q.Data).IsRequired();
-            e.HasIndex(q => new { q.UserId, q.Tipo, q.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(q => q.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ImageLibraryItem>(e =>
