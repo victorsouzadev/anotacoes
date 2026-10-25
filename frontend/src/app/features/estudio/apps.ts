@@ -4,7 +4,7 @@ import { TipoMidia } from './estudio.models';
 /**
  * Tudo o que o Estúdio abre, num lugar só: a grade da tela inicial, a busca e o MCP leem daqui.
  *
- * - craft: os 13 apps do ArtCraft (Rust/WebAssembly), servidos em /estudio/apps/<id>/ e abertos num
+ * - craft: os 13 apps do ArtCraft (Rust/WebAssembly), servidos em /crafts/<id>/ e abertos num
  *   iframe que troca arquivos com a biblioteca pela ponte `<id>:ready/open/save/dirty`.
  * - ia: gerações no fal.ai (e World Labs), numa tela comum configurada por app.
  * - ferramenta: telas próprias (Editor de Imagens, Palco 3D, Storyboard…).
@@ -31,7 +31,7 @@ export interface CraftApp extends AppEstudio {
   recebe: TipoMidia[];
   /** Precisa de WebGPU (todos menos LightCraft e PdfCraft, que usam WebGL2). */
   webgpu: boolean;
-  /** Versão da página do ArtCraft quando o build foi fixado. */
+  /** Versão do commit fixado em estudio/crafts/crafts.json. */
   versao: string;
   repo: string;
 }
@@ -41,79 +41,79 @@ export const CRAFTS: CraftApp[] = [
     id: 'photocraft', nome: 'PhotoCraft', subtitulo: 'Editor de imagem', icone: 'image', categoria: 'craft', rota: '/estudio/apps/photocraft',
     descricao: 'Camadas, máscaras, ajustes não destrutivos, 70+ filtros, PSD/PSB e seleção de objeto no próprio aparelho.',
     abre: ['.psd', '.psb', '.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff'], recebe: ['imagem', 'documento'], webgpu: true,
-    selo: 'alfa', versao: '0.10.0', repo: 'storytold/photocraft',
+    selo: 'alfa', versao: '0.15.1', repo: 'storytold/photocraft',
   },
   {
     id: 'vectorcraft', nome: 'VectorCraft', subtitulo: 'Ilustração vetorial', icone: 'vector', categoria: 'craft', rota: '/estudio/apps/vectorcraft',
     descricao: 'Pena, booleanas exatas, efeitos vivos, malha de gradiente, vetorização de imagem. SVG e PDF.',
     abre: ['.svg', '.pdf', '.json', '.png', '.jpg', '.jpeg', '.webp'], recebe: ['imagem', 'documento'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.13.1', repo: 'storytold/vectorcraft',
+    selo: 'em desenvolvimento', versao: '0.16.0', repo: 'storytold/vectorcraft',
   },
   {
     id: 'lightcraft', nome: 'LightCraft', subtitulo: 'Fotos e revelação RAW', icone: 'aperture', categoria: 'craft', rota: '/estudio/apps/lightcraft',
     descricao: 'Biblioteca de fotos e revelação não destrutiva de RAW (DNG, CR2, NEF, ARW, RAF…), máscaras de céu e assunto.',
     abre: ['.dng', '.cr2', '.nef', '.arw', '.raf', '.rw2', '.pef', '.orf', '.jpg', '.jpeg', '.png', '.tif', '.tiff'], recebe: ['imagem', 'documento'], webgpu: false,
-    selo: 'em desenvolvimento', versao: '0.9.1', repo: 'storytold/lightcraft',
+    selo: 'em desenvolvimento', versao: '0.13.0', repo: 'storytold/lightcraft',
   },
   {
     id: 'filmcraft', nome: 'FilmCraft', subtitulo: 'Editor de vídeo', icone: 'film', categoria: 'craft', rota: '/estudio/apps/filmcraft',
     descricao: 'Linha do tempo profissional, cortes, correção de cor, 55 efeitos e 30 transições, legendas, áudio com loudness.',
     abre: ['.mp4', '.mov', '.webm', '.mkv', '.m4v', '.mp3', '.wav', '.png', '.jpg', '.srt', '.vtt'], recebe: ['video', 'audio', 'imagem'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.9.0', repo: 'storytold/filmcraft',
+    selo: 'em desenvolvimento', versao: '0.12.0', repo: 'storytold/filmcraft',
   },
   {
     id: 'effectcraft', nome: 'EffectCraft', subtitulo: 'Motion graphics e efeitos', icone: 'sparkles', categoria: 'craft', rota: '/estudio/apps/effectcraft',
     descricao: 'Composições, keyframes, 259 efeitos, 3D com câmeras e luzes, expressões, Lottie, ProRes com alfa e EXR.',
     abre: ['.mp4', '.mov', '.webm', '.png', '.jpg', '.svg', '.json', '.lottie', '.mp3', '.wav'], recebe: ['video', 'imagem', 'audio'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.11.1', repo: 'storytold/effectcraft',
+    selo: 'em desenvolvimento', versao: '0.16.0', repo: 'storytold/effectcraft',
   },
   {
     id: 'soundcraft', nome: 'SoundCraft', subtitulo: 'Estúdio de áudio', icone: 'music', categoria: 'craft', rota: '/estudio/apps/soundcraft',
     descricao: 'Gravação, edição e mixagem: console completo, automação, plugins próprios e CLAP, MIDI, partitura, surround.',
     abre: ['.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac', '.mid', '.midi', '.mp4'], recebe: ['audio', 'video'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.8.0', repo: 'storytold/soundcraft',
+    selo: 'em desenvolvimento', versao: '0.12.1', repo: 'storytold/soundcraft',
   },
   {
     id: 'designcraft', nome: 'DesignCraft', subtitulo: 'Diagramação', icone: 'book', categoria: 'craft', rota: '/estudio/apps/designcraft',
     descricao: 'Páginas mestras, caixas de texto encadeadas, estilos, tipografia fina e PDF para gráfica (CMYK, sangria, PDF/X).',
     abre: ['.json', '.pdf', '.png', '.jpg', '.jpeg', '.svg'], recebe: ['imagem', 'documento'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.9.0', repo: 'storytold/designcraft',
+    selo: 'em desenvolvimento', versao: '0.12.0', repo: 'storytold/designcraft',
   },
   {
     id: 'figcraft', nome: 'FigCraft', subtitulo: 'Design de interface', icone: 'figma', categoria: 'craft', rota: '/estudio/apps/figcraft',
     descricao: 'Auto layout, componentes com variantes, variáveis, protótipos e código para CSS, HTML, React, SwiftUI e Compose.',
     abre: ['.json', '.svg', '.png', '.jpg', '.jpeg'], recebe: ['imagem', 'documento'], webgpu: true,
-    selo: 'alfa', versao: '0.7.0', repo: 'storytold/figcraft',
+    selo: 'alfa', versao: '0.10.0', repo: 'storytold/figcraft',
   },
   {
     id: 'deckcraft', nome: 'DeckCraft', subtitulo: 'Apresentações', icone: 'slides', categoria: 'craft', rota: '/estudio/apps/deckcraft',
     descricao: 'Mestres e temas, 150+ formas, transições com Morph, animações, modo apresentador. Abre e salva .pptx.',
     abre: ['.pptx', '.png', '.jpg', '.jpeg', '.svg'], recebe: ['imagem', 'documento'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.8.0', repo: 'storytold/deckcraft',
+    selo: 'em desenvolvimento', versao: '0.10.0', repo: 'storytold/deckcraft',
   },
   {
     id: 'wordcraft', nome: 'WordCraft', subtitulo: 'Texto', icone: 'file', categoria: 'craft', rota: '/estudio/apps/wordcraft',
     descricao: 'Faixa de opções, estilos, revisão com alterações controladas, sumário, notas, citações APA, MLA, Chicago e IEEE. Abre e salva .docx.',
     abre: ['.docx', '.odt', '.rtf', '.md', '.txt', '.html'], recebe: ['documento', 'imagem'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.8.0', repo: 'storytold/wordcraft',
+    selo: 'em desenvolvimento', versao: '0.10.0', repo: 'storytold/wordcraft',
   },
   {
     id: 'gridcraft', nome: 'GridCraft', subtitulo: 'Planilhas', icone: 'table', categoria: 'craft', rota: '/estudio/apps/gridcraft',
     descricao: '500+ funções, matrizes dinâmicas, LAMBDA, 17 tipos de gráfico, tabelas dinâmicas. Abre e salva .xlsx.',
     abre: ['.xlsx', '.csv'], recebe: ['documento'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.8.0', repo: 'storytold/gridcraft',
+    selo: 'em desenvolvimento', versao: '0.11.1', repo: 'storytold/gridcraft',
   },
   {
     id: 'pdfcraft', nome: 'PdfCraft', subtitulo: 'PDF', icone: 'file', categoria: 'craft', rota: '/estudio/apps/pdfcraft',
     descricao: 'Ler, buscar, reorganizar páginas, juntar, separar e proteger PDFs (até AES-256), com salvamento seguro.',
     abre: ['.pdf'], recebe: ['documento'], webgpu: false,
-    selo: 'alfa', versao: '0.9.0', repo: 'storytold/pdfcraft',
+    selo: 'alfa', versao: '0.13.0', repo: 'storytold/pdfcraft',
   },
   {
     id: 'cadcraft', nome: 'CADCraft', subtitulo: 'Desenho técnico', icone: 'ruler', categoria: 'craft', rota: '/estudio/apps/cadcraft',
     descricao: 'Comandos digitados, snaps, cotas associativas, hachuras, blocos, restrições paramétricas. DXF e DWG.',
     abre: ['.dxf', '.dwg'], recebe: ['documento'], webgpu: true,
-    selo: 'em desenvolvimento', versao: '0.8.0', repo: 'storytold/cadcraft',
+    selo: 'em desenvolvimento', versao: '0.12.0', repo: 'storytold/cadcraft',
   },
 ];
 

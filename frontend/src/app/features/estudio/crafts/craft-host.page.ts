@@ -12,17 +12,7 @@ import { FormGeracaoComponent } from '../shared/form-geracao';
 import { HistoricoGeracoes } from '../shared/historico';
 import { JobCardComponent } from '../shared/job-card';
 import { SeletorMidiaComponent } from '../shared/seletor-midia';
-
-/** Mensagens da ponte dos craft apps (mesmo formato do GridCraft, WordCraft, PdfCraft e CADCraft). */
-interface MensagemCraft {
-  type: string;
-  name?: string;
-  bytes?: ArrayBuffer;
-  saveAs?: boolean;
-  dirty?: boolean;
-  error?: string;
-  version?: string;
-}
+import { destinoDoSalvar, lerMensagem, mensagemAbrir } from './ponte';
 
 /**
  * Um craft app dentro do hub: o build web dele (servido em /estudio/apps/<id>/) num iframe do
@@ -53,7 +43,7 @@ interface MensagemCraft {
             <div class="ch-vazio e-card">
               <app-icon [name]="a.icone" [size]="36" />
               <h2>{{ a.nome }} ainda não está publicado neste servidor</h2>
-              <p class="e-muted">O build web dos craft apps é feito pelo GitHub Actions (workflow "Craft apps") e copiado para <code>downloads/crafts/{{ a.id }}/</code> na VPS. Depois de rodar o workflow, recarregue esta página.</p>
+              <p class="e-muted">O build web dos craft apps é feito pelo GitHub Actions (workflow "Craft apps") e copiado para <code>downloads/crafts/{{ a.id }}/</code> (servido em <code>/crafts/{{ a.id }}/</code>) na VPS. Depois de rodar o workflow, recarregue esta página.</p>
               <p class="e-muted">Enquanto isso, a versão oficial: <a [href]="'https://getartcraft.com/apps/' + a.id" target="_blank" rel="noopener">getartcraft.com/apps/{{ a.id }}</a></p>
               <a class="e-btn" routerLink="/estudio">Voltar ao Estúdio</a>
             </div>
@@ -117,6 +107,9 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
   readonly app = signal<CraftApp | null>(null);
   readonly pronto = signal(false);
   readonly sujo = signal(false);
+  /** Ponte em JavaScript sem aviso de "não salvo" (só o PhotoCraft avisa): na dúvida, pergunta ao sair. */
+  private semAvisoDeSujo = false;
+  private recebeuSujo = false;
   readonly doc = signal<Midia | null>(null);
   readonly status = signal('');
   readonly aviso = signal('');
@@ -158,12 +151,12 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
     if (a.webgpu && !('gpu' in navigator)) {
       this.aviso.set(`${a.nome} usa WebGPU, que este navegador não tem ligado. Use Chrome ou Edge atualizados (ou o programa do Windows).`);
     }
-    const base = `/estudio/apps/${a.id}/`;
+    const base = `/crafts/${a.id}/`;
     try {
       const r = await fetch(base + 'index.html', { method: 'HEAD', cache: 'no-store' });
       const tipo = r.headers.get('content-type') ?? '';
-      // Sem o build, o Caddy cai no index.html do próprio hub: o tipo é HTML do mesmo jeito, mas o
-      // cabeçalho X-Craft-App (posto pelo Caddy na pasta dos crafts) diz se é mesmo o app.
+      // Em desenvolvimento (ng serve) /crafts cai no index.html do próprio hub: o tipo é HTML do mesmo
+      // jeito, mas só o Caddy da pasta dos crafts põe o cabeçalho X-Craft-App.
       this.indisponivel.set(!r.ok || !tipo.includes('html') || r.headers.get('x-craft-app') !== a.id);
     } catch {
       this.indisponivel.set(true);
@@ -194,7 +187,10 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
 
   /** Usado pela rota (canDeactivate) ao navegar dentro do hub. */
   podeSair(): boolean {
-    return !this.sujo() || confirm(`Há alterações não salvas no ${this.app()?.nome}. Sair mesmo assim?`);
+    if (this.sujo()) return confirm(`Há alterações não salvas no ${this.app()?.nome}. Sair mesmo assim?`);
+    if (this.semAvisoDeSujo && !this.recebeuSujo && this.pronto())
+      return confirm(`O ${this.app()?.nome} não avisa o hub quando há alterações não salvas. Salvou o que precisava? Sair mesmo assim?`);
+    return true;
   }
 
   async abrirMidia(m: Midia | undefined): Promise<void> {
@@ -215,7 +211,7 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
     try {
       this.status.set('Abrindo ' + m.nome + '…');
       const bytes = await this.api.bytes(m);
-      alvo.postMessage({ type: `${a.id}:open`, name: m.nome, bytes }, location.origin, [bytes]);
+      alvo.postMessage(mensagemAbrir(a.id, m.nome, bytes, comoDocumento ? 'abrir' : 'inserir'), location.origin, [bytes]);
       if (comoDocumento) this.doc.set(m);
       this.status.set('');
     } catch (e) {
@@ -227,11 +223,12 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
     const a = this.app();
     const alvo = this.quadro?.nativeElement.contentWindow;
     if (!a || e.origin !== location.origin || e.source !== alvo) return;
-    const msg = e.data as MensagemCraft;
-    if (typeof msg?.type !== 'string' || !msg.type.startsWith(a.id + ':')) return;
-    switch (msg.type.slice(a.id.length + 1)) {
+    const ev = lerMensagem(e.data, a.id);
+    if (!ev) return;
+    switch (ev.tipo) {
       case 'ready':
         this.pronto.set(true);
+        this.semAvisoDeSujo = ev.ponteJs;
         if (this.pendente) {
           const m = this.pendente;
           this.pendente = null;
@@ -239,39 +236,35 @@ export class CraftHostPageComponent implements OnInit, OnDestroy {
         }
         break;
       case 'dirty':
-        this.sujo.set(!!msg.dirty);
+        this.recebeuSujo = true;
+        this.sujo.set(ev.sujo);
         break;
       case 'failed':
-        this.aviso.set(`${a.nome} não conseguiu iniciar: ${msg.error ?? 'erro desconhecido'}`);
+        this.aviso.set(`${a.nome} não conseguiu iniciar: ${ev.erro}`);
         break;
       case 'save':
-        await this.salvar(a, msg);
+        await this.salvar(a, ev.nome, ev.bytes, ev.salvarComo);
         break;
     }
   }
 
-  /**
-   * Salvar sobre o documento aberto substitui o arquivo na biblioteca; "Salvar como", exportação
-   * ou documento novo viram outro arquivo (numa pasta com o nome do app).
-   */
-  private async salvar(a: CraftApp, msg: MensagemCraft): Promise<void> {
-    if (!msg.bytes || !msg.name) return;
-    const blob = new Blob([msg.bytes]);
+  /** Salvar do app → biblioteca: por cima do documento aberto, documento novo ou cópia (ver destinoDoSalvar). */
+  private async salvar(a: CraftApp, nome: string, bytes: ArrayBuffer, salvarComo: boolean | null): Promise<void> {
+    const blob = new Blob([bytes]);
     const atual = this.doc();
     try {
-      this.status.set('Salvando ' + msg.name + '…');
-      if (atual && msg.saveAs !== true && msg.name === atual.nome) {
+      this.status.set('Salvando ' + nome + '…');
+      const destino = destinoDoSalvar(atual, nome, salvarComo);
+      if (destino === 'substituir' && atual) {
         this.doc.set(await this.api.substituirArquivo(atual.id, blob));
       } else {
-        const nova = await this.api.enviarBytes(blob, msg.name, 'craft', a.nome);
-        // WordCraft diz explicitamente se o arquivo vira o documento (saveAs); nos outros, o
-        // primeiro salvar de um documento sem arquivo passa a ser o documento.
-        if (msg.saveAs === true || (msg.saveAs === undefined && !atual)) this.doc.set(nova);
+        const nova = await this.api.enviarBytes(blob, nome, 'craft', a.nome);
+        if (destino === 'novo-documento') this.doc.set(nova);
       }
-      this.status.set(`Salvo na biblioteca: ${msg.name}`);
-      setTimeout(() => this.status() .startsWith('Salvo') && this.status.set(''), 4000);
-    } catch (e) {
-      this.status.set(mensagemDeErro(e, 'Não consegui salvar na biblioteca'));
+      this.status.set(`Salvo na biblioteca: ${nome}`);
+      setTimeout(() => this.status().startsWith('Salvo') && this.status.set(''), 4000);
+    } catch (err) {
+      this.status.set(mensagemDeErro(err, 'Não consegui salvar na biblioteca'));
     }
   }
 }

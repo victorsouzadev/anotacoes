@@ -1,0 +1,147 @@
+name: Craft apps
+
+# Compila os craft apps do ArtCraft que o Estúdio abre (estudio/crafts/crafts.json): o build
+# web de cada um vai para /opt/notas-vps/downloads/crafts/<id> (servido pelo Caddy em
+# /crafts/<id>/) e a linha de comando, usada pelo MCP remoto dos crafts, para
+# /opt/notas-vps/downloads/crafts-cli. Roda quando o manifesto ou os patches mudam na main, ou
+# à mão (todos ou só alguns apps).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'estudio/crafts/**'
+      - '.github/workflows/crafts.yml'
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps separados por vírgula (vazio = todos)'
+        required: false
+        default: ''
+      publicar:
+        description: 'Gravar na VPS'
+        type: boolean
+        default: true
+
+concurrency:
+  group: crafts
+  cancel-in-progress: false
+
+env:
+  TRUNK_VERSION: v0.21.14
+  CARGO_TERM_COLOR: never
+
+jobs:
+  lista:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.l.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: l
+        run: |
+          pedidos="${{ inputs.apps }}"
+          if [ -z "$pedidos" ]; then
+            apps=$(jq -c '[.apps[].id]' estudio/crafts/crafts.json)
+          else
+            apps=$(jq -c --arg p "$pedidos" '[.apps[].id] as $todos | ($p | split(",") | map(gsub(" "; "")) | map(select(. as $x | $todos | index($x))))' estudio/crafts/crafts.json)
+          fi
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+          echo "Compilando: $apps"
+
+  compilar:
+    needs: lista
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        app: ${{ fromJson(needs.lista.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependências do sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq brotli jq pkg-config libssl-dev libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev libfontconfig1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fontes/${{ matrix.app }}
+          key: ${{ matrix.app }}
+      - name: Trunk
+        run: |
+          curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" | tar xz -C "$HOME/.cargo/bin"
+          trunk --version
+      - name: Compilar ${{ matrix.app }}
+        env:
+          CRAFTS_FONTES: ${{ github.workspace }}/fontes
+        run: bash estudio/crafts/build.sh "${{ matrix.app }}" "saida/${{ matrix.app }}" --cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: craft-${{ matrix.app }}
+          path: saida/${{ matrix.app }}
+          retention-days: 7
+
+  publicar:
+    needs: [lista, compilar]
+    if: ${{ always() && needs.compilar.result != 'cancelled' && (github.event_name == 'push' || inputs.publicar) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: craft-*
+          path: artefatos
+      - name: Monta as pastas
+        run: |
+          mkdir -p envio/crafts envio/crafts-cli
+          for d in artefatos/craft-*; do
+            id="${d#artefatos/craft-}"
+            [ -f "$d/web/index.html" ] || { echo "::warning::$id sem build web"; continue; }
+            cp -r "$d/web" "envio/crafts/$id"
+            if [ -f "$d/cli/$id-cli" ]; then cp "$d/cli/$id-cli" envio/crafts-cli/ && chmod +x "envio/crafts-cli/$id-cli"; fi
+          done
+          ls -la envio/crafts envio/crafts-cli
+          du -sh envio/*
+      - name: Prepara a pasta na VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: rm -rf /opt/notas-vps/downloads/crafts-novo && mkdir -p /opt/notas-vps/downloads/crafts-novo
+      - name: Envia
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: envio/crafts,envio/crafts-cli
+          target: /opt/notas-vps/downloads/crafts-novo
+          strip_components: 1
+      - name: Troca os apps publicados
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            base=/opt/notas-vps/downloads
+            mkdir -p "$base/crafts" "$base/crafts-cli"
+            # Troca app por app: quem não foi compilado agora continua com a versão anterior.
+            for d in "$base/crafts-novo/crafts/"*/; do
+              id=$(basename "$d")
+              rm -rf "$base/crafts/$id.antigo"
+              [ -d "$base/crafts/$id" ] && mv "$base/crafts/$id" "$base/crafts/$id.antigo"
+              mv "$d" "$base/crafts/$id"
+              rm -rf "$base/crafts/$id.antigo"
+            done
+            if ls "$base/crafts-novo/crafts-cli/"* > /dev/null 2>&1; then
+              cp -f "$base/crafts-novo/crafts-cli/"* "$base/crafts-cli/"
+              chmod +x "$base/crafts-cli/"*
+            fi
+            rm -rf "$base/crafts-novo"
+            ls "$base/crafts"

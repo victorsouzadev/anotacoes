@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><title>Fake</title></head>
+<body style="margin:0"><canvas id="c" style="width:100vw;height:100vh;display:block"></canvas>
+<div id="fake_loading">Loading…</div>
+<script>
+  // Simula o runtime: "carrega" em 1 s, recebe arquivos soltos e salva via <a download>.
+  setTimeout(() => document.getElementById('fake_loading').remove(), 1000);
+  let sujo = false;
+  window.addEventListener('beforeunload', (e) => { if (sujo) e.preventDefault(); });
+  document.getElementById('c').addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files[0];
+    const txt = await f.text();
+    window.recebido = { nome: f.name, txt, x: e.clientX };
+    sujo = true;
+    // "Salvar": baixa o conteúdo em maiúsculas.
+    const blob = new Blob([txt.toUpperCase()], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'salvo-' + f.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  });
+</script></body></html>

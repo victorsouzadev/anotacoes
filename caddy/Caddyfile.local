@@ -91,6 +91,26 @@
         file_server
     }
 
+    # Craft apps do Estúdio (build web em WebAssembly), gravados pelo workflow "Craft apps" em
+    # /opt/notas-vps/downloads/crafts/<app>. Ficam fora da imagem (o EffectCraft sozinho passa de
+    # 50 MB) e vêm já comprimidos (.br/.gz ao lado de cada arquivo), para o Caddy não gastar CPU
+    # comprimindo o .wasm a cada visita. O hub abre cada um num iframe do mesmo endereço.
+    handle_path /crafts/* {
+        root * /srv-downloads/downloads/crafts
+        @app path_regexp app ^/([a-z]+)/
+        header @app X-Craft-App {re.app.1}
+        # Sem hash no nome (index.html, builds do xtask): revalida a cada visita (304 barato).
+        # Com hash do Trunk (app-0123456789abcdef_bg.wasm): nunca muda, cache longo.
+        header ?Cache-Control "no-cache"
+        @fixo path_regexp -[0-9a-f]{16}(_bg)?\.(wasm|js|css)$
+        header @fixo Cache-Control "public, max-age=31536000, immutable"
+        @wasm path *.wasm
+        header @wasm Content-Type "application/wasm"
+        file_server {
+            precompressed br gzip
+        }
+    }
+
     # APK do app Dieta, gravado pelo workflow "Android (Dieta)" em /opt/notas-vps/downloads/android.
     handle /downloads/android/* {
         root * /srv-downloads
