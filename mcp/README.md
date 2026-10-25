@@ -49,7 +49,7 @@ gerar story, feed ou carrossel e alimentar o site.
 | Tool | Descrição |
 |---|---|
 | `viih_listar_modelos` | Modelos de post (story, feed, carrossel), quantas fotos cada um recebe e os textos — inclui os salvos na galeria do editor. |
-| `viih_gerar_post` | Fotos + contexto → a IA escolhe o modelo (ou usa o tipo/modelo pedido), reescreve os textos da arte, ordena as fotos, sugere filtro e escreve 3 legendas. Salva um **rascunho no Editor de Imagens** e devolve o link (`/imagens?projeto=<id>`): o editor abre com o post montado, pronto pra conferir e exportar. |
+| `viih_gerar_post` | Fotos + contexto → a IA escolhe o modelo (ou usa o tipo/modelo pedido), reescreve os textos da arte, ordena as fotos, sugere filtro e escreve 3 legendas. Salva um **rascunho no Editor de Imagens** e devolve o link (`/estudio/editor?projeto=<id>`): o editor abre com o post montado, pronto pra conferir e exportar. |
 | `viih_gerar_legenda` | 3 legendas com hashtags, a partir do contexto e (opcional) de uma foto. |
 | `viih_site_estado` | Resumo do site: produtos, depoimentos, quando foi publicado. |
 | `viih_site_listar_produtos` | Catálogo do site. |
@@ -80,6 +80,31 @@ teste do frontend (`social-mcp-catalog.spec.ts`) falha se ele ficar desatualizad
 cd frontend
 UPDATE_MCP_CATALOG=1 npx ng test --watch=false --include=src/app/features/imagem/social-mcp-catalog.spec.ts
 ```
+
+## Estúdio
+
+As ferramentas `estudio_*` usam o [Estúdio](../estudio/README.md) do hub com o mesmo login
+(`HUB_EMAIL`/`HUB_PASSWORD`). Gerar imagem, vídeo, áudio ou 3D custa na conta do fal.ai cadastrada
+em `/estudio/config`. Acima do limite de confirmação de lá (padrão US$ 1), `estudio_gerar` devolve
+o custo e só gera de novo com `confirmar: true`.
+
+| Tool | Descrição |
+|---|---|
+| `estudio_modelos` | Modelos do catálogo (filtro por tipo: imagem, video, audio, modelo3d, mundo), com operações, entradas, parâmetros e opções. |
+| `estudio_gerar` | Gera com um modelo. As entradas podem ser **caminhos do computador** ou links (vão para a biblioteca antes) ou ids da biblioteca. Espera até `aguardar_segundos` e, com `baixar_para`, grava o resultado numa pasta. |
+| `estudio_trocar_fundo_video` | Tira o fundo de um vídeo e põe uma imagem atrás, mantendo o áudio. |
+| `estudio_status` / `estudio_cancelar` | Acompanha ou cancela uma geração (com `baixar_para` opcional). |
+| `estudio_midias` | Lista a biblioteca (tipo, pasta, busca). |
+| `estudio_enviar_arquivos` | Manda arquivos do computador (ou links https) para a biblioteca. |
+| `estudio_baixar` | Baixa arquivos da biblioteca para uma pasta do computador. |
+| `estudio_apagar_midia` | Apaga da biblioteca (pede confirmação). |
+| `estudio_abrir_no_app` | Link para abrir um arquivo num craft app, no Editor de Imagens ou no Palco 3D. |
+| `estudio_montar_video` | Junta vídeos, imagens e trilhas num vídeo (ffmpeg no servidor, sem custo). |
+| `estudio_extrair_quadros` | Tira quadros de um vídeo como imagens. |
+| `estudio_documentos` / `estudio_documento` / `estudio_salvar_documento` | Storyboards, moodboards, cenas do Palco e montagens. |
+
+Caminhos aceitam `~` (pasta do usuário). Sem um computador por perto (Claude no celular ou na web),
+use o MCP remoto `/api/mcp/estudio`, que tem as mesmas ferramentas trocando caminhos por links.
 
 ## Configuração
 
