@@ -26,6 +26,8 @@ public sealed class Configuracao
     public double? JanelaLargura { get; set; }
     public double? JanelaAltura { get; set; }
     public bool JanelaMaximizada { get; set; } = true;
+    /// <summary>Token do MCP local, cifrado pelo Windows (DPAPI).</summary>
+    public string? McpTokenCifrado { get; set; }
 
     private static readonly string Arquivo = Path.Combine(Pastas.Dados, "config.json");
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };

@@ -20,6 +20,25 @@ jobs:
             mobile:
               - 'mobile/**'
 
+  # Ponte em JavaScript dos craft apps do Estúdio (estudio/crafts/ponte-hub.js) num Chromium de verdade
+  # e o adaptador do MCP remoto deles.
+  ponte-crafts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ponte dos craft apps
+        working-directory: estudio/crafts
+        run: |
+          npm i --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node teste/ponte.test.mjs
+      # Adaptador do MCP remoto dos craft apps (stdio da CLI ↔ HTTP), com uma CLI de mentira.
+      - name: MCP remoto dos craft apps
+        run: node --test crafts-mcp/teste/servidor.test.mjs
+
   backend-build:
     runs-on: ubuntu-latest
     defaults:

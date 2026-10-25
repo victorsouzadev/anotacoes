@@ -283,6 +283,22 @@ token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.js
 `/access`). O Cérebro usa esses MCPs na rotina de sincronização. Detalhes em
 [cerebro/README.md](cerebro/README.md#apps-do-hub-mcps-e-rotina-de-sincronização).
 
+## Estúdio (craft apps, fal.ai e MCP dos crafts)
+
+1. **Craft apps:** depois do primeiro deploy da main (o Caddy precisa da rota `/crafts/*`),
+   rode o workflow **Craft apps** (Actions › Run workflow, apps vazio = todos). Ele usa os
+   mesmos segredos `VPS_*`, grava em `/opt/notas-vps/downloads/crafts` e gera
+   `downloads/crafts-web/crafts-web.tar.gz` para o instalador do Windows. Os 13 apps somam
+   algumas centenas de MB.
+2. **fal.ai:** cada usuário cola a chave em `/estudio/config`. Para uma chave padrão,
+   ponha `FAL_KEY=...` no `.env` (e `WORLDLABS_API_KEY=...` para os mundos Marble).
+3. **MCP dos crafts (opcional):** some `crafts` ao `COMPOSE_PROFILES` e ponha
+   `CRAFTS_MCP_URL=http://crafts-mcp:8080` no `.env`. O serviço usa as CLIs de
+   `downloads/crafts-cli`, gravadas pelo mesmo workflow.
+
+Os arquivos ficam em `data/estudio`. O `scripts/backup.sh` só copia os bancos: quem quiser backup das mídias precisa incluir essa pasta. Detalhes em
+[estudio/README.md](estudio/README.md).
+
 ## App Android da Dieta
 
 O workflow **Android (Dieta)** (tag `dieta-v1.2.3` ou execução manual) gera o APK e grava em

@@ -24,6 +24,13 @@ services:
       # (ex.: http://usuario:senha@host:porta). Vazio = conexão direta.
       - Auvp__Proxy=${AUVP_PROXY:-}
       - Llm__Provider=${LLM_PROVIDER:-}
+      # Estúdio: gerações de imagem, vídeo, áudio e 3D no fal.ai. Cada usuário cadastra a
+      # própria chave na tela; estas valem como padrão do servidor (vazias = sem padrão).
+      - Estudio__Raiz=/data/estudio
+      - Estudio__FalKey=${FAL_KEY:-}
+      - Estudio__WorldLabsKey=${WORLDLABS_API_KEY:-}
+      # MCP remoto dos craft apps: só com o profile "crafts" ligado (serviço crafts-mcp).
+      - Estudio__CraftsMcpUrl=${CRAFTS_MCP_URL:-}
       # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde
       # não prova, por si só, que o container foi substituído.
@@ -47,6 +54,7 @@ services:
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites
+      - ./data/estudio:/data/estudio
       - ./data/anotacao:/anotacao
       - ./data/cerebro/hub/access:/access:ro
     healthcheck:
@@ -214,6 +222,18 @@ services:
       # Hash do token gerado na tela do Segundo Cérebro (substitui o OPS_MCP_TOKEN quando existe).
       - ./data/cerebro/hub/access:/access:ro
     mem_limit: 128m
+
+  # MCP remoto dos craft apps do Estúdio (crafts-mcp/servidor.mjs): roda a CLI de cada app sem
+  # janela. Só fala com a API (que confere o token em /api/mcp/crafts/<app>); não tem porta
+  # publicada nem acesso ao banco — só às CLIs e à pasta de trabalho das sessões.
+  crafts-mcp:
+    build: ./crafts-mcp
+    profiles: ["crafts"]
+    restart: unless-stopped
+    volumes:
+      - ./downloads/crafts-cli:/crafts-cli:ro
+      - ./data/estudio/_mcp:/trabalho
+    mem_limit: 1g
 
 networks:
   sites:
