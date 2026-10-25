@@ -37,6 +37,9 @@ public class EstudioOptions
     /// <summary>Serviço que roda as CLIs dos craft apps sem janela (MCP remoto). Vazio = desligado.</summary>
     public string? CraftsMcpUrl { get; set; }
 
+    /// <summary>Pasta com as CLIs dos craft apps para rodá-las aqui mesmo (programa do Windows), no lugar do crafts-mcp.</summary>
+    public string? CraftsCliDir { get; set; }
+
     /// <summary>Desliga o processamento em segundo plano (testes que só olham a fila).</summary>
     public bool WorkerDesligado { get; set; }
 }

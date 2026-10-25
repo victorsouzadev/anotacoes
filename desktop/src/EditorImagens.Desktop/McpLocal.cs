@@ -7,17 +7,24 @@ using Notas.Api.Endpoints;
 namespace EditorImagens.Desktop;
 
 /// <summary>
-/// MCP do Estúdio no próprio PC (Claude Desktop e Claude Code apontam para ele): a mesma rota
-/// /api/mcp/estudio do servidor, numa porta fixa do 127.0.0.1 para o endereço não mudar a cada
-/// abertura. O token é gerado uma vez, guardado cifrado (DPAPI) e o servidor local só conhece o
-/// hash dele, no mesmo formato do arquivo que o Segundo Cérebro grava na VPS.
+/// MCPs do Estúdio no próprio PC (Claude Desktop e Claude Code apontam para eles): um por craft app,
+/// /api/mcp/crafts/&lt;app&gt; como no servidor, com as linhas de comando de crafts-cli\ rodando aqui
+/// mesmo, numa porta fixa do 127.0.0.1 para o endereço não mudar a cada abertura. O token é gerado
+/// uma vez, guardado cifrado (DPAPI) e o servidor local só conhece o hash dele, no mesmo formato do
+/// arquivo que o Segundo Cérebro grava na VPS.
 /// </summary>
 public static class McpLocal
 {
     public const int Porta = 47820;
     private static readonly byte[] Entropia = Encoding.UTF8.GetBytes("EditorImagens.Mcp.v1");
 
-    public static string Url(string grupo = "estudio") => $"http://127.0.0.1:{Porta}/api/mcp/{grupo}";
+    public static readonly string[] Apps =
+        ["photocraft", "vectorcraft", "lightcraft", "filmcraft", "effectcraft", "soundcraft", "designcraft", "figcraft", "deckcraft", "wordcraft", "gridcraft", "pdfcraft", "cadcraft"];
+
+    public static string Url(string app) => $"http://127.0.0.1:{Porta}/api/mcp/crafts/{app}";
+
+    /// <summary>Os craft apps cuja linha de comando veio no instalador.</summary>
+    public static string[] Instalados() => Apps.Where(a => File.Exists(Path.Combine(Pastas.CraftsCli, $"{a}-cli.exe"))).ToArray();
 
     /// <summary>Token em claro (para mostrar ao usuário), criando-o na primeira vez, e o arquivo de hash em dia.</summary>
     public static string Garantir(Configuracao config)

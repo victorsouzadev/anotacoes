@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Compila um craft app do ArtCraft para o Estúdio: o build web (WebAssembly) que o hub abre em
-# /crafts/<id>/ e, com --cli, a linha de comando (MCP sem janela) para Linux. Com --so-cli,
+# /crafts/<id>/ e, com --cli, a linha de comando (MCP sem janela) do sistema onde roda (Linux na VPS,
+# Windows para o instalador). Com --so-cli,
 # só a linha de comando (o workflow a compila num container Alpine, para rodar no crafts-mcp).
 #
 #   estudio/crafts/build.sh <id> <pasta-de-saída> [--cli | --so-cli]
@@ -80,6 +81,9 @@ fi
 if [ "$cli" = "--cli" ] || [ "$cli" = "--so-cli" ]; then
   (cd "$fonte" && cargo build --release --locked -p "$id-cli")
   mkdir -p "$saida/cli"
-  cp "${CARGO_TARGET_DIR:-$fonte/target}/release/$id-cli" "$saida/cli/"
-  echo "CLI: $saida/cli/$id-cli"
+  # No Windows (runner do GitHub, Git Bash) o binário sai com .exe.
+  exe="$id-cli"
+  [ -f "${CARGO_TARGET_DIR:-$fonte/target}/release/$exe.exe" ] && exe="$exe.exe"
+  cp "${CARGO_TARGET_DIR:-$fonte/target}/release/$exe" "$saida/cli/"
+  echo "CLI: $saida/cli/$exe"
 fi

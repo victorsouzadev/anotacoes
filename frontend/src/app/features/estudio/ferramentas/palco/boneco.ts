@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 
 /**
  * Boneco articulado do palco (o "manequim" do ArtCraft): juntas em hierarquia, com rotação em
- * graus por junta. A pose é só um mapa junta → [x, y, z], o que a cena salva e o MCP edita.
+ * graus por junta. A pose é só um mapa junta → [x, y, z], que é o que a cena salva.
  */
 export type Junta =
   | 'quadril' | 'tronco' | 'peito' | 'pescoco' | 'cabeca'

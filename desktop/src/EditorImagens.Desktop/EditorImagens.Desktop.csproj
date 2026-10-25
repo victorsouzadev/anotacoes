@@ -46,6 +46,8 @@
     <None Include="modelos/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- ffmpeg do Estúdio (montagem, quadros, troca de fundo), baixado pelo CI. -->
     <None Include="ffmpeg/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Linhas de comando dos craft apps (MCP do Estúdio), do pacote que o workflow "Craft apps" publica. -->
+    <None Include="crafts-cli/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Fora do instalador: símbolos de bibliotecas de terceiros (o do Skia tem

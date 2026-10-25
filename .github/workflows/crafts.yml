@@ -2,9 +2,10 @@ name: Craft apps
 
 # Compila os craft apps do ArtCraft que o Estúdio abre (estudio/crafts/crafts.json): o build
 # web de cada um vai para /opt/notas-vps/downloads/crafts/<id> (servido pelo Caddy em
-# /crafts/<id>/) e a linha de comando, usada pelo MCP remoto dos crafts, para
-# /opt/notas-vps/downloads/crafts-cli. Roda quando o manifesto ou os patches mudam na main, ou
-# à mão (todos ou só alguns apps).
+# /crafts/<id>/), a linha de comando para Linux, usada pelo MCP dos crafts na VPS, para
+# /opt/notas-vps/downloads/crafts-cli, e a de Windows (MCP do programa desktop) para
+# downloads/crafts-cli-win, empacotada em crafts-web/crafts-cli-win.tar.gz para o instalador.
+# Roda quando o manifesto ou os patches mudam na main, ou à mão (todos ou só alguns apps).
 
 on:
   push:
@@ -117,8 +118,42 @@ jobs:
           path: saida/${{ matrix.app }}/cli
           retention-days: 7
 
+  # A mesma linha de comando para Windows: o programa desktop roda o MCP de cada app no PC.
+  cli-windows:
+    needs: lista
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        app: ${{ fromJson(needs.lista.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fontes/${{ matrix.app }}
+          key: cli-win-${{ matrix.app }}
+      - name: Compilar ${{ matrix.app }}-cli.exe
+        env:
+          CRAFTS_FONTES: ${{ github.workspace }}/fontes
+          # Caminho curto: alguns crates estouram o limite de 260 caracteres do Windows.
+          CARGO_TARGET_DIR: C:/t
+        run: |
+          git config --global core.longpaths true
+          bash estudio/crafts/build.sh "${{ matrix.app }}" "saida/${{ matrix.app }}" --so-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-win-${{ matrix.app }}
+          path: saida/${{ matrix.app }}/cli
+          retention-days: 7
+
   publicar:
-    needs: [lista, compilar, cli]
+    needs: [lista, compilar, cli, cli-windows]
     if: ${{ always() && needs.compilar.result != 'cancelled' && (github.event_name == 'push' || inputs.publicar) }}
     runs-on: ubuntu-latest
     steps:
@@ -132,13 +167,18 @@ jobs:
           path: artefatos
       - name: Monta as pastas
         run: |
-          mkdir -p envio/crafts envio/crafts-cli
+          mkdir -p envio/crafts envio/crafts-cli envio/crafts-cli-win
+          for d in artefatos/cli-win-*; do
+            id="${d#artefatos/cli-win-}"
+            if [ -f "$d/$id-cli.exe" ]; then cp "$d/$id-cli.exe" envio/crafts-cli-win/; else echo "::warning::$id sem CLI de Windows"; fi
+          done
           for d in artefatos/craft-*; do
             id="${d#artefatos/craft-}"
             [ -f "$d/web/index.html" ] || { echo "::warning::$id sem build web"; continue; }
             cp -r "$d/web" "envio/crafts/$id"
           done
           for d in artefatos/cli-*; do
+            case "$d" in artefatos/cli-win-*) continue ;; esac
             id="${d#artefatos/cli-}"
             if [ -f "$d/$id-cli" ]; then cp "$d/$id-cli" envio/crafts-cli/ && chmod +x "envio/crafts-cli/$id-cli"; else echo "::warning::$id sem CLI"; fi
           done
@@ -157,7 +197,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: envio/crafts,envio/crafts-cli
+          source: envio/crafts,envio/crafts-cli,envio/crafts-cli-win
           target: /opt/notas-vps/downloads/crafts-novo
           strip_components: 1
       - name: Troca os apps publicados
@@ -182,6 +222,10 @@ jobs:
               cp -f "$base/crafts-novo/crafts-cli/"* "$base/crafts-cli/"
               chmod +x "$base/crafts-cli/"*
             fi
+            mkdir -p "$base/crafts-cli-win"
+            if ls "$base/crafts-novo/crafts-cli-win/"* > /dev/null 2>&1; then
+              cp -f "$base/crafts-novo/crafts-cli-win/"* "$base/crafts-cli-win/"
+            fi
             rm -rf "$base/crafts-novo"
             ls "$base/crafts"
             # Pacote com todos os apps publicados (sem as versões pré-comprimidas) para o
@@ -189,3 +233,8 @@ jobs:
             mkdir -p "$base/crafts-web"
             tar -czf "$base/crafts-web/crafts-web.tar.gz.novo" --exclude='*.br' --exclude='*.gz' --exclude='*.antigo' -C "$base" crafts
             mv -f "$base/crafts-web/crafts-web.tar.gz.novo" "$base/crafts-web/crafts-web.tar.gz"
+            # As CLIs de Windows, para o instalador (MCP dos craft apps no PC).
+            if ls "$base/crafts-cli-win/"*.exe > /dev/null 2>&1; then
+              tar -czf "$base/crafts-web/crafts-cli-win.tar.gz.novo" -C "$base" crafts-cli-win
+              mv -f "$base/crafts-web/crafts-cli-win.tar.gz.novo" "$base/crafts-web/crafts-cli-win.tar.gz"
+            fi

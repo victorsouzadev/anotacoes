@@ -78,7 +78,7 @@ public class CraftsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal(Sessao, r.Headers.GetValues("Mcp-Session-Id").Single());
         var nomes = (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("result").GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
-        Assert.Equal(["cell_set", "hub_trazer_midia", "hub_guardar_arquivo", "hub_arquivos_da_sessao"], nomes);
+        Assert.Equal(["cell_set", "hub_biblioteca", "hub_trazer_midia", "hub_guardar_arquivo", "hub_arquivos_da_sessao"], nomes);
         Assert.Equal("http://crafts-mcp:8080/gridcraft", _falso.Ultimo);
     }
 
@@ -87,6 +87,11 @@ public class CraftsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     {
         var put = await _logado.PostAsJsonAsync("/api/estudio/midias", new { nome = "logo.png", dataUrl = Png });
         var id = (await put.Content.ReadFromJsonAsync<JsonElement>())[0].GetProperty("id").GetString();
+
+        var achado = await Texto(await Rpc("photocraft", new { jsonrpc = "2.0", id = 9, method = "tools/call", @params = new { name = "hub_biblioteca", arguments = new { busca = "logo", tipo = "imagem" } } }));
+        Assert.Contains($"logo.png (imagem", achado);
+        Assert.Contains($"id {id}", achado);
+        Assert.Contains("Nada", await Texto(await Rpc("photocraft", new { jsonrpc = "2.0", id = 10, method = "tools/call", @params = new { name = "hub_biblioteca", arguments = new { busca = "nao-existe-xyz" } } })));
 
         var trazer = await Texto(await Rpc("photocraft", new { jsonrpc = "2.0", id = 1, method = "tools/call", @params = new { name = "hub_trazer_midia", arguments = new { midia = id } } }));
         Assert.Contains($"/trabalho/{Sessao}/logo.png", trazer);

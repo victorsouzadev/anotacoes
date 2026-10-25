@@ -6,7 +6,7 @@ import { Junta, Pose, aplicarPose, montarBoneco } from './boneco';
 export type TipoObjeto = 'boneco' | 'modelo' | 'forma' | 'imagem';
 export type Forma = 'cubo' | 'esfera' | 'cilindro' | 'cone' | 'plano';
 
-/** Um objeto da cena, como é salvo (quadro "cena") e como o MCP descreve. */
+/** Um objeto da cena, como é salvo (quadro "cena"). */
 export interface ObjetoCena {
   id: string;
   tipo: TipoObjeto;
