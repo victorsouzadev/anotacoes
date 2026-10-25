@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// api importa auth → config, que exige as credenciais já no import. vi.hoisted roda antes
+// dos imports abaixo; os testes daqui não fazem chamadas de rede.
+vi.hoisted(() => {
+  process.env.HUB_EMAIL ??= 'teste@example.com';
+  process.env.HUB_PASSWORD ??= 'teste';
+});
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { caminhoLocal, nomeLivre, precisaConfirmar, textoDoJob } from './api.js';

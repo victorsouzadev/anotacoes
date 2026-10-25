@@ -50,7 +50,8 @@ describe('posts do carrossel', () => {
     const ph = copies.find((o) => o.kind === 'foto') as PhotoOverlay;
     expect(sp.id).not.toBe('s');
     expect(ph.slotId).toBe(sp.id);
-    expect(pages(r.overlays, 4).filter((p) => p.startsWith('c'))).toEqual(['c@3']);
+    // As cópias ganham id aleatório (que pode começar com "c"): filtra pelo id exato.
+    expect(pages(r.overlays, 4).filter((p) => p.startsWith('c@'))).toEqual(['c@3']);
   });
 
   it('duplica sem a foto pra receber outra', () => {
