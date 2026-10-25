@@ -2,7 +2,7 @@ import { IconName } from '../../shared/icon';
 import { TipoMidia } from './estudio.models';
 
 /**
- * Tudo o que o Estúdio abre, num lugar só: a grade da tela inicial, a busca e o MCP leem daqui.
+ * Tudo o que o Estúdio abre, num lugar só: a grade da tela inicial e a busca leem daqui.
  *
  * - craft: os 13 apps do ArtCraft (Rust/WebAssembly), servidos em /crafts/<id>/ e abertos num
  *   iframe que troca arquivos com a biblioteca pela ponte `<id>:ready/open/save/dirty`.

@@ -83,28 +83,9 @@ UPDATE_MCP_CATALOG=1 npx ng test --watch=false --include=src/app/features/imagem
 
 ## Estúdio
 
-As ferramentas `estudio_*` usam o [Estúdio](../estudio/README.md) do hub com o mesmo login
-(`HUB_EMAIL`/`HUB_PASSWORD`). Gerar imagem, vídeo, áudio ou 3D custa na conta do fal.ai cadastrada
-em `/estudio/config`. Acima do limite de confirmação de lá (padrão US$ 1), `estudio_gerar` devolve
-o custo e só gera de novo com `confirmar: true`.
-
-| Tool | Descrição |
-|---|---|
-| `estudio_modelos` | Modelos do catálogo (filtro por tipo: imagem, video, audio, modelo3d, mundo), com operações, entradas, parâmetros e opções. |
-| `estudio_gerar` | Gera com um modelo. As entradas podem ser **caminhos do computador** ou links (vão para a biblioteca antes) ou ids da biblioteca. Espera até `aguardar_segundos` e, com `baixar_para`, grava o resultado numa pasta. |
-| `estudio_trocar_fundo_video` | Tira o fundo de um vídeo e põe uma imagem atrás, mantendo o áudio. |
-| `estudio_status` / `estudio_cancelar` | Acompanha ou cancela uma geração (com `baixar_para` opcional). |
-| `estudio_midias` | Lista a biblioteca (tipo, pasta, busca). |
-| `estudio_enviar_arquivos` | Manda arquivos do computador (ou links https) para a biblioteca. |
-| `estudio_baixar` | Baixa arquivos da biblioteca para uma pasta do computador. |
-| `estudio_apagar_midia` | Apaga da biblioteca (pede confirmação). |
-| `estudio_abrir_no_app` | Link para abrir um arquivo num craft app, no Editor de Imagens ou no Palco 3D. |
-| `estudio_montar_video` | Junta vídeos, imagens e trilhas num vídeo (ffmpeg no servidor, sem custo). |
-| `estudio_extrair_quadros` | Tira quadros de um vídeo como imagens. |
-| `estudio_documentos` / `estudio_documento` / `estudio_salvar_documento` | Storyboards, moodboards, cenas do Palco e montagens. |
-
-Caminhos aceitam `~` (pasta do usuário). Sem um computador por perto (Claude no celular ou na web),
-use o MCP remoto `/api/mcp/estudio`, que tem as mesmas ferramentas trocando caminhos por links.
+Este servidor não tem ferramentas do Estúdio. Para o Claude usar os craft apps (PhotoCraft, GridCraft,
+FilmCraft…), ligue o MCP de cada app direto na API do hub, `https://<site>/api/mcp/crafts/<app>`, com o
+token dos apps (o mesmo dos outros MCPs do hub). Ver [estudio/README.md](../estudio/README.md#mcps).
 
 ## Configuração
 

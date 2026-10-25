@@ -65,6 +65,7 @@ public sealed class Servidor : IAsyncDisposable
                 ["Estudio:Ffmpeg"] = File.Exists(Pastas.Ffmpeg) ? Pastas.Ffmpeg : "ffmpeg",
                 ["Estudio:Ffprobe"] = File.Exists(Pastas.Ffprobe) ? Pastas.Ffprobe : "ffprobe",
                 ["Mcp:TokenFile"] = Pastas.McpToken,
+                ["Estudio:CraftsCliDir"] = Pastas.CraftsCli,
             }),
             ConfigureServices = s =>
             {

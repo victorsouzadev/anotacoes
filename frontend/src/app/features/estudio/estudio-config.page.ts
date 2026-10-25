@@ -6,7 +6,7 @@ import { EstudioService } from './estudio.service';
 import { EstudioConfig, dolares } from './estudio.models';
 import { ESTUDIO_CSS } from './shared/estilos';
 
-/** Chaves do fal.ai e da World Labs, teto de gasto mensal e limite de confirmação do MCP. */
+/** Chaves do fal.ai e da World Labs, teto de gasto mensal e, no Windows, os MCPs dos craft apps. */
 @Component({
   selector: 'app-estudio-config',
   standalone: true,
@@ -56,24 +56,22 @@ import { ESTUDIO_CSS } from './shared/estilos';
               <span>Teto mensal (US$) — vazio = sem teto</span>
               <input class="e-input" type="number" min="0" step="1" [value]="teto()" (input)="teto.set($any($event.target).value)" />
             </label>
-            <label class="e-campo">
-              <span>MCP pede confirmação acima de (US$)</span>
-              <input class="e-input" type="number" min="0" step="0.5" [value]="confirmar()" (input)="confirmar.set($any($event.target).value)" />
-            </label>
           </div>
-          <button type="button" class="e-btn e-pri" [disabled]="salvando()" (click)="salvarGasto()">Salvar limites</button>
+          <button type="button" class="e-btn e-pri" [disabled]="salvando()" (click)="salvarGasto()">Salvar teto</button>
         </section>
 
         @if (desktop.enabled) {
           <section class="e-card ec-bloco">
-            <h2>Conectar ao Claude <span class="e-tag">MCP neste PC</span></h2>
+            <h2>Conectar ao Claude <span class="e-tag">MCP dos craft apps</span></h2>
             @if (mcp(); as m) {
-              @if (m.ativo) {
-                <p class="e-muted">O Claude Desktop e o Claude Code usam o Estúdio por este endereço enquanto o programa estiver aberto.</p>
-                <p class="ec-estado"><app-icon name="check" [size]="14" /> {{ m.url }}</p>
-                <span class="ec-rotulo">Claude Code (terminal)</span>
+              @if (!m.apps.length) {
+                <p class="e-muted">Esta instalação não trouxe as linhas de comando dos craft apps, então não há MCP para ligar. Atualize o programa.</p>
+              } @else if (m.ativo) {
+                <p class="e-muted">Um MCP por craft app ({{ m.apps.length }}), enquanto o programa estiver aberto: o Claude Desktop e o Claude Code mexem no app (planilha, texto, imagem, vídeo…) e levam e trazem arquivos da biblioteca.</p>
+                <p class="ec-estado"><app-icon name="check" [size]="14" /> 127.0.0.1:{{ m.porta }}/api/mcp/crafts/…</p>
+                <span class="ec-rotulo">Claude Code (terminal): um comando por app</span>
                 <pre class="ec-cod">{{ m.claudeCode }}</pre>
-                <button type="button" class="e-btn" (click)="copiar(m.claudeCode)">Copiar comando</button>
+                <button type="button" class="e-btn" (click)="copiar(m.claudeCode)">Copiar comandos</button>
                 <span class="ec-rotulo">Claude Desktop (claude_desktop_config.json, precisa do Node.js)</span>
                 <pre class="ec-cod">{{ m.claudeDesktop }}</pre>
                 <div class="ec-linha">
@@ -81,7 +79,7 @@ import { ESTUDIO_CSS } from './shared/estilos';
                   <button type="button" class="e-btn e-perigo" [disabled]="salvando()" (click)="renovarMcp()">Trocar token</button>
                 </div>
               } @else {
-                <p class="e-muted">A porta {{ porta(m.url) }} está ocupada por outro programa, então o MCP local não subiu. Feche o que estiver usando-a e reabra o Estúdio.</p>
+                <p class="e-muted">A porta {{ m.porta }} está ocupada por outro programa, então o MCP local não subiu. Feche o que estiver usando-a e reabra o Estúdio.</p>
               }
             } @else {
               <p class="e-muted">Carregando…</p>
@@ -123,7 +121,6 @@ export class EstudioConfigPageComponent {
   readonly chaveFal = signal('');
   readonly chaveWl = signal('');
   readonly teto = signal('');
-  readonly confirmar = signal('1');
   readonly salvando = signal(false);
   readonly erro = signal('');
   readonly ok = signal('');
@@ -132,10 +129,6 @@ export class EstudioConfigPageComponent {
   constructor() {
     void this.api.config().then((c) => this.aplicar(c), (e) => this.erro.set(mensagemDeErro(e, 'Não consegui abrir as configurações')));
     if (this.desktop.enabled) void this.desktop.mcp().then((m) => this.mcp.set(m), () => undefined);
-  }
-
-  porta(url: string): string {
-    return new URL(url).port;
   }
 
   async copiar(texto: string): Promise<void> {
@@ -168,10 +161,7 @@ export class EstudioConfigPageComponent {
 
   async salvarGasto(): Promise<void> {
     const teto = this.teto().toString().trim();
-    await this.enviar({
-      ...(teto === '' ? { semLimite: true } : { limiteMensalCentavos: Math.round(Number(teto) * 100) }),
-      confirmarAcimaCentavos: Math.round(Number(this.confirmar() || 0) * 100),
-    }, 'Limites salvos.');
+    await this.enviar(teto === '' ? { semLimite: true } : { limiteMensalCentavos: Math.round(Number(teto) * 100) }, 'Limite salvo.');
   }
 
   private async enviar(body: Parameters<EstudioService['salvarConfig']>[0], msg: string): Promise<void> {
@@ -191,6 +181,5 @@ export class EstudioConfigPageComponent {
   private aplicar(c: EstudioConfig): void {
     this.cfg.set(c);
     this.teto.set(c.limiteMensalCentavos == null ? '' : String(c.limiteMensalCentavos / 100));
-    this.confirmar.set(String(c.confirmarAcimaCentavos / 100));
   }
 }

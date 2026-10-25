@@ -26,6 +26,7 @@ env:
   # quadros, troca de fundo e miniaturas no Estúdio.
   FFMPEG_URL: https://github.com/GyanD/codexffmpeg/releases/download/8.0/ffmpeg-8.0-essentials_build.zip
   CRAFTS_URL: https://cerebro.vsitefy.com.br/downloads/crafts-web/crafts-web.tar.gz
+  CRAFTS_CLI_URL: https://cerebro.vsitefy.com.br/downloads/crafts-web/crafts-cli-win.tar.gz
   ESRGAN_URL: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.63.0/real_esrgan_x4plus-onnx-float.zip
 
 jobs:
@@ -85,6 +86,14 @@ jobs:
             ls "$d/crafts"
           else
             echo "::warning::Sem os craft apps publicados ($CRAFTS_URL): rode o workflow \"Craft apps\" antes. O instalador sai sem eles."
+          fi
+          # Linhas de comando dos apps (o MCP de cada craft app roda no PC).
+          p=desktop/src/EditorImagens.Desktop
+          if curl -fsSL "$CRAFTS_CLI_URL" -o crafts-cli-win.tar.gz; then
+            rm -rf "$p/crafts-cli" && tar -xzf crafts-cli-win.tar.gz -C "$p" && mv "$p/crafts-cli-win" "$p/crafts-cli"
+            ls "$p/crafts-cli"
+          else
+            echo "::warning::Sem as CLIs de Windows dos craft apps ($CRAFTS_CLI_URL): o instalador sai sem o MCP dos crafts."
           fi
 
       - name: Cache do ffmpeg

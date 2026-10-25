@@ -148,19 +148,25 @@ public static class DesktopEndpoints
         }
     }
 
-    /// <summary>Endereço, token e como ligar no Claude (os dois MCPs do PC: Estúdio e Tarefas/Finanças…).</summary>
-    private static object DadosMcp(string token, bool ativo) => new
+    /// <summary>Token e como ligar no Claude os MCPs do PC: um por craft app instalado.</summary>
+    private static object DadosMcp(string token, bool ativo)
     {
-        ativo,
-        url = McpLocal.Url(),
-        token,
-        claudeCode = $"claude mcp add --transport http estudio {McpLocal.Url()} --header \"Authorization: Bearer {token}\"",
-        claudeDesktop = JsonSerializer.Serialize(new Dictionary<string, object>
+        var apps = McpLocal.Instalados();
+        return new
         {
-            ["mcpServers"] = new Dictionary<string, object>
+            ativo,
+            porta = McpLocal.Porta,
+            apps = apps.Select(a => new { id = a, url = McpLocal.Url(a) }),
+            token,
+            claudeCode = string.Join('\n', apps.Select(a => $"claude mcp add --transport http {a} {McpLocal.Url(a)} --header \"Authorization: Bearer {token}\"")),
+            claudeDesktop = JsonSerializer.Serialize(new Dictionary<string, object>
             {
-                ["estudio"] = new { command = "npx", args = new[] { "-y", "mcp-remote@0.14.3", McpLocal.Url(), "--header", $"Authorization: Bearer {token}" } },
-            },
-        }, new JsonSerializerOptions { WriteIndented = true }),
-    };
+                ["mcpServers"] = apps.ToDictionary(a => a, a => (object)new
+                {
+                    command = "npx",
+                    args = new[] { "-y", "mcp-remote@0.14.3", McpLocal.Url(a), "--header", $"Authorization: Bearer {token}" },
+                }),
+            }, new JsonSerializerOptions { WriteIndented = true }),
+        };
+    }
 }

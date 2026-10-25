@@ -63,10 +63,11 @@ export interface DesktopPrinter {
   calibracao: { dxMm: number; dyMm: number; escalaX: number; escalaY: number };
 }
 
-/** MCP do Estúdio neste PC: endereço fixo no 127.0.0.1 e como ligar no Claude. */
+/** MCPs dos craft apps neste PC: um endereço fixo no 127.0.0.1 por app e como ligar no Claude. */
 export interface DesktopMcp {
   ativo: boolean;
-  url: string;
+  porta: number;
+  apps: { id: string; url: string }[];
   token: string;
   claudeCode: string;
   claudeDesktop: string;

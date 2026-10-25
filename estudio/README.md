@@ -117,8 +117,7 @@ imagem, por segundo de vídeo ou de áudio de entrada, ou por caractere. A tela
 mostra a estimativa antes de gerar. Em `/estudio/config` ficam:
 
 - o gasto estimado do mês;
-- o **teto mensal**;
-- o valor acima do qual o MCP pede confirmação (padrão US$ 1).
+- o **teto mensal**.
 
 O valor exato é o do painel do fal.
 
@@ -168,47 +167,48 @@ Storyboards, moodboards, cenas e montagens são guardados em
 
 ## MCPs
 
-| MCP | Endereço | Para quê |
-|---|---|---|
-| Estúdio (remoto) | `https://<site>/api/mcp/estudio` | Tudo o que a tela faz: gerar, acompanhar, biblioteca, montar vídeo, quadros, documentos |
-| Crafts (remoto) | `https://<site>/api/mcp/crafts/<app>` | A linha de comando de cada craft app (`<app>-cli mcp`), com uma pasta de trabalho por sessão |
-| Estúdio (local) | `mcp/` (Node, stdio) | O mesmo do remoto e mais: enviar arquivos do computador e baixar resultados para uma pasta |
-| Estúdio (Windows) | `http://127.0.0.1:47820/api/mcp/estudio` | O do remoto, servido pelo programa desktop |
+O Estúdio expõe ao Claude **só os craft apps**: um MCP por app, com as ferramentas da linha de
+comando do próprio app (`<app>-cli mcp`) e quatro ferramentas do hub, que levam e trazem
+arquivos da biblioteca. As IAs do fal.ai, a montagem de vídeo e os documentos ficam só na tela.
 
-**Remoto.** Usa o mesmo token dos outros MCPs do hub, o arquivo gerado na tela
-do Segundo Cérebro (`Authorization: Bearer <token>`). Ferramentas:
+| Onde | Endereço |
+|---|---|
+| Servidor (VPS) | `https://<site>/api/mcp/crafts/<app>` |
+| Programa do Windows | `http://127.0.0.1:47820/api/mcp/crafts/<app>`, enquanto ele está aberto |
 
-- gerar e acompanhar: `estudio_modelos`, `estudio_estimar`, `estudio_gerar`,
-  `estudio_trocar_fundo_video`, `estudio_status`, `estudio_cancelar`,
-  `estudio_geracoes`, `estudio_uso`;
-- biblioteca: `estudio_midias`, `estudio_midia`, `estudio_enviar_url`,
-  `estudio_enviar_arquivo`, `estudio_organizar_midia`, `estudio_apagar_midia`;
-- levar para outra tela: `estudio_para_editor`, `estudio_abrir_no_app`;
-- edição local: `estudio_montar_video`, `estudio_extrair_quadros`;
-- documentos (storyboard, moodboard, cena, timeline): `estudio_documentos`,
-  `estudio_documento`, `estudio_salvar_documento`.
+`<app>` é um dos 13: `photocraft`, `vectorcraft`, `lightcraft`, `filmcraft`, `effectcraft`,
+`soundcraft`, `designcraft`, `figcraft`, `deckcraft`, `wordcraft`, `gridcraft`, `pdfcraft`,
+`cadcraft`.
 
-`estudio_gerar` acima do limite de confirmação devolve o custo e só gera com
-`confirmar: true`. `estudio_apagar_midia` também pede confirmação.
+Ferramentas do hub em cada app:
 
-**Crafts.** Liga com o profile `crafts` e `CRAFTS_MCP_URL`:
+- `hub_biblioteca`: procura arquivos na biblioteca (por nome, pasta ou tipo) e devolve os ids;
+- `hub_trazer_midia`: copia um arquivo da biblioteca para a pasta da sessão, para o app abrir;
+- `hub_guardar_arquivo`: guarda na biblioteca o que o app salvou ou exportou na pasta da sessão;
+- `hub_arquivos_da_sessao`: lista a pasta da sessão.
+
+Cada sessão MCP é um processo da CLI com a sua pasta de trabalho (`data/estudio/_mcp/<sessão>`),
+apagada quando a sessão termina ou fica 15 minutos parada. Os apps que aceitam
+(`--automation-read-root/--automation-write-root`) só leem e gravam nessa pasta.
+
+**Servidor.** Usa o mesmo token dos outros MCPs do hub, o arquivo gerado na tela do Segundo
+Cérebro (`Authorization: Bearer <token>`). Liga com o profile `crafts` e `CRAFTS_MCP_URL`:
 
 ```bash
 echo "COMPOSE_PROFILES=crafts" >> /opt/notas-vps/.env   # ou some aos profiles que já estão lá
 echo "CRAFTS_MCP_URL=http://crafts-mcp:8080" >> /opt/notas-vps/.env
 ```
 
-O serviço `crafts-mcp` (`crafts-mcp/servidor.mjs`) abre uma CLI por sessão MCP
-e repassa as mensagens. As CLIs vêm de `downloads/crafts-cli`, gravadas pelo
-workflow, e cada uma só lê e grava na pasta da sessão
-(`--automation-read-root/--automation-write-root`). A API soma três
-ferramentas a cada app:
+O serviço `crafts-mcp` (`crafts-mcp/servidor.mjs`) abre a CLI de cada sessão (Linux, de
+`downloads/crafts-cli`, gravadas pelo workflow) e repassa as mensagens. No Claude Code:
 
-- `hub_trazer_midia`: biblioteca → pasta da sessão;
-- `hub_guardar_arquivo`: pasta da sessão → biblioteca;
-- `hub_arquivos_da_sessao`.
+```bash
+claude mcp add --transport http gridcraft https://<site>/api/mcp/crafts/gridcraft --header "Authorization: Bearer <token>"
+```
 
-**Local e Windows.** Ver [mcp/README.md](../mcp/README.md#estúdio) e
+**Windows.** O programa roda as CLIs de Windows que vêm no instalador (`crafts-cli\`, compiladas
+pelo workflow) ele mesmo, sem o Node (`CraftsLocal`). Os comandos e a configuração do Claude
+Desktop prontos para copiar ficam em Estúdio › Configurações › Conectar ao Claude. Ver
 [desktop/README.md](../desktop/README.md#estúdio-no-windows).
 
 ## Configuração do servidor

@@ -8,7 +8,6 @@ import { normalizePriority } from './priority.js';
 import { findCategoryByName, findLaneByName, findTaskMatch } from './taskMatch.js';
 import { searchTasks } from './taskSearch.js';
 import { registrarFerramentasViih } from './viih/ferramentas.js';
-import { registrarFerramentasEstudio } from './estudio/ferramentas.js';
 
 // `fetch` global só existe a partir do Node 18. Sem essa checagem, a primeira tool chamada falha
 // com "fetch is not defined" — mensagem que não indica a causa real (Node do cliente MCP é antigo).
@@ -430,7 +429,6 @@ server.tool(
 );
 
 registrarFerramentasViih(server);
-registrarFerramentasEstudio(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -39,14 +39,16 @@ EditorImagens.exe (WPF)
   dados para outro PC não as revela. O que estava gravado antes, em AES, continua
   legível e passa para DPAPI na próxima gravação.
 - **Biblioteca** em `%LocalAppData%\EditorImagens.Dados\estudio`.
-- **MCP local para o Claude.** O programa serve o MCP do Estúdio em
-  `http://127.0.0.1:47820/api/mcp/estudio` enquanto está aberto (porta fixa, só
-  127.0.0.1).
+- **MCP dos craft apps para o Claude.** O programa serve um MCP por craft app em
+  `http://127.0.0.1:47820/api/mcp/crafts/<app>` enquanto está aberto (porta fixa, só
+  127.0.0.1). Cada sessão roda a linha de comando de Windows do app (`crafts-cli\<app>-cli.exe`,
+  do pacote que o workflow "Craft apps" publica) numa pasta própria, e as ferramentas `hub_*`
+  levam e trazem arquivos da biblioteca. As IAs do fal.ai não entram no MCP.
   - O token é gerado na primeira abertura e guardado cifrado (DPAPI). O servidor só
     conhece o hash.
-  - Em Estúdio › Configurações › **Conectar ao Claude** aparecem o comando do Claude
-    Code (`claude mcp add --transport http …`) e o trecho do `claude_desktop_config.json`
-    (via `npx mcp-remote`, precisa do Node.js), com botões de copiar.
+  - Em Estúdio › Configurações › **Conectar ao Claude** aparecem os comandos do Claude
+    Code (`claude mcp add --transport http …`, um por app) e o trecho do
+    `claude_desktop_config.json` (via `npx mcp-remote`, precisa do Node.js), com botões de copiar.
   - **Trocar token** invalida o anterior na hora.
   - Se outra coisa ocupar a porta 47820, o programa abre normalmente, sem o MCP, e a
     tela avisa.

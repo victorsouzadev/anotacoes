@@ -17,6 +17,8 @@ public static class Pastas
     /// <summary>ffmpeg que vem no instalador (montagem de vídeo, quadros, troca de fundo, miniaturas).</summary>
     public static string Ffmpeg => Path.Combine(Programa, "ffmpeg", "ffmpeg.exe");
     public static string Ffprobe => Path.Combine(Programa, "ffmpeg", "ffprobe.exe");
+    /// <summary>Linhas de comando dos craft apps (o MCP do Estúdio roda cada uma sem janela).</summary>
+    public static string CraftsCli => Path.Combine(Programa, "crafts-cli");
     /// <summary>Hash do token do MCP local (ver <see cref="McpLocal"/>).</summary>
     public static string McpToken => Path.Combine(Dados, "mcp-token.json");
 

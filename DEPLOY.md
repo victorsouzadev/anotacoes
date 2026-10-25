@@ -288,7 +288,7 @@ token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.js
 1. **Craft apps:** depois do primeiro deploy da main (o Caddy precisa da rota `/crafts/*`),
    rode o workflow **Craft apps** (Actions › Run workflow, apps vazio = todos). Ele usa os
    mesmos segredos `VPS_*`, grava em `/opt/notas-vps/downloads/crafts` e gera
-   `downloads/crafts-web/crafts-web.tar.gz` para o instalador do Windows. Os 13 apps somam
+   `downloads/crafts-web/crafts-web.tar.gz` e `crafts-cli-win.tar.gz` (as linhas de comando de Windows, para o MCP do programa) para o instalador do Windows. Os 13 apps somam
    algumas centenas de MB.
 2. **fal.ai:** cada usuário cola a chave em `/estudio/config`. Para uma chave padrão,
    ponha `FAL_KEY=...` no `.env` (e `WORLDLABS_API_KEY=...` para os mundos Marble).

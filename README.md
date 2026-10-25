@@ -271,11 +271,10 @@ e variáveis.
   estimativa de custo aparece antes de gerar, e há teto mensal. O worker acompanha a fila do
   fal e baixa o resultado para a biblioteca.
 - **Local, sem custo:** montagem de vídeo, quadros e miniaturas com ffmpeg.
-- **MCP:**
-  - `/api/mcp/estudio`;
+- **MCP:** só os craft apps, um por app, com as ferramentas do próprio app e quatro `hub_*` que
+  levam e trazem arquivos da biblioteca:
   - `/api/mcp/crafts/<app>`, com o profile `crafts` e `CRAFTS_MCP_URL`;
-  - `mcp/` local;
-  - o programa do Windows em `127.0.0.1:47820`.
+  - o programa do Windows em `127.0.0.1:47820/api/mcp/crafts/<app>`.
 
 ### Editor de Imagens
 
@@ -764,7 +763,7 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `PUT /api/tasks/items/{id}` | Upsert idempotente — mover pra lixeira/restaurar é um upsert com `deletedAt` setado/nulo |
 | `DELETE /api/tasks/items/{id}` | Exclui tarefa definitivamente (ação "excluir para sempre" da lixeira) |
 | `GET /api/estudio/catalogo` | Modelos de IA do Estúdio (operações, entradas, parâmetros, opções) |
-| `GET/PUT /api/estudio/config` | Chaves do fal.ai e da World Labs (voltam mascaradas), teto mensal, limite de confirmação do MCP, gasto do mês |
+| `GET/PUT /api/estudio/config` | Chaves do fal.ai e da World Labs (voltam mascaradas), teto mensal, gasto do mês |
 | `GET/POST/PATCH/DELETE /api/estudio/midias[/{id}]` | Biblioteca do Estúdio (upload multipart até 500 MB, importar de link, pastas) |
 | `POST /api/estudio/estimar` \| `geracoes` | Estima o custo ou gera (fila do fal); `GET geracoes[/{id}]`, `POST geracoes/{id}/cancelar` |
 | `POST /api/estudio/local` | Montagem de vídeo e extração de quadros (ffmpeg) |
