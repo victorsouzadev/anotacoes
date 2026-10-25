@@ -11,8 +11,6 @@ public sealed class DesktopHost(Configuracao config, Dispatcher dispatcher, Mode
     public Configuracao Config { get; } = config;
     public ModelosLocais Modelos { get; } = modelos;
     public MainWindow? Janela { get; set; }
-    /// <summary>O MCP local está escutando na porta fixa (ver <see cref="McpLocal"/>).</summary>
-    public bool McpAtivo { get; set; }
 
     private string? arquivoInicial = arquivoInicial;
 

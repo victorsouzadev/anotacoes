@@ -1,8 +1,7 @@
 name: Desktop (Windows)
 
-# Monta o instalador do Estúdio pra Windows: o Angular compilado, os craft apps (build web
-# publicado pelo workflow "Craft apps"), o ffmpeg, os modelos de IA e a API rodando dentro do
-# programa, num Setup.exe do Velopack.
+# Monta o instalador do Editor de Imagens pra Windows: o Angular compilado, os
+# modelos de IA e a API rodando dentro do programa, num Setup.exe do Velopack.
 # Depois grava na VPS, em /downloads/windows: é de lá que o botão "Baixar para
 # Windows" do site baixa e de onde o programa instalado se atualiza. A tag
 # desktop-v1.2.3 também publica uma Release no GitHub.
@@ -22,11 +21,6 @@ permissions:
 
 env:
   BIREFNET_URL: https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx
-  # Build "essentials" do gyan.dev (GPL, espelho no GitHub): ffmpeg.exe e ffprobe.exe para montagem de vídeo,
-  # quadros, troca de fundo e miniaturas no Estúdio.
-  FFMPEG_URL: https://github.com/GyanD/codexffmpeg/releases/download/8.0/ffmpeg-8.0-essentials_build.zip
-  CRAFTS_URL: https://cerebro.vsitefy.com.br/downloads/crafts-web/crafts-web.tar.gz
-  CRAFTS_CLI_URL: https://cerebro.vsitefy.com.br/downloads/crafts-web/crafts-cli-win.tar.gz
   ESRGAN_URL: https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.63.0/real_esrgan_x4plus-onnx-float.zip
 
 jobs:
@@ -78,43 +72,6 @@ jobs:
           ls -la "$d"
           test -s "$d/birefnet.onnx" && test -s "$d/real_esrgan_x4plus.onnx" && test -s "$d/real_esrgan_x4plus.data"
 
-      - name: Craft apps (build web)
-        run: |
-          d=desktop/src/EditorImagens.Desktop/wwwroot
-          if curl -fsSL "$CRAFTS_URL" -o crafts-web.tar.gz; then
-            tar -xzf crafts-web.tar.gz -C "$d"
-            ls "$d/crafts"
-          else
-            echo "::warning::Sem os craft apps publicados ($CRAFTS_URL): rode o workflow \"Craft apps\" antes. O instalador sai sem eles."
-          fi
-          # Linhas de comando dos apps (o MCP de cada craft app roda no PC).
-          p=desktop/src/EditorImagens.Desktop
-          if curl -fsSL "$CRAFTS_CLI_URL" -o crafts-cli-win.tar.gz; then
-            rm -rf "$p/crafts-cli" && tar -xzf crafts-cli-win.tar.gz -C "$p" && mv "$p/crafts-cli-win" "$p/crafts-cli"
-            ls "$p/crafts-cli"
-          else
-            echo "::warning::Sem as CLIs de Windows dos craft apps ($CRAFTS_CLI_URL): o instalador sai sem o MCP dos crafts."
-          fi
-
-      - name: Cache do ffmpeg
-        id: cache-ffmpeg
-        uses: actions/cache@v4
-        with:
-          path: desktop/src/EditorImagens.Desktop/ffmpeg
-          key: ffmpeg-${{ env.FFMPEG_URL }}
-      - name: ffmpeg
-        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        run: |
-          d=desktop/src/EditorImagens.Desktop/ffmpeg
-          mkdir -p "$d" tmp-ffmpeg
-          curl -fsSL "$FFMPEG_URL" -o ffmpeg.zip
-          7z x ffmpeg.zip -otmp-ffmpeg > /dev/null
-          find tmp-ffmpeg -name 'ffmpeg.exe' -exec cp {} "$d/" \;
-          find tmp-ffmpeg -name 'ffprobe.exe' -exec cp {} "$d/" \;
-          find tmp-ffmpeg -name 'LICENSE*' -exec cp {} "$d/" \;
-          test -s "$d/ffmpeg.exe" && test -s "$d/ffprobe.exe"
-          ls -la "$d"
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
@@ -128,7 +85,7 @@ jobs:
         run: |
           dotnet tool install -g vpk --version 1.2.158
           vpk pack --packId EditorImagens --packVersion ${{ steps.v.outputs.versao }} --packDir publish \
-            --mainExe EditorImagens.exe --packTitle "Estúdio" --packAuthors "Estúdio" \
+            --mainExe EditorImagens.exe --packTitle "Editor de Imagens" --packAuthors "Editor de Imagens" \
             --icon desktop/src/EditorImagens.Desktop/icone.ico --framework webview2 --outputDir Releases
 
       - uses: actions/upload-artifact@v4
@@ -139,7 +96,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/desktop-v')
         uses: softprops/action-gh-release@v2
         with:
-          name: Estúdio ${{ steps.v.outputs.versao }} (Windows)
+          name: Editor de Imagens ${{ steps.v.outputs.versao }} (Windows)
           files: Releases/*
 
   # Os actions de SSH/SCP rodam em container: só em runner Linux.

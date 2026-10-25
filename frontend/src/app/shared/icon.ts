@@ -10,9 +10,7 @@ export type IconName =
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
   | 'grid' | 'wallet' | 'check' | 'x'
   | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake' | 'image' | 'chevron' | 'calculator'
-  | 'globe' | 'upload' | 'refresh' | 'stop' | 'copy' | 'external' | 'box'
-  | 'film' | 'music' | 'sparkles' | 'layers' | 'wand' | 'mic' | 'file' | 'table' | 'slides' | 'ruler' | 'aperture' | 'vector' | 'figma'
-  | 'play' | 'heart' | 'camera' | 'mountain' | 'scissors' | 'book' | 'settings';
+  | 'globe' | 'upload' | 'refresh' | 'stop' | 'copy' | 'external' | 'box';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -144,26 +142,6 @@ export type IconName =
         @case ('refresh') { <path d="M16 10a6 6 0 1 1-1.8-4.3" /><path d="M16 3.5v3.7h-3.7" /> }
         @case ('stop') { <rect x="5" y="5" width="10" height="10" rx="1.6" /> }
         @case ('copy') { <rect x="6.5" y="6.5" width="10" height="10" rx="1.6" /><path d="M13.5 6.5V4.6a1.1 1.1 0 0 0-1.1-1.1H4.6a1.1 1.1 0 0 0-1.1 1.1v7.8a1.1 1.1 0 0 0 1.1 1.1h1.9" /> }
-        @case ('film') { <rect x="2.8" y="3.5" width="14.4" height="13" rx="1.6" /><path d="M6.2 3.5v13M13.8 3.5v13M2.8 7.2h3.4M2.8 12.8h3.4M13.8 7.2h3.4M13.8 12.8h3.4" /> }
-        @case ('music') { <path d="M7.5 15V4.8l9-1.8v10" /><circle cx="5.4" cy="15" r="2.1" /><circle cx="14.4" cy="13" r="2.1" /> }
-        @case ('sparkles') { <path d="M9 2.8l1.5 4.2 4.2 1.5-4.2 1.5L9 14.2 7.5 10 3.3 8.5 7.5 7z" /><path d="M15 12.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" /> }
-        @case ('layers') { <path d="M10 2.8l7.2 3.8L10 10.4 2.8 6.6z" /><path d="M2.8 10.2L10 14l7.2-3.8M2.8 13.6L10 17.4l7.2-3.8" /> }
-        @case ('wand') { <path d="M3.5 16.5l9.3-9.3 1.4 1.4-9.3 9.3z" /><path d="M13 3v2.4M16.6 6.6H14.2M15.5 4l-1.6 1.6" /> }
-        @case ('mic') { <rect x="7.2" y="2.6" width="5.6" height="9.4" rx="2.8" /><path d="M4.6 9.6a5.4 5.4 0 0 0 10.8 0M10 15v2.6" /> }
-        @case ('file') { <path d="M5 2.6h6.6l3.4 3.4v11.4H5z" /><path d="M11.6 2.6V6H15M7.4 10h5.2M7.4 13h5.2" /> }
-        @case ('table') { <rect x="2.8" y="3.6" width="14.4" height="12.8" rx="1.4" /><path d="M2.8 7.8h14.4M2.8 12h14.4M7.6 3.6v12.8M12.4 3.6v12.8" /> }
-        @case ('slides') { <rect x="2.6" y="3.4" width="14.8" height="10" rx="1.4" /><path d="M10 13.4v3.2M7 16.6h6M6 7h5M6 9.8h8" /> }
-        @case ('ruler') { <path d="M3 13.6L13.6 3l3.4 3.4L6.4 17z" /><path d="M6.2 10.4l1.6 1.6M8.6 8l1.6 1.6M11 5.6l1.6 1.6" /> }
-        @case ('aperture') { <circle cx="10" cy="10" r="7.2" /><path d="M10 2.8l3 6M17 8.4l-6.6.6M14.6 15.6L10.6 10M5.4 15.6l3.8-5.4M3 8.4l6.4 1.4" /> }
-        @case ('vector') { <rect x="2.6" y="2.6" width="3.6" height="3.6" /><rect x="13.8" y="13.8" width="3.6" height="3.6" /><path d="M6.2 4.4c5 0 9.4 4.4 9.4 9.4M4.4 6.2v8.6a1.6 1.6 0 0 0 1.6 1.6h7.8" /> }
-        @case ('figma') { <rect x="3.4" y="3.4" width="13.2" height="13.2" rx="2" /><path d="M3.4 8h13.2M8 8v8.6" /> }
-        @case ('play') { <path d="M6 3.8v12.4L16 10z" /> }
-        @case ('heart') { <path d="M10 16.4s-6.6-3.9-6.6-8.4A3.6 3.6 0 0 1 10 6a3.6 3.6 0 0 1 6.6 2c0 4.5-6.6 8.4-6.6 8.4z" /> }
-        @case ('camera') { <path d="M2.8 6.6h3l1.6-2.2h5.2l1.6 2.2h3v9.2H2.8z" /><circle cx="10" cy="10.8" r="3" /> }
-        @case ('mountain') { <path d="M2.4 16.2l5.4-8.4 3.2 4.8 2-2.8 4.6 6.4z" /><circle cx="14" cy="5.2" r="1.6" /> }
-        @case ('scissors') { <circle cx="5.4" cy="5.6" r="2.2" /><circle cx="5.4" cy="14.4" r="2.2" /><path d="M7.2 6.8L16.6 15M7.2 13.2L16.6 5" /> }
-        @case ('book') { <path d="M3.4 4.2c2.6-1 4.8-.8 6.6.8v11.6c-1.8-1.6-4-1.8-6.6-.8zM16.6 4.2c-2.6-1-4.8-.8-6.6.8v11.6c1.8-1.6 4-1.8 6.6-.8z" /> }
-        @case ('settings') { <circle cx="10" cy="10" r="2.6" /><path d="M10 2.6v2.2M10 15.2v2.2M2.6 10h2.2M15.2 10h2.2M4.8 4.8l1.6 1.6M13.6 13.6l1.6 1.6M4.8 15.2l1.6-1.6M13.6 6.4l1.6-1.6" /> }
         @case ('external') { <path d="M11.5 3.5h5v5M16.5 3.5L9 11" /><path d="M14.5 11.5v3.8a1.2 1.2 0 0 1-1.2 1.2H4.7a1.2 1.2 0 0 1-1.2-1.2V6.7a1.2 1.2 0 0 1 1.2-1.2h3.8" /> }
       }
     </svg>

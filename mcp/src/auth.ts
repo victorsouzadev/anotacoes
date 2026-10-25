@@ -60,8 +60,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
       headers: {
         ...(init.headers ?? {}),
         Authorization: `Bearer ${bearer}`,
-        // Envio de arquivo (FormData/Blob): o fetch põe o Content-Type certo (com o boundary).
-        ...(init.body instanceof FormData || init.body instanceof Blob ? {} : { 'Content-Type': 'application/json' }),
+        'Content-Type': 'application/json',
       },
     });
 

@@ -49,7 +49,7 @@ gerar story, feed ou carrossel e alimentar o site.
 | Tool | Descrição |
 |---|---|
 | `viih_listar_modelos` | Modelos de post (story, feed, carrossel), quantas fotos cada um recebe e os textos — inclui os salvos na galeria do editor. |
-| `viih_gerar_post` | Fotos + contexto → a IA escolhe o modelo (ou usa o tipo/modelo pedido), reescreve os textos da arte, ordena as fotos, sugere filtro e escreve 3 legendas. Salva um **rascunho no Editor de Imagens** e devolve o link (`/estudio/editor?projeto=<id>`): o editor abre com o post montado, pronto pra conferir e exportar. |
+| `viih_gerar_post` | Fotos + contexto → a IA escolhe o modelo (ou usa o tipo/modelo pedido), reescreve os textos da arte, ordena as fotos, sugere filtro e escreve 3 legendas. Salva um **rascunho no Editor de Imagens** e devolve o link (`/imagens?projeto=<id>`): o editor abre com o post montado, pronto pra conferir e exportar. |
 | `viih_gerar_legenda` | 3 legendas com hashtags, a partir do contexto e (opcional) de uma foto. |
 | `viih_site_estado` | Resumo do site: produtos, depoimentos, quando foi publicado. |
 | `viih_site_listar_produtos` | Catálogo do site. |
@@ -80,12 +80,6 @@ teste do frontend (`social-mcp-catalog.spec.ts`) falha se ele ficar desatualizad
 cd frontend
 UPDATE_MCP_CATALOG=1 npx ng test --watch=false --include=src/app/features/imagem/social-mcp-catalog.spec.ts
 ```
-
-## Estúdio
-
-Este servidor não tem ferramentas do Estúdio. Para o Claude usar os craft apps (PhotoCraft, GridCraft,
-FilmCraft…), ligue o MCP de cada app direto na API do hub, `https://<site>/api/mcp/crafts/<app>`, com o
-token dos apps (o mesmo dos outros MCPs do hub). Ver [estudio/README.md](../estudio/README.md#mcps).
 
 ## Configuração
 

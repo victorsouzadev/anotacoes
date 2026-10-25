@@ -1,11 +1,8 @@
-# Estúdio — versão Windows
+# Editor de Imagens — versão Windows
 
-O [Estúdio](../estudio/README.md) do site (craft apps, Editor de Imagens, Palco 3D,
-Storyboard, Moodboard, montagem de vídeo e as IAs do fal.ai) como um programa do
-Windows que usa o PC: placa de vídeo para as IAs locais, disco para os projetos e a
-biblioteca, impressora e Silhouette Studio direto. Os craft apps, o Editor de Imagens
-e as ferramentas com ffmpeg funcionam **sem internet**. Só as gerações do fal.ai e da
-World Labs precisam de rede.
+O mesmo Editor de Imagens do site, como um programa do Windows que funciona
+**100% sem internet** e usa o PC: placa de vídeo para as IAs, disco para os
+projetos, impressora e Silhouette Studio direto.
 
 ## Como funciona
 
@@ -26,32 +23,6 @@ EditorImagens.exe (WPF)
   só em 127.0.0.1.
 - Uma instância por usuário: abrir outro `.edimg` com o programa aberto manda o
   arquivo para a janela que já existe.
-
-## Estúdio no Windows
-
-- **Craft apps embutidos.** O instalador traz o build web dos 13 apps
-  (`wwwroot/crafts/<id>`, baixado do pacote que o workflow "Craft apps" publica). Eles
-  abrem do próprio programa, sem baixar nada.
-- **ffmpeg embutido** (`ffmpeg\ffmpeg.exe` e `ffprobe.exe`, build do gyan.dev): montagem
-  de vídeo, extrair quadros, troca de fundo e miniaturas.
-- **Chaves de API no DPAPI.** As chaves do fal.ai, da World Labs e da OpenRouter são
-  cifradas pelo Windows e presas à conta do usuário (`ProtetorDpapi`). Copiar a pasta de
-  dados para outro PC não as revela. O que estava gravado antes, em AES, continua
-  legível e passa para DPAPI na próxima gravação.
-- **Biblioteca** em `%LocalAppData%\EditorImagens.Dados\estudio`.
-- **MCP dos craft apps para o Claude.** O programa serve um MCP por craft app em
-  `http://127.0.0.1:47820/api/mcp/crafts/<app>` enquanto está aberto (porta fixa, só
-  127.0.0.1). Cada sessão roda a linha de comando de Windows do app (`crafts-cli\<app>-cli.exe`,
-  do pacote que o workflow "Craft apps" publica) numa pasta própria, e as ferramentas `hub_*`
-  levam e trazem arquivos da biblioteca. As IAs do fal.ai não entram no MCP.
-  - O token é gerado na primeira abertura e guardado cifrado (DPAPI). O servidor só
-    conhece o hash.
-  - Em Estúdio › Configurações › **Conectar ao Claude** aparecem os comandos do Claude
-    Code (`claude mcp add --transport http …`, um por app) e o trecho do
-    `claude_desktop_config.json` (via `npx mcp-remote`, precisa do Node.js), com botões de copiar.
-  - **Trocar token** invalida o anterior na hora.
-  - Se outra coisa ocupar a porta 47820, o programa abre normalmente, sem o MCP, e a
-    tela avisa.
 
 ## O que tem a mais que o site
 
@@ -121,7 +92,7 @@ sem pedir administrador, e instala o WebView2 se faltar) e **publica no site**:
 - grava em `/opt/notas-vps/downloads/windows` na VPS, que o Caddy serve em
   `/downloads/windows/` (fora da imagem do site: o instalador tem centenas de MB
   e muda sem novo deploy). Fica só a última versão;
-- o site mostra **Baixar para Windows** no card do Estúdio (tela
+- o site mostra **Baixar para Windows** no card do Editor de Imagens (tela
   inicial) e na barra do editor — só quando existe um `versao.json` publicado;
 - o programa instalado busca atualização nesse mesmo endereço ao abrir (com
   internet), baixa em segundo plano e aplica ao fechar. Projetos e
@@ -133,11 +104,7 @@ A primeira vez exige um deploy da main antes (é ele que monta a pasta
 `downloads` no container do Caddy); o workflow confere o link no fim e avisa se
 faltar isso. Espaço na VPS: ~800 MB (instalador + pacote de atualização).
 
-Modelos: BiRefNet (licença MIT) e Real-ESRGAN (BSD-3), dentro do instalador. O
-ffmpeg (GPL) vai em `ffmpeg\` com a licença. Os craft apps são MIT/Apache-2.0 (ver
-[estudio/TERCEIROS.md](../estudio/TERCEIROS.md)). Rode o workflow **Craft apps** antes
-do **Desktop (Windows)**: sem o pacote publicado, o instalador sai sem os apps e avisa
-no log.
+Modelos: BiRefNet (licença MIT) e Real-ESRGAN (BSD-3), dentro do instalador.
 
 ## F6 — cortar direto pela USB (avaliado, não implementado)
 

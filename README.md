@@ -32,13 +32,7 @@ inicial, sem exigir outro login nem outro deploy.
   e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
   Cérebro sincroniza.
 
-- **Estúdio** — os 13 craft apps do ArtCraft (foto, vetor, RAW, vídeo, motion, áudio,
-  diagramação, interface, apresentações, texto, planilhas, PDF e CAD, rodando no navegador),
-  cerca de 60 modelos de IA de imagem, vídeo, áudio e 3D via fal.ai (mundos 3D também pela
-  World Labs), Palco 3D, Storyboard, Moodboard e montagem de vídeo, todos gravando numa mesma
-  biblioteca. MCPs remoto, local e no Windows. Ver [estudio/README.md](estudio/README.md).
-  O Editor de Imagens mora dentro dele.
-- **Editor de Imagens** (no Estúdio, `/estudio/editor`) — duas frentes numa ferramenta só: *print & cut* (contorno
+- **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
   com margem em mm, remoção de fundo, divisão de uma folha em elementos separados
   — com prévia do que vai ser separado, vão escolhido sozinho e ajustes próprios
   por elemento —, folha de montagem A4/A3 e exports em PNG 300 DPI, PDF, SVG de
@@ -258,27 +252,9 @@ mesmos dados.
   um LLM (Claude Desktop, Claude Code etc.) usar direto, autenticando contra o
   mesmo `/api/auth` e `/api/tasks` do web/Android — ver [mcp/README.md](mcp/README.md).
 
-### Estúdio
-
-Rota `/estudio`. O detalhe está em [estudio/README.md](estudio/README.md): craft apps e como
-são publicados, como funciona o fal.ai (chave, fila, custo, teto, catálogo), ferramentas, MCPs
-e variáveis.
-
-- **Craft apps:** compilados pelo workflow **Craft apps** a partir de
-  `estudio/crafts/crafts.json` e servidos pelo Caddy em `/crafts/<id>/`. Abrem num iframe,
-  com abrir e salvar ligados à biblioteca.
-- **IA:** fal.ai, com a chave por usuário em `/estudio/config` ou `FAL_KEY` do servidor. A
-  estimativa de custo aparece antes de gerar, e há teto mensal. O worker acompanha a fila do
-  fal e baixa o resultado para a biblioteca.
-- **Local, sem custo:** montagem de vídeo, quadros e miniaturas com ffmpeg.
-- **MCP:** só os craft apps, um por app, com as ferramentas do próprio app e quatro `hub_*` que
-  levam e trazem arquivos da biblioteca:
-  - `/api/mcp/crafts/<app>`, com o profile `crafts` e `CRAFTS_MCP_URL`;
-  - o programa do Windows em `127.0.0.1:47820/api/mcp/crafts/<app>`.
-
 ### Editor de Imagens
 
-Uma rota (`/estudio/editor`; o antigo `/imagens` redireciona), quatro modos (Print & Cut, Molde SVG, Redes sociais e
+Uma rota (`/imagens`), quatro modos (Print & Cut, Molde SVG, Redes sociais e
 Ilustração), escolhidos na barra do app. Todos convivem no mesmo projeto salvo
 (`/api/imagens/projetos`, um JSON opaco de até 9 MB com as artes embutidas em data
 URL); nome, **Salvar** (Ctrl+S) e **Abrir/Novo** ficam na barra do app, valendo
@@ -470,8 +446,8 @@ A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela intei
 
 #### Versão Windows (offline)
 
-O editor, junto com todo o Estúdio, também existe como programa do Windows (`desktop/`),
-que funciona sem internet (menos as gerações do fal.ai): a mesma página e a mesma API rodando dentro do programa, IAs de remover
+O editor também existe como programa do Windows (`desktop/`), que funciona sem
+internet: a mesma página e a mesma API rodando dentro do programa, IAs de remover
 fundo e ampliar na placa de vídeo (ONNX Runtime + DirectML), projetos em arquivo
 `.edimg`, exportação direto em pasta, impressão em tamanho real com calibração,
 "Abrir no Silhouette Studio", fontes do Windows e pasta monitorada no lote. Detalhes,
@@ -658,9 +634,7 @@ notas-vps/
 │   │   ├── data/remote/AuthApi.kt    # login/registro/refresh contra /api/auth/*
 │   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
 │   └── README.md
-├── desktop/                          # Estúdio pra Windows (WPF + WebView2, API, IA locais, crafts, ffmpeg, MCP local) — ver desktop/README.md
-├── estudio/                          # Estúdio: README, créditos e a esteira dos craft apps (crafts.json, build.sh, ponte-hub.js)
-├── crafts-mcp/                       # adaptador MCP das linhas de comando dos craft apps (profile crafts)
+├── desktop/                          # Editor de Imagens pra Windows (WPF + WebView2, API e IA locais) — ver desktop/README.md
 ├── deployer/                         # Publicar: único serviço com docker.sock; cria os containers site-<slug>
 ├── exemplos/publicar/recados/        # app de exemplo (front + API C# + SQLite) e o contrato para publicar
 ├── docs/poc-multi-app/DISCOVERY.md   # desenho da ferramenta Publicar
@@ -762,13 +736,6 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `GET /api/tasks/items` | Lista tarefas, inclusive as na lixeira (tombstone `deletedAt`) |
 | `PUT /api/tasks/items/{id}` | Upsert idempotente — mover pra lixeira/restaurar é um upsert com `deletedAt` setado/nulo |
 | `DELETE /api/tasks/items/{id}` | Exclui tarefa definitivamente (ação "excluir para sempre" da lixeira) |
-| `GET /api/estudio/catalogo` | Modelos de IA do Estúdio (operações, entradas, parâmetros, opções) |
-| `GET/PUT /api/estudio/config` | Chaves do fal.ai e da World Labs (voltam mascaradas), teto mensal, gasto do mês |
-| `GET/POST/PATCH/DELETE /api/estudio/midias[/{id}]` | Biblioteca do Estúdio (upload multipart até 500 MB, importar de link, pastas) |
-| `POST /api/estudio/estimar` \| `geracoes` | Estima o custo ou gera (fila do fal); `GET geracoes[/{id}]`, `POST geracoes/{id}/cancelar` |
-| `POST /api/estudio/local` | Montagem de vídeo e extração de quadros (ffmpeg) |
-| `GET/PUT/DELETE /api/estudio/quadros[/{id}]` | Storyboards, moodboards, cenas do Palco 3D e montagens |
-| `GET /api/estudio/arquivos/{id}?exp&sig` | Arquivo da biblioteca por link assinado (sem login, com range) |
 | `GET /api/health` | Health check |
 
 ## Desenvolvimento local
