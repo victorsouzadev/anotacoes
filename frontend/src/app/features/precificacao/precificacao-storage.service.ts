@@ -109,6 +109,20 @@ export class PrecificacaoStorageService {
     this.persistir(ORCAMENTOS_KEY, this.orcamentos, nova);
   }
 
+  /**
+   * Tudo o que está salvo neste navegador, num arquivo: é o que o painel da
+   * Viih Mimos importa em Precificação → "Importar do hub".
+   */
+  exportar(): void {
+    const dados = { config: this.config(), produtos: this.produtos(), historico: this.historico(), orcamentos: this.orcamentos() };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `precificacao-viih-mimos-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   removerOrcamento(id: string): void {
     this.persistir(ORCAMENTOS_KEY, this.orcamentos, this.orcamentos().filter((o) => o.id !== id));
   }

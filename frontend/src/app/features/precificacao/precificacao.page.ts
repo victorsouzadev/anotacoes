@@ -425,6 +425,10 @@ export class PrecificacaoPageComponent {
 
   // ------------------------------------------------------------ configurações globais
 
+  exportarParaOPainel(): void {
+    this.storage.exportar();
+  }
+
   abrirConfiguracoes(): void {
     this.configRascunho.set(structuredClone(this.config()));
     this.mostrarConfiguracoes.set(true);

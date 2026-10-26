@@ -27,6 +27,9 @@
         <app-icon name="duplicate" [size]="14" /> Clonar ficha
       </button>
       <button type="button" class="btn" (click)="carregarExemplo()">Carregar exemplo</button>
+      <button type="button" class="btn" (click)="exportarParaOPainel()" title="Baixa um arquivo com fichas, histórico e orçamentos para importar no painel da Viih Mimos">
+        <app-icon name="download" [size]="14" /> Exportar para o painel
+      </button>
       <button type="button" class="btn destaque" (click)="salvarProduto()" title="Salva a ficha e registra este cálculo no histórico">Salvar ficha</button>
       <button type="button" class="btn" (click)="abrirOrcamentos()">
         <app-icon name="paperclip" [size]="14" /> Orçamentos Viih Mimos
