@@ -177,6 +177,10 @@ public static class NotasApp
 
         // Ferramenta "Anotação": aprovação das pré-anotações do Claude nos relatos do mestrado.
         // Só liga com Anotacao__RunDir apontando para uma pasta local; na VPS fica desligada.
+        // Precificação guardada no painel da Viih Mimos (ViihMimos__Url/Chave/Usuarios).
+        builder.Services.Configure<Notas.Api.Endpoints.ViihMimosOptions>(
+            builder.Configuration.GetSection(Notas.Api.Endpoints.ViihMimosOptions.SectionName));
+        builder.Services.AddHttpClient(Notas.Api.Endpoints.ViihMimosEndpoints.ClienteHttp, c => c.Timeout = TimeSpan.FromSeconds(20));
         builder.Services.Configure<Notas.Api.Services.Anotacao.AnotacaoOptions>(
             builder.Configuration.GetSection(Notas.Api.Services.Anotacao.AnotacaoOptions.SectionName));
         builder.Services.AddSingleton<Notas.Api.Services.Anotacao.AnotacaoArquivos>();
@@ -351,6 +355,7 @@ public static class NotasApp
         app.MapDietaIaEndpoints();
         app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
+        app.MapViihMimosEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

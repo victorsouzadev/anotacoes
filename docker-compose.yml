@@ -44,6 +44,11 @@ services:
       # (enviado pelo llm-ner-pipeline) e só para os e-mails de ANOTACAO_USUARIOS.
       - Anotacao__RunDir=/anotacao
       - Anotacao__Usuarios=${ANOTACAO_USUARIOS:-}
+      # Precificação ligada ao painel da Viih Mimos: as fichas ficam no banco do painel.
+      # VIIH_MIMOS_CHAVE é a HUB_CHAVE do .env do painel; só os e-mails de VIIH_MIMOS_USUARIOS usam.
+      - ViihMimos__Url=${VIIH_MIMOS_URL:-}
+      - ViihMimos__Chave=${VIIH_MIMOS_CHAVE:-}
+      - ViihMimos__Usuarios=${VIIH_MIMOS_USUARIOS:-}
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites

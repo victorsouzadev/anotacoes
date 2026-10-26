@@ -140,6 +140,8 @@ export interface ProdutoFicha {
   faixasQuantidade: FaixaQuantidade[];
 
   atualizadoEm: string;
+  /** Produto do catálogo do site que usa o preço desta ficha (painel Viih Mimos). */
+  produtoCatalogoId?: number | null;
 }
 
 /**

@@ -50,6 +50,9 @@ export class PrecificacaoPageComponent {
   readonly custoItem = custoItem;
 
   private storage = inject(PrecificacaoStorageService);
+  /** Ligada ao painel da Viih Mimos: as fichas são as mesmas do painel e do app. */
+  protected readonly noPainel = this.storage.noPainel;
+  protected readonly erroDoPainel = this.storage.erro;
   auth = inject(AuthService);
   theme = inject(ThemeService);
 

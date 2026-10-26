@@ -160,3 +160,5 @@
   .orcamento-imprimir { position: absolute; inset: 0; width: 100%; }
   .no-print { display: none !important; }
 }
+
+.aviso-painel{margin:0 0 .75rem;font-size:.85rem}.aviso-painel.erro{color:#b3261e}

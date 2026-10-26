@@ -14,6 +14,10 @@
   </header>
 
   <main class="content">
+    @if (noPainel()) {
+      <p class="aviso-painel">Fichas, histórico e orçamentos ficam no painel da Viih Mimos: o que salvar aqui aparece lá e no app.</p>
+    }
+    @if (erroDoPainel()) { <p class="aviso-painel erro">{{ erroDoPainel() }}</p> }
     <!-- Ações gerais: cadastro de produtos e configurações globais reutilizáveis -->
     <div class="barra-acoes">
       <select class="select-produto" (change)="carregarProduto($any($event.target).value)">
@@ -27,8 +31,8 @@
         <app-icon name="duplicate" [size]="14" /> Clonar ficha
       </button>
       <button type="button" class="btn" (click)="carregarExemplo()">Carregar exemplo</button>
-      <button type="button" class="btn" (click)="exportarParaOPainel()" title="Baixa um arquivo com fichas, histórico e orçamentos para importar no painel da Viih Mimos">
-        <app-icon name="download" [size]="14" /> Exportar para o painel
+      <button type="button" class="btn" (click)="exportarParaOPainel()" title="Baixa um arquivo com fichas, histórico e orçamentos (cópia de segurança)">
+        <app-icon name="download" [size]="14" /> Exportar arquivo
       </button>
       <button type="button" class="btn destaque" (click)="salvarProduto()" title="Salva a ficha e registra este cálculo no histórico">Salvar ficha</button>
       <button type="button" class="btn" (click)="abrirOrcamentos()">
