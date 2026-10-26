@@ -30,6 +30,7 @@ class CasaViewModel(app: Application) : AndroidViewModel(app) {
     /** Tarefa aberta no detalhe (comentários, não feita). */
     var detalhe by mutableStateOf<Int?>(null)
     var painelAberto by mutableStateOf(false)
+    var imprimirAberto by mutableStateOf(false)
     /** Último comentário dos outros nas minhas tarefas que eu já vi. */
     var vistoComentario by mutableStateOf(prefs.getInt("visto_comentario", 0)); private set
     fun marcarComentariosVistos() {

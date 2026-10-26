@@ -119,12 +119,14 @@ private enum class Aba(val titulo: String, val icone: androidx.compose.ui.graphi
 private fun Principal(vm: CasaViewModel) {
     val e = vm.estado!!
     if (vm.painelAberto) { PainelTela(vm); return }
+    if (vm.imprimirAberto) { ImprimirTela(vm, e); return }
     vm.detalhe?.let { id -> e.atribuicoes.find { it.id == id }?.let { DetalheTarefa(vm, e, it); return } ?: run { vm.detalhe = null } }
     var aba by rememberSaveable { mutableStateOf(Aba.Hoje) }
     Scaffold(
         topBar = {
             TopAppBar(title = { Text(e.casaNome) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background), actions = {
                 if (vm.carregando) CircularProgressIndicator(Modifier.size(20.dp), color = grafite.grafiteSuave, strokeWidth = 2.dp)
+                IconButton(onClick = { vm.imprimirAberto = true }) { Icon(Icons.Outlined.Print, "Imprimir semana") }
                 IconButton(onClick = vm::atualizar) { Icon(Icons.Filled.Refresh, "Atualizar") }
             })
         },

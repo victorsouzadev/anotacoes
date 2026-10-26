@@ -129,6 +129,25 @@ class FluxoTest {
         org.junit.Assert.assertTrue(compose.onAllNodesWithContentDescription("Iniciar", substring = true).fetchSemanticsNodes().isEmpty())
         tela!!.onActivity { act -> androidx.lifecycle.ViewModelProvider(act)[CasaViewModel::class.java].escolherMostrarIniciar(true) }
 
+        // Imprimir: abre pela barra, troca as opções e confere o endereço que a pré-visualização carregou.
+        compose.onNodeWithContentDescription("Imprimir semana").performClick(); compose.waitForIdle()
+        compose.onNodeWithText("Lista por dia").performClick()
+        compose.onAllNodesWithText("Teste")[0].performClick()
+        compose.onNodeWithText("Já marcar as feitas").assertExists()
+        compose.waitForIdle()
+        var carregado: String? = null; var cabecalhos: Map<String, String>? = null
+        tela!!.onActivity { act ->
+            fun acha(v: android.view.View): android.webkit.WebView? = v as? android.webkit.WebView
+                ?: (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { acha(g.getChildAt(it)) } }
+            val w = acha(act.window.decorView)!!
+            carregado = org.robolectric.Shadows.shadowOf(w).lastLoadedUrl
+            cabecalhos = org.robolectric.Shadows.shadowOf(w).lastAdditionalHttpHeaders
+        }
+        val eu = kotlinx.coroutines.runBlocking { api.chamar("GET", "/api/estado").paraEstado() }.euId
+        org.junit.Assert.assertTrue(carregado, carregado!!.endsWith("/painel/imprimir?formato=dia&pessoa=$eu&feitas=1"))
+        org.junit.Assert.assertTrue(cabecalhos!!["Authorization"]!!.startsWith("Bearer "))
+        compose.onNodeWithContentDescription("Voltar").performClick(); compose.waitForIdle()
+
         // TV: abre /tv como a TV faria, lê o código e conecta pelo app.
         val servidor = System.getenv("CASA_SERVIDOR")!!
         val tv = java.net.URL("$servidor/tv").openConnection() as java.net.HttpURLConnection

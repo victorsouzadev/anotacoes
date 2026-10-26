@@ -73,6 +73,11 @@ Segue a skill `aplicar-grafite` (`.claude/skills/aplicar-grafite/SKILL.md` na `m
 - **Iniciar** (opcional, pode ser escondido em Casa → Aparência, por aparelho): ▶ na linha ou "Iniciar" no detalhe
   marca a tarefa como em andamento (`POST /api/atribuicoes/:id/iniciar`, `.../cancelar-inicio`); iniciar a de outra
   pessoa é assumi-la. A lista e o painel mostram "em andamento"; concluída, o detalhe mostra quanto levou.
+- **Imprimir a semana** para marcar à mão (`GET /painel/imprimir?formato=quadro|dia|pessoa&pessoa=<id>&feitas=1|0`,
+  pelo token do app ou pela sessão do painel): quadro tarefas × dias em A4 deitado (com a inicial de quem faz; o
+  espaçamento se ajusta para caber numa folha até ~23 tarefas), lista por dia, ou uma folha por pessoa com o total
+  de pontos. No app: ícone de impressora no topo → pré-visualização → impressão do Android (impressora ou PDF).
+  No painel do PC: botão "Imprimir semana", com as opções na barra (que não sai no papel).
 - **Não feita** sai das pendências (aba Hoje, lembretes, agenda do celular e .ics) e continua em Semana, no painel e
   nos comentários.
 

@@ -185,6 +185,15 @@ export function criarPainel({ db, estado, listarAtribuicoes, registra, exige, Er
       (await import('node:fs')).createReadStream((await import('node:path')).join(FOTOS, a.foto)).on('error', () => res.end()).pipe(res);
       return { chave: 'GET /painel/foto/:id' };
     }
+    // Impressão da semana: app (token no cabeçalho) ou PC (sessão do painel).
+    if (caminho === '/painel/imprimir' && req.method === 'GET') {
+      const token = (req.headers.authorization || '').replace(/^Bearer /, '');
+      const m = token ? db.prepare('SELECT * FROM membros WHERE token=?').get(token) : null;
+      const s = m ? null : sessao(req);
+      if (!m && !s) { html(res, 401, pagina('Casa', formularioErro('Abra pelo app Casa ou pelo painel.'))); return { chave: 'GET /painel/imprimir' }; }
+      html(res, 200, paginaImpressao(m ? m.casa_id : s.casa_id, url.searchParams, !m));
+      return { chave: 'GET /painel/imprimir', membro: m };
+    }
     if (caminho === '/painel/sair' && req.method === 'POST') {
       const t = cookies(req)[COOKIE];
       if (t) db.prepare('DELETE FROM painel_sessoes WHERE token=?').run(t);
@@ -267,6 +276,115 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(-
   </div>
 </main>`);
 
+  // ---------- impressão da semana ----------
+  // formato: quadro (tarefas × dias, folha deitada) | dia (lista por dia) | pessoa (uma página por pessoa)
+  // pessoa: id (só dela) ou vazio (todos) · feitas: 1 = já marcadas, 0 = em branco
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const NOMES_DIA = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+  const CURTOS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+  const ddmm = d => d.slice(8, 10) + '/' + d.slice(5, 7);
+  // Iniciais únicas: "V" e "Vi" para Victor e Vitória.
+  function iniciais(pessoas) {
+    const r = {};
+    for (const p of pessoas) {
+      let n = 1;
+      while (pessoas.some(o => o.id !== p.id && o.nome.slice(0, n).toLowerCase() === p.nome.slice(0, n).toLowerCase()) && n < p.nome.length) n++;
+      r[p.id] = p.nome.slice(0, n);
+    }
+    return r;
+  }
+  function paginaImpressao(casaId, q, comBarra) {
+    const e = estado(membroDaCasa(casaId));
+    const formato = ['quadro', 'dia', 'pessoa'].includes(q.get('formato')) ? q.get('formato') : 'quadro';
+    const pessoaId = Number(q.get('pessoa')) || null;
+    const marcarFeitas = q.get('feitas') !== '0';
+    const pessoas = e.membros.filter(m => !pessoaId || m.id === pessoaId);
+    const nome = id => (e.membros.find(m => m.id === id) || {}).nome || '—';
+    const ini = iniciais(e.membros);
+    const at = e.atribuicoes.filter(a => !pessoaId || a.membro_id === pessoaId);
+    const dias = e.diasCondicoes.map(x => x.dia);
+    const regras = d => (e.diasCondicoes.find(x => x.dia === d)?.condicoes ?? []).map(id => e.condicoes.find(c => c.id === id)?.nome).filter(Boolean);
+    const caixa = a => `<span class="caixa${marcarFeitas && a.feito_em ? ' marcada' : ''}" aria-hidden="true">${marcarFeitas && a.feito_em ? '✓' : ''}</span>`;
+    const naoFeita = a => a.nao_feita != null && !a.feito_em;
+    const titulo = `${esc(e.casa.nome)}${pessoaId ? ' · ' + esc(nome(pessoaId)) : ''}`;
+    const sub = `Semana de ${ddmm(dias[0])} a ${ddmm(dias[6])}`;
+    const cab = t => `<header class="cab"><div><h1>${t}</h1><div class="leg">${sub} · marque ao concluir</div></div><div class="marca">${SIMBOLO()}</div></header>`;
+    const rodape = `<footer class="rot">Casa · ${esc(e.casa.nome)} · gerado em ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</footer>`;
+    let corpo = '';
+    if (formato === 'quadro') {
+      const tarefas = [...new Map(at.map(a => [a.tarefa_id, a])).values()]
+        .sort((a, b) => (a.horario || '99').localeCompare(b.horario || '99') || a.tarefa.localeCompare(b.tarefa));
+      corpo = cab(titulo) + `<table class="quadro"><thead><tr><th class="t">Tarefa</th>${dias.map((d, i) =>
+        `<th>${CURTOS[i]} ${ddmm(d)}${regras(d).length ? `<div class="regra">${regras(d).map(esc).join(', ')}</div>` : ''}</th>`).join('')}</tr></thead><tbody>` +
+        tarefas.map(t => `<tr><td class="t">${esc(t.tarefa)}<span class="rot"> · ${t.pontos} pt${t.horario ? ' · ' + t.horario : ''}</span></td>` + dias.map(d => {
+          const l = at.filter(a => a.tarefa_id === t.tarefa_id && a.dia === d);
+          return `<td>${l.map(a => `<span class="cel${naoFeita(a) ? ' nao' : ''}">${caixa(a)}${pessoaId ? '' : `<span class="ini">${esc(ini[a.membro_id] || '?')}</span>`}</span>`).join('')}</td>`;
+        }).join('') + '</tr>').join('') + '</tbody></table>' +
+        (pessoaId ? '' : `<p class="rot legenda">${e.membros.map(m => `<b>${esc(ini[m.id])}</b> = ${esc(m.nome)}`).join(' · ')}</p>`);
+    } else {
+      const blocoDia = (lista, d, i, comPessoa) => !lista.length ? '' : `<section class="dia"><h2>${NOMES_DIA[i]} ${ddmm(d)}${regras(d).length ? ` <span class="regra">${regras(d).map(esc).join(', ')}</span>` : ''}</h2>` +
+        lista.map(a => `<div class="linha${naoFeita(a) ? ' nao' : ''}">${caixa(a)}<span class="hora val">${a.horario || ''}</span><span class="nome">${esc(a.tarefa)}${naoFeita(a) ? ' <span class="rot">(não feita)</span>' : ''}</span>` +
+          `${comPessoa ? `<span class="quem">${esc(nome(a.membro_id))}</span>` : ''}<span class="pts">${a.pontos} pt</span></div>`).join('') + '</section>';
+      if (formato === 'dia') corpo = cab(titulo) + `<div class="colunas">${dias.map((d, i) => blocoDia(at.filter(a => a.dia === d), d, i, !pessoaId)).join('')}</div>`;
+      else corpo = pessoas.map(p => {
+        const minhas = at.filter(a => a.membro_id === p.id);
+        const total = minhas.reduce((s, a) => s + a.pontos, 0);
+        return `<div class="folha">${cab(esc(p.nome))}<div class="colunas">${dias.map((d, i) => blocoDia(minhas.filter(a => a.dia === d), d, i, false)).join('')}</div>` +
+          `<p class="total">Feitos: ______ de <b>${total}</b> pontos</p>${rodape}</div>`;
+      }).join('');
+    }
+    if (formato !== 'pessoa') corpo += rodape;
+    // Quadro: quanto mais tarefas, linhas mais justas, para caber numa folha deitada (A4 tem ~186 mm úteis).
+    const nTarefas = new Set(at.map(a => a.tarefa_id)).size;
+    // ~132 mm para as linhas (o resto: cabeçalho, títulos dos dias, legenda e rodapé). Altura medida do texto
+    // de uma linha: 6,7 mm normal e 5,1 mm no modo justo (letra menor), usado quando a folga cairia abaixo de 1 mm.
+    const ESPACO = 132, n = Math.max(1, nTarefas);
+    const justo = (ESPACO / n - 6.7) / 2 < 1;
+    const folgaQuadro = Math.max(0.4, Math.min(2.6, (ESPACO / n - (justo ? 5.1 : 6.7)) / 2)).toFixed(1);
+    const opcoes = (nomeCampo, valores, atual) => valores.map(([v, r]) => `<a href="?${new URLSearchParams({ formato, pessoa: pessoaId || '', feitas: marcarFeitas ? '1' : '0', [nomeCampo]: v })}"${String(atual) === String(v) ? ' aria-current="true"' : ''}>${r}</a>`).join('');
+    const barra = !comBarra ? '' : `<nav class="barra">
+  <span class="grupo">${opcoes('formato', [['quadro', 'Quadro da semana'], ['dia', 'Lista por dia'], ['pessoa', 'Por pessoa']], formato)}</span>
+  <span class="grupo">${opcoes('pessoa', [['', 'Todos'], ...e.membros.map(m => [m.id, esc(m.nome)])], pessoaId || '')}</span>
+  <span class="grupo">${opcoes('feitas', [['1', 'Marcar feitas'], ['0', 'Tudo em branco']], marcarFeitas ? '1' : '0')}</span>
+  <button onclick="window.print()">Imprimir</button></nav>`;
+    return pagina(`Tarefas da semana · ${esc(e.casa.nome)}`, barra + `<main class="impresso ${formato}">${corpo}</main>`, 'claro', `
+@page{size:A4 ${formato === 'quadro' ? 'landscape' : 'portrait'};margin:12mm}
+body{background:#fff}
+.impresso{max-width:${formato === 'quadro' ? '277mm' : '186mm'};margin:0 auto;padding:16px;font-size:10.5pt;line-height:1.4}
+.cab{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--linha);padding-bottom:3mm;margin-bottom:4mm}
+.cab h1{font-size:20pt;line-height:24pt}.cab .marca svg{width:10mm;height:10mm}
+.caixa{display:inline-block;width:4.2mm;height:4.2mm;border:1.3px solid var(--grafite);border-radius:1mm;vertical-align:middle;text-align:center;
+  line-height:4mm;font-size:9pt;font-weight:600;flex:none;box-sizing:border-box}
+.regra{font:500 7.5pt/1.2 Figtree,sans-serif;color:var(--grafite-suave);text-transform:none;letter-spacing:0}
+table.quadro{width:100%;border-collapse:collapse;table-layout:fixed}
+.quadro th{font:600 8.5pt/1.2 Figtree,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--grafite-suave);text-align:center;padding:1.5mm 1mm;border-bottom:1.3px solid var(--grafite)}
+.quadro th.t,.quadro td.t{text-align:left;width:30%}
+.quadro td{border-bottom:1px solid var(--linha);padding:1.8mm 1mm;text-align:center;vertical-align:middle;white-space:normal;font-size:10pt}
+.quadro td+td,.quadro th+th{border-left:1px solid var(--linha)}
+.cel{display:inline-flex;align-items:center;gap:1mm;margin:0 1mm}.ini{font:600 8.5pt Figtree,sans-serif}
+.cel.nao .caixa{border-style:dashed}.cel.nao .ini{text-decoration:line-through}
+.legenda{margin-top:3mm}
+/* Quadro de geladeira: linhas e caixas maiores, para marcar à caneta. */
+.quadro td{padding:${folgaQuadro}mm 1mm;font-size:11pt}.quadro .caixa{width:5mm;height:5mm;line-height:4.8mm;font-size:11pt}.quadro .ini{font-size:9.5pt}
+.quadro thead{display:table-header-group}.quadro tr{break-inside:avoid}${justo ? '.quadro td{font-size:9.5pt;line-height:1.2}.quadro .caixa{width:4mm;height:4mm;line-height:3.8mm;font-size:9pt}.quadro .ini{font-size:8pt}' : ''}
+.colunas{column-count:${formato === 'quadro' ? 1 : 2};column-gap:8mm}
+.dia{break-inside:avoid;margin-bottom:4mm}
+.dia h2{font:600 10.5pt/1.3 Figtree,sans-serif;margin:0 0 1.5mm;border-bottom:1px solid var(--linha);padding-bottom:1mm}
+.linha{display:flex;align-items:center;gap:2mm;padding:1.1mm 0}
+.linha .hora{min-width:10mm;font-size:9pt;color:var(--grafite-suave)}.linha .hora:empty{min-width:0;display:none}
+.linha .nome{flex:1}.linha .quem{color:var(--grafite-suave);font-size:9pt}.linha .pts{color:var(--grafite-suave);font-size:9pt;min-width:9mm;text-align:right}
+.linha.nao .nome{text-decoration:line-through;color:var(--grafite-suave)}
+.total{margin-top:4mm;font-size:11pt}
+.folha+.folha{break-before:page}
+footer{margin-top:4mm;font-size:8pt}
+.barra{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--linha);background:var(--papel);position:sticky;top:0}
+.barra .grupo{display:inline-flex;gap:4px;flex-wrap:wrap}
+.barra a{color:var(--grafite);text-decoration:none;border:1px solid var(--linha);border-radius:6px;padding:4px 10px;font-size:13px;background:var(--folha)}
+.barra a[aria-current]{background:var(--nanquim-tinta);border-color:var(--nanquim-tinta)}
+.barra button{margin-left:auto;background:var(--nanquim);border-color:var(--nanquim);color:var(--sobre-nanquim)}
+@media print{.barra{display:none}.impresso{padding:0;max-width:none}body{background:#fff}}`);
+  }
+
   const paginaTv = codigo => pagina('Casa na TV', `
 <main class="tvcod">
   <div class="marca">${SIMBOLO()}</div>
@@ -297,6 +415,7 @@ html{font-size:1.4vw}
   <div style="flex:1;min-width:0"><h1 id="casa">Casa</h1><div class="leg" id="sub">carregando…</div></div>
   <div class="temas" role="group" aria-label="Tema">${noApp ? '' : `
     <button data-t="sistema">Sistema</button><button data-t="claro">Claro</button><button data-t="escuro">Escuro</button>
+    ${tv ? '' : '<a class="botao" href="/painel/imprimir" style="text-decoration:none">Imprimir semana</a>'}
     <form method="post" action="/painel/sair" style="display:inline"><button title="Desconectar este aparelho">Sair</button></form>`}</div>
 </header>
 <main id="painel"${tv ? ' class="tv"' : ''}>

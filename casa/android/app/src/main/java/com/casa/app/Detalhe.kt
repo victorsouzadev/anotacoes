@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Print
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.*
@@ -261,5 +262,86 @@ fun PainelTela(vm: CasaViewModel) {
             },
             update = { w -> if (w.url != null && !w.url!!.contains("tema=" + if (escuro) "escuro" else "claro")) w.loadUrl(url, mapOf("Authorization" to "Bearer ${vm.api.token}")) },
         )
+    }
+}
+
+/**
+ * Imprimir as tarefas da semana para marcar à mão: escolhe o formato (quadro da semana, lista por dia,
+ * uma página por pessoa), de quem e se as feitas já saem marcadas; pré-visualiza e manda para a
+ * impressão do Android (impressora ou "Salvar como PDF").
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun ImprimirTela(vm: CasaViewModel, e: Estado) {
+    BackHandler { vm.imprimirAberto = false }
+    var formato by remember { mutableStateOf("quadro") }
+    var pessoa by remember { mutableStateOf<Int?>(null) }
+    var feitas by remember { mutableStateOf(true) }
+    var pronto by remember { mutableStateOf(false) }
+    var web by remember { mutableStateOf<WebView?>(null) }
+    val url = vm.api.servidor.trimEnd('/') + "/painel/imprimir?formato=$formato&pessoa=${pessoa ?: ""}&feitas=${if (feitas) 1 else 0}"
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Imprimir semana") }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                navigationIcon = { IconButton(onClick = { vm.imprimirAberto = false }) { Icon(Icons.Outlined.ArrowBack, "Voltar") } })
+        },
+        bottomBar = {
+            Column {
+                HorizontalDivider(color = grafite.linha)
+                Button(onClick = {
+                    val w = web ?: return@Button
+                    val nome = "Tarefas da semana · ${e.casaNome}"
+                    val pm = ctx.getSystemService(android.content.Context.PRINT_SERVICE) as android.print.PrintManager
+                    val folha = if (formato == "quadro") android.print.PrintAttributes.MediaSize.ISO_A4.asLandscape() else android.print.PrintAttributes.MediaSize.ISO_A4
+                    pm.print(nome, w.createPrintDocumentAdapter(nome), android.print.PrintAttributes.Builder().setMediaSize(folha).build())
+                }, enabled = pronto, shape = RaioBotao, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Icon(Icons.Outlined.Print, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Imprimir ou salvar PDF")
+                }
+            }
+        },
+    ) { pad ->
+        Column(Modifier.padding(pad).fillMaxSize()) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("quadro" to "Quadro da semana", "dia" to "Lista por dia", "pessoa" to "Por pessoa").forEach { (f, r) ->
+                        FilterChip(formato == f, { formato = f }, { Text(r) })
+                    }
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(pessoa == null, { pessoa = null }, { Text("Todos") })
+                    e.membros.forEach { m -> FilterChip(pessoa == m.id, { pessoa = m.id }, { Text(m.nome) }) }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Já marcar as feitas", Modifier.weight(1f))
+                    Switch(feitas, { feitas = it }, colors = SwitchDefaults.colors(checkedThumbColor = grafite.folha, checkedTrackColor = grafite.grafite,
+                        uncheckedThumbColor = grafite.grafiteSuave, uncheckedTrackColor = grafite.papel, uncheckedBorderColor = grafite.grafiteSuave))
+                }
+                Text(when (formato) {
+                    "quadro" -> "Tarefas × dias numa folha deitada, com a inicial de quem faz. Bom para a geladeira."
+                    "dia" -> "Cada dia com as tarefas, o horário e quem faz."
+                    else -> "Uma folha para cada pessoa, com o total de pontos da semana."
+                }, style = MaterialTheme.typography.bodySmall, color = grafite.grafiteSuave)
+            }
+            HorizontalDivider(color = grafite.linha)
+            // Pré-visualização: a mesma página que vai para a impressora, reduzida para caber na tela.
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { c ->
+                    WebView(c).apply {
+                        settings.javaScriptEnabled = true
+                        settings.useWideViewPort = true; settings.loadWithOverviewMode = true
+                        settings.builtInZoomControls = true; settings.displayZoomControls = false
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView?, u: String?) { pronto = true }
+                        }
+                        web = this
+                    }
+                },
+                update = { w ->
+                    if (w.tag != url) { w.tag = url; pronto = false; w.loadUrl(url, mapOf("Authorization" to "Bearer ${vm.api.token}")) }
+                },
+            )
+        }
     }
 }
