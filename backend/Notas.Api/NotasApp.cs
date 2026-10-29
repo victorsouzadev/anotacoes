@@ -188,6 +188,13 @@ public static class NotasApp
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();
         builder.Services.AddScoped<MetaService>();
+        builder.Services.AddMemoryCache();
+        builder.Services.AddHttpClient(nameof(Notas.Api.Services.Acoes.BrapiCliente), c =>
+        {
+            c.BaseAddress = new Uri("https://brapi.dev/");
+            c.Timeout = TimeSpan.FromSeconds(10);
+        });
+        builder.Services.AddScoped<Notas.Api.Services.Acoes.ICotacoes, Notas.Api.Services.Acoes.BrapiCliente>();
         builder.Services.AddScoped<PlanejamentoService>();
         builder.Services.AddScoped<FerramentasFinanceiras>();
         builder.Services.AddScoped<ChatComFerramentas>();
@@ -354,6 +361,7 @@ public static class NotasApp
         app.MapDietaEndpoints();
         app.MapDietaIaEndpoints();
         app.MapTreinoEndpoints();
+        app.MapAcoesEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapViihMimosEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");

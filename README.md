@@ -48,6 +48,9 @@ inicial, sem exigir outro login nem outro deploy.
   cola, espessura do papel, distribuição na folha com cópias, export SVG/DXF/PNG. E a
   partir de imagem: caixa no formato de um desenho, molde decalcado de uma foto/scan de
   molde em papel e reconhecimento de embalagem pronta por IA.
+- **Ações** — carteira de ações e FIIs da B3: registra compras e vendas (com taxas),
+  calcula quantidade, preço médio e resultado realizado, e busca a cotação na brapi.dev
+  (token grátis em brapi.dev, na variável `BRAPI_TOKEN`). API em `/api/acoes`.
 - **Segundo Cérebro** — o vault do Obsidian na VPS: captura por API (celular, WhatsApp,
   navegador), Inbox classificada pelo Claude com aprovação na tela ou no frontmatter, busca
   e MCP para agentes. Sync com o Obsidian por WebDAV. Ver [cerebro/README.md](cerebro/README.md).

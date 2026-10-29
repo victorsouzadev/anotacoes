@@ -49,6 +49,8 @@ services:
       - ViihMimos__Url=${VIIH_MIMOS_URL:-}
       - ViihMimos__Chave=${VIIH_MIMOS_CHAVE:-}
       - ViihMimos__Usuarios=${VIIH_MIMOS_USUARIOS:-}
+      # Cotações da ferramenta Ações (brapi.dev). Sem token só PETR4, VALE3, ITUB4 e MGLU3 respondem.
+      - Brapi__Token=${BRAPI_TOKEN:-}
     volumes:
       - ./data/db:/data/db
       - ./data/sites:/data/sites

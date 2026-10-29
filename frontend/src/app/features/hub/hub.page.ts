@@ -81,6 +81,12 @@ const TOOLS: ToolCard[] = [
     title: 'Precificação',
     description: 'Calculadora de precificação para papelaria personalizada: materiais, HH, HM, custos fixos, margem e preço sugerido.',
   },
+  {
+    path: '/acoes',
+    icon: 'wallet',
+    title: 'Ações',
+    description: 'Acompanhe as ações e FIIs que você comprou: preço médio, cotação da B3, resultado da carteira e das vendas.',
+  },
 ];
 
 @Component({

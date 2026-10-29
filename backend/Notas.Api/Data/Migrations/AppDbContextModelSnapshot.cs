@@ -17,6 +17,52 @@ namespace Notas.Api.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.3");
 
+            modelBuilder.Entity("Notas.Api.Data.AcaoOperacao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("PrecoUnitario")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal>("Taxas")
+                        .HasColumnType("decimal(14,2)");
+
+                    b.Property<string>("Ticker")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Ticker");
+
+                    b.ToTable("acoes_operacoes", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1713,6 +1759,15 @@ namespace Notas.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Data.AcaoOperacao", b =>
+                {
+                    b.HasOne("Notas.Api.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>

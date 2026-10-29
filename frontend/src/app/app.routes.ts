@@ -108,6 +108,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/precificacao/precificacao.page').then((m) => m.PrecificacaoPageComponent),
   },
   {
+    path: 'acoes',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/acoes/acoes.page').then((m) => m.AcoesPageComponent),
+  },
+  {
     path: 'cerebro',
     canActivate: [authGuard],
     loadComponent: () => import('./features/cerebro/cerebro.page').then((m) => m.CerebroPageComponent),

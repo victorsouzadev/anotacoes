@@ -1,0 +1,116 @@
+<div class="page">
+  <header class="top-bar">
+    <div class="brand">
+      <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
+      <h1><span class="brand-mark"><app-icon name="wallet" [size]="14" /></span> Ações</h1>
+    </div>
+    <div class="top-bar-actions">
+      <button class="theme-toggle" (click)="recarregar()" title="Atualizar cotações"><app-icon name="refresh" [size]="16" /></button>
+      <button class="theme-toggle" (click)="theme.cycle()" title="Alternar tema"><app-icon [name]="themeIconName()" [size]="16" /></button>
+      <span class="user-email">{{ auth.user()?.email }}</span>
+      <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
+    </div>
+  </header>
+
+  <main class="content">
+    @if (carteira(); as c) {
+      <section class="resumo">
+        <div class="kpi"><span>Investido</span><strong>R$ {{ c.custo | number: '1.2-2' }}</strong></div>
+        <div class="kpi"><span>Valor atual</span><strong>{{ c.valorAtual != null ? 'R$ ' + (c.valorAtual | number: '1.2-2') : '—' }}</strong></div>
+        <div class="kpi">
+          <span>Resultado</span>
+          <strong [class]="sinal(c.resultado)">
+            @if (c.resultado != null) { R$ {{ c.resultado | number: '1.2-2' }} <small>({{ c.resultadoPercentual | number: '1.2-2' }}%)</small> } @else { — }
+          </strong>
+        </div>
+        <div class="kpi"><span>Realizado em vendas</span><strong [class]="sinal(c.resultadoRealizado)">R$ {{ c.resultadoRealizado | number: '1.2-2' }}</strong></div>
+      </section>
+      @if (!c.cotacoesCompletas) {
+        <p class="aviso">Algum ativo ficou sem cotação. Sem token da brapi.dev só alguns códigos de teste respondem — configure <code>Brapi__Token</code> no servidor.</p>
+      }
+    }
+
+    <section class="card">
+      <h2>Carteira</h2>
+      @if (carregando() && !carteira()) {
+        <p class="vazio">Carregando…</p>
+      } @else if (abertas().length === 0) {
+        <p class="vazio">Nenhuma ação em carteira. Registre sua primeira compra abaixo.</p>
+      } @else {
+        <div class="tabela-rolagem">
+          <table>
+            <thead>
+              <tr><th>Ativo</th><th>Qtd</th><th>Preço médio</th><th>Cotação</th><th>Dia</th><th>Investido</th><th>Valor atual</th><th>Resultado</th></tr>
+            </thead>
+            <tbody>
+              @for (p of abertas(); track p.ticker) {
+                <tr>
+                  <td><strong>{{ p.ticker }}</strong>@if (p.nome) {<small class="nome">{{ p.nome }}</small>}</td>
+                  <td>{{ p.quantidade | number: '1.0-4' }}</td>
+                  <td>{{ p.precoMedio | number: '1.2-2' }}</td>
+                  <td>{{ p.cotacao != null ? (p.cotacao | number: '1.2-2') : '—' }}</td>
+                  <td [class]="sinal(p.variacaoDia)">{{ p.variacaoDia != null ? (p.variacaoDia | number: '1.2-2') + '%' : '' }}</td>
+                  <td>{{ p.custo | number: '1.2-2' }}</td>
+                  <td>{{ p.valorAtual != null ? (p.valorAtual | number: '1.2-2') : '—' }}</td>
+                  <td [class]="sinal(p.resultado)">
+                    @if (p.resultado != null) { {{ p.resultado | number: '1.2-2' }} <small>({{ p.resultadoPercentual | number: '1.2-2' }}%)</small> }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (encerradas().length) {
+        <p class="encerradas">Posições encerradas:
+          @for (p of encerradas(); track p.ticker) {
+            <span>{{ p.ticker }} <b [class]="sinal(p.resultadoRealizado)">R$ {{ p.resultadoRealizado | number: '1.2-2' }}</b></span>
+          }
+        </p>
+      }
+    </section>
+
+    <section class="card">
+      <h2>Registrar operação</h2>
+      <form class="form" (ngSubmit)="registrar()">
+        <label><span>Tipo</span>
+          <select name="tipo" [(ngModel)]="tipo"><option value="compra">Compra</option><option value="venda">Venda</option></select>
+        </label>
+        <label><span>Código</span><input name="ticker" [(ngModel)]="ticker" placeholder="PETR4" maxlength="7" autocapitalize="characters" /></label>
+        <label><span>Quantidade</span><input name="quantidade" type="number" min="0" step="any" [(ngModel)]="quantidade" /></label>
+        <label><span>Preço (R$)</span><input name="preco" type="number" min="0" step="0.01" [(ngModel)]="preco" /></label>
+        <label><span>Taxas (R$)</span><input name="taxas" type="number" min="0" step="0.01" [(ngModel)]="taxas" placeholder="0,00" /></label>
+        <label><span>Data</span><input name="data" type="date" [(ngModel)]="data" /></label>
+        <label class="largo"><span>Observações</span><input name="observacoes" [(ngModel)]="observacoes" maxlength="500" /></label>
+        <button class="btn destaque" type="submit" [disabled]="salvando()"><app-icon name="plus" [size]="14" /> Registrar</button>
+      </form>
+      @if (erro()) { <p class="erro">{{ erro() }}</p> }
+    </section>
+
+    <section class="card">
+      <h2>Histórico</h2>
+      @if (operacoes().length === 0) {
+        <p class="vazio">Nenhuma operação ainda.</p>
+      } @else {
+        <div class="tabela-rolagem">
+          <table>
+            <thead><tr><th>Data</th><th>Tipo</th><th>Ativo</th><th>Qtd</th><th>Preço</th><th>Total</th><th></th></tr></thead>
+            <tbody>
+              @for (op of operacoes(); track op.id) {
+                <tr>
+                  <td>{{ op.data | date: 'dd/MM/yyyy' }}</td>
+                  <td><span class="tag" [class.venda]="op.tipo === 'venda'">{{ op.tipo }}</span></td>
+                  <td>{{ op.ticker }}@if (op.observacoes) {<small class="nome">{{ op.observacoes }}</small>}</td>
+                  <td>{{ op.quantidade | number: '1.0-4' }}</td>
+                  <td>{{ op.precoUnitario | number: '1.2-2' }}</td>
+                  <td>{{ op.total | number: '1.2-2' }}</td>
+                  <td><button class="icone" (click)="remover(op)" title="Excluir"><app-icon name="delete" [size]="14" /></button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  </main>
+</div>

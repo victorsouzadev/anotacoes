@@ -1,0 +1,47 @@
+.page { min-height: 100dvh; background: var(--bg); padding-bottom: 40px; }
+.top-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.hub-link { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--radius-sm); color: var(--text-muted); border: 1px solid var(--border); }
+.hub-link:hover, .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--accent-contrast); flex-shrink: 0; }
+.top-bar-actions { display: flex; align-items: center; gap: 12px; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius-sm); color: var(--text-muted); }
+.user-email { font-size: 12px; color: var(--text-muted); display: none; }
+.logout { display: flex; align-items: center; gap: 5px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.logout:hover { color: var(--danger); }
+@media (min-width: 640px) { .user-email { display: inline; } }
+
+.content { max-width: 1100px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.kpi span { font-size: 12px; color: var(--text-muted); }
+.kpi strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.kpi small { font-size: 12px; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; }
+.card h2 { font-size: 14px; margin: 0 0 12px; }
+.vazio { color: var(--text-muted); font-size: 13px; margin: 0; }
+.aviso { margin: 0; font-size: 12px; color: var(--atencao); }
+.erro { margin: 10px 0 0; font-size: 13px; color: var(--danger); }
+.positivo { color: var(--positivo); }
+.negativo { color: var(--negativo); }
+
+.tabela-rolagem { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 8px; border-bottom: 1px solid var(--divider); white-space: nowrap; }
+td small { font-size: 11px; }
+.nome { display: block; color: var(--text-muted); font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--tag-bg); text-transform: capitalize; }
+.tag.venda { color: var(--negativo); }
+.icone { border: none; background: none; color: var(--text-muted); cursor: pointer; padding: 4px; }
+.icone:hover { color: var(--danger); }
+.encerradas { margin: 12px 0 0; font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 12px; }
+
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; align-items: end; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.form .largo { grid-column: span 2; }
+.form input, .form select { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 13px; min-width: 0; }
+.btn { padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.btn.destaque { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.btn:disabled { opacity: 0.6; cursor: default; }

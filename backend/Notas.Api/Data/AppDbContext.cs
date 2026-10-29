@@ -86,6 +86,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DietaCompartilhamento> DietaCompartilhamentos => Set<DietaCompartilhamento>();
     public DbSet<TreinoAtividade> TreinoAtividades => Set<TreinoAtividade>();
     public DbSet<TreinoPlano> TreinoPlanos => Set<TreinoPlano>();
+    public DbSet<AcaoOperacao> AcaoOperacoes => Set<AcaoOperacao>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -193,6 +194,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Nota).HasMaxLength(2000);
             e.HasIndex(x => new { x.UserId, x.Inicio });
             e.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AcaoOperacao>(e =>
+        {
+            e.ToTable("acoes_operacoes");
+            e.Property(x => x.Ticker).IsRequired().HasMaxLength(12);
+            e.Property(x => x.Tipo).HasMaxLength(10);
+            e.Property(x => x.Quantidade).HasColumnType("decimal(18,6)");
+            e.Property(x => x.PrecoUnitario).HasColumnType("decimal(18,6)");
+            e.Property(x => x.Taxas).HasColumnType("decimal(14,2)");
+            e.Property(x => x.Observacoes).HasMaxLength(500);
+            e.HasIndex(x => new { x.UserId, x.Ticker });
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
