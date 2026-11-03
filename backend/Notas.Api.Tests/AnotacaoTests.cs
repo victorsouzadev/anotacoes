@@ -110,4 +110,35 @@ public class AnotacaoTests : IDisposable
         Assert.Equal(5, AnotacaoArquivos.ParaCodepoint(texto, 6));
         Assert.Equal(texto.Length, AnotacaoArquivos.ParaUtf16(texto, 8));
     }
+
+    [Fact]
+    public async Task Lote_devolve_so_o_tamanho_pedido_sem_revisados_nem_pulados_e_grava_todos()
+    {
+        Gravar("documents.jsonl",
+            new { row_id = "1", original_text = "ANA PRADO" },
+            new { row_id = "2", original_text = "JOAO SILVA" },
+            new { row_id = "3", original_text = "MARIA" },
+            new { row_id = "4", original_text = "LUIZ" });
+        Gravar("claude_proposals.jsonl",
+            new { row_id = "1", entities = new[] { Entidade("PERSON", 0, 9) }, model = "claude" },
+            new { row_id = "2", entities = new[] { Entidade("PERSON", 0, 10) }, model = "claude" },
+            new { row_id = "3", entities = new[] { Entidade("PERSON", 0, 5) }, model = "claude" },
+            new { row_id = "4", entities = new[] { Entidade("PERSON", 0, 4) }, model = "claude" });
+        var servico = Servico();
+
+        Assert.Equal(["1", "2"], servico.Lote(2, new HashSet<string>()).Select(d => d.RowId));
+        Assert.Equal(["1", "3", "4"], servico.Lote(10, new HashSet<string> { "2" }).Select(d => d.RowId));
+
+        var resposta = await servico.RegistrarLoteAsync(
+        [
+            new DecisaoLoteItem("1", [new EntidadeAnotacaoDto("PERSON", 0, 9, "")], null),
+            new DecisaoLoteItem("2", [], null),
+            new DecisaoLoteItem("99", [], null),
+        ], default);
+
+        Assert.Equal(2, resposta.Gravadas);
+        Assert.Equal(["99"], resposta.Erros.Select(e => e.RowId));
+        Assert.Equal(["approved", "corrected"], Revisoes().Select(r => r["status"]!.GetValue<string>()));
+        Assert.Equal(["3", "4"], servico.Lote(10, new HashSet<string>()).Select(d => d.RowId));
+    }
 }

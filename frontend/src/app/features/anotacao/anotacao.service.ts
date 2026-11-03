@@ -30,6 +30,17 @@ export interface DocumentoAnotacao {
   aprovadas: number;
 }
 
+export interface DecisaoLote {
+  rowId: string;
+  entidades: EntidadeDto[];
+  observacao: string;
+}
+
+export interface ResultadoLote {
+  gravadas: number;
+  erros: { rowId: string; erro: string }[];
+}
+
 const BASE = '/api/anotacao';
 
 @Injectable({ providedIn: 'root' })
@@ -47,5 +58,14 @@ export class AnotacaoService {
 
   decidir(rowId: string, entidades: EntidadeDto[], observacao: string): Promise<void> {
     return firstValueFrom(this.http.post<void>(`${BASE}/${encodeURIComponent(rowId)}/decisao`, { entidades, observacao }));
+  }
+
+  /** Os próximos documentos pendentes, para ler em lista e aprovar de uma vez. */
+  lote(tamanho: number, pular: string[]): Promise<DocumentoAnotacao[]> {
+    return firstValueFrom(this.http.get<DocumentoAnotacao[]>(`${BASE}/lote`, { params: { tamanho, pular: pular.join(',') } }));
+  }
+
+  decidirLote(decisoes: DecisaoLote[]): Promise<ResultadoLote> {
+    return firstValueFrom(this.http.post<ResultadoLote>(`${BASE}/lote/decisao`, { decisoes }));
   }
 }

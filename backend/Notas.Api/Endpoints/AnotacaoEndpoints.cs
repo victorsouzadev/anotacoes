@@ -33,6 +33,23 @@ public static class AnotacaoEndpoints
             return doc is null ? Results.NoContent() : Results.Ok(doc);
         });
 
+        // Lote para ler em lista e aprovar de uma vez; o tamanho é limitado para a página não pesar.
+        group.MapGet("/lote", async (int? tamanho, string? pular, ClaimsPrincipal user, AppDbContext db, IOptions<AnotacaoOptions> opt, AnotacaoArquivos arquivos) =>
+        {
+            if (!arquivos.Habilitado || !await PodeAnotar(user, db, opt.Value)) return Results.NotFound();
+            var ignorar = (pular ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet();
+            return Results.Ok(arquivos.Lote(Math.Clamp(tamanho ?? 25, 1, 100), ignorar));
+        });
+
+        group.MapPost("/lote/decisao", async (DecisaoLoteRequest req, ClaimsPrincipal user, AppDbContext db,
+            IOptions<AnotacaoOptions> opt, AnotacaoArquivos arquivos, CancellationToken ct) =>
+        {
+            if (!arquivos.Habilitado || !await PodeAnotar(user, db, opt.Value)) return Results.NotFound();
+            var decisoes = req.Decisoes ?? [];
+            if (decisoes.Count is 0 or > 100) return Results.BadRequest(new { erro = "Envie de 1 a 100 decisões." });
+            return Results.Ok(await arquivos.RegistrarLoteAsync(decisoes, ct));
+        });
+
         group.MapPost("/{rowId}/decisao", async (string rowId, DecisaoAnotacaoRequest req, ClaimsPrincipal user, AppDbContext db,
             IOptions<AnotacaoOptions> opt, AnotacaoArquivos arquivos, CancellationToken ct) =>
         {

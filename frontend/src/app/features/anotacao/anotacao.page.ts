@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/icon';
 import { mensagemDeErro } from '../../core/erro-http';
 import { AnotacaoService, DocumentoAnotacao, TIPOS, Tipo } from './anotacao.service';
-import { Marcacao, aparar, limiteValido, moverLimite, ocorrencias, partir } from './trechos';
+import { Marcacao, Pedaco, aparar, limiteValido, moverLimite, ocorrencias, partir } from './trechos';
 
 /** Uma cor por tipo, com transparência: funciona no tema claro e no escuro. */
 const MATIZ: Record<Tipo, number> = {
@@ -12,10 +12,34 @@ const MATIZ: Record<Tipo, number> = {
   ADDRESS: 270, VEHICLE: 60, COMPANY: 30, BANK: 300, CARD: 100,
 };
 
+/** Um documento na lista do modo em lote. */
+interface ItemLote {
+  doc: DocumentoAnotacao;
+  marcacoes: Marcacao[];
+  pedacos: Pedaco[];
+  /** Fica para depois: não entra na aprovação do lote e volta no modo "um por vez". */
+  deixar: boolean;
+}
+
+const CHAVE_MODO = 'anotacao.modo';
+const CHAVE_TAMANHO = 'anotacao.tamanho';
+const TAMANHO_PADRAO = 25;
+const TAMANHO_MAXIMO = 100;
+
+function lerPreferencia(chave: string): string | null {
+  try { return localStorage.getItem(chave); } catch { return null; }
+}
+
+function gravarPreferencia(chave: string, valor: string): void {
+  try { localStorage.setItem(chave, valor); } catch { /* sem armazenamento: só não lembra */ }
+}
+
 /**
  * Anotação: aprova ou corrige a pré-anotação que o Claude fez num relato.
  * Clique numa marcação para tirar (ou devolver); selecione um trecho para marcar.
  * Enter aprova e passa para o próximo; P pula.
+ * No modo "em lote" você lê uma lista (tamanho à escolha), tira o que estiver errado,
+ * deixa para depois o que quiser revisar com calma e aprova o resto de uma vez.
  */
 @Component({
   selector: 'app-anotacao-page',
@@ -26,8 +50,20 @@ const MATIZ: Record<Tipo, number> = {
       <header class="top-bar">
         <a class="hub-link" routerLink="/" title="Voltar ao início"><app-icon name="grid" [size]="16" /></a>
         <h1>Anotação</h1>
-        @if (doc(); as d) {
-          <span class="contagem">{{ d.pendentes }} pendentes · {{ d.aprovadas + aprovadasAgora() }} aprovadas</span>
+        @if (resumo(); as r) {
+          <span class="contagem">{{ r.pendentes }} pendentes · {{ r.aprovadas + aprovadasAgora() }} aprovadas</span>
+        }
+        @if (habilitado()) {
+          <div class="modos" role="group" aria-label="Modo de revisão">
+            <button type="button" [class.ativo]="modo() === 'um'" (click)="mudarModo('um')">Um por vez</button>
+            <button type="button" [class.ativo]="modo() === 'lote'" (click)="mudarModo('lote')">Em lote</button>
+          </div>
+          @if (modo() === 'lote') {
+            <label class="tamanho" title="Quantos documentos aparecem por vez (1 a 100)">
+              Lote de
+              <input type="number" min="1" [max]="tamanhoMaximo" [value]="tamanho()" (change)="aplicarTamanho($any($event.target).value)" />
+            </label>
+          }
         }
       </header>
 
@@ -37,6 +73,43 @@ const MATIZ: Record<Tipo, number> = {
         } @else if (!habilitado()) {
           <p class="aviso">Ferramenta desligada neste servidor. Ela só funciona com <code>Anotacao__RunDir</code>
             apontando para a pasta local do run.</p>
+        } @else if (modo() === 'lote') {
+          @if (itens().length === 0) {
+            <p class="aviso">Nenhuma proposta pendente. Peça ao Claude o próximo lote.</p>
+          } @else {
+            <p class="dica">Leia a lista. Clique numa marcação para tirá-la; use «Deixar para depois» no que quiser
+              revisar com calma (isso volta no modo «Um por vez»). Aprove no fim.</p>
+            @for (it of itens(); track it.doc.rowId; let n = $index) {
+              <article class="cartao" [class.deixado]="it.deixar">
+                <div class="cartao-topo">
+                  <strong>{{ n + 1 }}.</strong>
+                  <span class="id">documento {{ it.doc.rowId }}</span>
+                  <span class="qtd">{{ contar(it) }} marcações</span>
+                  <button type="button" class="link" (click)="alternarDeixar(it)">
+                    {{ it.deixar ? 'Voltar ao lote' : 'Deixar para depois' }}
+                  </button>
+                </div>
+                <div class="relato compacto">
+                  @for (p of it.pedacos; track p.inicio) {
+                    @if (p.kind === 'marca') {
+                      <span class="ent" [class.removida]="p.marcacao.removida" [style]="cor(p.marcacao.tipo)"
+                            (click)="alternarNoLote(it, p.marcacao)"
+                            [title]="p.marcacao.removida ? 'Clique para devolver' : 'Clique para tirar'">{{ p.texto }}<sup>{{ p.marcacao.tipo }}</sup></span>
+                    } @else {
+                      <span [class.tag]="p.tag" [class.quebra]="p.quebra">{{ p.texto }}</span>
+                    }
+                  }
+                </div>
+              </article>
+            }
+            <footer class="acoes">
+              <span class="resumo-lote">{{ aprovaveis() }} para aprovar@if (deixados() > 0) { · {{ deixados() }} para depois }</span>
+              <button type="button" class="primario" (click)="aprovarLote()" [disabled]="salvando() || aprovaveis() === 0">
+                <app-icon name="check" [size]="14" /> Aprovar {{ aprovaveis() }}
+              </button>
+            </footer>
+            @if (erro()) { <p class="erro">{{ erro() }}</p> }
+          }
         } @else if (!doc()) {
           <p class="aviso">Nenhuma proposta pendente. Peça ao Claude o próximo lote.</p>
         } @else {
@@ -151,6 +224,18 @@ const MATIZ: Record<Tipo, number> = {
     kbd { font-size: 10px; opacity: .6; font-family: inherit; }
     .erro { color: var(--danger); }
     .rodape { font-size: 12px; color: var(--text-muted); }
+    .modos { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+    .modos button { background: var(--surface); color: var(--text-muted); border: none; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+    .modos button.ativo { background: var(--accent); color: var(--accent-contrast); }
+    .tamanho { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+    .tamanho input { width: 64px; padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); }
+    .dica { color: var(--text-muted); font-size: 13px; margin: 0 0 12px; }
+    .cartao { margin-bottom: 14px; }
+    .cartao.deixado { opacity: .55; }
+    .cartao-topo { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .cartao-topo .id { flex: 1; }
+    .relato.compacto { line-height: 1.7; font-size: 14px; padding: 12px 14px; }
+    .resumo-lote { flex: 1; font-size: 13px; color: var(--text-muted); }
   `],
 })
 export class AnotacaoPageComponent {
@@ -163,6 +248,13 @@ export class AnotacaoPageComponent {
   readonly marcacoes = signal<Marcacao[]>([]);
   readonly selecao = signal<{ inicio: number; fim: number; texto: string } | null>(null);
   readonly aprovadasAgora = signal(0);
+  readonly resumo = signal<{ pendentes: number; aprovadas: number } | null>(null);
+  readonly modo = signal<'um' | 'lote'>(lerPreferencia(CHAVE_MODO) === 'lote' ? 'lote' : 'um');
+  readonly tamanho = signal(this.tamanhoSalvo());
+  readonly itens = signal<ItemLote[]>([]);
+  readonly aprovaveis = computed(() => this.itens().filter((i) => !i.deixar).length);
+  readonly deixados = computed(() => this.itens().filter((i) => i.deixar).length);
+  readonly tamanhoMaximo = TAMANHO_MAXIMO;
   observacao = '';
 
   private readonly relato = viewChild<ElementRef<HTMLElement>>('relato');
@@ -180,7 +272,7 @@ export class AnotacaoPageComponent {
     try {
       const estado = await this.api.estado();
       this.habilitado.set(estado.habilitado);
-      if (estado.habilitado) await this.carregar();
+      if (estado.habilitado) await this.recarregar();
     } catch (e) {
       this.erro.set(mensagemDeErro(e, 'carregar a anotação'));
     } finally {
@@ -188,9 +280,97 @@ export class AnotacaoPageComponent {
     }
   }
 
+  private tamanhoSalvo(): number {
+    const n = Number(lerPreferencia(CHAVE_TAMANHO));
+    return Number.isInteger(n) && n >= 1 && n <= TAMANHO_MAXIMO ? n : TAMANHO_PADRAO;
+  }
+
+  private recarregar(): Promise<void> {
+    return this.modo() === 'lote' ? this.carregarLote() : this.carregar();
+  }
+
+  async mudarModo(modo: 'um' | 'lote'): Promise<void> {
+    if (modo === this.modo()) return;
+    this.modo.set(modo);
+    gravarPreferencia(CHAVE_MODO, modo);
+    this.carregando.set(true);
+    try {
+      await this.recarregar();
+    } catch (e) {
+      this.erro.set(mensagemDeErro(e, 'carregar a anotação'));
+    } finally {
+      this.carregando.set(false);
+    }
+  }
+
+  async aplicarTamanho(valor: string): Promise<void> {
+    const n = Math.min(TAMANHO_MAXIMO, Math.max(1, Math.floor(Number(valor)) || TAMANHO_PADRAO));
+    this.tamanho.set(n);
+    gravarPreferencia(CHAVE_TAMANHO, String(n));
+    try {
+      await this.carregarLote();
+    } catch (e) {
+      this.erro.set(mensagemDeErro(e, 'carregar o lote'));
+    }
+  }
+
+  private async carregarLote(): Promise<void> {
+    const docs = await this.api.lote(this.tamanho(), this.pulados);
+    this.itens.set(
+      docs.map((doc) => {
+        const marcacoes = doc.entidades.map((e) => ({ id: this.proximoId++, tipo: e.tipo, inicio: e.inicio, fim: e.fim, removida: false }));
+        return { doc, marcacoes, pedacos: partir(doc.texto, marcacoes), deixar: false };
+      }),
+    );
+    if (docs[0]) this.resumo.set({ pendentes: docs[0].pendentes, aprovadas: docs[0].aprovadas });
+    this.erro.set(null);
+    window.scrollTo({ top: 0 });
+  }
+
+  contar(it: ItemLote): number {
+    return it.marcacoes.filter((m) => !m.removida).length;
+  }
+
+  alternarNoLote(it: ItemLote, m: Marcacao): void {
+    const marcacoes = it.marcacoes.map((x) => (x.id === m.id ? { ...x, removida: !x.removida } : x));
+    this.itens.update((lista) => lista.map((x) => (x === it ? { ...x, marcacoes, pedacos: partir(x.doc.texto, marcacoes) } : x)));
+  }
+
+  alternarDeixar(it: ItemLote): void {
+    this.itens.update((lista) => lista.map((x) => (x === it ? { ...x, deixar: !x.deixar } : x)));
+  }
+
+  /** Aprova os documentos do lote que não ficaram para depois e carrega o próximo lote. */
+  async aprovarLote(): Promise<void> {
+    if (this.salvando()) return;
+    const aprovar = this.itens().filter((i) => !i.deixar);
+    if (!aprovar.length) return;
+    this.salvando.set(true);
+    try {
+      const res = await this.api.decidirLote(
+        aprovar.map((i) => ({
+          rowId: i.doc.rowId,
+          observacao: '',
+          entidades: i.marcacoes
+            .filter((m) => !m.removida)
+            .map((m) => ({ tipo: m.tipo as Tipo, inicio: m.inicio, fim: m.fim, texto: i.doc.texto.slice(m.inicio, m.fim) })),
+        })),
+      );
+      this.aprovadasAgora.update((n) => n + res.gravadas);
+      this.pulados.push(...this.itens().filter((i) => i.deixar).map((i) => i.doc.rowId), ...res.erros.map((e) => e.rowId));
+      await this.carregarLote();
+      if (res.erros.length) this.erro.set(`${res.erros.length} não gravaram: ${res.erros.map((e) => `${e.rowId} (${e.erro})`).join('; ')}`);
+    } catch (e) {
+      this.erro.set(mensagemDeErro(e, 'salvar o lote'));
+    } finally {
+      this.salvando.set(false);
+    }
+  }
+
   private async carregar(): Promise<void> {
     const d = await this.api.proximo(this.pulados);
     this.doc.set(d);
+    if (d) this.resumo.set({ pendentes: d.pendentes, aprovadas: d.aprovadas });
     this.marcacoes.set((d?.entidades ?? []).map((e) => ({ id: this.proximoId++, tipo: e.tipo, inicio: e.inicio, fim: e.fim, removida: false })));
     this.selecao.set(null);
     this.observacao = '';
@@ -304,6 +484,7 @@ export class AnotacaoPageComponent {
 
   @HostListener('document:keydown', ['$event'])
   atalho(e: KeyboardEvent): void {
+    if (this.modo() === 'lote') return; // aprovar um lote inteiro nunca é por atalho
     const alvo = e.target as HTMLElement;
     if (alvo.closest('input, select, textarea')) return;
     if (e.key === 'Enter') { e.preventDefault(); void this.aprovar(); }

@@ -54,6 +54,9 @@ public class AnotacaoApiTests : IClassFixture<AnotacaoApiTests.Factory>
         var estado = await client.GetFromJsonAsync<JsonElement>("/api/anotacao/estado");
         Assert.False(estado.GetProperty("habilitado").GetBoolean());
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/anotacao/proximo")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/anotacao/lote?tamanho=5")).StatusCode);
+        var lote = await client.PostAsJsonAsync("/api/anotacao/lote/decisao", new { decisoes = new[] { new { rowId = "1", entidades = Array.Empty<object>() } } });
+        Assert.Equal(HttpStatusCode.NotFound, lote.StatusCode);
         var post = await client.PostAsJsonAsync("/api/anotacao/1/decisao", new { entidades = Array.Empty<object>() });
         Assert.Equal(HttpStatusCode.NotFound, post.StatusCode);
         Assert.False(File.Exists(Path.Combine(_factory.Dir, "manual_review.jsonl")));

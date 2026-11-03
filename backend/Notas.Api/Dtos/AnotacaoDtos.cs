@@ -16,3 +16,11 @@ public record DocumentoAnotacaoResponse(
     int Aprovadas);
 
 public record DecisaoAnotacaoRequest(List<EntidadeAnotacaoDto>? Entidades, string? Observacao);
+
+public record DecisaoLoteItem(string RowId, List<EntidadeAnotacaoDto>? Entidades, string? Observacao);
+
+public record DecisaoLoteRequest(List<DecisaoLoteItem>? Decisoes);
+
+public record ErroLote(string RowId, string Erro);
+
+public record DecisaoLoteResponse(int Gravadas, List<ErroLote> Erros);

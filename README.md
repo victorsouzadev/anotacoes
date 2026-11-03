@@ -559,6 +559,11 @@ Aprovação das pré-anotações de dados pessoais que o Claude faz nos relatos 
 marcação para tirá-la, selecione um trecho para marcar (todas as repetições entram juntas),
 **Enter** aprova e passa para o próximo, **P** pula.
 
+O modo **Em lote** (alternador no topo) mostra uma lista de relatos, com o tamanho do lote à
+escolha (1 a 100, lembrado no navegador). Você lê, clica nas marcações erradas para tirá-las,
+usa «Deixar para depois» no que quiser ver com calma (volta no modo «Um por vez») e aprova o
+resto de uma vez. Não há atalho de teclado para aprovar o lote.
+
 - **Dados**: nada vai para o banco nem para o repositório. A API lê o lote em `data/anotacao`
   (`documents.jsonl` e `claude_proposals.jsonl`, montados por
   `scripts/claude_proposals.py pacote`) e acrescenta cada decisão ao `manual_review.jsonl`

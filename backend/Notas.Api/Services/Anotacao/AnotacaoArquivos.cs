@@ -65,16 +65,22 @@ public class AnotacaoArquivos
     }
 
     /// <summary>A próxima proposta sem decisão, na ordem em que os lotes foram gravados.</summary>
-    public DocumentoAnotacaoResponse? Proximo(IReadOnlySet<string> pular)
+    public DocumentoAnotacaoResponse? Proximo(IReadOnlySet<string> pular) => Lote(1, pular).FirstOrDefault();
+
+    /// <summary>As próximas <paramref name="tamanho"/> propostas sem decisão, para ler e aprovar de uma vez.</summary>
+    public IReadOnlyList<DocumentoAnotacaoResponse> Lote(int tamanho, IReadOnlySet<string> pular)
     {
         var propostas = LerPropostas();
         var revisoes = LerRevisoes();
         var (pendentes, aprovadas) = Contagem(propostas, revisoes);
+        var textos = Textos();
 
+        var lote = new List<DocumentoAnotacaoResponse>();
         foreach (var (rowId, proposta) in propostas)
         {
+            if (lote.Count >= tamanho) break;
             if (revisoes.ContainsKey(rowId) || pular.Contains(rowId)) continue;
-            if (!Textos().TryGetValue(rowId, out var texto)) continue;
+            if (!textos.TryGetValue(rowId, out var texto)) continue;
 
             var entidades = new List<EntidadeAnotacaoDto>();
             foreach (var e in proposta["entities"]?.AsArray() ?? [])
@@ -84,9 +90,23 @@ public class AnotacaoArquivos
                 if (inicio < 0 || fim > texto.Length || inicio >= fim) continue;
                 entidades.Add(new EntidadeAnotacaoDto(e["entity_type"]!.GetValue<string>(), inicio, fim, texto[inicio..fim]));
             }
-            return new DocumentoAnotacaoResponse(rowId, texto, entidades, proposta["model"]?.GetValue<string>(), pendentes, aprovadas);
+            lote.Add(new DocumentoAnotacaoResponse(rowId, texto, entidades, proposta["model"]?.GetValue<string>(), pendentes, aprovadas));
         }
-        return null;
+        return lote;
+    }
+
+    /// <summary>Grava as decisões de um lote. Uma que falha não impede as outras.</summary>
+    public async Task<DecisaoLoteResponse> RegistrarLoteAsync(IEnumerable<DecisaoLoteItem> decisoes, CancellationToken ct)
+    {
+        var gravadas = 0;
+        var erros = new List<ErroLote>();
+        foreach (var d in decisoes)
+        {
+            var erro = await RegistrarAsync(d.RowId, new DecisaoAnotacaoRequest(d.Entidades, d.Observacao), ct);
+            if (erro is null) gravadas++;
+            else erros.Add(new ErroLote(d.RowId, erro));
+        }
+        return new DecisaoLoteResponse(gravadas, erros);
     }
 
     /// <summary>Grava a decisão. Devolve o erro para mostrar na tela, ou null quando gravou.</summary>
