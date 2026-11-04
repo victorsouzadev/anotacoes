@@ -562,7 +562,8 @@ marcação para tirá-la, selecione um trecho para marcar (todas as repetições
 O modo **Em lote** (alternador no topo) mostra uma lista de relatos, com o tamanho do lote à
 escolha (1 a 100, lembrado no navegador). Você lê, clica nas marcações erradas para tirá-las,
 usa «Deixar para depois» no que quiser ver com calma (volta no modo «Um por vez») e aprova o
-resto de uma vez. Não há atalho de teclado para aprovar o lote.
+resto de uma vez. Selecionar um trecho do relato também marca (com as repetições), como no
+modo individual. Não há atalho de teclado para aprovar o lote.
 
 - **Dados**: nada vai para o banco nem para o repositório. A API lê o lote em `data/anotacao`
   (`documents.jsonl` e `claude_proposals.jsonl`, montados por

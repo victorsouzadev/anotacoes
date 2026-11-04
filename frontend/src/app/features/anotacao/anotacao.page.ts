@@ -89,17 +89,29 @@ function gravarPreferencia(chave: string, valor: string): void {
                     {{ it.deixar ? 'Voltar ao lote' : 'Deixar para depois' }}
                   </button>
                 </div>
-                <div class="relato compacto">
+                <div class="relato compacto" (mouseup)="aoSelecionarNoLote(it, $event)">
                   @for (p of it.pedacos; track p.inicio) {
                     @if (p.kind === 'marca') {
                       <span class="ent" [class.removida]="p.marcacao.removida" [style]="cor(p.marcacao.tipo)"
                             (click)="alternarNoLote(it, p.marcacao)"
-                            [title]="p.marcacao.removida ? 'Clique para devolver' : 'Clique para tirar'">{{ p.texto }}<sup>{{ p.marcacao.tipo }}</sup></span>
+                            [title]="p.marcacao.removida ? 'Clique para devolver' : 'Clique para tirar'"><span
+                            [attr.data-ini]="p.inicio">{{ p.texto }}</span><sup>{{ p.marcacao.tipo }}</sup></span>
                     } @else {
-                      <span [class.tag]="p.tag" [class.quebra]="p.quebra">{{ p.texto }}</span>
+                      <span [attr.data-ini]="p.inicio" [class.tag]="p.tag" [class.quebra]="p.quebra">{{ p.texto }}</span>
                     }
                   }
                 </div>
+                @if (selecaoLote(); as s) {
+                  @if (s.rowId === it.doc.rowId) {
+                    <div class="marcar">
+                      <span>Marcar <strong>{{ s.texto }}</strong> como</span>
+                      @for (t of tipos; track t) {
+                        <button type="button" class="chip" [style]="cor(t)" (click)="marcarNoLote(it, t)">{{ t }}</button>
+                      }
+                      <button type="button" class="link" (click)="selecaoLote.set(null)">cancelar</button>
+                    </div>
+                  }
+                }
               </article>
             }
             <footer class="acoes">
@@ -252,6 +264,7 @@ export class AnotacaoPageComponent {
   readonly modo = signal<'um' | 'lote'>(lerPreferencia(CHAVE_MODO) === 'lote' ? 'lote' : 'um');
   readonly tamanho = signal(this.tamanhoSalvo());
   readonly itens = signal<ItemLote[]>([]);
+  readonly selecaoLote = signal<{ rowId: string; inicio: number; fim: number; texto: string } | null>(null);
   readonly aprovaveis = computed(() => this.itens().filter((i) => !i.deixar).length);
   readonly deixados = computed(() => this.itens().filter((i) => i.deixar).length);
   readonly tamanhoMaximo = TAMANHO_MAXIMO;
@@ -334,6 +347,27 @@ export class AnotacaoPageComponent {
   alternarNoLote(it: ItemLote, m: Marcacao): void {
     const marcacoes = it.marcacoes.map((x) => (x.id === m.id ? { ...x, removida: !x.removida } : x));
     this.itens.update((lista) => lista.map((x) => (x === it ? { ...x, marcacoes, pedacos: partir(x.doc.texto, marcacoes) } : x)));
+  }
+
+  /** Seleção do mouse dentro do relato de um documento da lista. */
+  aoSelecionarNoLote(it: ItemLote, evento: MouseEvent): void {
+    const sel = this.lerSelecao(evento.currentTarget as HTMLElement, it.doc.texto);
+    this.selecaoLote.set(sel ? { rowId: it.doc.rowId, ...sel } : null);
+  }
+
+  /** Marca o trecho selecionado (e as repetições dele) no documento da lista. */
+  marcarNoLote(it: ItemLote, tipo: Tipo): void {
+    const s = this.selecaoLote();
+    if (!s || s.rowId !== it.doc.rowId) return;
+    const texto = it.doc.texto;
+    const ativas = it.marcacoes.filter((m) => !m.removida);
+    const livre = (i: number, f: number) => !ativas.some((m) => i < m.fim && f > m.inicio);
+    const novas = ocorrencias(texto, s.texto).filter(([i, f]) => livre(i, f));
+    if (!novas.some(([i]) => i === s.inicio) && livre(s.inicio, s.fim)) novas.push([s.inicio, s.fim]);
+    const marcacoes = [...it.marcacoes, ...novas.map(([i, f]) => ({ id: this.proximoId++, tipo, inicio: i, fim: f, removida: false }))];
+    this.itens.update((lista) => lista.map((x) => (x === it ? { ...x, marcacoes, pedacos: partir(texto, marcacoes) } : x)));
+    this.selecaoLote.set(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   alternarDeixar(it: ItemLote): void {
@@ -427,10 +461,17 @@ export class AnotacaoPageComponent {
 
   /** Converte a seleção do mouse em posições do relato, pelos data-ini dos pedaços. */
   aoSelecionar(): void {
-    const sel = window.getSelection();
     const raiz = this.relato()?.nativeElement;
     const texto = this.doc()?.texto;
-    if (!sel || sel.isCollapsed || !raiz || !texto) return;
+    if (!raiz || !texto) return;
+    const sel = this.lerSelecao(raiz, texto);
+    if (sel) this.selecao.set(sel);
+  }
+
+  /** Posições da seleção do mouse dentro de `raiz`, ou null se não houver seleção válida ali. */
+  private lerSelecao(raiz: HTMLElement, texto: string): { inicio: number; fim: number; texto: string } | null {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return null;
     const r = sel.getRangeAt(0);
     const posicao = (no: Node, offset: number): number | null => {
       const el = (no.nodeType === Node.TEXT_NODE ? no.parentElement : (no as Element))?.closest('[data-ini]');
@@ -438,9 +479,9 @@ export class AnotacaoPageComponent {
     };
     const ini = posicao(r.startContainer, r.startOffset);
     const fim = posicao(r.endContainer, r.endOffset);
-    if (ini === null || fim === null || fim <= ini) return;
+    if (ini === null || fim === null || fim <= ini) return null;
     const [a, b] = aparar(texto, ini, fim);
-    if (b > a) this.selecao.set({ inicio: a, fim: b, texto: texto.slice(a, b) });
+    return b > a ? { inicio: a, fim: b, texto: texto.slice(a, b) } : null;
   }
 
   /** Marca o trecho selecionado e todas as repetições dele que ainda não estão marcadas. */
