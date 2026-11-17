@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grafite · Componentes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="grafite.css">
+<style>
+  /* Só desta vitrine */
+  .vitrine-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 32px; }
+  .amostra { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cor { width: 120px; }
+  .cor i { display: block; height: 56px; border-radius: 10px; border: 1px solid var(--g-linha); margin-bottom: 6px; }
+  .duas { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+  .menu-demo { position: static; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-mais" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-busca" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></symbol>
+    <symbol id="i-mais-opcoes" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+    <symbol id="i-nota" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8.5l4 4v13H6z"/><path d="M14.5 3.5v4h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-carteira" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6" width="17" height="13" rx="2"/><path d="M16 12.5h4.5M3.5 9h17"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-imagem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5.5-5 4 3.5 2.5-2 4 3.5"/></symbol>
+    <symbol id="i-cerebro" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="6" r="1.8"/><circle cx="5" cy="18" r="1.8"/><circle cx="19" cy="18" r="1.8"/><path d="m6.4 7.2 3.3 2.9M17.6 7.2l-3.3 2.9M6.4 16.8l3.3-2.9M17.6 16.8l-3.3-2.9"/></symbol>
+    <symbol id="i-alerta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 21 19.5H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="i-lua" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z"/></symbol>
+  </defs>
+</svg>
+
+<main class="g-pagina">
+  <div class="vitrine-cabeca">
+    <a class="g-marca" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--g-nanquim)"/><path d="M7 12.5h18M7 19.5h18" stroke="var(--g-papel)" stroke-opacity=".28"/><path d="M9.5 24 21 9.5" stroke="var(--g-papel)" stroke-width="3" stroke-linecap="round"/><circle cx="23.6" cy="23.2" r="1.9" fill="var(--g-tarefas)"/></svg>
+      Grafite
+    </a>
+    <div class="g-segmentado" role="group" aria-label="Tema">
+      <button type="button" data-tema="" aria-pressed="true">Sistema</button>
+      <button type="button" data-tema="light" aria-pressed="false">Dia</button>
+      <button type="button" data-tema="dark" aria-pressed="false">Noite</button>
+    </div>
+  </div>
+
+  <section class="g-secao">
+    <p class="g-legenda">Terça, 17 de novembro</p>
+    <h1 class="g-titulo-1">Bom dia, Victor</h1>
+  </section>
+
+  <section class="g-secao g-grade g-grade--blocos">
+    <a class="g-cartao g-bloco" href="#" data-ferramenta="notas">
+      <span class="g-ferramenta"><svg><use href="#i-nota"/></svg></span>
+      <span class="g-titulo-3">Notas</span>
+      <span class="g-apoio">3 editadas hoje</span>
+    </a>
+    <a class="g-cartao g-bloco" href="#" data-ferramenta="financas">
+      <span class="g-ferramenta"><svg><use href="#i-carteira"/></svg></span>
+      <span class="g-titulo-3">Finanças</span>
+      <span class="g-numero">R$ 1.284,90</span>
+    </a>
+    <a class="g-cartao g-bloco" href="#" data-ferramenta="tarefas">
+      <span class="g-ferramenta"><svg><use href="#i-check"/></svg></span>
+      <span class="g-titulo-3">Tarefas</span>
+      <span class="g-apoio">5 para hoje</span>
+    </a>
+    <a class="g-cartao g-bloco" href="#" data-ferramenta="editor">
+      <span class="g-ferramenta"><svg><use href="#i-imagem"/></svg></span>
+      <span class="g-titulo-3">Editor de Imagens</span>
+      <span class="g-apoio">Último: capa.png</span>
+    </a>
+    <a class="g-cartao g-bloco" href="#" data-ferramenta="cerebro">
+      <span class="g-ferramenta"><svg><use href="#i-cerebro"/></svg></span>
+      <span class="g-titulo-3">Segundo Cérebro</span>
+      <span class="g-apoio">2 itens na inbox</span>
+    </a>
+  </section>
+
+  <section class="g-secao">
+    <h2 class="g-titulo-2">Cores</h2>
+    <div class="amostra" style="margin-top:16px">
+      <div class="cor"><i style="background:var(--g-papel)"></i><span class="g-rotulo">papel</span></div>
+      <div class="cor"><i style="background:var(--g-folha)"></i><span class="g-rotulo">folha</span></div>
+      <div class="cor"><i style="background:var(--g-grafite)"></i><span class="g-rotulo">grafite</span></div>
+      <div class="cor"><i style="background:var(--g-grafite-suave)"></i><span class="g-rotulo">grafite-suave</span></div>
+      <div class="cor"><i style="background:var(--g-linha)"></i><span class="g-rotulo">linha</span></div>
+      <div class="cor"><i style="background:var(--g-nanquim)"></i><span class="g-rotulo">nanquim</span></div>
+      <div class="cor"><i style="background:var(--g-nanquim-tinta)"></i><span class="g-rotulo">nanquim-tinta</span></div>
+      <div class="cor"><i style="background:var(--g-positivo)"></i><span class="g-rotulo">positivo</span></div>
+      <div class="cor"><i style="background:var(--g-negativo)"></i><span class="g-rotulo">negativo</span></div>
+      <div class="cor"><i style="background:var(--g-atencao)"></i><span class="g-rotulo">atencao</span></div>
+    </div>
+  </section>
+
+  <section class="g-secao duas">
+    <div class="g-pilha">
+      <h2 class="g-titulo-2">Botões</h2>
+      <div class="g-fila">
+        <button class="g-btn g-btn--primario"><svg><use href="#i-mais"/></svg>Nova nota</button>
+        <button class="g-btn">Exportar</button>
+        <button class="g-btn g-btn--fantasma">Cancelar</button>
+        <button class="g-btn g-btn--perigo">Excluir</button>
+        <button class="g-btn g-btn--icone" aria-label="Mais opções"><svg><use href="#i-mais-opcoes"/></svg></button>
+        <button class="g-btn" disabled>Desabilitado</button>
+      </div>
+      <h2 class="g-titulo-2" style="margin-top:16px">Chips e tags</h2>
+      <div class="g-fila">
+        <button class="g-chip" aria-pressed="true">Este mês</button>
+        <button class="g-chip" aria-pressed="false">Mercado</button>
+        <button class="g-chip" aria-pressed="false">Transporte</button>
+      </div>
+      <div class="g-fila">
+        <span class="g-tag">pessoal</span>
+        <span class="g-tag" data-estado="positivo">Meta atingida</span>
+        <span class="g-tag" data-estado="atencao">87% do orçamento</span>
+        <span class="g-tag" data-estado="negativo">Estourou</span>
+        <span class="g-badge">3</span>
+      </div>
+    </div>
+
+    <form class="g-cartao g-cartao--espacoso g-pilha" onsubmit="return false">
+      <h2 class="g-titulo-3">Novo lançamento</h2>
+      <div class="g-campo">
+        <label for="valor">Valor</label>
+        <div class="g-prefixo"><span>R$</span><input id="valor" class="g-entrada g-entrada--numero" inputmode="decimal" value="45,00"></div>
+      </div>
+      <div class="g-campo">
+        <label for="desc">Descrição</label>
+        <input id="desc" class="g-entrada" placeholder="Ex.: mercado da semana">
+      </div>
+      <div class="g-campo g-campo--erro">
+        <label for="cat">Categoria</label>
+        <select id="cat" class="g-entrada" aria-invalid="true" aria-describedby="cat-erro"><option>Escolha uma categoria</option><option>Mercado</option></select>
+        <span class="g-ajuda" id="cat-erro">Escolha uma categoria para entrar no orçamento.</span>
+      </div>
+      <div class="g-fila">
+        <label class="g-opcao"><input type="checkbox" class="g-check" checked> Recorrente</label>
+        <label class="g-opcao"><input type="checkbox" class="g-switch"> Lembrar no vencimento</label>
+      </div>
+      <div class="g-fila" style="justify-content:flex-end">
+        <button class="g-btn" type="button">Cancelar</button>
+        <button class="g-btn g-btn--primario">Salvar lançamento</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="g-secao duas">
+    <div class="g-cartao">
+      <div class="g-cartao__cabeca">
+        <div><p class="g-legenda" style="margin:0">Outubro</p><h2 class="g-titulo-3">Lançamentos recentes</h2></div>
+        <button class="g-btn g-btn--fantasma g-btn--compacto">Ver todos</button>
+      </div>
+      <ul class="g-lista">
+        <li class="g-linha"><span class="g-marcador" data-ferramenta="financas"></span><span class="g-linha__texto"><span class="g-linha__titulo">Mercado</span><span class="g-linha__apoio">Alimentação · 12 out</span></span><span class="g-linha__valor g-negativo">− R$ 45,00</span></li>
+        <li class="g-linha"><span class="g-marcador" data-ferramenta="financas"></span><span class="g-linha__texto"><span class="g-linha__titulo">Salário</span><span class="g-linha__apoio">Renda · 05 out</span></span><span class="g-linha__valor g-positivo">+ R$ 6.200,00</span></li>
+        <li class="g-linha"><span class="g-marcador" data-ferramenta="financas"></span><span class="g-linha__texto"><span class="g-linha__titulo">Conta de luz</span><span class="g-linha__apoio">Casa · 03 out</span></span><span class="g-linha__valor g-negativo">− R$ 182,37</span></li>
+      </ul>
+    </div>
+
+    <div class="g-pilha">
+      <div class="g-cartao">
+        <p class="g-legenda" style="margin:0">Orçamento · Mercado</p>
+        <p class="g-numero--destaque" style="margin:4px 0 12px">R$ 870,00</p>
+        <div class="g-progresso" data-estado="atencao"><span style="width:87%"></span></div>
+        <p class="g-apoio" style="margin:8px 0 0">87% de R$ 1.000,00 · faltam 14 dias</p>
+      </div>
+      <div class="g-aviso" data-estado="negativo"><svg><use href="#i-alerta"/></svg><div><strong>Não consegui ler o PDF.</strong> Tente uma foto do extrato.</div></div>
+      <div class="g-fila">
+        <div class="g-toast">Nota salva <button>Desfazer</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="g-secao duas">
+    <div class="g-pilha">
+      <div class="g-abas" role="tablist">
+        <button class="g-aba" role="tab" aria-selected="true">Resumo</button>
+        <button class="g-aba" role="tab" aria-selected="false">Categorias</button>
+        <button class="g-aba" role="tab" aria-selected="false">Metas</button>
+      </div>
+      <table class="g-tabela">
+        <thead><tr><th>Categoria</th><th class="num">Previsto</th><th class="num">Gasto</th></tr></thead>
+        <tbody>
+          <tr><td>Mercado</td><td class="num">1.000,00</td><td class="num">870,00</td></tr>
+          <tr><td>Transporte</td><td class="num">300,00</td><td class="num">112,40</td></tr>
+        </tbody>
+        <tfoot><tr><td>Total</td><td class="num">1.300,00</td><td class="num">982,40</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="g-pilha">
+      <div class="g-menu menu-demo" role="menu">
+        <button role="menuitem">Duplicar</button>
+        <button role="menuitem">Mover para pasta</button>
+        <hr>
+        <button role="menuitem" class="g-negativo">Excluir nota</button>
+      </div>
+      <div class="g-cartao g-vazio">
+        <svg><use href="#i-nota"/></svg>
+        <h3 class="g-titulo-3">Nenhuma nota ainda</h3>
+        <p class="g-apoio" style="margin:0">Suas notas aparecem aqui.</p>
+        <button class="g-btn g-btn--primario"><svg><use href="#i-mais"/></svg>Nova nota</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  document.querySelectorAll('[data-tema]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.getAttribute('data-tema');
+      if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
+      document.querySelectorAll('[data-tema]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+    });
+  });
+  document.querySelectorAll('.g-chip').forEach(function (c) {
+    c.addEventListener('click', function () { c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true')); });
+  });
+</script>
+</body>
+</html>

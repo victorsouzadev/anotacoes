@@ -7,6 +7,8 @@ description: Aplica a identidade visual Grafite (cores papel/grafite/nanquim, fo
 
 Guia completo da marca: https://claude.ai/artifact/2z6Yu8iV9x2UCEeKkXWnZW
 Os valores abaixo são a fonte da verdade desta skill; não invente outros.
+Para projetar telas e componentes novos (medidas, estados, padrões, voz), use a
+skill `design-system-grafite`.
 
 ## Tokens
 
