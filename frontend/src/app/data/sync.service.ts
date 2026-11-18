@@ -83,6 +83,7 @@ export class SyncService {
         updatedAt: note.updatedAt,
         deletedAt: note.deletedAt,
         trashedAt: note.trashedAt ?? null,
+        tags: note.tags ?? [],
       });
       // Servidor pode ter versão mais recente (LWW) — adota-a como fonte da verdade.
       const merged: NoteRecord = {
@@ -94,11 +95,21 @@ export class SyncService {
         updatedAt: result.updatedAt,
         deletedAt: result.deletedAt,
         trashedAt: result.trashedAt ?? null,
+        tags: result.tags ?? [],
         dirty: false,
         thumbnail: note.thumbnail,
         paperStyle: note.paperStyle,
       };
-      await this.localDb.putNote(merged);
+      // Se a nota mudou aqui enquanto a requisição estava no ar (ex.: tags logo depois de
+      // renomear), a resposta do servidor é velha: mantém a cópia local, ainda pendente, e ela
+      // sobe na próxima rodada. Sem isso a mudança era sobrescrita e marcada como enviada.
+      const mudouNoMeio = await this.localDb.emSerie(async () => {
+        const atual = await this.localDb.getNote(note.id);
+        if (atual && atual.updatedAt !== note.updatedAt) return true;
+        await this.localDb.putNote(merged);
+        return false;
+      });
+      if (mudouNoMeio) this.syncQueued = true;
     }
   }
 
@@ -107,27 +118,30 @@ export class SyncService {
     const changes = await this.api.listNoteChangesSince(since);
     let maxUpdatedAt = since;
     for (const remote of changes) {
-      const local = await this.localDb.getNote(remote.id);
-      // Não sobrescrever edições locais ainda não enviadas.
-      if (local?.dirty) continue;
-      const record: NoteRecord = {
-        id: remote.id,
-        folderId: remote.folderId,
-        title: remote.title,
-        pages: parseStoredPages(remote.elements),
-        createdAt: remote.createdAt,
-        updatedAt: remote.updatedAt,
-        deletedAt: remote.deletedAt,
-        trashedAt: remote.trashedAt ?? null,
-        dirty: false,
-        thumbnail: local?.thumbnail,
-        paperStyle: local?.paperStyle,
-      };
-      if (remote.deletedAt) {
-        await this.localDb.deleteNoteLocal(remote.id);
-      } else {
-        await this.localDb.putNote(record);
-      }
+      await this.localDb.emSerie(async () => {
+        const local = await this.localDb.getNote(remote.id);
+        // Não sobrescrever edições locais ainda não enviadas.
+        if (local?.dirty) return;
+        const record: NoteRecord = {
+          id: remote.id,
+          folderId: remote.folderId,
+          title: remote.title,
+          pages: parseStoredPages(remote.elements),
+          createdAt: remote.createdAt,
+          updatedAt: remote.updatedAt,
+          deletedAt: remote.deletedAt,
+          trashedAt: remote.trashedAt ?? null,
+          tags: remote.tags ?? [],
+          dirty: false,
+          thumbnail: local?.thumbnail,
+          paperStyle: local?.paperStyle,
+        };
+        if (remote.deletedAt) {
+          await this.localDb.deleteNoteLocal(remote.id);
+        } else {
+          await this.localDb.putNote(record);
+        }
+      });
       if (remote.updatedAt > maxUpdatedAt) maxUpdatedAt = remote.updatedAt;
     }
     await this.localDb.setMeta(LAST_SYNC_KEY, maxUpdatedAt);

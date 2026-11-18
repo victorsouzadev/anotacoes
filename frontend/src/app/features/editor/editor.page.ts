@@ -24,6 +24,8 @@ import { TextOverlayComponent } from './text-overlay';
 import { ChecklistOverlayComponent } from './checklist-overlay';
 import { NoteReaderComponent } from './note-reader';
 import { ShareDialogComponent } from './share-dialog';
+import { TagInputComponent } from '../../shared/tag-input.component';
+import { contarTags } from '../notes/notes-filter';
 import { IconComponent } from '../../shared/icon';
 
 @Component({
@@ -32,13 +34,14 @@ import { IconComponent } from '../../shared/icon';
   imports: [
     RouterLink, FormsModule, FocusOnInitDirective, CanvasHostComponent, ToolbarComponent,
     PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
-    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent, ShareDialogComponent,
+    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent, ShareDialogComponent, TagInputComponent,
   ],
   template: `
     <div class="editor-page">
       <header>
         <a routerLink="/notes" class="back">← Notas</a>
         <input class="title-input" [(ngModel)]="title" (change)="onTitleChange()" placeholder="Título da nota" />
+        <app-tag-input class="header-tags" [tags]="tags" [sugestoes]="tagSugestoes" (tagsChange)="onTagsChange($event)" />
         <span class="sync-indicator" [class]="syncService.status()">
           <span class="dot"></span>{{ syncLabel() }}
         </span>
@@ -254,6 +257,7 @@ import { IconComponent } from '../../shared/icon';
     .pdf-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
     .pdf-acoes button { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: var(--radius-sm); padding: 7px 12px; font-weight: 600; }
     .pdf-acoes .primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+    .header-tags { flex: 0 1 260px; min-width: 0; }
     .read-btn {
       display: inline-flex; align-items: center; gap: 6px;
       border: 1px solid var(--border); background: var(--bg); color: var(--text);
@@ -377,6 +381,7 @@ import { IconComponent } from '../../shared/icon';
       .title-input { font-size: 14px; }
       .sync-indicator span:last-child { display: none; }
       .btn-label { display: none; }
+      .header-tags { display: none; }
     }
   `],
 })
@@ -386,6 +391,9 @@ export class EditorPageComponent implements OnInit, OnDestroy {
 
   store = new EditorStore();
   noteId = '';
+  /** Tags da nota (spec 021) e as já usadas em outras notas, para sugerir. */
+  tags: string[] = [];
+  tagSugestoes: string[] = [];
   /** Modo leitura aberto (spec 024). */
   reading = false;
   /** Diálogo de link somente leitura aberto (spec 023). */
@@ -485,6 +493,8 @@ export class EditorPageComponent implements OnInit, OnDestroy {
       return;
     }
     this.title = note.title;
+    this.tags = note.tags ?? [];
+    void this.repo.listNotes().then((todas) => { this.tagSugestoes = contarTags(todas).map((t) => t.tag); this.cdr.markForCheck(); });
     this.pages = note.pages;
     this.currentPageIndex = 0;
     this.store.paperStyle.set(note.paperStyle ?? 'blank');
@@ -947,6 +957,12 @@ export class EditorPageComponent implements OnInit, OnDestroy {
       this.gerandoPdf = false;
       this.cdr.markForCheck();
     }
+  }
+
+  async onTagsChange(tags: string[]): Promise<void> {
+    this.tags = tags;
+    await this.repo.setTags(this.noteId, tags);
+    this.syncService.syncNow();
   }
 
   openShare(): void {

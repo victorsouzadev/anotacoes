@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NoteRecord } from '../../data/models';
-import { diasRestantes, filtrarNotas } from './notes-filter';
+import { contarTags, diasRestantes, filtrarNotas, normalizarTags } from './notes-filter';
 
 function nota(p: Partial<NoteRecord>): NoteRecord {
   return {
@@ -39,5 +39,32 @@ describe('diasRestantes', () => {
     expect(diasRestantes('2026-01-11T00:00:00Z', agora)).toBe(30);
     expect(diasRestantes('2026-01-01T00:00:00Z', agora)).toBe(20);
     expect(diasRestantes('2025-11-01T00:00:00Z', agora)).toBe(0);
+  });
+});
+
+describe('tags', () => {
+  const notas = [
+    nota({ id: 'a', title: 'A', tags: ['faculdade', 'provas'] }),
+    nota({ id: 'b', title: 'B', tags: ['provas'], folderId: 'outra' }),
+    nota({ id: 'c', title: 'C', tags: ['provas'], trashedAt: '2026-01-01T00:00:00Z' }),
+  ];
+
+  it('normaliza', () => {
+    expect(normalizarTags([' Faculdade ', 'faculdade', '', 'PROVAS'])).toEqual(['faculdade', 'provas']);
+    expect(normalizarTags(Array.from({ length: 25 }, (_, i) => `t${i}`))).toHaveLength(20);
+    expect(normalizarTags(['x'.repeat(50)])[0]).toHaveLength(40);
+  });
+
+  it('filtra com E entre as tags, em qualquer pasta', () => {
+    expect(filtrarNotas(notas, { pasta: null, busca: '', ordem: 'title', tags: ['provas'] }).map((n) => n.id)).toEqual(['a', 'b']);
+    expect(filtrarNotas(notas, { pasta: null, busca: '', ordem: 'title', tags: ['provas', 'faculdade'] }).map((n) => n.id)).toEqual(['a']);
+  });
+
+  it('a busca acha pela tag', () => {
+    expect(filtrarNotas(notas, { pasta: null, busca: 'facul', ordem: 'title' }).map((n) => n.id)).toEqual(['a']);
+  });
+
+  it('conta sem a lixeira', () => {
+    expect(contarTags(notas)).toEqual([{ tag: 'faculdade', total: 1 }, { tag: 'provas', total: 2 }]);
   });
 });

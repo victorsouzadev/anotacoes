@@ -8,7 +8,8 @@ import { SyncService } from '../../data/sync.service';
 import { ThemeService } from '../../core/theme.service';
 import { FocusOnInitDirective } from '../../shared/focus-on-init.directive';
 import { IconComponent, IconName } from '../../shared/icon';
-import { SortMode, diasRestantes, filtrarNotas } from './notes-filter';
+import { SortMode, contarTags, diasRestantes, filtrarNotas } from './notes-filter';
+import { TagInputComponent } from '../../shared/tag-input.component';
 type ViewMode = 'grid' | 'list';
 
 const VIEW_MODE_KEY = 'notas.notesViewMode';
@@ -17,7 +18,7 @@ const MOBILE_BREAKPOINT = 760;
 @Component({
   selector: 'app-notes-list-page',
   standalone: true,
-  imports: [FormsModule, RouterLink, FocusOnInitDirective, IconComponent],
+  imports: [FormsModule, RouterLink, FocusOnInitDirective, IconComponent, TagInputComponent],
   template: `
     <div class="page">
       <aside class="sidebar">
@@ -60,6 +61,23 @@ const MOBILE_BREAKPOINT = 760;
             @if (trashCount > 0) { <span class="count">{{ trashCount }}</span> }
           </button>
         </nav>
+        @if (tagCounts.length > 0) {
+          <div class="tags-side">
+            <h3>Tags</h3>
+            @for (t of tagCounts; track t.tag) {
+              <div class="tag-row">
+                <button class="tag-item" [class.active]="activeTags.includes(t.tag)" (click)="toggleTag(t.tag)"
+                  [title]="activeTags.includes(t.tag) ? 'Tirar do filtro' : 'Filtrar (várias tags = todas)'">
+                  <app-icon name="tag" [size]="14" /> {{ t.tag }} <span class="count">{{ t.total }}</span>
+                </button>
+                <div class="folder-actions">
+                  <button (click)="renameTagEverywhere(t.tag)" title="Renomear em todas as notas"><app-icon name="edit" [size]="13" /></button>
+                  <button (click)="removeTagEverywhere(t.tag)" title="Tirar de todas as notas"><app-icon name="delete" [size]="13" /></button>
+                </div>
+              </div>
+            }
+          </div>
+        }
         <div class="new-folder">
           <input [(ngModel)]="newFolderName" placeholder="Nova pasta" (keydown.enter)="createFolder()" />
           <button (click)="createFolder()">Criar</button>
@@ -159,6 +177,7 @@ const MOBILE_BREAKPOINT = 760;
                     <button (click)="remove(note)" title="Excluir"><app-icon name="delete" [size]="14" /></button>
                   </div>
                 </div>
+                <app-tag-input class="card-tags" [tags]="note.tags ?? []" [sugestoes]="allTags" (tagsChange)="setTags(note, $event)" />
               </div>
             }
             @if (filteredNotes().length === 0) {
@@ -191,6 +210,7 @@ const MOBILE_BREAKPOINT = 760;
                     <span class="card-title">{{ note.title || 'Sem título' }}</span>
                     <span class="card-date">{{ formatDate(note.updatedAt) }}</span>
                   }
+                  <app-tag-input [tags]="note.tags ?? []" [sugestoes]="allTags" (tagsChange)="setTags(note, $event)" />
                 </div>
                 <div class="card-actions" (click)="$event.stopPropagation(); $event.preventDefault()">
                   <select class="move-select" title="Mover para pasta" [ngModel]="note.folderId ?? ''" (ngModelChange)="moveNote(note, $event)">
@@ -222,20 +242,20 @@ const MOBILE_BREAKPOINT = 760;
   styles: [`
     .page { display: flex; height: 100dvh; background: var(--bg); }
     .count { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+    .card-tags { display: block; padding: 0 12px 10px; }
+    .tags-side h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin: 0 0 4px 8px; }
+    .tag-row { display: flex; align-items: center; border-radius: var(--radius-sm); }
+    .tag-row:hover .folder-actions { opacity: 1; }
+    .tag-item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: none; background: none; padding: 6px 10px;
+      border-radius: var(--radius-sm); font-size: 13px; color: var(--text); text-align: left; }
+    .tag-item:hover { background: var(--bg); }
+    .tag-item.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
     .trash { display: flex; flex-direction: column; gap: 8px; }
     .trash-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .trash-head p { margin: 0; font-size: 13px; color: var(--text-muted); }
     .trash-row { cursor: default; }
     .card-actions.always { opacity: 1; }
     .card-actions button { display: inline-flex; align-items: center; gap: 4px; }
-    .danger-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--danger); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; }
-    .toast {
-      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      display: flex; align-items: center; gap: 14px;
-      background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm);
-      font-size: 13px; box-shadow: var(--shadow); z-index: 50;
-    }
-    .toast button { border: none; background: none; color: inherit; font-weight: 700; text-decoration: underline; }
     .sidebar {
       width: 250px;
       flex-shrink: 0;
@@ -452,6 +472,10 @@ export class NotesListPageComponent implements OnInit {
   editingFolderName = '';
   viewMode: ViewMode = 'grid';
   showTrash = false;
+  /** Filtro por tags (spec 021): a nota precisa ter todas. */
+  activeTags: string[] = [];
+  tagCounts: { tag: string; total: number }[] = [];
+  allTags: string[] = [];
   trash: NoteRecord[] = [];
   trashCount = 0;
   /** Nota recém-mandada para a lixeira, enquanto o aviso com "Desfazer" está na tela. */
@@ -524,6 +548,9 @@ export class NotesListPageComponent implements OnInit {
     this.notes = await this.repo.listNotes();
     this.folders = await this.repo.listFolders();
     this.trash = await this.repo.listTrash();
+    this.tagCounts = contarTags(this.notes);
+    this.allTags = this.tagCounts.map((t) => t.tag);
+    this.activeTags = this.activeTags.filter((t) => this.allTags.includes(t));
     this.trashCount = this.trash.length;
     // Sem isso, mudanças aplicadas depois de um `await` (ex: renomear/excluir pasta,
     // disparado por um prompt()/confirm() nativo) não repintam a tela sozinhas — só
@@ -532,7 +559,34 @@ export class NotesListPageComponent implements OnInit {
   }
 
   filteredNotes(): NoteRecord[] {
-    return filtrarNotas(this.notes, { pasta: this.activeFolder, busca: this.search, ordem: this.sortMode });
+    return filtrarNotas(this.notes, { pasta: this.activeFolder, busca: this.search, ordem: this.sortMode, tags: this.activeTags });
+  }
+
+  toggleTag(tag: string): void {
+    this.showTrash = false;
+    this.activeTags = this.activeTags.includes(tag) ? this.activeTags.filter((t) => t !== tag) : [...this.activeTags, tag];
+  }
+
+  async setTags(note: NoteRecord, tags: string[]): Promise<void> {
+    await this.repo.setTags(note.id, tags);
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async renameTagEverywhere(tag: string): Promise<void> {
+    const novo = prompt(`Novo nome para a tag "${tag}" (vale para todas as notas):`, tag)?.trim().toLowerCase();
+    if (!novo || novo === tag) return;
+    await this.repo.renameTag(tag, novo.slice(0, 40));
+    this.activeTags = this.activeTags.map((t) => (t === tag ? novo : t));
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async removeTagEverywhere(tag: string): Promise<void> {
+    if (!confirm(`Tirar a tag "${tag}" de todas as notas?`)) return;
+    await this.repo.renameTag(tag, null);
+    await this.reload();
+    this.sync.syncNow();
   }
 
   daysLeft(note: NoteRecord): number {

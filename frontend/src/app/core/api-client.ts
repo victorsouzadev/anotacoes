@@ -15,6 +15,7 @@ export interface NoteDto extends NoteMetaDto {
   elements: string;
   deletedAt: string | null;
   trashedAt?: string | null;
+  tags?: string[];
 }
 
 export interface FolderDto {
@@ -43,6 +44,7 @@ export class ApiClient {
     updatedAt: string;
     deletedAt: string | null;
     trashedAt?: string | null;
+    tags?: string[];
   }): Promise<NoteDto> {
     return firstValueFrom(
       this.http.put<NoteDto>(`/api/notes/${id}`, {
@@ -54,6 +56,7 @@ export class ApiClient {
         updatedAt: body.updatedAt,
         deletedAt: body.deletedAt,
         trashedAt: body.trashedAt ?? null,
+        tags: body.tags ?? [],
       }),
     );
   }

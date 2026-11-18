@@ -899,6 +899,10 @@ namespace Notas.Api.Data.Migrations
                     b.Property<string>("FolderId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("TEXT");

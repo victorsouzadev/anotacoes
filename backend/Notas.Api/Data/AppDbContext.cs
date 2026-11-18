@@ -43,6 +43,8 @@ public class Note
     public DateTime? DeletedAt { get; set; }
     /// <summary>Na lixeira desde (spec 018). O conteúdo fica; depois de 30 dias vira tombstone (DeletedAt).</summary>
     public DateTime? TrashedAt { get; set; }
+    /// <summary>Tags da nota em JSON (spec 021): minúsculas, únicas, até 20 de até 40 caracteres.</summary>
+    public string Tags { get; set; } = "[]";
 }
 
 /// <summary>Link somente leitura de uma nota (spec 023). Só o SHA-256 do token fica no banco.</summary>

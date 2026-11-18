@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
 using Notas.Api.Dtos;
@@ -23,10 +24,8 @@ public static class NotesEndpoints
                 var delta = await db.Notes.AsNoTracking()
                     .Where(n => n.UserId == userId && n.UpdatedAt > s)
                     .OrderBy(n => n.UpdatedAt)
-                    .Select(n => new NoteDto(n.Id, n.FolderId, n.Title, n.Elements,
-                        n.CreatedAt, n.UpdatedAt, n.DeletedAt, n.TrashedAt))
                     .ToListAsync();
-                return Results.Ok(delta);
+                return Results.Ok(delta.Select(ToDto));
             }
             var metas = await db.Notes.AsNoTracking()
                 .Where(n => n.UserId == userId && n.DeletedAt == null && n.TrashedAt == null)
@@ -74,6 +73,9 @@ public static class NotesEndpoints
             return Results.BadRequest(new { error = "Título muito longo." });
         if ((req.Elements?.Length ?? 0) > MaxElementsBytes)
             return Results.Json(new { error = "Nota muito grande." }, statusCode: 413);
+        List<string>? tags = null;
+        if (req.Tags is not null && (tags = NormalizarTags(req.Tags)) is null)
+            return Results.BadRequest(new { error = "Tags inválidas." });
 
         var userId = user.UserId();
 
@@ -107,6 +109,7 @@ public static class NotesEndpoints
         note.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
         note.DeletedAt = req.DeletedAt;
         note.TrashedAt = req.DeletedAt is null ? req.TrashedAt : null;
+        if (tags is not null) note.Tags = JsonSerializer.Serialize(tags);
         if (note.DeletedAt is not null) note.Elements = "[]";
 
         try
@@ -129,6 +132,7 @@ public static class NotesEndpoints
                 existing.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
                 existing.DeletedAt = req.DeletedAt;
                 existing.TrashedAt = req.DeletedAt is null ? req.TrashedAt : null;
+                if (tags is not null) existing.Tags = JsonSerializer.Serialize(tags);
                 if (existing.DeletedAt is not null) existing.Elements = "[]";
                 await db.SaveChangesAsync();
             }
@@ -138,7 +142,23 @@ public static class NotesEndpoints
     }
 
     private static NoteDto ToDto(Note n) =>
-        new(n.Id, n.FolderId, n.Title, n.Elements, n.CreatedAt, n.UpdatedAt, n.DeletedAt, n.TrashedAt);
+        new(n.Id, n.FolderId, n.Title, n.Elements, n.CreatedAt, n.UpdatedAt, n.DeletedAt, n.TrashedAt, LerTags(n.Tags));
+
+    public const int MaxTags = 20;
+    public const int MaxTagLength = 40;
+
+    /// <summary>Minúsculas, aparadas, sem vazias, únicas; null se passar dos limites.</summary>
+    public static List<string>? NormalizarTags(IEnumerable<string?> tags)
+    {
+        var lista = tags.Select(t => (t ?? "").Trim().ToLowerInvariant()).Where(t => t.Length > 0).Distinct().ToList();
+        return lista.Count > MaxTags || lista.Any(t => t.Length > MaxTagLength) ? null : lista;
+    }
+
+    private static List<string> LerTags(string json)
+    {
+        try { return JsonSerializer.Deserialize<List<string>>(json) ?? []; }
+        catch (JsonException) { return []; }
+    }
 
     public static string UserId(this ClaimsPrincipal user) =>
         user.FindFirstValue(ClaimTypes.NameIdentifier)

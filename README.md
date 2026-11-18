@@ -124,7 +124,10 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 - **Lixeira**: excluir manda a nota para a Lixeira com o conteúdo intacto (com "Desfazer" na hora);
   de lá dá para restaurar, excluir para sempre ou esvaziar. O servidor exclui de vez o que está
   na lixeira há mais de 30 dias (`NotesLixeiraWorker`). A lixeira sincroniza entre aparelhos.
-- **Busca**: por título **e por conteúdo** (texto, notas adesivas e itens de checklist de todas as páginas da nota).
+- **Tags**: cada nota tem tags livres (minúsculas, até 20), editadas no cabeçalho do editor ou no card;
+  a barra lateral lista as tags com a contagem, clicar filtra (várias = a nota precisa ter todas) e o
+  menu da tag renomeia ou tira de todas as notas.
+- **Busca**: por título, tags **e por conteúdo** (texto, notas adesivas e itens de checklist de todas as páginas da nota).
 - **Ordenação**: por última edição, data de criação ou nome.
 - Lista de notas com miniaturas (thumbnail gerado a partir do canvas), duplicar, renomear, excluir.
 
@@ -829,7 +832,7 @@ tarefas; o status de cada uma está no índice:
   subdomínio já está no ar (cerebro.vsitefy.com.br).
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos
-  ([020](specs/020-notas-paginas/spec.md), feito), tags ([021](specs/021-notas-tags/spec.md)),
+  ([020](specs/020-notas-paginas/spec.md), feito), tags ([021](specs/021-notas-tags/spec.md), feito),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md), feito), link somente leitura
   ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),

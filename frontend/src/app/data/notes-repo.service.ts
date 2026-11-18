@@ -8,6 +8,10 @@ import { LocalDbService } from './local-db.service';
 export class NotesRepoService {
   constructor(private localDb: LocalDbService, private api: ApiClient) {}
 
+  private emSerie<T>(fn: () => Promise<T>): Promise<T> {
+    return this.localDb.emSerie(fn);
+  }
+
   /** Notas vivas — fora da lixeira e sem tombstone. */
   async listNotes(): Promise<NoteRecord[]> {
     const all = await this.localDb.getAllNotes();
@@ -24,25 +28,29 @@ export class NotesRepoService {
   }
 
   /** Manda para a lixeira sem apagar o conteúdo. */
-  async trashNote(id: string): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.trashedAt = new Date().toISOString();
-    note.updatedAt = note.trashedAt;
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  trashNote(id: string): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.trashedAt = new Date().toISOString();
+      note.updatedAt = note.trashedAt;
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
   /** Tira da lixeira; volta para a pasta original se ela ainda existir. */
-  async restoreNote(id: string): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    const folders = await this.localDb.getAllFolders();
-    if (note.folderId && !folders.some((f) => f.id === note.folderId)) note.folderId = null;
-    note.trashedAt = null;
-    note.updatedAt = new Date().toISOString();
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  restoreNote(id: string): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      const folders = await this.localDb.getAllFolders();
+      if (note.folderId && !folders.some((f) => f.id === note.folderId)) note.folderId = null;
+      note.trashedAt = null;
+      note.updatedAt = new Date().toISOString();
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
   async getNote(id: string): Promise<NoteRecord | undefined> {
@@ -76,47 +84,88 @@ export class NotesRepoService {
     return note;
   }
 
-  async savePages(id: string, pages: NotePage[]): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.pages = pages;
-    note.updatedAt = new Date().toISOString();
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  savePages(id: string, pages: NotePage[]): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.pages = pages;
+      note.updatedAt = new Date().toISOString();
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
   /** Preferência puramente local — não marca a nota como "dirty" nem mexe em
    * updatedAt, para não gerar tráfego de sync por causa só da aparência do papel. */
-  async setPaperStyle(id: string, paperStyle: PaperStyle): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.paperStyle = paperStyle;
-    await this.localDb.putNote(note);
+  setPaperStyle(id: string, paperStyle: PaperStyle): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.paperStyle = paperStyle;
+      await this.localDb.putNote(note);
+    });
   }
 
-  async saveThumbnail(id: string, thumbnail: string): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.thumbnail = thumbnail;
-    await this.localDb.putNote(note);
+  saveThumbnail(id: string, thumbnail: string): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.thumbnail = thumbnail;
+      await this.localDb.putNote(note);
+    });
   }
 
-  async renameNote(id: string, title: string): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.title = title;
-    note.updatedAt = new Date().toISOString();
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  /** Troca as tags da nota (já normalizadas por quem chama). */
+  setTags(id: string, tags: string[]): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.tags = tags;
+      note.updatedAt = new Date().toISOString();
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
-  async moveToFolder(id: string, folderId: string | null): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.folderId = folderId;
-    note.updatedAt = new Date().toISOString();
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  /** Renomeia (ou, com `para` null, remove) uma tag em todas as notas vivas que a têm. */
+  renameTag(de: string, para: string | null): Promise<number> {
+    return this.emSerie(async () => {
+      const all = await this.localDb.getAllNotes();
+      let n = 0;
+      for (const note of all) {
+        if (note.deletedAt || !note.tags?.includes(de)) continue;
+        const tags = note.tags.filter((t) => t !== de);
+        if (para && !tags.includes(para)) tags.push(para);
+        note.tags = tags;
+        note.updatedAt = new Date().toISOString();
+        note.dirty = true;
+        await this.localDb.putNote(note);
+        n++;
+      }
+      return n;
+    });
+  }
+
+  renameNote(id: string, title: string): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.title = title;
+      note.updatedAt = new Date().toISOString();
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
+  }
+
+  moveToFolder(id: string, folderId: string | null): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.folderId = folderId;
+      note.updatedAt = new Date().toISOString();
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
   async duplicateNote(id: string): Promise<NoteRecord | undefined> {
@@ -137,15 +186,17 @@ export class NotesRepoService {
   }
 
   /** Excluir para sempre: tombstone com o conteúdo zerado (o servidor faz o mesmo). */
-  async deleteNote(id: string): Promise<void> {
-    const note = await this.localDb.getNote(id);
-    if (!note) return;
-    note.trashedAt = null;
-    note.deletedAt = new Date().toISOString();
-    note.updatedAt = note.deletedAt;
-    note.pages = [];
-    note.dirty = true;
-    await this.localDb.putNote(note);
+  deleteNote(id: string): Promise<void> {
+    return this.emSerie(async () => {
+      const note = await this.localDb.getNote(id);
+      if (!note) return;
+      note.trashedAt = null;
+      note.deletedAt = new Date().toISOString();
+      note.updatedAt = note.deletedAt;
+      note.pages = [];
+      note.dirty = true;
+      await this.localDb.putNote(note);
+    });
   }
 
   async listFolders(): Promise<FolderRecord[]> {

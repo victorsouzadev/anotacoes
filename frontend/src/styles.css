@@ -173,3 +173,13 @@ body, .card, .task-card, .opcao, .sugestao, button, input, select, textarea {
     transition: none;
   }
 }
+
+/* Avisos flutuantes com "Desfazer" e botão de ação destrutiva (lixeira de notas, spec 018). */
+.danger-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--danger); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; }
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px;
+  background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm);
+  font-size: 13px; box-shadow: var(--shadow); z-index: 50;
+}
+.toast button { border: none; background: none; color: inherit; font-weight: 700; text-decoration: underline; }
