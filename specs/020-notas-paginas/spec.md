@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Roadmap do README (Polish): "Atalho de teclado para trocar de página (Ctrl+PageUp/PageDown)" e "Duplicar página (hoje só duplica a nota inteira)".
 
@@ -14,13 +14,14 @@
 
 - Q: Onde fica "Duplicar página"? → A: Num menu de contexto da aba (botão direito ou toque longo), junto com Renomear e Excluir; a cópia entra logo depois da original.
 - Q: Dá para reordenar páginas? → A: Sim, arrastando a aba — entra aqui porque usa o mesmo menu/abas e é pequeno.
+- Q: Ctrl+Shift+N para página nova? → A: Não: o Chrome reserva esse atalho (janela anônima) e a página nunca o recebe. Ficou Alt+N (decidido na implementação).
 - Q: Excluir página continua sem desfazer? → A: Não; ganha "Desfazer" no aviso, como a lixeira de notas.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Trocar de página pelo teclado (Priority: P1)
 
-Ctrl+PageDown vai para a próxima página e Ctrl+PageUp para a anterior; Ctrl+Shift+N cria página nova.
+Ctrl+PageDown vai para a próxima página e Ctrl+PageUp para a anterior (Alt+→/← como alternativa); Alt+N cria página nova.
 
 **Why this priority**: É o atalho mais pedido para notas longas.
 
@@ -54,7 +55,7 @@ Arrastar uma aba muda a ordem; excluir página mostra "Página excluída · Desf
 
 ### Functional Requirements
 
-- **FR-001**: O editor MUST trocar de página com Ctrl+PageUp/PageDown e criar com Ctrl+Shift+N.
+- **FR-001**: O editor MUST trocar de página com Ctrl+PageUp/PageDown (e Alt+←/→) e criar com Alt+N.
 - **FR-002**: O editor MUST duplicar uma página com ids novos e referências de seta remapeadas.
 - **FR-003**: O editor MUST reordenar páginas arrastando as abas.
 - **FR-004**: Excluir página MUST oferecer desfazer.

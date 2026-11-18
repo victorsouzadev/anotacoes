@@ -102,6 +102,9 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 - **Estilo de papel**: liso, pautado ou quadriculado (preferência só local, não sincronizada).
 - **Tema claro/escuro/automático**.
 - **Múltiplas páginas por nota**: abas no topo do editor para trocar, adicionar (`+ Página`) e excluir páginas — cada página tem seu conjunto independente de elementos, como um caderno.
+  Botão direito (ou toque longo) na aba abre Renomear, Duplicar página, Mover e Excluir (com
+  "Desfazer"); arrastar a aba reordena. Atalhos: Ctrl+PageUp/PageDown ou Alt+←/→ trocam de página,
+  Alt+N cria uma nova.
 - **Exportar PNG**: renderiza a página atual inteira (não só o que está visível na tela) em resolução real, com opção de fundo branco ou transparente.
 - **Exportar PDF** (Mais ações): a nota inteira (uma página do PDF por página da nota) ou só a página
   atual, em A4 com orientação automática ou no tamanho do conteúdo, a ~200 DPI, gerado no navegador
@@ -824,7 +827,7 @@ tarefas; o status de cada uma está no índice:
   subdomínio já está no ar (cerebro.vsitefy.com.br).
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos
-  ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
+  ([020](specs/020-notas-paginas/spec.md), feito), tags ([021](specs/021-notas-tags/spec.md)),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
   ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
