@@ -62,6 +62,13 @@ public sealed class AiSettings
 
     public sealed record Stored(string Provider, string? Model, string? EncryptedKey);
 
+    private const string LerAnexosKey = "ler_anexos";
+
+    /// <summary>Ler texto de PDFs e imagens com a IA (spec 026). Custa por uso, então nasce desligado.</summary>
+    public bool LerAnexos => _db.GetSetting(LerAnexosKey)?.Value == "true";
+
+    public void SetLerAnexos(bool ligado) => _db.SetSetting(LerAnexosKey, ligado ? "true" : "false");
+
     public bool CanStoreKeys => _box.Available;
 
     public (Stored Value, DateTimeOffset? UpdatedAt) Load()

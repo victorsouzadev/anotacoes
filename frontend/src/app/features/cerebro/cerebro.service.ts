@@ -235,6 +235,15 @@ export class CerebroService {
     return firstValueFrom(this.http.put<ConfigTranscricao>(`${BASE}/transcricao`, { servico, modelo, chave_api: chaveApi }));
   }
 
+  /** Leitura de texto de PDFs e imagens (spec 026). */
+  configAnexos(): Promise<{ ligado: boolean; ia: boolean }> {
+    return firstValueFrom(this.http.get<{ ligado: boolean; ia: boolean }>(`${BASE}/anexos`));
+  }
+
+  salvarAnexos(ligado: boolean): Promise<{ ligado: boolean; ia: boolean }> {
+    return firstValueFrom(this.http.put<{ ligado: boolean; ia: boolean }>(`${BASE}/anexos`, { ligado }));
+  }
+
   configIa(): Promise<ConfigIa> {
     return firstValueFrom(this.http.get<ConfigIa>(`${BASE}/ia`));
   }

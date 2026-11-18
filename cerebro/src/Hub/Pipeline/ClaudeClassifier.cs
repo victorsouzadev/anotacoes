@@ -7,6 +7,13 @@ using Microsoft.Extensions.Options;
 
 namespace Hub.Pipeline;
 
+/// <summary>Arquivo enviado junto da mensagem (imagem ou PDF), no formato de cada provedor.</summary>
+public sealed record Anexo(string MediaType, byte[] Dados, string Nome)
+{
+    public bool EhPdf => MediaType == "application/pdf";
+    public string Base64 => Convert.ToBase64String(Dados);
+}
+
 public sealed record Classification(
     string Title,
     string Summary,
@@ -117,13 +124,41 @@ public sealed class ClaudeClassifier
     /// <summary>
     /// Uma chamada com tool forçada: o modelo só responde pelo schema. Serve à classificação e ao resumo analítico.
     /// </summary>
+    /// <param name="anexos">Imagens/PDFs que vão antes do texto na mensagem (leitura de anexos, spec 026).</param>
     public Task<JsonNode> CallToolAsync(EffectiveAi ai, string tool, string description, string system, string user,
-        JsonObject schema, int maxTokens, CancellationToken ct) =>
+        JsonObject schema, int maxTokens, CancellationToken ct, IReadOnlyList<Anexo>? anexos = null) =>
         ai.Provider == AiProvider.Anthropic
-            ? CallAnthropicAsync(ai, tool, description, system, user, schema, maxTokens, ct)
-            : CallOpenRouterAsync(ai, tool, description, system, user, schema, maxTokens, ct);
+            ? CallAnthropicAsync(ai, tool, description, system, user, schema, maxTokens, ct, anexos)
+            : CallOpenRouterAsync(ai, tool, description, system, user, schema, maxTokens, ct, anexos);
 
-    private async Task<JsonNode> CallAnthropicAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct)
+    /// <summary>Conteúdo da mensagem: só o texto, ou os anexos seguidos do texto.</summary>
+    private static JsonNode ConteudoAnthropic(string user, IReadOnlyList<Anexo>? anexos)
+    {
+        if (anexos is null || anexos.Count == 0) return JsonValue.Create(user)!;
+        var partes = new JsonArray();
+        foreach (var a in anexos)
+            partes.Add(new JsonObject
+            {
+                ["type"] = a.EhPdf ? "document" : "image",
+                ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = a.MediaType, ["data"] = a.Base64 },
+            });
+        partes.Add(new JsonObject { ["type"] = "text", ["text"] = user });
+        return partes;
+    }
+
+    private static JsonNode ConteudoOpenRouter(string user, IReadOnlyList<Anexo>? anexos)
+    {
+        if (anexos is null || anexos.Count == 0) return JsonValue.Create(user)!;
+        var partes = new JsonArray();
+        foreach (var a in anexos)
+            partes.Add(a.EhPdf
+                ? new JsonObject { ["type"] = "file", ["file"] = new JsonObject { ["filename"] = a.Nome, ["file_data"] = $"data:{a.MediaType};base64,{a.Base64}" } }
+                : new JsonObject { ["type"] = "image_url", ["image_url"] = new JsonObject { ["url"] = $"data:{a.MediaType};base64,{a.Base64}" } });
+        partes.Add(new JsonObject { ["type"] = "text", ["text"] = user });
+        return partes;
+    }
+
+    private async Task<JsonNode> CallAnthropicAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct, IReadOnlyList<Anexo>? anexos)
     {
         var payload = new JsonObject
         {
@@ -137,7 +172,7 @@ public sealed class ClaudeClassifier
                 ["input_schema"] = schema
             }),
             ["tool_choice"] = new JsonObject { ["type"] = "tool", ["name"] = tool },
-            ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = user })
+            ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = ConteudoAnthropic(user, anexos) })
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _options.Anthropic.BaseUrl.TrimEnd('/') + "/v1/messages")
@@ -154,7 +189,7 @@ public sealed class ClaudeClassifier
             ?? throw new InvalidOperationException("Resposta da Anthropic sem tool_use.");
     }
 
-    private async Task<JsonNode> CallOpenRouterAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct)
+    private async Task<JsonNode> CallOpenRouterAsync(EffectiveAi ai, string tool, string description, string system, string user, JsonObject schema, int maxTokens, CancellationToken ct, IReadOnlyList<Anexo>? anexos)
     {
         var payload = new JsonObject
         {
@@ -162,7 +197,7 @@ public sealed class ClaudeClassifier
             ["max_tokens"] = maxTokens,
             ["messages"] = new JsonArray(
                 new JsonObject { ["role"] = "system", ["content"] = system },
-                new JsonObject { ["role"] = "user", ["content"] = user }),
+                new JsonObject { ["role"] = "user", ["content"] = ConteudoOpenRouter(user, anexos) }),
             ["tools"] = new JsonArray(new JsonObject
             {
                 ["type"] = "function",

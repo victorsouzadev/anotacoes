@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Fora da PoC (spec 011 e `cerebro/README.md`): "PDF e imagens (OCR) — o arquivo é salvo e linkado, sem extração".
 

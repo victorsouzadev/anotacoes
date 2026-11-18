@@ -27,7 +27,7 @@ Captura pela tela do hub, por `POST /cerebro/api/v1/captures` com API key por fo
 **Acceptance Scenarios**:
 
 1. **Given** a mesma captura enviada duas vezes com a mesma chave de idempotência, **Then** só uma nota é criada.
-2. **Given** um anexo (PDF, imagem), **When** é capturado, **Then** o arquivo é salvo e linkado, sem extração de texto.
+2. **Given** um anexo (PDF, imagem), **When** é capturado, **Then** o arquivo é salvo e linkado; com a leitura de anexos ligada (spec 026), o texto entra na nota.
 
 ---
 
@@ -58,7 +58,7 @@ Em Configurações → Apps do hub, horários (padrão 08:00 e 20:00), quais app
 
 - Acesso só para `CEREBRO_USUARIOS` e só por HTTPS.
 - Falha de um app na rotina (ex.: Casa sem token) não impede os outros.
-- Busca semântica, OAuth 2.1 no MCP e OCR estão fora (pontos de extensão registrados).
+- Busca semântica, OAuth 2.1 no MCP e leitura de anexos vieram depois, nas specs 027, 028 e 026.
 
 ## Requirements *(mandatory)*
 

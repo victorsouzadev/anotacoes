@@ -15,6 +15,7 @@ public sealed record WebCaptureDto(string? Content, string? Url, List<string>? T
 public sealed record WebDecisionDto(string Path, string? Folder);
 
 public sealed record WebPathDto(string Path);
+public sealed record WebAnexosDto(bool Ligado);
 
 public sealed record WebRevealDto(string Item);
 
@@ -117,6 +118,13 @@ public static class WebEndpoints
         web.MapPost("/ia/testar", TestAi);
         web.MapGet("/transcricao", (TranscriptionSettings t) => Results.Ok(DescribeTranscription(t)));
         web.MapPut("/transcricao", SaveTranscription);
+        // Leitura de texto de PDFs e imagens (spec 026): desligada por padrão, custa por uso.
+        web.MapGet("/anexos", (AiSettings ai) => Results.Ok(new { ligado = ai.LerAnexos, ia = ai.Resolve().Enabled }));
+        web.MapPut("/anexos", (WebAnexosDto dto, AiSettings ai) =>
+        {
+            ai.SetLerAnexos(dto.Ligado);
+            return Results.Ok(new { ligado = ai.LerAnexos, ia = ai.Resolve().Enabled });
+        });
 
         web.MapGet("/acessos", GetAccess);
         web.MapPost("/acessos/revelar", RevealAccess);

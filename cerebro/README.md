@@ -24,7 +24,7 @@ Obsidian (PC, celular) ◀──WebDAV──▶ vault em disco ──▶ índice
 | 3 · Processamento e escrita: Claude, aprovação pelo frontmatter, create_note, append_daily | Pronto |
 | 4 · Busca semântica (embeddings) | Fora: o índice já separa trechos e tem `Candidates()` como ponto de extensão |
 | OAuth 2.1 no MCP | Fora: token bearer (ou `?key=`) por enquanto |
-| PDF e imagens (OCR) | Fora: o arquivo é salvo e linkado, sem extração |
+| PDF e imagens (texto) | Pronto (spec 026): com a opção ligada em Configurações, o texto entra em `## Texto extraído`, lido pela mesma IA da Inbox (até 10 MB e 20 páginas; HEIC não) |
 
 Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, captura, busca) e a API
 `/api/v1/web/*`, que aceita o JWT do login único (mesmo `JWT_SECRET`), só para os e-mails de `CEREBRO_USUARIOS`.
