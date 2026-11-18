@@ -35,13 +35,18 @@
 
     # OAuth do MCP do Cérebro (spec 028): o cliente (Claude web) procura o metadata na raiz do domínio.
     handle /.well-known/oauth-* {
-        reverse_proxy cerebro:8080
+        reverse_proxy cerebro:8080 {
+            header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+        }
     }
 
     # API, MCP (/cerebro/mcp) e bookmarklet. O prefixo sai antes de chegar ao serviço.
     handle_path /cerebro/* {
         reverse_proxy cerebro:8080 {
             flush_interval -1
+            # O HTTPS termina no nginx-proxy-manager: sem isto o Caddy repassaria "http" (o protocolo
+            # que ele mesmo recebe) e o OAuth do MCP anunciaria endereços http:// (spec 028).
+            header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
         }
     }
 

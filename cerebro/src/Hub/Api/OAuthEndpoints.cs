@@ -24,7 +24,9 @@ public static class OAuthEndpoints
     /// <summary>Endereço público visto pelo cliente (o Caddy repassa o Host; o HTTPS vem do proxy).</summary>
     public static string Base(HttpRequest r)
     {
-        var proto = r.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? r.Scheme;
+        // Primeiro valor de "https, http" (proxies em cadeia); vazio ou estranho cai no esquema da requisição.
+        var proto = (r.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? "").Split(',')[0].Trim().ToLowerInvariant();
+        if (proto is not ("http" or "https")) proto = r.Scheme;
         return $"{proto}://{r.Host}";
     }
 
