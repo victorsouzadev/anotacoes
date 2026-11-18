@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Lacuna da spec 004: concluir uma tarefa recorrente na web não gera a próxima ocorrência, como o app Android faz.
 

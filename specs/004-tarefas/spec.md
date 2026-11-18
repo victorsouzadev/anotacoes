@@ -20,7 +20,7 @@ A pessoa cria tarefas com título, descrição, prazo, prioridade, categoria, su
 
 **Acceptance Scenarios**:
 
-1. **Given** uma tarefa recorrente no app Android, **When** é concluída (ou pulada), **Then** a próxima ocorrência é gerada. Na web a regra é guardada e editada, mas concluir não gera a próxima — ver Edge Cases.
+1. **Given** uma tarefa recorrente, **When** é concluída (ou pulada) no Android ou na web, **Then** a próxima ocorrência é gerada no cliente que concluiu (spec 015).
 2. **Given** o formulário de tarefa, **When** a pessoa digita uma categoria nova, **Then** ela é criada ali mesmo (nome + cor).
 3. **Given** a busca e os filtros (Todas/Hoje/Atrasadas/Sem prazo, categoria, ordenação por prazo/prioridade/criação), **When** a pessoa filtra, **Then** a lista atualiza em tempo real.
 
@@ -81,7 +81,6 @@ Um servidor MCP separado (`mcp/`, Node/TS) expõe `add_task`, `list_tasks`, `com
 - Categorias não têm tombstone: excluir uma categoria com outro dispositivo offline faz ela reaparecer nele (limitação aceita).
 - Sincronização completa, não incremental, a cada rodada.
 - Anexo acima de 5 MB é recusado.
-- **Divergência conhecida**: a geração da próxima ocorrência de tarefa recorrente existe só no Android (`TaskRepository.createNextOccurrence`); a web não gera. Candidata a spec própria se a web precisar disso.
 
 ## Requirements *(mandatory)*
 

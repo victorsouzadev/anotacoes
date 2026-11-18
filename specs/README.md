@@ -77,8 +77,7 @@ Todas têm `checklists/requirements.md`.
 
 ## Lacunas encontradas no levantamento
 
-- **Tarefas**: a próxima ocorrência de tarefa recorrente só é gerada no Android; a web guarda
-  a regra, mas não gera (spec 004, Edge Cases).
+- ~~**Tarefas**: a próxima ocorrência de tarefa recorrente só era gerada no Android~~ — resolvido pela 015.
 - **Dieta**: não há tela web (etapa 8 do `docs/dieta/PLANO.md`).
 - **Treino**: não há tela web; os dados só chegam pelo app Treino Corrida.
 - **Segundo Cérebro**: busca semântica, OAuth 2.1 no MCP e OCR de anexos ficaram fora da PoC.

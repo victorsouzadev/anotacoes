@@ -158,6 +158,12 @@
     </div>
 
     <div class="actions">
+      @if (!task.isCompleted && !task.deletedAt && store.isRecurrent(task)) {
+        <button type="button" class="secondary" (click)="skipOccurrence()"
+                title="Cria a próxima ocorrência e manda esta para a lixeira, sem contar como concluída">
+          Pular esta vez
+        </button>
+      }
       <button type="button" class="secondary" (click)="close.emit()">Fechar</button>
       <button type="button" class="primary" (click)="edit.emit()"><app-icon name="edit" [size]="14" /> Editar</button>
     </div>
