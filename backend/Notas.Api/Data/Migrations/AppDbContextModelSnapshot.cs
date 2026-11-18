@@ -924,6 +924,47 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("notes", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Data.NoteShare", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NoteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevogadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "NoteId");
+
+                    b.ToTable("note_shares", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
                 {
                     b.Property<Guid>("Id")

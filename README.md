@@ -109,6 +109,10 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 
 ### Organização
 - **Pastas**: criar, renomear, excluir (notas da pasta excluída voltam para "sem pasta"), mover notas entre pastas.
+- **Link somente leitura** (botão "Compartilhar" no editor): cria links com nome e validade (7, 30, 90
+  dias ou sem) que abrem a nota em modo leitura sem conta, em `/p/nota/<token>`; revogar, mandar a
+  nota para a lixeira ou excluí-la desliga o link. Só o SHA-256 do token fica no banco, então o link
+  completo aparece uma vez, ao criar.
 - **Lixeira**: excluir manda a nota para a Lixeira com o conteúdo intacto (com "Desfazer" na hora);
   de lá dá para restaurar, excluir para sempre ou esvaziar. O servidor exclui de vez o que está
   na lixeira há mais de 30 dias (`NotesLixeiraWorker`). A lixeira sincroniza entre aparelhos.
@@ -711,6 +715,8 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `POST /api/auth/register` \| `login` \| `refresh` \| `logout` | Autenticação (compartilhada por todas as ferramentas) |
 | `GET /api/notes?since=` | Lista notas (metadados ou mudanças desde uma data) |
 | `PUT /api/notes/{id}` | Upsert idempotente (id gerado no cliente) |
+| `GET/POST /api/notes/{id}/links`, `DELETE /api/notes/{id}/links/{linkId}` | Links somente leitura da nota (criar, listar, revogar) |
+| `GET /api/notes/publico/{token}` | Nota compartilhada, sem login (só título e páginas; limite por IP) |
 | `GET /api/folders` | Lista pastas do usuário |
 | `POST /api/folders` | Cria pasta |
 | `PUT /api/folders/{id}` | Renomeia pasta |
@@ -817,7 +823,7 @@ tarefas; o status de cada uma está no índice:
   ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos
   ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
-  ([023](specs/023-notas-link-publico/spec.md)) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
+  ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
   telas web da Dieta ([016](specs/016-dieta-web/spec.md)) e do Treino ([017](specs/017-treino-web/spec.md)),
   e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md)), busca semântica

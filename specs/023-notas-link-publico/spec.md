@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Roadmap do README: "Compartilhar nota por link somente-leitura, sem exigir conta".
 

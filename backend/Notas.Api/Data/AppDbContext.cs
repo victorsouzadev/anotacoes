@@ -45,12 +45,26 @@ public class Note
     public DateTime? TrashedAt { get; set; }
 }
 
+/// <summary>Link somente leitura de uma nota (spec 023). Só o SHA-256 do token fica no banco.</summary>
+public class NoteShare
+{
+    public string Id { get; set; } = "";
+    public string NoteId { get; set; } = "";
+    public string UserId { get; set; } = "";
+    public string TokenHash { get; set; } = "";
+    public string Nome { get; set; } = "";
+    public DateTime? ExpiraEm { get; set; }
+    public DateTime? RevogadoEm { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
+    public DbSet<NoteShare> NoteShares => Set<NoteShare>();
     public DbSet<Transacao> Transacoes => Set<Transacao>();
     public DbSet<Orcamento> Orcamentos => Set<Orcamento>();
     public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
@@ -130,6 +144,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.ToTable("users");
             e.HasIndex(u => u.Email).IsUnique();
             e.Property(u => u.Email).UseCollation("NOCASE");
+        });
+
+        b.Entity<NoteShare>(e =>
+        {
+            e.ToTable("note_shares");
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.NoteId });
+            e.Property(x => x.Nome).HasMaxLength(80);
         });
 
         b.Entity<RefreshToken>(e =>

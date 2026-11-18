@@ -255,6 +255,16 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
+            // Páginas públicas sem login (link somente leitura de nota, spec 023): por IP, para
+            // dificultar varrer tokens.
+            o.AddPolicy("publico", ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
+
             // IA da Dieta (chat e reconhecimento de foto): por usuário, como a das Finanças.
             o.AddPolicy("dieta-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -340,6 +350,7 @@ public static class NotasApp
         });
         app.MapAuthEndpoints();
         app.MapNotesEndpoints();
+        app.MapNotesShareEndpoints();
         app.MapFoldersEndpoints();
         app.MapFinancasEndpoints();
         app.MapAuvpEndpoints();

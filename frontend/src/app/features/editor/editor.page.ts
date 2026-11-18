@@ -21,6 +21,7 @@ import { MoreActionsMenuComponent } from './more-actions-menu';
 import { TextOverlayComponent } from './text-overlay';
 import { ChecklistOverlayComponent } from './checklist-overlay';
 import { NoteReaderComponent } from './note-reader';
+import { ShareDialogComponent } from './share-dialog';
 import { IconComponent } from '../../shared/icon';
 
 @Component({
@@ -29,7 +30,7 @@ import { IconComponent } from '../../shared/icon';
   imports: [
     RouterLink, FormsModule, FocusOnInitDirective, CanvasHostComponent, ToolbarComponent,
     PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
-    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent,
+    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent, ShareDialogComponent,
   ],
   template: `
     <div class="editor-page">
@@ -39,11 +40,17 @@ import { IconComponent } from '../../shared/icon';
         <span class="sync-indicator" [class]="syncService.status()">
           <span class="dot"></span>{{ syncLabel() }}
         </span>
+        <button class="read-btn" (click)="openShare()" title="Compartilhar por link somente leitura">
+          <app-icon name="share" [size]="15" /> <span class="btn-label">Compartilhar</span>
+        </button>
         <button class="read-btn" (click)="openReader()" title="Modo leitura: esconde as ferramentas, ←/→ troca de página, F tela cheia">
           <app-icon name="book" [size]="15" /> Ler
         </button>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">{{ themeIcon() }}</button>
       </header>
+      @if (sharing) {
+        <app-share-dialog [noteId]="noteId" [sincronizando]="syncService.status() !== 'idle'" (fechar)="sharing = false" />
+      }
       @if (reading) {
         <app-note-reader [pages]="pages" [paperStyle]="store.paperStyle()" [inicio]="currentPageIndex" [titulo]="title"
           (fechar)="closeReader($event)" />
@@ -301,6 +308,7 @@ import { IconComponent } from '../../shared/icon';
       header { padding: 8px 10px; gap: 10px; }
       .title-input { font-size: 14px; }
       .sync-indicator span:last-child { display: none; }
+      .btn-label { display: none; }
     }
   `],
 })
@@ -312,6 +320,8 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   noteId = '';
   /** Modo leitura aberto (spec 024). */
   reading = false;
+  /** Diálogo de link somente leitura aberto (spec 023). */
+  sharing = false;
   title = '';
   pages: NotePage[] = [];
   currentPageIndex = 0;
@@ -741,6 +751,11 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.reading = true;
   }
 
+  openShare(): void {
+    this.flushSave();
+    this.sharing = true;
+  }
+
   closeReader(pagina: number): void {
     this.reading = false;
     if (pagina !== this.currentPageIndex) this.switchPage(pagina);
@@ -748,7 +763,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(ev: KeyboardEvent): void {
-    if (this.reading || this.editingTarget || this.editingChecklistTarget) return;
+    if (this.reading || this.sharing || this.editingTarget || this.editingChecklistTarget) return;
     const ctrl = ev.ctrlKey || ev.metaKey;
     if (ctrl && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
       ev.preventDefault();
