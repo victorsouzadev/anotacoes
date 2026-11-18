@@ -5,6 +5,15 @@ import { firstValueFrom } from 'rxjs';
 /** O Caddy publica o serviço "cerebro" em /cerebro/* (sem o prefixo do lado dele). */
 const BASE = '/cerebro/api/v1/web';
 
+export interface EstadoBuscaSemantica {
+  ligado: boolean;
+  disponivel: boolean;
+  origem_chave: 'servidor' | 'transcricao' | 'nenhuma';
+  modelo: string;
+  progresso: { feitas: number; total: number };
+  estimativa: { tokens: number; custo_usd: string };
+}
+
 export interface CerebroMe {
   email: string;
   classificacao: boolean;
@@ -242,6 +251,15 @@ export class CerebroService {
 
   salvarAnexos(ligado: boolean): Promise<{ ligado: boolean; ia: boolean }> {
     return firstValueFrom(this.http.put<{ ligado: boolean; ia: boolean }>(`${BASE}/anexos`, { ligado }));
+  }
+
+  /** Busca semântica (spec 027). */
+  buscaSemantica(): Promise<EstadoBuscaSemantica> {
+    return firstValueFrom(this.http.get<EstadoBuscaSemantica>(`${BASE}/busca-semantica`));
+  }
+
+  salvarBuscaSemantica(ligado: boolean): Promise<EstadoBuscaSemantica> {
+    return firstValueFrom(this.http.put<EstadoBuscaSemantica>(`${BASE}/busca-semantica`, { ligado }));
   }
 
   configIa(): Promise<ConfigIa> {

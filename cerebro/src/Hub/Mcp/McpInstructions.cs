@@ -6,6 +6,7 @@ public static class McpInstructions
     public const string Text = """
         Este servidor é o Segundo Cérebro do usuário: um vault do Obsidian com as notas pessoais dele.
         Ler é livre (search, read_note, list_notes, get_daily, list_inbox). Escrever exige critério.
+        search acha por palavras e, com a busca semântica ligada, também pelo sentido (mode: auto, palavras ou significado).
 
         Antes de capture, create_note ou append_daily, avalie se vale guardar:
         - Guarde o que o usuário vai querer reencontrar depois: decisões, ideias, aprendizados, referências,

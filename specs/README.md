@@ -80,4 +80,4 @@ Todas têm `checklists/requirements.md`.
 - ~~**Tarefas**: a próxima ocorrência de tarefa recorrente só era gerada no Android~~ — resolvido pela 015.
 - ~~**Dieta**: não havia tela web~~ — resolvido pela 016.
 - ~~**Treino**: não havia tela web~~ — resolvido pela 017.
-- **Segundo Cérebro**: busca semântica, OAuth 2.1 no MCP e OCR de anexos ficaram fora da PoC.
+- ~~**Segundo Cérebro**: busca semântica, OAuth 2.1 no MCP e leitura de anexos ficaram fora da PoC~~ — 026, 027 e 028.

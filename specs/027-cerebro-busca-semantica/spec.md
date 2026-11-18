@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Fase 4 da PoC (spec 011): "Busca semântica (embeddings) — o índice já separa trechos e tem `Candidates()` como ponto de extensão".
 

@@ -161,6 +161,8 @@ services:
       # provedor, modelo e chave (aba Configurações), sem mexer no .env.
       - Hub__OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Hub__Transcription__ApiKey=${CEREBRO_OPENAI_API_KEY:-}
+      # Busca semântica (spec 027). Sem ela, usa a chave da transcrição quando é da OpenAI.
+      - Hub__Embeddings__ApiKey=${CEREBRO_EMBEDDINGS_API_KEY:-}
       - Hub__AutoMoveLowRisk=${CEREBRO_AUTO_MOVER:-false}
       # App Casa (serviço à parte): o mesmo MCP_TOKEN do casa-api. Vazio = a Casa fica fora da rotina dos apps.
       - Hub__Casa__McpUrl=${CASA_MCP_URL:-https://casa.vsitefy.com.br/mcp}

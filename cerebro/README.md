@@ -22,7 +22,7 @@ Obsidian (PC, celular) ◀──WebDAV──▶ vault em disco ──▶ índice
 | 1 · Captura: API, API keys, idempotência, upload, webhooks, bookmarklet | Pronto |
 | 2 · MCP de leitura: search, read_note, list_notes, get_daily, list_inbox | Pronto |
 | 3 · Processamento e escrita: Claude, aprovação pelo frontmatter, create_note, append_daily | Pronto |
-| 4 · Busca semântica (embeddings) | Fora: o índice já separa trechos e tem `Candidates()` como ponto de extensão |
+| 4 · Busca semântica (embeddings) | Pronto (spec 027): ligada em Configurações, vetores dos trechos em `vectors.db` (recriável), busca híbrida palavras + significado (RRF) na tela, no MCP (`search` com `mode`) e nas sugestões de links |
 | OAuth 2.1 no MCP | Fora: token bearer (ou `?key=`) por enquanto |
 | PDF e imagens (texto) | Pronto (spec 026): com a opção ligada em Configurações, o texto entra em `## Texto extraído`, lido pela mesma IA da Inbox (até 10 MB e 20 páginas; HEIC não) |
 

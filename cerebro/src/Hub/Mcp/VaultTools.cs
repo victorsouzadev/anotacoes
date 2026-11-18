@@ -30,9 +30,12 @@ public sealed class VaultTools
     private readonly GitSnapshotter _git;
     private readonly VersionService _versions;
 
+    private readonly HybridSearch _busca;
+
     public VaultTools(VaultStore vault, NoteIndex index, IngestService ingest, ApprovalService approval,
-        HubDb db, HubClock clock, GitSnapshotter git, VersionService versions, ILogger<VaultTools> log)
+        HubDb db, HubClock clock, GitSnapshotter git, VersionService versions, HybridSearch busca, ILogger<VaultTools> log)
     {
+        _busca = busca;
         _git = git;
         _versions = versions;
         _vault = vault;
@@ -45,14 +48,17 @@ public sealed class VaultTools
     }
 
     [McpServerTool(Name = "search", ReadOnly = true, OpenWorld = false)]
-    [Description("Busca full-text no vault Obsidian (título, tags e corpo; ignora acentos). Devolve caminho, título e trecho de cada nota encontrada.")]
-    public string Search(
-        [Description("Palavras a buscar. Todas precisam aparecer; aceita prefixos (ex.: 'reuni' acha 'reunião').")] string query,
+    [Description("Busca no vault Obsidian (título, tags e corpo; ignora acentos). Com a busca semântica ligada, combina palavras " +
+                 "e significado (acha 'gastos com o carro' numa nota sobre 'revisão do Gol'). Devolve caminho, título e trecho de cada nota.")]
+    public async Task<string> Search(
+        [Description("O que buscar. No modo palavras, todas precisam aparecer e aceita prefixos (ex.: 'reuni' acha 'reunião').")] string query,
         [Description("Opcional: limita a uma pasta, ex.: '10-Projetos'.")] string? folder = null,
-        [Description("Máximo de resultados (1 a 50).")] int limit = 10)
+        [Description("Máximo de resultados (1 a 50).")] int limit = 10,
+        [Description("Opcional: 'auto' (padrão: palavras + significado quando ligado), 'palavras' ou 'significado'.")] string? mode = null,
+        CancellationToken ct = default)
     {
         Log(nameof(Search), query);
-        var hits = _index.Search(query, string.IsNullOrWhiteSpace(folder) ? null : VaultLayout.NormalizeRelative(folder), limit);
+        var hits = await _busca.SearchAsync(query, string.IsNullOrWhiteSpace(folder) ? null : VaultLayout.NormalizeRelative(folder), limit, mode, ct);
         if (hits.Count == 0) return "Nenhuma nota encontrada.";
 
         var sb = new StringBuilder();

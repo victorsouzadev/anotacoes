@@ -31,6 +31,11 @@ builder.Services.AddSingleton<HubClock>();
 builder.Services.AddSingleton<VaultStore>();
 builder.Services.AddSingleton<HubDb>();
 builder.Services.AddSingleton<NoteIndex>();
+// Busca semântica (spec 027): vetores num SQLite à parte, atualizados em segundo plano.
+builder.Services.AddSingleton<Embeddings>();
+builder.Services.AddSingleton<VectorIndex>();
+builder.Services.AddSingleton<HybridSearch>();
+builder.Services.AddSingleton<VectorIndexWorker>();
 builder.Services.AddSingleton<AccessStore>();
 builder.Services.AddSingleton<ApiKeyAuth>();
 builder.Services.AddSingleton<SecretBox>();
@@ -55,6 +60,7 @@ builder.Services.AddSingleton<ProcessingWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitSnapshotter>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexWatcher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessingWorker>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<VectorIndexWorker>());
 // Rotina que traz os dados dos apps do hub (Tarefas, Finanças, Criativo) pelos MCPs deles.
 builder.Services.AddSingleton<AppsSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AppsSyncService>());
@@ -63,6 +69,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<AppsSyncService>()
 // Classificação (Anthropic ou OpenRouter): mesmo cliente, mesmo teto de tempo.
 builder.Services.AddHttpClient("anthropic", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddHttpClient("transcribe", c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient("embeddings", c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddHttpClient("fetch", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(20);
