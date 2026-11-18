@@ -24,12 +24,12 @@ public static class NotesEndpoints
                     .Where(n => n.UserId == userId && n.UpdatedAt > s)
                     .OrderBy(n => n.UpdatedAt)
                     .Select(n => new NoteDto(n.Id, n.FolderId, n.Title, n.Elements,
-                        n.CreatedAt, n.UpdatedAt, n.DeletedAt))
+                        n.CreatedAt, n.UpdatedAt, n.DeletedAt, n.TrashedAt))
                     .ToListAsync();
                 return Results.Ok(delta);
             }
             var metas = await db.Notes.AsNoTracking()
-                .Where(n => n.UserId == userId && n.DeletedAt == null)
+                .Where(n => n.UserId == userId && n.DeletedAt == null && n.TrashedAt == null)
                 .OrderByDescending(n => n.UpdatedAt)
                 .Select(n => new NoteMetaDto(n.Id, n.FolderId, n.Title, n.CreatedAt, n.UpdatedAt))
                 .ToListAsync();
@@ -57,6 +57,7 @@ public static class NotesEndpoints
             if (note is null) return Results.NotFound();
             note.DeletedAt = DateTime.UtcNow;
             note.UpdatedAt = DateTime.UtcNow;
+            note.TrashedAt = null;
             note.Elements = "[]";
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -105,6 +106,7 @@ public static class NotesEndpoints
         note.Elements = req.Elements ?? "[]";
         note.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
         note.DeletedAt = req.DeletedAt;
+        note.TrashedAt = req.DeletedAt is null ? req.TrashedAt : null;
         if (note.DeletedAt is not null) note.Elements = "[]";
 
         try
@@ -126,6 +128,7 @@ public static class NotesEndpoints
                 existing.Elements = req.Elements ?? "[]";
                 existing.UpdatedAt = req.UpdatedAt == default ? DateTime.UtcNow : req.UpdatedAt;
                 existing.DeletedAt = req.DeletedAt;
+                existing.TrashedAt = req.DeletedAt is null ? req.TrashedAt : null;
                 if (existing.DeletedAt is not null) existing.Elements = "[]";
                 await db.SaveChangesAsync();
             }
@@ -135,7 +138,7 @@ public static class NotesEndpoints
     }
 
     private static NoteDto ToDto(Note n) =>
-        new(n.Id, n.FolderId, n.Title, n.Elements, n.CreatedAt, n.UpdatedAt, n.DeletedAt);
+        new(n.Id, n.FolderId, n.Title, n.Elements, n.CreatedAt, n.UpdatedAt, n.DeletedAt, n.TrashedAt);
 
     public static string UserId(this ClaimsPrincipal user) =>
         user.FindFirstValue(ClaimTypes.NameIdentifier)

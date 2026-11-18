@@ -82,6 +82,7 @@ export class SyncService {
         createdAt: note.createdAt,
         updatedAt: note.updatedAt,
         deletedAt: note.deletedAt,
+        trashedAt: note.trashedAt ?? null,
       });
       // Servidor pode ter versão mais recente (LWW) — adota-a como fonte da verdade.
       const merged: NoteRecord = {
@@ -92,8 +93,10 @@ export class SyncService {
         createdAt: result.createdAt,
         updatedAt: result.updatedAt,
         deletedAt: result.deletedAt,
+        trashedAt: result.trashedAt ?? null,
         dirty: false,
         thumbnail: note.thumbnail,
+        paperStyle: note.paperStyle,
       };
       await this.localDb.putNote(merged);
     }
@@ -115,8 +118,10 @@ export class SyncService {
         createdAt: remote.createdAt,
         updatedAt: remote.updatedAt,
         deletedAt: remote.deletedAt,
+        trashedAt: remote.trashedAt ?? null,
         dirty: false,
         thumbnail: local?.thumbnail,
+        paperStyle: local?.paperStyle,
       };
       if (remote.deletedAt) {
         await this.localDb.deleteNoteLocal(remote.id);

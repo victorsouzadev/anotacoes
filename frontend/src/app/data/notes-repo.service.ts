@@ -8,9 +8,41 @@ import { LocalDbService } from './local-db.service';
 export class NotesRepoService {
   constructor(private localDb: LocalDbService, private api: ApiClient) {}
 
+  /** Notas vivas — fora da lixeira e sem tombstone. */
   async listNotes(): Promise<NoteRecord[]> {
     const all = await this.localDb.getAllNotes();
-    return all.filter((n) => !n.deletedAt).map((n) => this.ensurePages(n));
+    return all.filter((n) => !n.deletedAt && !n.trashedAt).map((n) => this.ensurePages(n));
+  }
+
+  /** Lixeira (spec 018), as mais recentes primeiro. */
+  async listTrash(): Promise<NoteRecord[]> {
+    const all = await this.localDb.getAllNotes();
+    return all
+      .filter((n) => !n.deletedAt && !!n.trashedAt)
+      .map((n) => this.ensurePages(n))
+      .sort((a, b) => (b.trashedAt ?? '').localeCompare(a.trashedAt ?? ''));
+  }
+
+  /** Manda para a lixeira sem apagar o conteúdo. */
+  async trashNote(id: string): Promise<void> {
+    const note = await this.localDb.getNote(id);
+    if (!note) return;
+    note.trashedAt = new Date().toISOString();
+    note.updatedAt = note.trashedAt;
+    note.dirty = true;
+    await this.localDb.putNote(note);
+  }
+
+  /** Tira da lixeira; volta para a pasta original se ela ainda existir. */
+  async restoreNote(id: string): Promise<void> {
+    const note = await this.localDb.getNote(id);
+    if (!note) return;
+    const folders = await this.localDb.getAllFolders();
+    if (note.folderId && !folders.some((f) => f.id === note.folderId)) note.folderId = null;
+    note.trashedAt = null;
+    note.updatedAt = new Date().toISOString();
+    note.dirty = true;
+    await this.localDb.putNote(note);
   }
 
   async getNote(id: string): Promise<NoteRecord | undefined> {
@@ -104,9 +136,11 @@ export class NotesRepoService {
     return copy;
   }
 
+  /** Excluir para sempre: tombstone com o conteúdo zerado (o servidor faz o mesmo). */
   async deleteNote(id: string): Promise<void> {
     const note = await this.localDb.getNote(id);
     if (!note) return;
+    note.trashedAt = null;
     note.deletedAt = new Date().toISOString();
     note.updatedAt = note.deletedAt;
     note.pages = [];

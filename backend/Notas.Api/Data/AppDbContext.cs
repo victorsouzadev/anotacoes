@@ -41,6 +41,8 @@ public class Note
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? DeletedAt { get; set; }
+    /// <summary>Na lixeira desde (spec 018). O conteúdo fica; depois de 30 dias vira tombstone (DeletedAt).</summary>
+    public DateTime? TrashedAt { get; set; }
 }
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)

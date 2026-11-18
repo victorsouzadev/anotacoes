@@ -155,6 +155,7 @@ public static class NotasApp
         builder.Services.AddScoped<ExecutorSites>();
         builder.Services.AddSingleton<IPostgresProvisionador, PostgresProvisionador>();
         builder.Services.AddHostedService<PublicacaoWorker>();
+        builder.Services.AddHostedService<Notas.Api.Services.Lixeira.NotesLixeiraWorker>();
         builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
         builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 

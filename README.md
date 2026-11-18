@@ -106,6 +106,9 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 
 ### Organização
 - **Pastas**: criar, renomear, excluir (notas da pasta excluída voltam para "sem pasta"), mover notas entre pastas.
+- **Lixeira**: excluir manda a nota para a Lixeira com o conteúdo intacto (com "Desfazer" na hora);
+  de lá dá para restaurar, excluir para sempre ou esvaziar. O servidor exclui de vez o que está
+  na lixeira há mais de 30 dias (`NotesLixeiraWorker`). A lixeira sincroniza entre aparelhos.
 - **Busca**: por título **e por conteúdo** (texto, notas adesivas e itens de checklist de todas as páginas da nota).
 - **Ordenação**: por última edição, data de criação ou nome.
 - Lista de notas com miniaturas (thumbnail gerado a partir do canvas), duplicar, renomear, excluir.
@@ -807,7 +810,7 @@ tarefas; o status de cada uma está no índice:
 - **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)) — o hub avisa quem
   está em `PUBLICADORES` quando o último backup passa de 36 h. O HTTPS por
   subdomínio já está no ar (cerebro.vsitefy.com.br).
-- **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md)), exportar PDF
+- **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos
   ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura

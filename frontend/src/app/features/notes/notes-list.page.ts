@@ -8,8 +8,7 @@ import { SyncService } from '../../data/sync.service';
 import { ThemeService } from '../../core/theme.service';
 import { FocusOnInitDirective } from '../../shared/focus-on-init.directive';
 import { IconComponent, IconName } from '../../shared/icon';
-
-type SortMode = 'updated' | 'created' | 'title';
+import { SortMode, diasRestantes, filtrarNotas } from './notes-filter';
 type ViewMode = 'grid' | 'list';
 
 const VIEW_MODE_KEY = 'notas.notesViewMode';
@@ -31,7 +30,7 @@ const MOBILE_BREAKPOINT = 760;
         </div>
         <button class="new-note" (click)="createNote()"><app-icon name="plus" [size]="16" /> Nova nota</button>
         <nav>
-          <button class="folder-item" [class.active]="activeFolder === null" (click)="activeFolder = null">
+          <button class="folder-item" [class.active]="!showTrash && activeFolder === null" (click)="activeFolder = null; showTrash = false">
             <app-icon name="folder" [size]="16" /> Todas as notas
           </button>
           @for (f of folders; track f.id) {
@@ -46,7 +45,7 @@ const MOBILE_BREAKPOINT = 760;
                   (keydown.escape)="cancelRenameFolder()"
                 />
               } @else {
-                <button class="folder-item" [class.active]="activeFolder === f.id" (click)="activeFolder = f.id">
+                <button class="folder-item" [class.active]="!showTrash && activeFolder === f.id" (click)="activeFolder = f.id; showTrash = false">
                   <app-icon name="folder" [size]="16" /> {{ f.name }}
                 </button>
               }
@@ -56,6 +55,10 @@ const MOBILE_BREAKPOINT = 760;
               </div>
             </div>
           }
+          <button class="folder-item" [class.active]="showTrash" (click)="openTrash()">
+            <app-icon name="trash" [size]="16" /> Lixeira
+            @if (trashCount > 0) { <span class="count">{{ trashCount }}</span> }
+          </button>
         </nav>
         <div class="new-folder">
           <input [(ngModel)]="newFolderName" placeholder="Nova pasta" (keydown.enter)="createFolder()" />
@@ -88,7 +91,35 @@ const MOBILE_BREAKPOINT = 760;
           </div>
         </div>
 
-        @if (viewMode === 'grid') {
+        @if (showTrash) {
+          <div class="trash">
+            <div class="trash-head">
+              <p>As notas ficam aqui por 30 dias e depois são excluídas de vez.</p>
+              @if (trash.length > 0) {
+                <button class="danger-btn" (click)="emptyTrash()"><app-icon name="trash" [size]="14" /> Esvaziar lixeira</button>
+              }
+            </div>
+            @for (note of trash; track note.id) {
+              <div class="list-row trash-row">
+                <div class="list-thumb">
+                  @if (note.thumbnail) { <img [src]="note.thumbnail" alt="" /> }
+                  @else { <div class="list-thumb-empty"><app-icon name="text" [size]="16" /></div> }
+                </div>
+                <div class="list-info">
+                  <span class="card-title">{{ note.title || 'Sem título' }}</span>
+                  <span class="card-date">Excluída {{ formatDate(note.trashedAt!) }} · {{ daysLeft(note) }} dia(s) restantes</span>
+                </div>
+                <div class="card-actions always">
+                  <button (click)="restore(note)" title="Restaurar"><app-icon name="restore" [size]="14" /> Restaurar</button>
+                  <button (click)="deleteForever(note)" title="Excluir para sempre"><app-icon name="delete" [size]="14" /></button>
+                </div>
+              </div>
+            }
+            @if (trash.length === 0) {
+              <p class="empty">A lixeira está vazia.</p>
+            }
+          </div>
+        } @else if (viewMode === 'grid') {
           <div class="grid">
             @for (note of filteredNotes(); track note.id) {
               <div class="card" [routerLink]="['/notes', note.id]">
@@ -180,10 +211,31 @@ const MOBILE_BREAKPOINT = 760;
           </div>
         }
       </main>
+      @if (undoNote) {
+        <div class="toast" role="status">
+          Nota movida para a lixeira
+          <button (click)="undoTrash()">Desfazer</button>
+        </div>
+      }
     </div>
   `,
   styles: [`
     .page { display: flex; height: 100dvh; background: var(--bg); }
+    .count { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+    .trash { display: flex; flex-direction: column; gap: 8px; }
+    .trash-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .trash-head p { margin: 0; font-size: 13px; color: var(--text-muted); }
+    .trash-row { cursor: default; }
+    .card-actions.always { opacity: 1; }
+    .card-actions button { display: inline-flex; align-items: center; gap: 4px; }
+    .danger-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--danger); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 14px;
+      background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm);
+      font-size: 13px; box-shadow: var(--shadow); z-index: 50;
+    }
+    .toast button { border: none; background: none; color: inherit; font-weight: 700; text-decoration: underline; }
     .sidebar {
       width: 250px;
       flex-shrink: 0;
@@ -399,6 +451,12 @@ export class NotesListPageComponent implements OnInit {
   editingFolderId: string | null = null;
   editingFolderName = '';
   viewMode: ViewMode = 'grid';
+  showTrash = false;
+  trash: NoteRecord[] = [];
+  trashCount = 0;
+  /** Nota recém-mandada para a lixeira, enquanto o aviso com "Desfazer" está na tela. */
+  undoNote: NoteRecord | null = null;
+  private undoTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private repo: NotesRepoService,
@@ -465,6 +523,8 @@ export class NotesListPageComponent implements OnInit {
   private async reload(): Promise<void> {
     this.notes = await this.repo.listNotes();
     this.folders = await this.repo.listFolders();
+    this.trash = await this.repo.listTrash();
+    this.trashCount = this.trash.length;
     // Sem isso, mudanças aplicadas depois de um `await` (ex: renomear/excluir pasta,
     // disparado por um prompt()/confirm() nativo) não repintam a tela sozinhas — só
     // apareceriam na próxima interação do usuário que disparasse outro ciclo de CD.
@@ -472,33 +532,16 @@ export class NotesListPageComponent implements OnInit {
   }
 
   filteredNotes(): NoteRecord[] {
-    let list = this.notes;
-    if (this.activeFolder !== null) list = list.filter((n) => n.folderId === this.activeFolder);
-    if (this.search.trim()) {
-      const q = this.search.trim().toLowerCase();
-      list = list.filter((n) => this.matchesSearch(n, q));
-    }
-    const sorted = [...list];
-    switch (this.sortMode) {
-      case 'updated': sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); break;
-      case 'created': sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); break;
-      case 'title': sorted.sort((a, b) => a.title.localeCompare(b.title)); break;
-    }
-    return sorted;
+    return filtrarNotas(this.notes, { pasta: this.activeFolder, busca: this.search, ordem: this.sortMode });
   }
 
-  /** Busca não só no título mas também no conteúdo de texto/adesivo/checklist de
-   * todas as páginas da nota — dá pra achar uma nota lembrando só de uma palavra
-   * que foi escrita nela, sem precisar lembrar do título. */
-  private matchesSearch(note: NoteRecord, q: string): boolean {
-    if (note.title.toLowerCase().includes(q)) return true;
-    for (const page of note.pages) {
-      for (const el of page.elements) {
-        if ((el.type === 'text' || el.type === 'sticky') && el.content.toLowerCase().includes(q)) return true;
-        if (el.type === 'checklist' && el.items.some((it) => it.text.toLowerCase().includes(q))) return true;
-      }
-    }
-    return false;
+  daysLeft(note: NoteRecord): number {
+    return note.trashedAt ? diasRestantes(note.trashedAt) : 0;
+  }
+
+  async openTrash(): Promise<void> {
+    this.showTrash = true;
+    await this.reload();
   }
 
   async createNote(): Promise<void> {
@@ -582,9 +625,42 @@ export class NotesListPageComponent implements OnInit {
     this.sync.syncNow();
   }
 
+  /** Excluir manda para a lixeira (spec 018); o aviso oferece desfazer por alguns segundos. */
   async remove(note: NoteRecord): Promise<void> {
-    if (!confirm(`Excluir a nota "${note.title || 'Sem título'}"? Esta ação não pode ser desfeita.`)) return;
+    await this.repo.trashNote(note.id);
+    this.undoNote = note;
+    if (this.undoTimer) clearTimeout(this.undoTimer);
+    this.undoTimer = setTimeout(() => { this.undoNote = null; this.cdr.markForCheck(); }, 6000);
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async undoTrash(): Promise<void> {
+    const note = this.undoNote;
+    if (!note) return;
+    this.undoNote = null;
+    if (this.undoTimer) clearTimeout(this.undoTimer);
+    await this.repo.restoreNote(note.id);
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async restore(note: NoteRecord): Promise<void> {
+    await this.repo.restoreNote(note.id);
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async deleteForever(note: NoteRecord): Promise<void> {
+    if (!confirm(`Excluir "${note.title || 'Sem título'}" para sempre? Esta ação não pode ser desfeita.`)) return;
     await this.repo.deleteNote(note.id);
+    await this.reload();
+    this.sync.syncNow();
+  }
+
+  async emptyTrash(): Promise<void> {
+    if (!confirm(`Excluir para sempre as ${this.trash.length} nota(s) da lixeira? Esta ação não pode ser desfeita.`)) return;
+    for (const note of this.trash) await this.repo.deleteNote(note.id);
     await this.reload();
     this.sync.syncNow();
   }

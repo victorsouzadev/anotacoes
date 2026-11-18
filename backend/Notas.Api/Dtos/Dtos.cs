@@ -10,10 +10,10 @@ public record NoteMetaDto(string Id, string? FolderId, string Title,
     DateTime CreatedAt, DateTime UpdatedAt);
 
 public record NoteDto(string Id, string? FolderId, string Title, string Elements,
-    DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt);
+    DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt, DateTime? TrashedAt = null);
 
 public record NoteUpsertRequest(string Id, string? FolderId, string Title, string Elements,
-    DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt);
+    DateTime CreatedAt, DateTime UpdatedAt, DateTime? DeletedAt, DateTime? TrashedAt = null);
 
 public record FolderDto(string Id, string Name, DateTime CreatedAt);
 public record FolderUpsertRequest(string Name);

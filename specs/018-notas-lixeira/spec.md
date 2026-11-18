@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Roadmap do README: "Lixeira com restaurar — hoje excluir é permanente na prática". Hoje `deleteNote` zera as páginas no cliente e o servidor grava `Elements = "[]"`.
 

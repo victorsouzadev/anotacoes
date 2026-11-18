@@ -117,4 +117,4 @@ Zoom e pan (roda, pinça, atalhos, "ajustar à tela"), papel liso/pautado/quadri
 
 - Uso pessoal: sem colaboração em tempo real nem compartilhamento entre usuários.
 - Sem reconhecimento de escrita à mão.
-- Ideias registradas no Roadmap do README (link somente leitura, tags, lixeira com restaurar, PDF, duplicar página) estão fora desta spec.
+- A lixeira de notas foi acrescentada depois pela spec 018; as demais ideias do Roadmap têm specs próprias (019 a 024).

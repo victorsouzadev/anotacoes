@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild, effect } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChecklistElement, ChecklistItem, NotePage, PAGE_COLORS, PaperStyle, StickyElement, TextElement } from '../../data/models';
@@ -325,7 +325,16 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     public syncService: SyncService,
     public theme: ThemeService,
     private cdr: ChangeDetectorRef,
-  ) {}
+  ) {
+    // Nota mandada para a lixeira em outro aparelho (spec 018): depois de cada sincronização,
+    // se a cópia local ficou na lixeira ou foi excluída, volta para a lista.
+    effect(() => {
+      if (this.syncService.status() !== 'idle' || !this.noteId) return;
+      void this.repo.getNote(this.noteId).then((n) => {
+        if (!n || n.trashedAt || n.deletedAt) this.router.navigateByUrl('/notes');
+      });
+    });
+  }
 
   themeIcon(): string {
     switch (this.theme.pref()) {
@@ -346,7 +355,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     this.noteId = this.route.snapshot.paramMap.get('id')!;
     const note = await this.repo.getNote(this.noteId);
-    if (!note) {
+    if (!note || note.trashedAt || note.deletedAt) {
       this.router.navigateByUrl('/notes');
       return;
     }
