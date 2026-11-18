@@ -801,21 +801,21 @@ pipeline — é distribuído como APK separado, não pelo Caddy/VPS.
 
 ## Roadmap / sugestões de melhoria
 
-Nada abaixo está implementado — é uma lista de ideias levantadas em conversa, por prioridade.
+Cada item do Roadmap virou uma spec do Spec Kit em [`specs/`](specs/README.md), com plano e
+tarefas, ainda não implementada:
 
-**Confiabilidade**
-- Confirmar que o cron de backup do SQLite está de fato rodando na VPS (único ponto de falha dos dados).
-- HTTPS via subdomínio + Nginx Proxy Manager (hoje é IP puro, senha trafega em claro).
+- **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)). O HTTPS por
+  subdomínio já está no ar (cerebro.vsitefy.com.br).
+- **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md)), exportar PDF
+  ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos
+  ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
+  arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
+  ([023](specs/023-notas-link-publico/spec.md)) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md)).
+- **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
+  telas web da Dieta ([016](specs/016-dieta-web/spec.md)) e do Treino ([017](specs/017-treino-web/spec.md)),
+  e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md)), busca semântica
+  ([027](specs/027-cerebro-busca-semantica/spec.md)) e OAuth no MCP ([028](specs/028-cerebro-mcp-oauth/spec.md)).
 
-**Funcionalidades**
-- Compartilhar nota por link somente-leitura, sem exigir conta.
-- Arrastar-e-soltar imagens/arquivos direto no canvas (hoje só colar via Ctrl+V).
-- Tags, além de pastas (categorização cruzada, não hierárquica).
-- Modo apresentação/leitura (esconde a toolbar).
-- Lixeira com restaurar — hoje excluir é permanente na prática, embora o campo `deletedAt` já exista internamente como tombstone de sync.
-- Exportar em PDF (hoje só PNG).
-
-**Polish**
-- Atalho de teclado para trocar de página (Ctrl+PageUp/PageDown).
-- Duplicar página (hoje só duplica a nota inteira).
-- Reconhecimento de escrita à mão, colaboração em tempo real, compartilhamento entre usuários, login social, recuperação de senha por e-mail, app mobile nativo — fora do escopo original da v1, mantidos aqui só como registro do que foi conscientemente deixado de fora.
+Reconhecimento de escrita à mão, colaboração em tempo real, compartilhamento entre usuários, login
+social e recuperação de senha por e-mail continuam fora do escopo, registrados só como o que foi
+conscientemente deixado de fora.
