@@ -774,6 +774,24 @@ echo "sdk.dir=/caminho/do/Android/sdk" > local.properties
 ./gradlew assembleDebug
 ```
 
+## Desenvolvimento guiado por spec (Spec Kit)
+
+Features novas seguem o [Spec Kit](https://github.com/github/spec-kit): as skills
+`/speckit-specify`, `/speckit-plan`, `/speckit-tasks` e `/speckit-implement` ficam em
+`.claude/skills/`, os templates e scripts em `.specify/`, e cada feature ganha uma pasta
+`specs/NNN-nome/` com spec, plano e tarefas. Os princípios que todo plano precisa respeitar
+estão em [`.specify/memory/constitution.md`](.specify/memory/constitution.md); o fluxo
+resumido está em [`CLAUDE.md`](CLAUDE.md).
+
+Para atualizar os templates para uma versão nova do Spec Kit:
+
+```bash
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+specify init --here --force --non-interactive --integration claude --script sh
+```
+
+(A constituição já preenchida é preservada; confira o `git diff` antes de commitar.)
+
 ## Deploy
 
 Ver [DEPLOY.md](DEPLOY.md) — resumo: `python scripts/deploy.py` (envia os arquivos
