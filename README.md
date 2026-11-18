@@ -25,7 +25,8 @@ inicial, sem exigir outro login nem outro deploy.
   Facts), metas de calorias/macros/água, peso, plano alimentar, fotos de refeição e
   de progresso, gamificação (XP, níveis, sequências, conquistas, desafio semanal) e
   links públicos de progresso com escopos. App Android nativo próprio
-  ([`mobile/dieta`](mobile/dieta/README.md)), API em `/api/dieta` e MCP
+  ([`mobile/dieta`](mobile/dieta/README.md)) e tela web em `/dieta` (dia, registro, água, peso,
+  progresso, perfil e plano, links e assistente), API em `/api/dieta` e MCP
   `/api/mcp/dieta`, que o Segundo Cérebro sincroniza.
 - **Treino** — recebe os treinos do app Android Treino Corrida (repositório
   `treino-corrida`, offline-first; a conta do hub é opcional): API em `/api/treino`
@@ -836,7 +837,7 @@ tarefas; o status de cada uma está no índice:
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md), feito), link somente leitura
   ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
-  telas web da Dieta ([016](specs/016-dieta-web/spec.md)) e do Treino ([017](specs/017-treino-web/spec.md)),
+  telas web da Dieta ([016](specs/016-dieta-web/spec.md), feita) e do Treino ([017](specs/017-treino-web/spec.md)),
   e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md)), busca semântica
   ([027](specs/027-cerebro-busca-semantica/spec.md)) e OAuth no MCP ([028](specs/028-cerebro-mcp-oauth/spec.md)).
 

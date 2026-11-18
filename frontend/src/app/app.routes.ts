@@ -32,6 +32,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/editor/editor.page').then((m) => m.EditorPageComponent),
   },
   {
+    path: 'dieta',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/dieta/dieta.page').then((m) => m.DietaPageComponent),
+  },
+  {
     path: 'configuracoes',
     canActivate: [authGuard],
     loadComponent: () => import('./features/configuracoes/configuracoes.page').then((m) => m.ConfiguracoesPageComponent),

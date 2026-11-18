@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Etapa 8 do `docs/dieta/PLANO.md` (lacuna da spec 005): acompanhar e registrar a Dieta pelo navegador, com a mesma conta do app Android.
 

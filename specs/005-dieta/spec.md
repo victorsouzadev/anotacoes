@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Implementado (etapas 1 a 7 do plano) — spec retroativa. Tela web (etapa 8) ainda não existe.
+**Status**: Implementado (etapas 1 a 7 do plano) — spec retroativa. A tela web (etapa 8) veio depois, na spec 016.
 
 **Input**: Levantamento do código existente: `mobile/dieta`, `Endpoints/DietaEndpoints.cs`, `Endpoints/DietaIaEndpoints.cs`, `Services/Dieta`, `Mcp/DietaMcpTools.cs`, `docs/dieta/PLANO.md` e `mobile/dieta/README.md`.
 
@@ -126,4 +126,4 @@ Lembretes às 13:30 e 20:30 só se almoço/jantar não foi registrado (desligáv
 ## Assumptions
 
 - O app é distribuído como APK (`Dieta.apk`, workflow por tag `dieta-v*`).
-- A tela web da Dieta (etapa 8 do plano) está fora do que existe hoje.
+- A tela web da Dieta (etapa 8 do plano) é a spec 016.

@@ -58,6 +58,15 @@ const TOOLS: ToolCard[] = [
     downloadLabel: 'Baixar app Android (.apk)',
   },
   {
+    path: '/dieta',
+    icon: 'apple',
+    title: 'Dieta',
+    description: 'Diário alimentar com a tabela TACO, metas de calorias e macros, água, peso, plano alimentar e progresso — com o app Android.',
+    downloadUrl: '/downloads/android/Dieta.apk',
+    downloadFileName: 'Dieta.apk',
+    downloadLabel: 'Baixar app Android (.apk)',
+  },
+  {
     path: '/imagens',
     icon: 'image',
     title: 'Editor de Imagens',
