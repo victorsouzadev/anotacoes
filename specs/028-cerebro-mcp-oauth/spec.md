@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Fora da PoC (spec 011): "OAuth 2.1 no MCP — token bearer (ou `?key=`) por enquanto". Hoje o Claude web recebe o token dentro da URL do conector.
 

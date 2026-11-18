@@ -1,8 +1,9 @@
+import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { mensagemDeErro } from '../../core/erro-http';
 import { IconComponent } from '../../shared/icon';
-import { Acessos, CerebroService, ItemAcesso } from './cerebro.service';
+import { Acessos, CerebroService, ClienteOAuth, ItemAcesso } from './cerebro.service';
 
 type Secao = 'obsidian' | 'mcp' | 'apps' | 'ops' | 'api';
 type Cliente = 'code' | 'web';
@@ -11,7 +12,7 @@ type Cliente = 'code' | 'web';
 @Component({
   selector: 'app-cerebro-conectar',
   standalone: true,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, DatePipe],
   templateUrl: './cerebro-conectar.component.html',
   styleUrls: ['./cerebro-comum.css', './cerebro-conectar.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -28,6 +29,31 @@ export class CerebroConectarComponent {
   readonly clienteMcp = signal<Cliente>('code');
   readonly clienteOps = signal<Cliente>('code');
   readonly clienteApps = signal<Cliente>('code');
+  /** Aplicativos conectados por OAuth (spec 028). */
+  readonly autorizados = signal<ClienteOAuth[]>([]);
+
+  private async carregarAutorizados(): Promise<void> {
+    try { this.autorizados.set(await this.api.clientesOAuth()); } catch { this.autorizados.set([]); }
+  }
+
+  async revogarCliente(id: string, nome: string): Promise<void> {
+    if (!confirm(`Revogar o acesso de "${nome}"? Ele para de funcionar na hora e precisará ser autorizado de novo.`)) return;
+    try {
+      await this.api.revogarClienteOAuth(id);
+      await this.carregarAutorizados();
+    } catch (e) {
+      this.erro.set(mensagemDeErro(e, 'Não foi possível revogar.'));
+    }
+  }
+
+  async copiarTexto(texto: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(texto);
+      this.aviso.set('Copiado.');
+    } catch {
+      prompt('Copie:', texto);
+    }
+  }
 
   /** MCPs dos apps do hub: o mesmo token serve para todos. */
   readonly mcpsApps = [
@@ -64,6 +90,7 @@ export class CerebroConectarComponent {
 
   constructor() {
     void this.carregar();
+    void this.carregarAutorizados();
   }
 
   /** Valor revelado ou um marcador, para os comandos ficarem legíveis antes de revelar. */

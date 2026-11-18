@@ -42,6 +42,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/treino/treino.page').then((m) => m.TreinoPageComponent),
   },
   {
+    // Consentimento do OAuth do MCP do Cérebro (spec 028). Fora de /cerebro, que o Caddy manda ao serviço.
+    path: 'autorizar',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/cerebro/autorizar.page').then((m) => m.AutorizarPageComponent),
+  },
+  {
     path: 'configuracoes',
     canActivate: [authGuard],
     loadComponent: () => import('./features/configuracoes/configuracoes.page').then((m) => m.ConfiguracoesPageComponent),

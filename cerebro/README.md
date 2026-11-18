@@ -23,7 +23,7 @@ Obsidian (PC, celular) ◀──WebDAV──▶ vault em disco ──▶ índice
 | 2 · MCP de leitura: search, read_note, list_notes, get_daily, list_inbox | Pronto |
 | 3 · Processamento e escrita: Claude, aprovação pelo frontmatter, create_note, append_daily | Pronto |
 | 4 · Busca semântica (embeddings) | Pronto (spec 027): ligada em Configurações, vetores dos trechos em `vectors.db` (recriável), busca híbrida palavras + significado (RRF) na tela, no MCP (`search` com `mode`) e nas sugestões de links |
-| OAuth 2.1 no MCP | Fora: token bearer (ou `?key=`) por enquanto |
+| OAuth 2.1 no MCP | Pronto (spec 028): o Claude web conecta em `https://<domínio>/cerebro/mcp` sem token na URL; a permissão é dada na página `/autorizar` do hub, e os aplicativos autorizados aparecem (e são revogados) em Conectar. O token estático continua valendo |
 | PDF e imagens (texto) | Pronto (spec 026): com a opção ligada em Configurações, o texto entra em `## Texto extraído`, lido pela mesma IA da Inbox (até 10 MB e 20 páginas; HEIC não) |
 
 Além da PoC original, a integração ao hub acrescentou a tela web (Inbox, captura, busca) e a API
@@ -275,8 +275,8 @@ Tela do hub (`Authorization: Bearer <JWT do login>`; só `CEREBRO_USUARIOS`, sen
 
 ## Próximos passos
 
-1. OAuth 2.1 no `/mcp` (conector do Claude sem token na URL).
-2. Busca semântica: embeddings por trecho + `sqlite-vec`, busca híbrida.
-3. Resumo semanal da Inbox e arquivamento de itens parados há 30 dias.
-4. Extração de PDF e OCR de imagens.
-5. Calendário escrevendo a agenda no diário.
+Feitos depois da PoC: OAuth 2.1 no `/mcp` (spec 028), busca semântica (spec 027, vetores em SQLite
+próprio, sem `sqlite-vec`) e texto de PDFs e imagens (spec 026).
+
+1. Resumo semanal da Inbox e arquivamento de itens parados há 30 dias.
+2. Calendário escrevendo a agenda no diário.

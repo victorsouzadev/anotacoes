@@ -840,7 +840,7 @@ tarefas; o status de cada uma está no índice:
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
   telas web da Dieta ([016](specs/016-dieta-web/spec.md), feita) e do Treino ([017](specs/017-treino-web/spec.md), feita),
   e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md), feito), busca semântica
-  ([027](specs/027-cerebro-busca-semantica/spec.md), feita) e OAuth no MCP ([028](specs/028-cerebro-mcp-oauth/spec.md)).
+  ([027](specs/027-cerebro-busca-semantica/spec.md), feita) e OAuth no MCP ([028](specs/028-cerebro-mcp-oauth/spec.md), feito).
 
 Reconhecimento de escrita à mão, colaboração em tempo real, compartilhamento entre usuários, login
 social e recuperação de senha por e-mail continuam fora do escopo, registrados só como o que foi

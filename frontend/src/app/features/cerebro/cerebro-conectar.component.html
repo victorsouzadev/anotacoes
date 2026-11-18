@@ -56,14 +56,22 @@
           } @else {
             <ol class="passos">
               <li>Em <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener">claude.ai → Configurações → Conectores</a>, clique em <strong>Adicionar conector personalizado</strong>.</li>
-              <li>Nome: <code>Segundo Cérebro</code>. URL: a de baixo (o token vai na própria URL, então trate a URL como senha).</li>
-              <li>Deixe <em>OAuth Client ID/Secret</em> em branco, clique em <strong>Adicionar</strong> e depois em <strong>Conectar</strong>.</li>
+              <li>Nome: <code>Segundo Cérebro</code>. URL: a de baixo, <strong>sem token</strong>. Deixe <em>OAuth Client ID/Secret</em> em branco.</li>
+              <li>Clique em <strong>Conectar</strong>: abre uma página deste hub pedindo para permitir o acesso. Entre com a sua conta e clique em <strong>Permitir</strong>.</li>
               <li>Numa conversa, ligue o conector no ícone de ferramentas, perto da caixa de mensagem. Vale também no app do celular.</li>
             </ol>
             <div class="bloco">
-              <pre>{{ urlWebMcp() }}</pre>
-              <button type="button" class="botao pequeno" (click)="copiarCom(['mcp'], urlWebMcp)"><app-icon name="copy" [size]="12" /> Copiar URL</button>
+              <pre>{{ origem }}/cerebro/mcp</pre>
+              <button type="button" class="botao pequeno" (click)="copiarTexto(origem + '/cerebro/mcp')"><app-icon name="copy" [size]="12" /> Copiar URL</button>
             </div>
+            <details class="ferramentas">
+              <summary>Alternativa antiga: token na URL</summary>
+              <p class="ajuda">Funciona sem a página de permissão, mas o token fica dentro da URL; trate-a como senha.</p>
+              <div class="bloco">
+                <pre>{{ urlWebMcp() }}</pre>
+                <button type="button" class="botao pequeno" (click)="copiarCom(['mcp'], urlWebMcp)"><app-icon name="copy" [size]="12" /> Copiar URL</button>
+              </div>
+            </details>
           }
           <details class="ferramentas">
             <summary>O que o Claude pode fazer com este conector</summary>
@@ -76,6 +84,15 @@
               <li><code>process_inbox_item</code>: aprovar ou rejeitar item da Inbox, só quando você pedir.</li>
             </ul>
           </details>
+        }
+        <h3 class="autorizados">Aplicativos autorizados (OAuth)</h3>
+        @for (c of autorizados(); track c.id) {
+          <div class="autorizado">
+            <span><strong>{{ c.nome }}</strong> <small>{{ c.redirect.join(', ') }} · último uso {{ c.ultimo_uso ? (c.ultimo_uso | date: 'dd/MM/yyyy HH:mm') : '—' }}</small></span>
+            <button type="button" class="botao pequeno" (click)="revogarCliente(c.id, c.nome)">Revogar</button>
+          </div>
+        } @empty {
+          <p class="ajuda">Nenhum aplicativo conectado por OAuth.</p>
         }
       </div>
     }

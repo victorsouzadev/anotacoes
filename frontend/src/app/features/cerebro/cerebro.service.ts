@@ -5,6 +5,19 @@ import { firstValueFrom } from 'rxjs';
 /** O Caddy publica o serviço "cerebro" em /cerebro/* (sem o prefixo do lado dele). */
 const BASE = '/cerebro/api/v1/web';
 
+export interface ClienteOAuth {
+  id: string;
+  nome: string;
+  criado_em: string;
+  ultimo_uso: string | null;
+  redirect: string[];
+}
+
+export interface PedidoOAuth {
+  cliente: string;
+  redirect_host: string;
+}
+
 export interface EstadoBuscaSemantica {
   ligado: boolean;
   disponivel: boolean;
@@ -260,6 +273,24 @@ export class CerebroService {
 
   salvarBuscaSemantica(ligado: boolean): Promise<EstadoBuscaSemantica> {
     return firstValueFrom(this.http.put<EstadoBuscaSemantica>(`${BASE}/busca-semantica`, { ligado }));
+  }
+
+  // ------------------------------------------------------------- OAuth do MCP (spec 028)
+
+  clientesOAuth(): Promise<ClienteOAuth[]> {
+    return firstValueFrom(this.http.get<ClienteOAuth[]>(`${BASE}/oauth/clientes`));
+  }
+
+  revogarClienteOAuth(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${BASE}/oauth/clientes/${encodeURIComponent(id)}`));
+  }
+
+  pedidoOAuth(id: string): Promise<PedidoOAuth> {
+    return firstValueFrom(this.http.get<PedidoOAuth>(`${BASE}/oauth/pedido/${encodeURIComponent(id)}`));
+  }
+
+  consentirOAuth(pedido: string, aprovar: boolean): Promise<{ redirect: string }> {
+    return firstValueFrom(this.http.post<{ redirect: string }>(`${BASE}/oauth/consentir`, { pedido, aprovar }));
   }
 
   configIa(): Promise<ConfigIa> {

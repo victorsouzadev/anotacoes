@@ -1,6 +1,6 @@
 # Data Model: OAuth 2.1 no MCP
 
-Tabelas novas no `HubDb` (`cerebro/src/Hub/Data/HubDb.cs`), todas recriáveis sem afetar o vault:
+Tabelas novas no `hub.db` (o mesmo arquivo do `HubDb`), criadas e usadas pelo `OAuthStore` (`cerebro/src/Hub/Api/OAuthStore.cs`); apagá-las só desconecta os aplicativos, sem afetar o vault. A implementação acrescentou `oauth_pedidos` (pedidos de autorização à espera da página de consentimento, 10 min):
 
 | Tabela | Campos |
 |---|---|

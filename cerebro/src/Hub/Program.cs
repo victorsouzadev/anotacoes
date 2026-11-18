@@ -38,6 +38,7 @@ builder.Services.AddSingleton<HybridSearch>();
 builder.Services.AddSingleton<VectorIndexWorker>();
 builder.Services.AddSingleton<AccessStore>();
 builder.Services.AddSingleton<ApiKeyAuth>();
+builder.Services.AddSingleton<OAuthStore>(sp => new OAuthStore(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HubOptions>>()));
 builder.Services.AddSingleton<SecretBox>();
 builder.Services.AddSingleton<AiSettings>();
 builder.Services.AddSingleton<TranscriptionSettings>();
@@ -119,15 +120,24 @@ app.Use(async (http, next) =>
     if (http.Request.Path.StartsWithSegments("/mcp"))
     {
         var auth = http.RequestServices.GetRequiredService<ApiKeyAuth>();
-        if (!auth.McpEnabled)
+        var oauthLigado = !string.IsNullOrWhiteSpace(hubOptions.Web.JwtSecret);
+        if (!auth.McpEnabled && !oauthLigado)
         {
             http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await http.Response.WriteAsync("MCP desativado: defina Hub__McpToken.");
             return;
         }
-        if (!auth.AuthenticateMcp(http))
+        // OAuth (spec 028): token emitido pela página /autorizar, ainda de um e-mail de CEREBRO_USUARIOS.
+        var header = http.Request.Headers.Authorization.FirstOrDefault();
+        var bearer = header?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true ? header[7..].Trim() : null;
+        var porOAuth = oauthLigado && bearer is { Length: > 0 }
+            && http.RequestServices.GetRequiredService<OAuthStore>().Validar(bearer) is { } email
+            && hubOptions.Web.AllowedEmails.Contains(email);
+        if (!porOAuth && !(auth.McpEnabled && auth.AuthenticateMcp(http)))
         {
             http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            if (oauthLigado)
+                http.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{OAuthEndpoints.MetadataDoRecurso(http.Request)}\"";
             return;
         }
     }
@@ -145,6 +155,7 @@ app.MapGet("/internal/webdav-auth", (HttpContext http, ApiKeyAuth auth) =>
 
 app.MapHubApi();
 app.MapHubWeb();
+app.MapOAuth(hubOptions.Web);
 app.MapMcp("/mcp");
 
 app.Run();
