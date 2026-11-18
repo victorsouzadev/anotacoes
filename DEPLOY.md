@@ -84,6 +84,12 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    0 4 * * * /opt/notas-vps/scripts/backup.sh
    ```
 
+   Cada execução sem erro grava `data/db/backup-status.json`. O hub lê esse arquivo
+   (`GET /api/sistema/backup`) e mostra uma faixa de alerta para os e-mails de `PUBLICADORES`
+   quando o último backup tem mais de 36 h; a seção **Servidor** em `/configuracoes` traz os
+   detalhes, e o resumo do MCP criativo leva a mesma linha para o diário do Segundo Cérebro.
+   Para conferir na VPS: `crontab -l` e `cat /opt/notas-vps/data/db/backup-status.json`.
+
 ## Atualizações seguintes
 
 ```powershell

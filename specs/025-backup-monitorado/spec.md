@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Roadmap do README (Confiabilidade): "Confirmar que o cron de backup do SQLite está de fato rodando na VPS (único ponto de falha dos dados)".
 

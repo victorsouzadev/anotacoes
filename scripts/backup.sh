@@ -28,4 +28,19 @@ fi
 # retenção: 14 dias
 find "$BACKUPS" -type f -mtime +14 -delete
 
+# Estado para o hub (/api/sistema/backup): só chega aqui se nada acima falhou (set -e).
+# Lista os arquivos desta execução; escreve num temporário e troca, para nunca ficar pela metade.
+STATUS="$BASE/data/db/backup-status.json"
+TOTAL=0
+ITENS=""
+for f in "$BACKUPS"/*-"$DATE".*; do
+  [ -f "$f" ] || continue
+  bytes=$(wc -c < "$f" | tr -d ' ')
+  TOTAL=$((TOTAL + bytes))
+  [ -n "$ITENS" ] && ITENS="$ITENS,"
+  ITENS="$ITENS{\"nome\":\"$(basename "$f")\",\"bytes\":$bytes}"
+done
+printf '{"concluidoEm":"%s","arquivos":[%s],"totalBytes":%s}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$ITENS" "$TOTAL" > "$STATUS.tmp"
+mv "$STATUS.tmp" "$STATUS"
+
 echo "Backup ok: $BACKUPS/notas-$DATE.db"

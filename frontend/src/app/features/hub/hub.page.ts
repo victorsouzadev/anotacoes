@@ -7,6 +7,7 @@ import { WindowsDownloadService } from '../../core/windows-download';
 import { PublicarService } from '../publicar/publicar.service';
 import { CerebroService } from '../cerebro/cerebro.service';
 import { AnotacaoService } from '../anotacao/anotacao.service';
+import { SistemaService, alertaBackup } from '../../core/sistema.service';
 
 interface ToolCard {
   path: string;
@@ -102,6 +103,11 @@ const TOOLS: ToolCard[] = [
       </header>
 
       <main class="content">
+        @if (alerta(); as a) {
+          <a class="alerta" routerLink="/configuracoes" fragment="servidor">
+            <app-icon name="alert" [size]="16" /> {{ a }}
+          </a>
+        }
         <div class="grid">
           @for (tool of tools(); track tool.path) {
             <div class="tool-card-wrapper">
@@ -171,6 +177,13 @@ const TOOLS: ToolCard[] = [
     .logout:hover { color: var(--danger); }
 
     .content { max-width: 900px; margin: 0 auto; padding: 48px 28px; }
+    .alerta {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 20px; padding: 10px 14px;
+      border: 1px solid var(--atencao); border-radius: var(--radius-sm);
+      color: var(--atencao); background: var(--surface);
+      font-size: 13px; font-weight: 600; text-decoration: none;
+    }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; align-items: start; }
     .tool-card-wrapper { display: flex; flex-direction: column; gap: 8px; }
     .tool-card {
@@ -220,6 +233,8 @@ export class HubPageComponent {
   private readonly podePublicar = signal(false);
   private readonly temCerebro = signal(false);
   private readonly temAnotacao = signal(false);
+  /** Faixa de backup atrasado (spec 025), só para quem opera o servidor. */
+  readonly alerta = signal<string | null>(null);
   readonly tools = computed(() => [
     ...(this.temAnotacao() ? [ANOTACAO] : []),
     ...TOOLS,
@@ -234,10 +249,14 @@ export class HubPageComponent {
     publicar: PublicarService,
     cerebro: CerebroService,
     anotacao: AnotacaoService,
+    sistema: SistemaService,
   ) {
     windows.check();
     void anotacao.estado().then((e) => this.temAnotacao.set(e.habilitado), () => undefined);
-    void publicar.permissao().then((r) => this.podePublicar.set(r.podePublicar));
+    void publicar.permissao().then((r) => {
+      this.podePublicar.set(r.podePublicar);
+      if (r.podePublicar) void sistema.backup().then((b) => this.alerta.set(alertaBackup(b)));
+    });
     void cerebro.disponivel().then((ok) => this.temCerebro.set(ok));
   }
 

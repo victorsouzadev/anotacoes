@@ -149,6 +149,7 @@ public static class NotasApp
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
+        builder.Services.Configure<Notas.Api.Services.Sistema.SistemaOptions>(builder.Configuration.GetSection(Notas.Api.Services.Sistema.SistemaOptions.SectionName));
         builder.Services.AddSingleton<SitesArmazenamento>();
         builder.Services.AddSingleton<FilaSites>();
         builder.Services.AddScoped<ExecutorSites>();
@@ -356,6 +357,7 @@ public static class NotasApp
         app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapViihMimosEndpoints();
+        app.MapSistemaEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

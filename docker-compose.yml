@@ -31,6 +31,8 @@ services:
       # Ferramenta "Publicar" (docs/poc-multi-app/DISCOVERY.md). Sem PUBLICADORES
       # ninguém publica; sem DEPLOYER_TOKEN só sites estáticos funcionam.
       - Sites__Raiz=/data/sites
+      # Estado do backup gravado pelo scripts/backup.sh (spec 025).
+      - Sistema__BackupStatus=/data/db/backup-status.json
       - Sites__Publicadores=${PUBLICADORES:-}
       - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
       - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}

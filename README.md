@@ -802,9 +802,10 @@ pipeline — é distribuído como APK separado, não pelo Caddy/VPS.
 ## Roadmap / sugestões de melhoria
 
 Cada item do Roadmap virou uma spec do Spec Kit em [`specs/`](specs/README.md), com plano e
-tarefas, ainda não implementada:
+tarefas; o status de cada uma está no índice:
 
-- **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)). O HTTPS por
+- **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)) — o hub avisa quem
+  está em `PUBLICADORES` quando o último backup passa de 36 h. O HTTPS por
   subdomínio já está no ar (cerebro.vsitefy.com.br).
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md)), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos

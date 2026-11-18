@@ -255,5 +255,26 @@
         }
       </div>
     }
+
+    @if (backup(); as b) {
+      <div class="card" id="servidor">
+        <h2>Servidor</h2>
+        <p class="ajuda">Backup diário do SQLite e dos bancos dos apps publicados (<code>scripts/backup.sh</code>, cron às 04:00).</p>
+        @if (b.registrado) {
+          <p [class.alerta-texto]="b.atrasado">
+            Último backup: {{ b.concluidoEm | date: 'dd/MM/yyyy HH:mm' }} (há {{ idade(b.idadeHoras ?? 0) }}){{ b.atrasado ? ' — atrasado' : '' }}
+          </p>
+          <ul class="arquivos-backup">
+            @for (a of b.arquivos; track a.nome) {
+              <li><code>{{ a.nome }}</code> · {{ tamanho(a.bytes) }}</li>
+            }
+          </ul>
+          <p class="ajuda">Total: {{ tamanho(b.totalBytes) }}</p>
+        } @else {
+          <p class="alerta-texto">Nenhum backup registrado.</p>
+        }
+        <p class="ajuda">Para rodar à mão na VPS: <code>/opt/notas-vps/scripts/backup.sh</code>. Para conferir o agendamento: <code>crontab -l</code>.</p>
+      </div>
+    }
   </main>
 </div>
