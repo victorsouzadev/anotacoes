@@ -11,7 +11,8 @@ import { CanvasHostComponent } from './canvas-host';
 import { CanvasCornerControlsComponent } from './canvas-corner-controls';
 import { checklistHeight } from './engine/checklist-layout';
 import { EditorStore } from './engine/editor-store';
-import { exportNoteToPng } from './engine/export';
+import { exportNoteToPdf, exportNoteToPng } from './engine/export';
+import { TamanhoPdf } from './engine/export-pdf-layout';
 import { Renderer } from './engine/renderer';
 import { stickyContentHeight } from './engine/sticky-layout';
 import { Viewport } from './engine/viewport';
@@ -48,6 +49,26 @@ import { IconComponent } from '../../shared/icon';
         </button>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">{{ themeIcon() }}</button>
       </header>
+      @if (pdfDialog) {
+        <div class="pdf-fundo" (click)="pdfDialog = false">
+          <div class="pdf-dialogo" role="dialog" aria-label="Exportar PDF" (click)="$event.stopPropagation()">
+            <h2>Exportar PDF</h2>
+            <fieldset>
+              <label><input type="radio" name="pdf-paginas" [(ngModel)]="pdfPaginas" value="todas" /> Nota inteira ({{ pages.length }} página(s))</label>
+              <label><input type="radio" name="pdf-paginas" [(ngModel)]="pdfPaginas" value="atual" /> Só a página atual</label>
+            </fieldset>
+            <fieldset>
+              <label><input type="radio" name="pdf-tamanho" [(ngModel)]="pdfTamanho" value="a4" /> A4 (orientação automática)</label>
+              <label><input type="radio" name="pdf-tamanho" [(ngModel)]="pdfTamanho" value="conteudo" /> Tamanho do conteúdo</label>
+            </fieldset>
+            <label><input type="checkbox" [(ngModel)]="pdfPapel" /> Incluir o estilo de papel (pautado/quadriculado)</label>
+            <div class="pdf-acoes">
+              <button type="button" (click)="pdfDialog = false">Cancelar</button>
+              <button type="button" class="primario" (click)="onExportPdf()" [disabled]="gerandoPdf">{{ gerandoPdf ? 'Gerando PDF…' : 'Exportar' }}</button>
+            </div>
+          </div>
+        </div>
+      }
       @if (sharing) {
         <app-share-dialog [noteId]="noteId" [sincronizando]="syncService.status() !== 'idle'" (fechar)="sharing = false" />
       }
@@ -132,6 +153,7 @@ import { IconComponent } from '../../shared/icon';
           (sendToBack)="onSendToBack()"
           (paperStyleChange)="onPaperStyleChange($event)"
           (exportPng)="onExportPng($event)"
+          (exportPdf)="pdfDialog = true"
         />
         <app-text-overlay
           [store]="store"
@@ -196,6 +218,15 @@ import { IconComponent } from '../../shared/icon';
     .sync-indicator.offline .dot { background: #d85a30; }
     .sync-indicator.error .dot { background: var(--danger); }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .pdf-fundo { position: fixed; inset: 0; background: rgb(0 0 0 / .35); z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .pdf-dialogo { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px;
+      width: min(380px, 100%); display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); font-size: 13px; }
+    .pdf-dialogo h2 { margin: 0 0 4px; font-size: 16px; }
+    .pdf-dialogo fieldset { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .pdf-dialogo label { display: flex; align-items: center; gap: 8px; }
+    .pdf-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+    .pdf-acoes button { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: var(--radius-sm); padding: 7px 12px; font-weight: 600; }
+    .pdf-acoes .primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
     .read-btn {
       display: inline-flex; align-items: center; gap: 6px;
       border: 1px solid var(--border); background: var(--bg); color: var(--text);
@@ -322,6 +353,12 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   reading = false;
   /** Diálogo de link somente leitura aberto (spec 023). */
   sharing = false;
+  /** Exportar PDF (spec 019). */
+  pdfDialog = false;
+  pdfPaginas: 'todas' | 'atual' = 'todas';
+  pdfTamanho: TamanhoPdf = 'a4';
+  pdfPapel = false;
+  gerandoPdf = false;
   title = '';
   pages: NotePage[] = [];
   currentPageIndex = 0;
@@ -751,6 +788,22 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.reading = true;
   }
 
+  async onExportPdf(): Promise<void> {
+    this.captureCurrentPage();
+    const paginas = this.pdfPaginas === 'todas' ? this.pages : [this.pages[this.currentPageIndex]];
+    this.gerandoPdf = true;
+    this.cdr.markForCheck();
+    try {
+      await exportNoteToPdf(paginas, this.store.paperStyle(), this.title || 'nota', { tamanho: this.pdfTamanho, estiloPapel: this.pdfPapel });
+      this.pdfDialog = false;
+    } catch {
+      alert('Não foi possível gerar o PDF.');
+    } finally {
+      this.gerandoPdf = false;
+      this.cdr.markForCheck();
+    }
+  }
+
   openShare(): void {
     this.flushSave();
     this.sharing = true;
@@ -763,7 +816,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   onKeydown(ev: KeyboardEvent): void {
-    if (this.reading || this.sharing || this.editingTarget || this.editingChecklistTarget) return;
+    if (this.reading || this.sharing || this.pdfDialog || this.editingTarget || this.editingChecklistTarget) return;
     const ctrl = ev.ctrlKey || ev.metaKey;
     if (ctrl && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
       ev.preventDefault();

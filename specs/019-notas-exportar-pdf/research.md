@@ -13,4 +13,4 @@
 
 ## Orientação
 
-- **Decision**: paisagem quando largura/altura do bbox do conteúdo > 1,1.
+- **Decision**: paisagem só quando ela deixa o conteúdo pelo menos 25% maior do que em pé. A primeira ideia (largura/altura > 1,1) virava paisagem com uma única linha de texto, que no editor é uma caixa larga e baixa; o teste no navegador mostrou isso.

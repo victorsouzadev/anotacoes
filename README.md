@@ -103,6 +103,9 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 - **Tema claro/escuro/automático**.
 - **Múltiplas páginas por nota**: abas no topo do editor para trocar, adicionar (`+ Página`) e excluir páginas — cada página tem seu conjunto independente de elementos, como um caderno.
 - **Exportar PNG**: renderiza a página atual inteira (não só o que está visível na tela) em resolução real, com opção de fundo branco ou transparente.
+- **Exportar PDF** (Mais ações): a nota inteira (uma página do PDF por página da nota) ou só a página
+  atual, em A4 com orientação automática ou no tamanho do conteúdo, a ~200 DPI, gerado no navegador
+  (`shared/pdf.ts`, o mesmo gerador do Editor de Imagens).
 - **Modo leitura** (botão "Ler"): esconde as ferramentas e mostra cada página inteira; ←/→, toque
   nas bordas ou deslizar trocam de página, F entra em tela cheia, Esc volta a editar. Nada pode ser
   alterado no modo (componente `note-reader.ts`, também usado pelo link público).
@@ -820,7 +823,7 @@ tarefas; o status de cada uma está no índice:
   está em `PUBLICADORES` quando o último backup passa de 36 h. O HTTPS por
   subdomínio já está no ar (cerebro.vsitefy.com.br).
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
-  ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos
+  ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos
   ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
   ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
