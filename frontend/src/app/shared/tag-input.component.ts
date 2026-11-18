@@ -49,7 +49,7 @@ export class TagInputComponent {
       ev.preventDefault();
       this.adicionar();
     } else if (ev.key === 'Backspace' && !this.texto && this.tags.length) {
-      this.tagsChange.emit(this.tags.slice(0, -1));
+      this.mudar(this.tags.slice(0, -1));
     }
   }
 
@@ -57,10 +57,17 @@ export class TagInputComponent {
     const novas = this.texto.split(',');
     this.texto = '';
     const tags = normalizarTags([...this.tags, ...novas]);
-    if (tags.join('\u0000') !== this.tags.join('\u0000')) this.tagsChange.emit(tags);
+    if (tags.join('\u0000') !== this.tags.join('\u0000')) this.mudar(tags);
   }
 
   remover(tag: string): void {
-    this.tagsChange.emit(this.tags.filter((t) => t !== tag));
+    this.mudar(this.tags.filter((t) => t !== tag));
+  }
+
+  /** Atualiza a cópia local na hora: a próxima tecla não pode partir da lista antiga enquanto o
+   * pai ainda não devolveu a nova pelo @Input (duas tags digitadas em sequência rápida). */
+  private mudar(tags: string[]): void {
+    this.tags = tags;
+    this.tagsChange.emit(tags);
   }
 }

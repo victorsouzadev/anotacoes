@@ -28,7 +28,9 @@ grande numa ferramenta que já existe pode ser uma spec nova que cita a retroati
 
 Cobrem as lacunas do levantamento e todo o Roadmap do README. Cada uma passou por
 specify → clarify (respondido com o padrão recomendado, registrado em "Clarifications") →
-plan → tasks → analyze. Status: **Draft**, nada implementado.
+plan → tasks → analyze → implement. **Todas implementadas em 2026-11-18**, na ordem abaixo, com as
+tarefas marcadas em cada `tasks.md`. Decisões tomadas durante a implementação ficaram registradas na
+própria spec (ex.: Alt+N na 020, critério de paisagem na 019).
 
 | # | Feature | Origem | Backend? | Artefatos |
 |---|---|---|---|---|
@@ -49,7 +51,7 @@ plan → tasks → analyze. Status: **Draft**, nada implementado.
 
 Todas têm `checklists/requirements.md`.
 
-### Ordem recomendada de implementação
+### Ordem de implementação (seguida)
 
 1. **025** backup monitorado — protege os dados antes de mexer em schema.
 2. **015** recorrência na web — corrige uma divergência real, pequena.
@@ -81,3 +83,14 @@ Todas têm `checklists/requirements.md`.
 - ~~**Dieta**: não havia tela web~~ — resolvido pela 016.
 - ~~**Treino**: não havia tela web~~ — resolvido pela 017.
 - ~~**Segundo Cérebro**: busca semântica, OAuth 2.1 no MCP e leitura de anexos ficaram fora da PoC~~ — 026, 027 e 028.
+
+## Achados da implementação
+
+- **Notas, sincronização**: dois problemas antigos que perdiam edições apareceram no teste das tags (021)
+  e foram corrigidos: a resposta de um envio sobrescrevia, como já enviada, uma mudança feita durante a
+  requisição; e duas gravações locais ao mesmo tempo (renomear + autosave) faziam a última apagar a
+  outra. As operações de ler-alterar-gravar no IndexedDB agora correm numa fila única.
+- **Notas, sincronização**: o estilo de papel (preferência local) se perdia a cada sincronização;
+  corrigido na 018.
+- **Cérebro**: o README dizia que o índice já separava trechos; não separava (o FTS é por nota). A 027
+  passou a dividir as notas em trechos para os vetores.
