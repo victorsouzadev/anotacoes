@@ -41,6 +41,9 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
    * escondido do próprio desenho do canvas enquanto isso, senão o texto "fantasma"
    * renderizado por baixo do textarea transparente sobrepõe visualmente o que está
    * sendo digitado, ficando dessincronizado do resultado final. */
+  /** Com o modo leitura aberto por cima (spec 024), colar não pode inserir nada. */
+  @Input() inativo = false;
+
   @Input() set hiddenElementId(id: string | null) {
     this._hiddenElementId = id;
     this.scheduleRender();
@@ -861,6 +864,7 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
    * o evento nativo de paste. */
   @HostListener('document:paste', ['$event'])
   onPaste(ev: ClipboardEvent): void {
+    if (this.inativo) return;
     const target = ev.target as HTMLElement | null;
     if (target?.closest?.('input, textarea, [contenteditable]')) return;
     const items = ev.clipboardData?.items;

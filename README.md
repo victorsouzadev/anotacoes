@@ -103,6 +103,9 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 - **Tema claro/escuro/automático**.
 - **Múltiplas páginas por nota**: abas no topo do editor para trocar, adicionar (`+ Página`) e excluir páginas — cada página tem seu conjunto independente de elementos, como um caderno.
 - **Exportar PNG**: renderiza a página atual inteira (não só o que está visível na tela) em resolução real, com opção de fundo branco ou transparente.
+- **Modo leitura** (botão "Ler"): esconde as ferramentas e mostra cada página inteira; ←/→, toque
+  nas bordas ou deslizar trocam de página, F entra em tela cheia, Esc volta a editar. Nada pode ser
+  alterado no modo (componente `note-reader.ts`, também usado pelo link público).
 
 ### Organização
 - **Pastas**: criar, renomear, excluir (notas da pasta excluída voltam para "sem pasta"), mover notas entre pastas.
@@ -814,7 +817,7 @@ tarefas; o status de cada uma está no índice:
   ([019](specs/019-notas-exportar-pdf/spec.md)), duplicar página e atalhos
   ([020](specs/020-notas-paginas/spec.md)), tags ([021](specs/021-notas-tags/spec.md)),
   arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
-  ([023](specs/023-notas-link-publico/spec.md)) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md)).
+  ([023](specs/023-notas-link-publico/spec.md)) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
   telas web da Dieta ([016](specs/016-dieta-web/spec.md)) e do Treino ([017](specs/017-treino-web/spec.md)),
   e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md)), busca semântica

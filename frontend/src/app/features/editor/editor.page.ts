@@ -20,6 +20,8 @@ import { PropertiesPanelComponent } from './properties-panel';
 import { MoreActionsMenuComponent } from './more-actions-menu';
 import { TextOverlayComponent } from './text-overlay';
 import { ChecklistOverlayComponent } from './checklist-overlay';
+import { NoteReaderComponent } from './note-reader';
+import { IconComponent } from '../../shared/icon';
 
 @Component({
   selector: 'app-editor-page',
@@ -27,7 +29,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
   imports: [
     RouterLink, FormsModule, FocusOnInitDirective, CanvasHostComponent, ToolbarComponent,
     PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
-    TextOverlayComponent, ChecklistOverlayComponent,
+    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent,
   ],
   template: `
     <div class="editor-page">
@@ -37,8 +39,15 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
         <span class="sync-indicator" [class]="syncService.status()">
           <span class="dot"></span>{{ syncLabel() }}
         </span>
+        <button class="read-btn" (click)="openReader()" title="Modo leitura: esconde as ferramentas, ←/→ troca de página, F tela cheia">
+          <app-icon name="book" [size]="15" /> Ler
+        </button>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">{{ themeIcon() }}</button>
       </header>
+      @if (reading) {
+        <app-note-reader [pages]="pages" [paperStyle]="store.paperStyle()" [inicio]="currentPageIndex" [titulo]="title"
+          (fechar)="closeReader($event)" />
+      }
       <div class="pages-bar">
         @for (p of pages; track p.id; let i = $index) {
           <div class="page-tab" [class.active]="i === currentPageIndex" (click)="switchPage(i)">
@@ -90,6 +99,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           #canvasHost
           [store]="store"
           [hiddenElementId]="editingTarget?.id ?? editingChecklistTarget?.id ?? null"
+          [inativo]="reading"
           (requestTextEdit)="onEditText($event)"
           (requestStickyEdit)="onEditSticky($event)"
           (requestChecklistEdit)="onEditChecklist($event)"
@@ -179,6 +189,12 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
     .sync-indicator.offline .dot { background: #d85a30; }
     .sync-indicator.error .dot { background: var(--danger); }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .read-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; flex-shrink: 0;
+    }
+    .read-btn:hover { border-color: var(--accent); color: var(--accent); }
     .theme-toggle {
       border: 1px solid var(--border);
       background: var(--bg);
@@ -294,6 +310,8 @@ export class EditorPageComponent implements OnInit, OnDestroy {
 
   store = new EditorStore();
   noteId = '';
+  /** Modo leitura aberto (spec 024). */
+  reading = false;
   title = '';
   pages: NotePage[] = [];
   currentPageIndex = 0;
@@ -715,9 +733,22 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.flushSave();
   }
 
+  /** Abre o modo leitura na página atual, depois de confirmar o que estiver em edição. */
+  openReader(): void {
+    if (this.editingTarget) this.onOverlayFinish();
+    this.editingChecklistTarget = null;
+    this.flushSave();
+    this.reading = true;
+  }
+
+  closeReader(pagina: number): void {
+    this.reading = false;
+    if (pagina !== this.currentPageIndex) this.switchPage(pagina);
+  }
+
   @HostListener('window:keydown', ['$event'])
   onKeydown(ev: KeyboardEvent): void {
-    if (this.editingTarget || this.editingChecklistTarget) return;
+    if (this.reading || this.editingTarget || this.editingChecklistTarget) return;
     const ctrl = ev.ctrlKey || ev.metaKey;
     if (ctrl && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
       ev.preventDefault();
