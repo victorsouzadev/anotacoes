@@ -223,6 +223,25 @@ public sealed class OAuthTests : IClassFixture<OAuthTests.Factory>
     }
 
     [Fact]
+    public async Task Atras_do_proxy_https_o_metadata_anuncia_https()
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, "/.well-known/oauth-authorization-server/cerebro");
+        req.Headers.Add("X-Forwarded-Proto", "https");
+        var servidor = await (await Cliente().SendAsync(req)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("https://localhost/cerebro", servidor.GetProperty("issuer").GetString());
+
+        var vazio = new HttpRequestMessage(HttpMethod.Get, "/.well-known/oauth-authorization-server/cerebro");
+        vazio.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "");
+        var semValor = await (await Cliente().SendAsync(vazio)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("http://localhost/cerebro", semValor.GetProperty("issuer").GetString());
+
+        var mcp = new HttpRequestMessage(HttpMethod.Post, "/mcp") { Content = new StringContent("{}", Encoding.UTF8, "application/json") };
+        mcp.Headers.Add("X-Forwarded-Proto", "https");
+        var r = await Cliente().SendAsync(mcp);
+        Assert.Contains("resource_metadata=\"https://localhost/.well-known/oauth-protected-resource/cerebro/mcp\"", r.Headers.WwwAuthenticate.ToString());
+    }
+
+    [Fact]
     public void Pkce_s256() =>
         Assert.True(OAuthStore.PkceValido("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"));
 }
