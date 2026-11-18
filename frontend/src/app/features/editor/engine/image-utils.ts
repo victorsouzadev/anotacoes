@@ -38,3 +38,21 @@ export function downscaleImageBlob(blob: Blob): Promise<{ dataUrl: string; w: nu
     img.src = url;
   });
 }
+
+/** Limite do conteúdo de uma nota no servidor (NotesEndpoints.MaxElementsBytes). */
+export const LIMITE_NOTA_BYTES = 8 * 1024 * 1024;
+
+/** Várias imagens soltas juntas descem em cascata a partir do ponto (24 unidades por imagem). */
+export function cascata(ponto: { x: number; y: number }, indice: number): { x: number; y: number } {
+  return { x: ponto.x + indice * 24, y: ponto.y + indice * 24 };
+}
+
+/** A nota continua dentro do limite do servidor com mais esta imagem? (com 2% de folga para o JSON) */
+export function cabeNoLimite(bytesAtuais: number, dataUrl: string, limite = LIMITE_NOTA_BYTES): boolean {
+  return bytesAtuais + dataUrl.length * 1.02 + 200 <= limite;
+}
+
+/** Só imagens entram no canvas (HEIC inclusive, convertido antes). */
+export function ehImagem(file: { name: string; type: string }): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|hei[cf])$/i.test(file.name);
+}

@@ -95,7 +95,9 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
   de checklist marca/desmarca sem precisar abrir o modo de edição.
 - **Notas adesivas**: cor à escolha, tamanho de fonte ajustável (mesmos controles do texto), crescem automaticamente para caber o conteúdo.
 - **Checklist**: itens marcáveis, tamanho de fonte ajustável, redimensionável manualmente (a altura não é mais sobrescrita ao digitar), fundo transparente durante a edição, marca de "✓" no item concluído.
-- **Imagens**: colar direto da área de transferência (Ctrl+V) — redimensionadas/comprimidas no cliente antes de salvar.
+- **Imagens**: colar (Ctrl+V), arrastar arquivos para o canvas (caem no ponto solto, várias em cascata) ou
+  o botão "Inserir imagem" da barra (câmera/galeria no celular) — redimensionadas/comprimidas no cliente
+  antes de salvar, HEIC convertido, e recusadas se a nota passaria do limite de 8 MB.
 - **Seleção múltipla**, mover, redimensionar (alças de canto com área de clique maior que o desenho, pra não errar o alvo), rotacionar, camadas (frente/trás).
 - **Undo/redo** (command pattern), até ~100 passos.
 - **Zoom/pan**: roda do mouse, pinça em touch, atalhos de teclado, "ajustar à tela".
@@ -828,7 +830,7 @@ tarefas; o status de cada uma está no índice:
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos
   ([020](specs/020-notas-paginas/spec.md), feito), tags ([021](specs/021-notas-tags/spec.md)),
-  arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md)), link somente leitura
+  arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md), feito), link somente leitura
   ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
 - **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
   telas web da Dieta ([016](specs/016-dieta-web/spec.md)) e do Treino ([017](specs/017-treino-web/spec.md)),

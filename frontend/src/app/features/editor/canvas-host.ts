@@ -1,11 +1,12 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, Output, ViewChild, effect } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, HostBinding, HostListener, Input, OnDestroy, Output, ViewChild, effect } from '@angular/core';
 import { uuid } from '../../core/uuid';
 import { ArrowElement, CanvasElement, ChecklistElement, ImageElement, Point, PomodoroElement, ShapeElement, StickyElement, StrokeElement, TextElement } from '../../data/models';
 import { arrowBendPoint, bboxAnchorFor, bboxAnchorPoint, intersectRayWithBBox } from './engine/arrow-geometry';
 import { checklistHeight, checklistItemLayouts, CHECKLIST_DEFAULT_FONT_SIZE } from './engine/checklist-layout';
 import { EditorStore, translateElement } from './engine/editor-store';
 import { elementBBox, hitTestElement, distToSegment, bboxIntersectsRect, pointInBBox, hitTextCheckbox, HANDLE_HIT_SIZE } from './engine/hit-test';
-import { downscaleImageBlob } from './engine/image-utils';
+import { cabeNoLimite, cascata, downscaleImageBlob, ehImagem } from './engine/image-utils';
+import { asBrowserImage } from '../../shared/heic';
 import { playPomodoroBeep } from './engine/pomodoro-sound';
 import { pomodoroButtonLayouts, pomodoroDisplaySec, POMODORO_BREAK_SEC, POMODORO_DEFAULT_H, POMODORO_DEFAULT_W, POMODORO_WORK_SEC } from './engine/pomodoro-layout';
 import { Renderer } from './engine/renderer';
@@ -32,6 +33,7 @@ type DragMode = 'none' | 'draw-stroke' | 'draw-shape' | 'draw-arrow' | 'marquee'
   ></canvas>`,
   styles: [`
     :host { display: block; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
+    :host(.soltando) { outline: 3px dashed var(--accent); outline-offset: -6px; }
     canvas { display: block; cursor: crosshair; }
   `],
 })
@@ -60,6 +62,11 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
    * vez de esperar o debounce de elementsChanged, senão um F5 logo em seguida perde a
    * mudança (mesma classe de bug já corrigida para undo/redo/exclusão no editor.page). */
   @Output() requestImmediateSave = new EventEmitter<void>();
+  /** Mensagem curta para o editor mostrar (ex.: arquivo que não é imagem). */
+  @Output() aviso = new EventEmitter<string>();
+  /** Tamanho atual do conteúdo da nota em bytes, para não passar do limite do servidor (spec 022). */
+  @Input() tamanhoNota: () => number = () => 0;
+  @HostBinding('class.soltando') soltando = false;
 
   @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
@@ -874,28 +881,73 @@ export class CanvasHostComponent implements AfterViewInit, OnDestroy {
     const blob = imageItem.getAsFile();
     if (!blob) return;
     ev.preventDefault();
-    this.insertPastedImage(blob);
+    void this.insertImages([blob]);
   }
 
-  private async insertPastedImage(blob: Blob): Promise<void> {
-    const { dataUrl, w, h } = await downscaleImageBlob(blob);
-    const scale = Math.min(1, MAX_IMAGE_WORLD_DIM / Math.max(w, h));
-    const worldW = w * scale;
-    const worldH = h * scale;
-    const center = this.store.viewport.screenToWorld({ x: this.renderer.width / 2, y: this.renderer.height / 2 });
-    const el: ImageElement = {
-      id: uuid(),
-      type: 'image',
-      x: center.x - worldW / 2,
-      y: center.y - worldH / 2,
-      w: worldW,
-      h: worldH,
-      src: dataUrl,
-      zIndex: this.store.nextZIndex(),
-      rotation: 0,
-    };
-    this.store.addElement(el);
-    this.store.select([el.id]);
+  // ---- Arrastar e soltar (spec 022) ----
+
+  @HostListener('dragover', ['$event'])
+  onDragOver(ev: DragEvent): void {
+    if (this.inativo || !ev.dataTransfer?.types.includes('Files')) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'copy';
+    this.soltando = true;
+  }
+
+  @HostListener('dragleave')
+  onDragLeave(): void {
+    this.soltando = false;
+  }
+
+  @HostListener('drop', ['$event'])
+  onDrop(ev: DragEvent): void {
+    this.soltando = false;
+    if (this.inativo || !ev.dataTransfer?.files.length) return;
+    ev.preventDefault();
+    const rect = this.canvasRef.nativeElement.getBoundingClientRect();
+    const ponto = this.store.viewport.screenToWorld({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
+    void this.insertImages([...ev.dataTransfer.files], ponto);
+  }
+
+  /**
+   * Insere imagens (colar, soltar ou botão) no ponto do mundo — ou no centro da tela —, em cascata,
+   * redimensionadas e comprimidas como a colagem. Recusa o que não é imagem e o que passaria do
+   * limite de 8 MB da nota, avisando o editor.
+   */
+  async insertImages(arquivos: (File | Blob)[], pontoMundo?: Point): Promise<void> {
+    const imagens = arquivos.filter((f) => !(f instanceof File) || ehImagem(f));
+    if (imagens.length < arquivos.length) this.aviso.emit('Só imagens podem ser soltas na nota.');
+    if (imagens.length === 0) return;
+    const centro = pontoMundo ?? this.store.viewport.screenToWorld({ x: this.renderer.width / 2, y: this.renderer.height / 2 });
+    let bytes = this.tamanhoNota();
+    const novos: string[] = [];
+    for (const [i, original] of imagens.entries()) {
+      let blob: Blob = original;
+      try {
+        if (original instanceof File) blob = await asBrowserImage(original);
+        const { dataUrl, w, h } = await downscaleImageBlob(blob);
+        if (!cabeNoLimite(bytes, dataUrl)) {
+          this.aviso.emit('A nota ficaria grande demais (limite de 8 MB) — a imagem não entrou.');
+          break;
+        }
+        bytes += dataUrl.length;
+        const scale = Math.min(1, MAX_IMAGE_WORLD_DIM / Math.max(w, h));
+        const worldW = w * scale;
+        const worldH = h * scale;
+        const p = cascata(centro, i);
+        const el: ImageElement = {
+          id: uuid(), type: 'image',
+          x: p.x - worldW / 2, y: p.y - worldH / 2, w: worldW, h: worldH,
+          src: dataUrl, zIndex: this.store.nextZIndex(), rotation: 0,
+        };
+        this.store.addElement(el);
+        novos.push(el.id);
+      } catch {
+        this.aviso.emit('Não foi possível abrir uma das imagens.');
+      }
+    }
+    if (novos.length === 0) return;
+    this.store.select(novos);
     this.store.tool.set('select');
     this.elementsChanged.emit();
     this.scheduleRender();

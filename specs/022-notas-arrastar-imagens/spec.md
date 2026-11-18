@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Roadmap do README: "Arrastar-e-soltar imagens/arquivos direto no canvas (hoje só colar via Ctrl+V)".
 

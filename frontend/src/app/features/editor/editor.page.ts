@@ -125,6 +125,9 @@ import { IconComponent } from '../../shared/icon';
           }
         </div>
       }
+      @if (aviso) {
+        <div class="page-toast" role="status">{{ aviso }}</div>
+      }
       @if (removedPage) {
         <div class="page-toast" role="status">
           Página excluída
@@ -150,13 +153,15 @@ import { IconComponent } from '../../shared/icon';
           [store]="store"
           [hiddenElementId]="editingTarget?.id ?? editingChecklistTarget?.id ?? null"
           [inativo]="reading"
+          [tamanhoNota]="tamanhoNota"
+          (aviso)="mostrarAviso($event)"
           (requestTextEdit)="onEditText($event)"
           (requestStickyEdit)="onEditSticky($event)"
           (requestChecklistEdit)="onEditChecklist($event)"
           (elementsChanged)="scheduleSave()"
           (requestImmediateSave)="flushSave()"
         />
-        <app-toolbar [store]="store" />
+        <app-toolbar [store]="store" (inserirImagens)="canvasHost.insertImages($event)" />
         <app-properties-panel [store]="store" (elementsChanged)="scheduleSave()" />
         <app-canvas-corner-controls
           #cornerControls
@@ -397,6 +402,22 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   private removedTimer: ReturnType<typeof setTimeout> | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
   dragDe: number | null = null;
+  /** Aviso curto vindo do canvas (ex.: arquivo que não é imagem). */
+  aviso: string | null = null;
+  private avisoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Bytes do conteúdo da nota como o servidor recebe (todas as páginas, com a atual em edição). */
+  readonly tamanhoNota = (): number => {
+    const paginas = this.pages.map((p, i) => (i === this.currentPageIndex ? { ...p, elements: this.store.elements() } : p));
+    return JSON.stringify(paginas).length;
+  };
+
+  mostrarAviso(msg: string): void {
+    this.aviso = msg;
+    if (this.avisoTimer) clearTimeout(this.avisoTimer);
+    this.avisoTimer = setTimeout(() => { this.aviso = null; this.cdr.markForCheck(); }, 4000);
+    this.cdr.markForCheck();
+  }
   dropAlvo: number | null = null;
   title = '';
   pages: NotePage[] = [];
