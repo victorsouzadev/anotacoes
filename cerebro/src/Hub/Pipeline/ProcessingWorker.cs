@@ -23,12 +23,14 @@ public sealed class ProcessingWorker : BackgroundService
     private readonly LinkExtractor _links;
     private readonly Transcriber _transcriber;
     private readonly ClaudeClassifier _classifier;
+    private readonly AttachmentReader _reader;
+    private readonly HybridSearch _busca;
     private readonly ApprovalService _approval;
     private readonly HubOptions _options;
     private readonly ILogger<ProcessingWorker> _log;
 
     public ProcessingWorker(ProcessingQueue queue, HubDb db, VaultStore vault, NoteIndex index,
-        LinkExtractor links, Transcriber transcriber, ClaudeClassifier classifier, ApprovalService approval,
+        LinkExtractor links, Transcriber transcriber, ClaudeClassifier classifier, AttachmentReader reader, HybridSearch busca, ApprovalService approval,
         IOptions<HubOptions> options, ILogger<ProcessingWorker> log)
     {
         _queue = queue;
@@ -38,6 +40,8 @@ public sealed class ProcessingWorker : BackgroundService
         _links = links;
         _transcriber = transcriber;
         _classifier = classifier;
+        _reader = reader;
+        _busca = busca;
         _approval = approval;
         _options = options.Value;
         _log = log;
@@ -110,6 +114,16 @@ public sealed class ProcessingWorker : BackgroundService
             }
         }
 
+        // Texto de imagens e PDFs (spec 026), antes da classificação para ela considerar o conteúdo.
+        if (attachment is not null && AttachmentReader.Considera(attachment) && !doc.Body.Contains("## Texto extraído"))
+        {
+            var leitura = await _reader.LerAsync(_vault.FullPath(attachment), ct);
+            if (leitura.Texto is { } texto)
+                extra.Append("\n## Texto extraído\n\n").Append(texto).Append('\n');
+            else if (leitura.Aviso is { } aviso)
+                doc.FrontMatter.Set("hub_note", aviso);
+        }
+
         if (extra.Length > 0)
             doc.Body = doc.Body.TrimEnd('\n') + "\n" + extra;
 
@@ -118,7 +132,7 @@ public sealed class ProcessingWorker : BackgroundService
         {
             var title = ProvisionalTitle(doc, capture.Path);
             var folders = AllowedFolders();
-            var candidates = _index.Candidates(title + "\n" + doc.Body);
+            var candidates = await _busca.CandidatesAsync(title + "\n" + doc.Body, ct);
             var result = await _classifier.ClassifyAsync(title, doc.Body, capture.Source, folders, candidates, ct);
 
             var tags = doc.FrontMatter.GetList("tags").Concat(result.Tags).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

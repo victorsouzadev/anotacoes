@@ -34,6 +34,19 @@ export class LocalDbService {
     });
   }
 
+  /**
+   * Fila das operações de ler-alterar-gravar nas notas (repositório e sincronização). Duas ao
+   * mesmo tempo — renomear enquanto o autosave grava páginas, ou uma resposta do servidor chegando
+   * no meio de uma edição — fariam a última apagar a outra; aqui elas correm uma de cada vez.
+   */
+  private fila: Promise<unknown> = Promise.resolve();
+
+  emSerie<T>(fn: () => Promise<T>): Promise<T> {
+    const r = this.fila.then(fn, fn);
+    this.fila = r.catch(() => undefined);
+    return r;
+  }
+
   async getAllNotes(): Promise<NoteRecord[]> {
     const db = await this.dbPromise;
     return db.getAll('notes');

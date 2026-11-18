@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, HostListener, OnDestroy, OnInit, ViewChild, effect } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChecklistElement, ChecklistItem, NotePage, PAGE_COLORS, PaperStyle, StickyElement, TextElement } from '../../data/models';
@@ -11,7 +11,9 @@ import { CanvasHostComponent } from './canvas-host';
 import { CanvasCornerControlsComponent } from './canvas-corner-controls';
 import { checklistHeight } from './engine/checklist-layout';
 import { EditorStore } from './engine/editor-store';
-import { exportNoteToPng } from './engine/export';
+import { exportNoteToPdf, exportNoteToPng } from './engine/export';
+import { TamanhoPdf } from './engine/export-pdf-layout';
+import { duplicatePage, movePage } from './engine/page-ops';
 import { Renderer } from './engine/renderer';
 import { stickyContentHeight } from './engine/sticky-layout';
 import { Viewport } from './engine/viewport';
@@ -20,6 +22,11 @@ import { PropertiesPanelComponent } from './properties-panel';
 import { MoreActionsMenuComponent } from './more-actions-menu';
 import { TextOverlayComponent } from './text-overlay';
 import { ChecklistOverlayComponent } from './checklist-overlay';
+import { NoteReaderComponent } from './note-reader';
+import { ShareDialogComponent } from './share-dialog';
+import { TagInputComponent } from '../../shared/tag-input.component';
+import { contarTags } from '../notes/notes-filter';
+import { IconComponent } from '../../shared/icon';
 
 @Component({
   selector: 'app-editor-page',
@@ -27,21 +34,59 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
   imports: [
     RouterLink, FormsModule, FocusOnInitDirective, CanvasHostComponent, ToolbarComponent,
     PropertiesPanelComponent, CanvasCornerControlsComponent, MoreActionsMenuComponent,
-    TextOverlayComponent, ChecklistOverlayComponent,
+    TextOverlayComponent, ChecklistOverlayComponent, NoteReaderComponent, IconComponent, ShareDialogComponent, TagInputComponent,
   ],
   template: `
     <div class="editor-page">
       <header>
         <a routerLink="/notes" class="back">← Notas</a>
         <input class="title-input" [(ngModel)]="title" (change)="onTitleChange()" placeholder="Título da nota" />
+        <app-tag-input class="header-tags" [tags]="tags" [sugestoes]="tagSugestoes" (tagsChange)="onTagsChange($event)" />
         <span class="sync-indicator" [class]="syncService.status()">
           <span class="dot"></span>{{ syncLabel() }}
         </span>
+        <button class="read-btn" (click)="openShare()" title="Compartilhar por link somente leitura">
+          <app-icon name="share" [size]="15" /> <span class="btn-label">Compartilhar</span>
+        </button>
+        <button class="read-btn" (click)="openReader()" title="Modo leitura: esconde as ferramentas, ←/→ troca de página, F tela cheia">
+          <app-icon name="book" [size]="15" /> Ler
+        </button>
         <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()">{{ themeIcon() }}</button>
       </header>
+      @if (pdfDialog) {
+        <div class="pdf-fundo" (click)="pdfDialog = false">
+          <div class="pdf-dialogo" role="dialog" aria-label="Exportar PDF" (click)="$event.stopPropagation()">
+            <h2>Exportar PDF</h2>
+            <fieldset>
+              <label><input type="radio" name="pdf-paginas" [(ngModel)]="pdfPaginas" value="todas" /> Nota inteira ({{ pages.length }} página(s))</label>
+              <label><input type="radio" name="pdf-paginas" [(ngModel)]="pdfPaginas" value="atual" /> Só a página atual</label>
+            </fieldset>
+            <fieldset>
+              <label><input type="radio" name="pdf-tamanho" [(ngModel)]="pdfTamanho" value="a4" /> A4 (orientação automática)</label>
+              <label><input type="radio" name="pdf-tamanho" [(ngModel)]="pdfTamanho" value="conteudo" /> Tamanho do conteúdo</label>
+            </fieldset>
+            <label><input type="checkbox" [(ngModel)]="pdfPapel" /> Incluir o estilo de papel (pautado/quadriculado)</label>
+            <div class="pdf-acoes">
+              <button type="button" (click)="pdfDialog = false">Cancelar</button>
+              <button type="button" class="primario" (click)="onExportPdf()" [disabled]="gerandoPdf">{{ gerandoPdf ? 'Gerando PDF…' : 'Exportar' }}</button>
+            </div>
+          </div>
+        </div>
+      }
+      @if (sharing) {
+        <app-share-dialog [noteId]="noteId" [sincronizando]="syncService.status() !== 'idle'" (fechar)="sharing = false" />
+      }
+      @if (reading) {
+        <app-note-reader [pages]="pages" [paperStyle]="store.paperStyle()" [inicio]="currentPageIndex" [titulo]="title"
+          (fechar)="closeReader($event)" />
+      }
       <div class="pages-bar">
         @for (p of pages; track p.id; let i = $index) {
-          <div class="page-tab" [class.active]="i === currentPageIndex" (click)="switchPage(i)">
+          <div class="page-tab" [class.active]="i === currentPageIndex" [class.drop-alvo]="dropAlvo === i" (click)="switchPage(i)"
+               draggable="true" (dragstart)="onTabDragStart(i, $event)" (dragover)="onTabDragOver(i, $event)"
+               (dragleave)="dropAlvo = null" (drop)="onTabDrop(i, $event)" (dragend)="dragDe = null; dropAlvo = null"
+               (contextmenu)="openPageMenu(i, $event)"
+               (pointerdown)="onTabPointerDown(i, $event)" (pointerup)="cancelLongPress()" (pointerleave)="cancelLongPress()">
             <span
               class="page-color-dot"
               [style.background]="p.color || 'transparent'"
@@ -70,8 +115,28 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
             }
           </div>
         }
-        <button class="page-add" (click)="addPage()" title="Nova página">+ Página</button>
+        <button class="page-add" (click)="addPage()" title="Nova página (Alt+N)">+ Página</button>
       </div>
+      @if (pageMenu) {
+        <div class="page-menu" [style.top.px]="pageMenu.top" [style.left.px]="pageMenu.left" (click)="$event.stopPropagation()" role="menu">
+          <button role="menuitem" (click)="startRenamePage(pages[pageMenu.index]); pageMenu = null">Renomear</button>
+          <button role="menuitem" (click)="duplicatePageAt(pageMenu.index)">Duplicar página</button>
+          <button role="menuitem" [disabled]="pageMenu.index === 0" (click)="movePageBy(pageMenu.index, -1)">Mover para a esquerda</button>
+          <button role="menuitem" [disabled]="pageMenu.index === pages.length - 1" (click)="movePageBy(pageMenu.index, 1)">Mover para a direita</button>
+          @if (pages.length > 1) {
+            <button role="menuitem" class="perigo" (click)="removePage(pageMenu.index); pageMenu = null">Excluir página</button>
+          }
+        </div>
+      }
+      @if (aviso) {
+        <div class="page-toast" role="status">{{ aviso }}</div>
+      }
+      @if (removedPage) {
+        <div class="page-toast" role="status">
+          Página excluída
+          <button (click)="undoRemovePage()">Desfazer</button>
+        </div>
+      }
       @if (colorPickerPage) {
         <div
           class="color-picker"
@@ -90,13 +155,16 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           #canvasHost
           [store]="store"
           [hiddenElementId]="editingTarget?.id ?? editingChecklistTarget?.id ?? null"
+          [inativo]="reading"
+          [tamanhoNota]="tamanhoNota"
+          (aviso)="mostrarAviso($event)"
           (requestTextEdit)="onEditText($event)"
           (requestStickyEdit)="onEditSticky($event)"
           (requestChecklistEdit)="onEditChecklist($event)"
           (elementsChanged)="scheduleSave()"
           (requestImmediateSave)="flushSave()"
         />
-        <app-toolbar [store]="store" />
+        <app-toolbar [store]="store" (inserirImagens)="canvasHost.insertImages($event)" />
         <app-properties-panel [store]="store" (elementsChanged)="scheduleSave()" />
         <app-canvas-corner-controls
           #cornerControls
@@ -115,6 +183,7 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
           (sendToBack)="onSendToBack()"
           (paperStyleChange)="onPaperStyleChange($event)"
           (exportPng)="onExportPng($event)"
+          (exportPdf)="pdfDialog = true"
         />
         <app-text-overlay
           [store]="store"
@@ -179,6 +248,22 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
     .sync-indicator.offline .dot { background: #d85a30; }
     .sync-indicator.error .dot { background: var(--danger); }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .pdf-fundo { position: fixed; inset: 0; background: rgb(0 0 0 / .35); z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .pdf-dialogo { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px;
+      width: min(380px, 100%); display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); font-size: 13px; }
+    .pdf-dialogo h2 { margin: 0 0 4px; font-size: 16px; }
+    .pdf-dialogo fieldset { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .pdf-dialogo label { display: flex; align-items: center; gap: 8px; }
+    .pdf-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+    .pdf-acoes button { border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: var(--radius-sm); padding: 7px 12px; font-weight: 600; }
+    .pdf-acoes .primario { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+    .header-tags { flex: 0 1 260px; min-width: 0; }
+    .read-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; font-weight: 600; flex-shrink: 0;
+    }
+    .read-btn:hover { border-color: var(--accent); color: var(--accent); }
     .theme-toggle {
       border: 1px solid var(--border);
       background: var(--bg);
@@ -214,6 +299,16 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       flex-shrink: 0;
       cursor: pointer;
     }
+    .page-tab.drop-alvo { box-shadow: -3px 0 0 var(--accent); }
+    .page-menu { position: fixed; z-index: 80; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      box-shadow: var(--shadow); padding: 4px; display: flex; flex-direction: column; min-width: 190px; }
+    .page-menu button { border: none; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--text); }
+    .page-menu button:hover:not(:disabled) { background: var(--accent-soft); }
+    .page-menu button:disabled { opacity: .4; }
+    .page-menu .perigo { color: var(--danger); }
+    .page-toast { position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 14px;
+      background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm); font-size: 13px; box-shadow: var(--shadow); }
+    .page-toast button { border: none; background: none; color: inherit; font-weight: 700; text-decoration: underline; }
     .page-tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
     .page-color-dot {
       width: 10px; height: 10px;
@@ -285,6 +380,8 @@ import { ChecklistOverlayComponent } from './checklist-overlay';
       header { padding: 8px 10px; gap: 10px; }
       .title-input { font-size: 14px; }
       .sync-indicator span:last-child { display: none; }
+      .btn-label { display: none; }
+      .header-tags { display: none; }
     }
   `],
 })
@@ -294,6 +391,42 @@ export class EditorPageComponent implements OnInit, OnDestroy {
 
   store = new EditorStore();
   noteId = '';
+  /** Tags da nota (spec 021) e as já usadas em outras notas, para sugerir. */
+  tags: string[] = [];
+  tagSugestoes: string[] = [];
+  /** Modo leitura aberto (spec 024). */
+  reading = false;
+  /** Diálogo de link somente leitura aberto (spec 023). */
+  sharing = false;
+  /** Exportar PDF (spec 019). */
+  pdfDialog = false;
+  pdfPaginas: 'todas' | 'atual' = 'todas';
+  pdfTamanho: TamanhoPdf = 'a4';
+  pdfPapel = false;
+  gerandoPdf = false;
+  /** Abas de página (spec 020): menu de contexto, arrastar e desfazer exclusão. */
+  pageMenu: { index: number; top: number; left: number } | null = null;
+  removedPage: { page: NotePage; index: number } | null = null;
+  private removedTimer: ReturnType<typeof setTimeout> | null = null;
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  dragDe: number | null = null;
+  /** Aviso curto vindo do canvas (ex.: arquivo que não é imagem). */
+  aviso: string | null = null;
+  private avisoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Bytes do conteúdo da nota como o servidor recebe (todas as páginas, com a atual em edição). */
+  readonly tamanhoNota = (): number => {
+    const paginas = this.pages.map((p, i) => (i === this.currentPageIndex ? { ...p, elements: this.store.elements() } : p));
+    return JSON.stringify(paginas).length;
+  };
+
+  mostrarAviso(msg: string): void {
+    this.aviso = msg;
+    if (this.avisoTimer) clearTimeout(this.avisoTimer);
+    this.avisoTimer = setTimeout(() => { this.aviso = null; this.cdr.markForCheck(); }, 4000);
+    this.cdr.markForCheck();
+  }
+  dropAlvo: number | null = null;
   title = '';
   pages: NotePage[] = [];
   currentPageIndex = 0;
@@ -325,7 +458,16 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     public syncService: SyncService,
     public theme: ThemeService,
     private cdr: ChangeDetectorRef,
-  ) {}
+  ) {
+    // Nota mandada para a lixeira em outro aparelho (spec 018): depois de cada sincronização,
+    // se a cópia local ficou na lixeira ou foi excluída, volta para a lista.
+    effect(() => {
+      if (this.syncService.status() !== 'idle' || !this.noteId) return;
+      void this.repo.getNote(this.noteId).then((n) => {
+        if (!n || n.trashedAt || n.deletedAt) this.router.navigateByUrl('/notes');
+      });
+    });
+  }
 
   themeIcon(): string {
     switch (this.theme.pref()) {
@@ -346,11 +488,13 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     this.noteId = this.route.snapshot.paramMap.get('id')!;
     const note = await this.repo.getNote(this.noteId);
-    if (!note) {
+    if (!note || note.trashedAt || note.deletedAt) {
       this.router.navigateByUrl('/notes');
       return;
     }
     this.title = note.title;
+    this.tags = note.tags ?? [];
+    void this.repo.listNotes().then((todas) => { this.tagSugestoes = contarTags(todas).map((t) => t.tag); this.cdr.markForCheck(); });
     this.pages = note.pages;
     this.currentPageIndex = 0;
     this.store.paperStyle.set(note.paperStyle ?? 'blank');
@@ -435,14 +579,98 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); this.maybeAutoStartText(); }, 0);
   }
 
+  /** Exclui sem perguntar; o aviso oferece desfazer por 6 s (spec 020). */
   removePage(index: number): void {
     if (this.pages.length <= 1) return;
-    if (!confirm(`Excluir a página ${index + 1}? Esta ação não pode ser desfeita.`)) return;
     this.captureCurrentPage();
-    this.pages.splice(index, 1);
+    const [removida] = this.pages.splice(index, 1);
     if (this.currentPageIndex >= this.pages.length) this.currentPageIndex = this.pages.length - 1;
+    else if (index < this.currentPageIndex) this.currentPageIndex--;
     this.store.loadElements(this.pages[this.currentPageIndex].elements);
+    this.removedPage = { page: removida, index };
+    if (this.removedTimer) clearTimeout(this.removedTimer);
+    this.removedTimer = setTimeout(() => { this.removedPage = null; this.cdr.markForCheck(); }, 6000);
     this.flushSave();
+  }
+
+  undoRemovePage(): void {
+    const r = this.removedPage;
+    if (!r) return;
+    this.removedPage = null;
+    if (this.removedTimer) clearTimeout(this.removedTimer);
+    this.captureCurrentPage();
+    const indice = Math.min(r.index, this.pages.length);
+    this.pages.splice(indice, 0, r.page);
+    this.currentPageIndex = indice;
+    this.store.loadElements(r.page.elements);
+    this.flushSave();
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); }, 0);
+  }
+
+  duplicatePageAt(index: number): void {
+    this.pageMenu = null;
+    this.captureCurrentPage();
+    const copia = duplicatePage(this.pages[index]);
+    this.pages.splice(index + 1, 0, copia);
+    this.currentPageIndex = index + 1;
+    this.store.loadElements(copia.elements);
+    this.flushSave();
+    setTimeout(() => { this.canvasHost?.fitToScreen(); this.cornerControls?.refreshZoomPercent(); }, 0);
+  }
+
+  movePageBy(index: number, delta: number): void {
+    this.pageMenu = null;
+    this.reorderPage(index, index + delta);
+  }
+
+  private reorderPage(de: number, para: number): void {
+    if (para < 0 || para >= this.pages.length || de === para) return;
+    this.captureCurrentPage();
+    const atual = this.pages[this.currentPageIndex];
+    this.pages = movePage(this.pages, de, para);
+    this.currentPageIndex = this.pages.indexOf(atual);
+    this.flushSave();
+  }
+
+  openPageMenu(index: number, ev: MouseEvent): void {
+    ev.preventDefault();
+    this.pageMenu = { index, top: ev.clientY + 4, left: Math.min(ev.clientX, window.innerWidth - 200) };
+  }
+
+  /** Toque longo (0,5 s) na aba abre o mesmo menu, para celular e tablet. */
+  onTabPointerDown(index: number, ev: PointerEvent): void {
+    if (ev.pointerType === 'mouse') return;
+    this.cancelLongPress();
+    const { clientX, clientY } = ev;
+    this.longPressTimer = setTimeout(() => {
+      this.pageMenu = { index, top: clientY + 8, left: Math.min(clientX, window.innerWidth - 200) };
+      this.cdr.markForCheck();
+    }, 500);
+  }
+
+  cancelLongPress(): void {
+    if (this.longPressTimer) clearTimeout(this.longPressTimer);
+    this.longPressTimer = null;
+  }
+
+  onTabDragStart(index: number, ev: DragEvent): void {
+    this.dragDe = index;
+    ev.dataTransfer?.setData('text/plain', String(index));
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onTabDragOver(index: number, ev: DragEvent): void {
+    if (this.dragDe === null) return;
+    ev.preventDefault();
+    this.dropAlvo = index;
+  }
+
+  onTabDrop(index: number, ev: DragEvent): void {
+    ev.preventDefault();
+    const de = this.dragDe;
+    this.dragDe = null;
+    this.dropAlvo = null;
+    if (de !== null) this.reorderPage(de, index);
   }
 
   startRenamePage(p: NotePage): void {
@@ -486,6 +714,7 @@ export class EditorPageComponent implements OnInit, OnDestroy {
   @HostListener('document:click')
   closeColorPicker(): void {
     this.colorPickerIndex = null;
+    this.pageMenu = null;
   }
 
   onExportPng(transparent: boolean): void {
@@ -706,8 +935,69 @@ export class EditorPageComponent implements OnInit, OnDestroy {
     this.flushSave();
   }
 
+  /** Abre o modo leitura na página atual, depois de confirmar o que estiver em edição. */
+  openReader(): void {
+    if (this.editingTarget) this.onOverlayFinish();
+    this.editingChecklistTarget = null;
+    this.flushSave();
+    this.reading = true;
+  }
+
+  async onExportPdf(): Promise<void> {
+    this.captureCurrentPage();
+    const paginas = this.pdfPaginas === 'todas' ? this.pages : [this.pages[this.currentPageIndex]];
+    this.gerandoPdf = true;
+    this.cdr.markForCheck();
+    try {
+      await exportNoteToPdf(paginas, this.store.paperStyle(), this.title || 'nota', { tamanho: this.pdfTamanho, estiloPapel: this.pdfPapel });
+      this.pdfDialog = false;
+    } catch {
+      alert('Não foi possível gerar o PDF.');
+    } finally {
+      this.gerandoPdf = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async onTagsChange(tags: string[]): Promise<void> {
+    this.tags = tags;
+    await this.repo.setTags(this.noteId, tags);
+    this.syncService.syncNow();
+  }
+
+  openShare(): void {
+    this.flushSave();
+    this.sharing = true;
+  }
+
+  closeReader(pagina: number): void {
+    this.reading = false;
+    if (pagina !== this.currentPageIndex) this.switchPage(pagina);
+  }
+
+  /** Atalhos de página (spec 020). Vêm antes da trava de edição: confirmam o texto aberto e trocam. */
+  private pageShortcut(ev: KeyboardEvent): boolean {
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    let destino: number | null = null;
+    if (ctrl && ev.key === 'PageDown') destino = this.currentPageIndex + 1;
+    else if (ctrl && ev.key === 'PageUp') destino = this.currentPageIndex - 1;
+    else if (ev.altKey && !ctrl && ev.key === 'ArrowRight') destino = this.currentPageIndex + 1;
+    else if (ev.altKey && !ctrl && ev.key === 'ArrowLeft') destino = this.currentPageIndex - 1;
+    const nova = ev.altKey && !ctrl && (ev.key === 'n' || ev.key === 'N');
+    if (destino === null && !nova) return false;
+    ev.preventDefault();
+    if (this.editingTarget) this.onOverlayFinish();
+    if (this.editingChecklistTarget) this.editingChecklistTarget = null;
+    if (nova) this.addPage();
+    else if (destino! >= 0 && destino! < this.pages.length) this.switchPage(destino!);
+    this.cdr.markForCheck();
+    return true;
+  }
+
   @HostListener('window:keydown', ['$event'])
   onKeydown(ev: KeyboardEvent): void {
+    if (this.reading || this.sharing || this.pdfDialog) return;
+    if (this.pageShortcut(ev)) return;
     if (this.editingTarget || this.editingChecklistTarget) return;
     const ctrl = ev.ctrlKey || ev.metaKey;
     if (ctrl && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {

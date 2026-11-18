@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { uuid } from '../../../core/uuid';
-import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskProject, TaskProjectMembership } from '../models/task.model';
+import { KanbanLane, Subtask, TaskAttachment, TaskCategory, TaskComment, TaskItem, TaskProject, TaskProjectMembership, decodeRecurrence, nextOccurrence } from '../models/task.model';
 import { stripNotesImages } from '../notes/notes-html';
 import { TaskUpsertInput, TasksService } from './tasks.service';
 
@@ -127,6 +127,48 @@ export class TasksStoreService {
   async setCompleted(task: TaskItem, isCompleted: boolean): Promise<void> {
     if (task.isCompleted === isCompleted) return;
     await this.save(task, {}, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null });
+    // Como no Android (TaskRepository.setCompleted): concluir uma recorrente cria a próxima. O
+    // servidor não gera ocorrências, senão cada conclusão feita no app viraria duas.
+    if (isCompleted) await this.createNextOccurrence(task);
+  }
+
+  /** É recorrente com uma regra que dá próxima data. */
+  isRecurrent(task: TaskItem): boolean {
+    return task.isRecurring && nextOccurrence(decodeRecurrence(task.recurrenceRule), new Date()) !== null;
+  }
+
+  /**
+   * "Pular esta vez": cria a próxima ocorrência e manda esta para a lixeira sem contar como
+   * concluída (não infla as estatísticas), como `skipCurrentOccurrence` do Android.
+   */
+  async skipOccurrence(task: TaskItem): Promise<void> {
+    if (!this.isRecurrent(task)) return;
+    await this.createNextOccurrence(task);
+    await this.save(task, {}, { deletedAt: new Date().toISOString() });
+  }
+
+  /**
+   * Nova tarefa para a próxima ocorrência: mesmos campos, subtarefas desmarcadas e prazo pela
+   * regra (a partir do prazo atual, ou de agora se não houver). Não herda projetos, comentários,
+   * anexos nem pomodoros — as anotações vão sem as imagens, que apontam para anexos da original.
+   */
+  private async createNextOccurrence(task: TaskItem): Promise<TaskItem | null> {
+    if (!task.isRecurring) return null;
+    const base = task.dueDate ? new Date(task.dueDate) : new Date();
+    const next = nextOccurrence(decodeRecurrence(task.recurrenceRule), base);
+    if (!next) return null;
+    return this.createTask({
+      title: task.title,
+      description: task.description,
+      dueDate: next.toISOString(),
+      priority: task.priority,
+      categoryIds: task.categoryIds,
+      isRecurring: true,
+      recurrenceRule: task.recurrenceRule,
+      locationLabel: task.locationLabel,
+      subtasks: task.subtasks.map((s) => ({ ...s, isCompleted: false })),
+      notes: stripNotesImages(task.notes) || null,
+    });
   }
 
   async toggleSubtask(task: TaskItem, index: number): Promise<void> {
@@ -165,10 +207,10 @@ export class TasksStoreService {
     });
   }
 
+  /** Passa por setCompleted para cada recorrente gerar a sua próxima ocorrência. O "Desfazer"
+   * usa restoreState, que não gera de novo (e não apaga as já criadas, como no Android). */
   async bulkComplete(tasks: TaskItem[], isCompleted: boolean): Promise<void> {
-    await Promise.all(
-      tasks.map((t) => this.save(t, {}, { isCompleted, completedAt: isCompleted ? new Date().toISOString() : null })),
-    );
+    await Promise.all(tasks.map((t) => this.setCompleted(t, isCompleted)));
   }
 
   async bulkTrash(tasks: TaskItem[]): Promise<void> {

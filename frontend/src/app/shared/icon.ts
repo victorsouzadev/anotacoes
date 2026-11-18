@@ -10,7 +10,8 @@ export type IconName =
   | 'sun' | 'moon' | 'monitor' | 'plus' | 'logout'
   | 'grid' | 'wallet' | 'check' | 'x'
   | 'calendar' | 'kanban' | 'comment' | 'paperclip' | 'eye' | 'help' | 'cake' | 'image' | 'chevron' | 'calculator'
-  | 'globe' | 'upload' | 'refresh' | 'stop' | 'copy' | 'external' | 'box';
+  | 'globe' | 'upload' | 'refresh' | 'stop' | 'copy' | 'external' | 'box'
+  | 'alert' | 'trash' | 'tag' | 'book' | 'share' | 'apple' | 'run' | 'fullscreen' | 'restore';
 
 /** Conjunto de ícones da própria app — sem dependência externa (nenhuma lib de
  * ícones no projeto). Um único componente com switch em vez de SVG inline em cada
@@ -22,6 +23,15 @@ export type IconName =
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
          stroke-linecap="round" stroke-linejoin="round">
       @switch (name) {
+        @case ('alert') { <path d="M10 3.2l7.2 12.6H2.8z" /><path d="M10 8.2v3.6M10 14.1v.1" /> }
+        @case ('trash') { <path d="M3.8 5.6h12.4M8 5.6V3.8h4v1.8M5.4 5.6l.8 10.8h7.6l.8-10.8" /><path d="M8.4 8.6v5M11.6 8.6v5" /> }
+        @case ('tag') { <path d="M3.2 3.2h6.6l7 7-6.6 6.6-7-7z" /><circle cx="6.8" cy="6.8" r="1.1" /> }
+        @case ('book') { <path d="M10 5.4C8.4 4 6 3.6 3 3.8v11.4c3-.2 5.4.2 7 1.6 1.6-1.4 4-1.8 7-1.6V3.8c-3-.2-5.4.2-7 1.6z" /><path d="M10 5.4v11.4" /> }
+        @case ('share') { <circle cx="5" cy="10" r="2" /><circle cx="15" cy="5" r="2" /><circle cx="15" cy="15" r="2" /><path d="M6.8 9.1l6.4-3.2M6.8 10.9l6.4 3.2" /> }
+        @case ('apple') { <path d="M10 6.4c-1.6-1.4-5.8-1.6-6 3 0 3.8 2.6 7.4 4.4 7.4.7 0 1-.4 1.6-.4s.9.4 1.6.4c1.8 0 4.4-3.6 4.4-7.4-.2-4.6-4.4-4.4-6-3z" /><path d="M10 6.4c0-1.6.6-2.8 2-3.4" /> }
+        @case ('run') { <circle cx="12.4" cy="3.8" r="1.5" /><path d="M5 9l3-2.4 3.4.6 1.8 3 2.6.8M11.4 7.2l-2 4.4 3 2.2-1 3.6M9.4 11.6l-2.8 1.2-2.4-.4" /> }
+        @case ('fullscreen') { <path d="M3.5 7.5v-4h4M12.5 3.5h4v4M16.5 12.5v4h-4M7.5 16.5h-4v-4" /> }
+        @case ('restore') { <path d="M4 10a6 6 0 1 0 1.8-4.3" /><path d="M4 3.4v3.2h3.2" /> }
         @case ('select') { <path d="M4 3l11 8.5-4.6.7 2.2 4.6-2 1-2.2-4.6-3.4 3z" /> }
         @case ('pan') {
           <path d="M7.3 10V4.6a1.2 1.2 0 0 1 2.4 0V9m0-.7V3.4a1.2 1.2 0 0 1 2.4 0V9m0-.4V5a1.2 1.2 0 0 1 2.4 0v6c0 2.8-1.9 5.2-4.6 5.2-1.9 0-3-.7-4.1-2.4l-1.9-3a1.1 1.1 0 0 1 1.8-1.2L7.3 12" />

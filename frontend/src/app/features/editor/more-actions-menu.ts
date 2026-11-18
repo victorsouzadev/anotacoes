@@ -27,6 +27,7 @@ import { IconComponent } from '../../shared/icon';
         </div>
         <div class="row">
           <button (click)="exportPng.emit(exportTransparent); close()" title="Exportar a página atual como imagem PNG"><app-icon name="download" />Exportar PNG</button>
+          <button (click)="exportPdf.emit(); close()" title="Exportar a nota (ou a página) em PDF"><app-icon name="download" />Exportar PDF</button>
         </div>
         <label class="export-option">
           <input type="checkbox" [(ngModel)]="exportTransparent" />
@@ -97,6 +98,7 @@ export class MoreActionsMenuComponent {
   @Output() bringToFront = new EventEmitter<void>();
   @Output() sendToBack = new EventEmitter<void>();
   @Output() exportPng = new EventEmitter<boolean>();
+  @Output() exportPdf = new EventEmitter<void>();
   @Output() paperStyleChange = new EventEmitter<PaperStyle>();
 
   exportTransparent = false;

@@ -84,6 +84,12 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    0 4 * * * /opt/notas-vps/scripts/backup.sh
    ```
 
+   Cada execução sem erro grava `data/db/backup-status.json`. O hub lê esse arquivo
+   (`GET /api/sistema/backup`) e mostra uma faixa de alerta para os e-mails de `PUBLICADORES`
+   quando o último backup tem mais de 36 h; a seção **Servidor** em `/configuracoes` traz os
+   detalhes, e o resumo do MCP criativo leva a mesma linha para o diário do Segundo Cérebro.
+   Para conferir na VPS: `crontab -l` e `cat /opt/notas-vps/data/db/backup-status.json`.
+
 ## Atualizações seguintes
 
 ```powershell
@@ -264,6 +270,8 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 4. Faça push na `main` (ou rode o deploy). Ele cria `data/cerebro/` com o dono `CEREBRO_PUID:CEREBRO_PGID`
    (padrão 1000) e builda o serviço.
 5. Abra o hub pelo subdomínio HTTPS: o card "Segundo Cérebro" aparece para os e-mails liberados.
+   O Caddy também manda `/.well-known/oauth-*` para o Cérebro (só por HTTPS): é por onde o Claude web
+   descobre o OAuth do MCP (spec 028) e conecta em `https://<subdomínio>/cerebro/mcp` sem token na URL.
 6. Configure o Remotely Save em cada aparelho (endereço `https://<subdomínio>/dav`). Faça o primeiro
    sync a partir do aparelho que já tem as notas, depois de um backup.
 

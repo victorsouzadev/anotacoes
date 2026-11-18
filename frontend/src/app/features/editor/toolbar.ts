@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { ToolType } from '../../data/models';
 import { EditorStore } from './engine/editor-store';
 import { IconComponent } from '../../shared/icon';
@@ -29,6 +29,8 @@ import { IconComponent } from '../../shared/icon';
       <button [class.active]="tool() === 'sticky'" (click)="setTool('sticky')" title="Nota adesiva"><app-icon name="sticky" /></button>
       <button [class.active]="tool() === 'checklist'" (click)="setTool('checklist')" title="Lista de tarefas"><app-icon name="checklist" /></button>
       <button [class.active]="tool() === 'pomodoro'" (click)="setTool('pomodoro')" title="Pomodoro"><app-icon name="pomodoro" /></button>
+      <button (click)="arquivo.click()" title="Inserir imagem (ou arraste para a nota)"><app-icon name="image" /></button>
+      <input #arquivo type="file" accept="image/*,.heic,.heif" multiple hidden (change)="escolheu($event)" />
     </div>
   `,
   styles: [`
@@ -74,6 +76,15 @@ import { IconComponent } from '../../shared/icon';
 })
 export class ToolbarComponent {
   @Input({ required: true }) store!: EditorStore;
+  /** "Inserir imagem" (spec 022): o editor repassa ao canvas. */
+  @Output() inserirImagens = new EventEmitter<File[]>();
+
+  escolheu(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const arquivos = [...(input.files ?? [])];
+    input.value = '';
+    if (arquivos.length) this.inserirImagens.emit(arquivos);
+  }
 
   get tool() { return this.store.tool; }
 

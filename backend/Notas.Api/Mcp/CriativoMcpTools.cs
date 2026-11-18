@@ -14,7 +14,8 @@ namespace Notas.Api.Mcp;
 /// (projetos e biblioteca). Só leitura. Os Moldes são gerados na hora e não ficam guardados.
 /// </summary>
 [McpServerToolType]
-public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sites, McpUser user)
+public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sites, McpUser user,
+    IOptions<Notas.Api.Services.Sistema.SistemaOptions> sistema)
 {
     private static readonly CultureInfo Br = Notas.Api.Services.CulturaBr.Cultura;
 
@@ -43,6 +44,8 @@ public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sit
             sb.Append($"- {p.Name} ({(p.CreatedAt >= inicio ? "novo" : "alterado")} em {p.UpdatedAt.ToLocalTime().ToString("dd/MM HH:mm", Br)})\n");
         var biblioteca = await db.ImageLibrary.CountAsync(i => i.UserId == uid, ct);
         sb.Append($"Biblioteca: {biblioteca} artes guardadas.\n");
+        sb.Append("\n## Servidor\n").Append(Notas.Api.Services.Sistema.BackupStatus.Linha(
+            Notas.Api.Services.Sistema.BackupStatus.Ler(sistema.Value.BackupStatus, DateTime.UtcNow))).Append('\n');
         return sb.ToString().TrimEnd();
     }
 

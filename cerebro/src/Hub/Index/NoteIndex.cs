@@ -340,6 +340,32 @@ public sealed class NoteIndex
         return list;
     }
 
+    /// <summary>Hash do conteúdo de cada nota indexada (o índice de vetores usa para saber o que mudou).</summary>
+    public IReadOnlyDictionary<string, string> Hashes()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT path, hash FROM notes";
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) map[r.GetString(0)] = r.GetString(1);
+        return map;
+    }
+
+    public string? Title(string relative)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT title FROM notes WHERE path = $p";
+        cmd.Parameters.AddWithValue("$p", relative);
+        return cmd.ExecuteScalar() as string;
+    }
+
+    /// <summary>Pastas que não entram nas sugestões de links (Inbox, Diário, sistema).</summary>
+    public static bool ForaDasSugestoes(string path) =>
+        path.StartsWith("00-Inbox", StringComparison.Ordinal) || path.StartsWith("01-Diario", StringComparison.Ordinal)
+        || path.StartsWith("_sistema", StringComparison.Ordinal);
+
     /// <summary>Títulos e caminhos de notas permanentes, para o LLM sugerir links reais.</summary>
     public IReadOnlyList<SearchHit> Candidates(string text, int limit = 8)
     {

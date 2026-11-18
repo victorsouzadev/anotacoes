@@ -165,3 +165,36 @@ export function decodeRecurrence(raw: string | null): DecodedRecurrence | null {
   if (kind === 'MONTHLY') return { kind: 'MONTHLY' };
   return null;
 }
+
+const DIAS_JS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+
+/**
+ * Próxima ocorrência de uma tarefa recorrente — a mesma conta de `RecurrenceRule.nextOccurrence`
+ * do app Android (spec 015): DAILY soma n dias; WEEKLY anda a partir de amanhã até um dos dias
+ * marcados; MONTHLY soma um mês, ficando no último dia quando o mês seguinte é mais curto
+ * (31/01 → 28/02), como o `plusMonths` do Java. Usa o horário local, como o Android usa o do
+ * aparelho. Devolve null para regra sem dias válidos.
+ */
+export function nextOccurrence(rule: DecodedRecurrence | null, from: Date): Date | null {
+  if (!rule) return null;
+  if (rule.kind === 'DAILY') {
+    const next = new Date(from);
+    next.setDate(next.getDate() + Math.max(1, rule.intervalDays ?? 1));
+    return next;
+  }
+  if (rule.kind === 'WEEKLY') {
+    const dias = new Set((rule.daysOfWeek ?? []).filter((d) => DIAS_JS.includes(d)));
+    if (dias.size === 0) return null;
+    const next = new Date(from);
+    do next.setDate(next.getDate() + 1);
+    while (!dias.has(DIAS_JS[next.getDay()]));
+    return next;
+  }
+  const next = new Date(from);
+  const dia = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + 1);
+  const ultimo = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(dia, ultimo));
+  return next;
+}

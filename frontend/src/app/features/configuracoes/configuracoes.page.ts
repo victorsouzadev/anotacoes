@@ -14,6 +14,8 @@ import {
 } from './configuracao-ia.model';
 import { ConfiguracaoIaService } from './configuracao-ia.service';
 import { mensagemDeErro } from '../../core/erro-http';
+import { BackupEstado, SistemaService, idadeTexto, tamanhoTexto } from '../../core/sistema.service';
+import { PublicarService } from '../publicar/publicar.service';
 
 @Component({
   selector: 'app-configuracoes-page',
@@ -42,6 +44,12 @@ export class ConfiguracoesPageComponent {
   readonly mostrarChave = signal(false);
   readonly mostrarChaveUpscale = signal(false);
   readonly confirmandoRemocaoUpscale = signal(false);
+  /** Estado do backup (spec 025): só carregado para quem está em PUBLICADORES. */
+  readonly backup = signal<BackupEstado | null>(null);
+  readonly idade = idadeTexto;
+  readonly tamanho = tamanhoTexto;
+  private readonly sistema = inject(SistemaService);
+  private readonly publicar = inject(PublicarService);
 
   // Campos do formulário.
   provedor: ProvedorIa = '';
@@ -75,6 +83,9 @@ export class ConfiguracoesPageComponent {
 
   constructor() {
     this.carregar();
+    void this.publicar.permissao().then((r) => {
+      if (r.podePublicar) void this.sistema.backup().then((b) => this.backup.set(b));
+    });
   }
 
   private carregar(): void {

@@ -156,6 +156,11 @@ export class TaskDetailComponent implements OnChanges, OnInit, OnDestroy {
     return 'Mensalmente';
   }
 
+  async skipOccurrence(): Promise<void> {
+    await this.store.skipOccurrence(this.task);
+    this.close.emit();
+  }
+
   async toggleSubtask(index: number): Promise<void> {
     await this.store.toggleSubtask(this.task, index);
   }

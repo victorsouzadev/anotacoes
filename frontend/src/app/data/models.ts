@@ -164,6 +164,10 @@ export interface NoteMeta {
 export interface NoteRecord extends NoteMeta {
   pages: NotePage[];
   deletedAt: string | null;
+  /** Na lixeira desde (spec 018); o conteúdo fica até 30 dias, depois vira tombstone. */
+  trashedAt?: string | null;
+  /** Tags da nota (spec 021): minúsculas e únicas. Registros antigos não têm o campo. */
+  tags?: string[];
   dirty: boolean;
   thumbnail?: string;
   /** Preferência puramente local (não sincronizada com o servidor) — aparência do

@@ -46,6 +46,9 @@ public sealed class HubOptions
 
     public TranscriptionOptions Transcription { get; set; } = new();
 
+    /// <summary>Busca semântica (spec 027). Sem chave aqui, usa a da transcrição quando ela é da OpenAI.</summary>
+    public EmbeddingsOptions Embeddings { get; set; } = new();
+
     public WebOptions Web { get; set; } = new();
 
     /// <summary>Base dos MCPs dos apps do hub pela rede interna do Docker (sem token em URL pública).</summary>
@@ -110,4 +113,12 @@ public sealed class TranscriptionOptions
     public string Model { get; set; } = "whisper-1";
     public string Language { get; set; } = "pt";
     public bool Enabled => !string.IsNullOrWhiteSpace(ApiKey);
+}
+
+/// <summary>Embeddings por API compatível com OpenAI (/embeddings), para a busca semântica.</summary>
+public sealed class EmbeddingsOptions
+{
+    public string ApiKey { get; set; } = "";
+    public string BaseUrl { get; set; } = "https://api.openai.com/v1";
+    public string Model { get; set; } = "text-embedding-3-small";
 }

@@ -31,8 +31,14 @@ builder.Services.AddSingleton<HubClock>();
 builder.Services.AddSingleton<VaultStore>();
 builder.Services.AddSingleton<HubDb>();
 builder.Services.AddSingleton<NoteIndex>();
+// Busca semântica (spec 027): vetores num SQLite à parte, atualizados em segundo plano.
+builder.Services.AddSingleton<Embeddings>();
+builder.Services.AddSingleton<VectorIndex>();
+builder.Services.AddSingleton<HybridSearch>();
+builder.Services.AddSingleton<VectorIndexWorker>();
 builder.Services.AddSingleton<AccessStore>();
 builder.Services.AddSingleton<ApiKeyAuth>();
+builder.Services.AddSingleton<OAuthStore>(sp => new OAuthStore(sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HubOptions>>()));
 builder.Services.AddSingleton<SecretBox>();
 builder.Services.AddSingleton<AiSettings>();
 builder.Services.AddSingleton<TranscriptionSettings>();
@@ -44,6 +50,7 @@ builder.Services.AddSingleton<ApprovalService>();
 builder.Services.AddSingleton<LinkExtractor>();
 builder.Services.AddSingleton<Transcriber>();
 builder.Services.AddSingleton<ClaudeClassifier>();
+builder.Services.AddSingleton<AttachmentReader>();
 builder.Services.AddSingleton<DigestService>();
 
 // Serviços de fundo (singletons para o /health ler o estado deles)
@@ -54,6 +61,7 @@ builder.Services.AddSingleton<ProcessingWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GitSnapshotter>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<IndexWatcher>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessingWorker>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<VectorIndexWorker>());
 // Rotina que traz os dados dos apps do hub (Tarefas, Finanças, Criativo) pelos MCPs deles.
 builder.Services.AddSingleton<AppsSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AppsSyncService>());
@@ -62,6 +70,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<AppsSyncService>()
 // Classificação (Anthropic ou OpenRouter): mesmo cliente, mesmo teto de tempo.
 builder.Services.AddHttpClient("anthropic", c => c.Timeout = TimeSpan.FromSeconds(90));
 builder.Services.AddHttpClient("transcribe", c => c.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient("embeddings", c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddHttpClient("fetch", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(20);
@@ -111,15 +120,24 @@ app.Use(async (http, next) =>
     if (http.Request.Path.StartsWithSegments("/mcp"))
     {
         var auth = http.RequestServices.GetRequiredService<ApiKeyAuth>();
-        if (!auth.McpEnabled)
+        var oauthLigado = !string.IsNullOrWhiteSpace(hubOptions.Web.JwtSecret);
+        if (!auth.McpEnabled && !oauthLigado)
         {
             http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await http.Response.WriteAsync("MCP desativado: defina Hub__McpToken.");
             return;
         }
-        if (!auth.AuthenticateMcp(http))
+        // OAuth (spec 028): token emitido pela página /autorizar, ainda de um e-mail de CEREBRO_USUARIOS.
+        var header = http.Request.Headers.Authorization.FirstOrDefault();
+        var bearer = header?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true ? header[7..].Trim() : null;
+        var porOAuth = oauthLigado && bearer is { Length: > 0 }
+            && http.RequestServices.GetRequiredService<OAuthStore>().Validar(bearer) is { } email
+            && hubOptions.Web.AllowedEmails.Contains(email);
+        if (!porOAuth && !(auth.McpEnabled && auth.AuthenticateMcp(http)))
         {
             http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            if (oauthLigado)
+                http.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{OAuthEndpoints.MetadataDoRecurso(http.Request)}\"";
             return;
         }
     }
@@ -137,6 +155,7 @@ app.MapGet("/internal/webdav-auth", (HttpContext http, ApiKeyAuth auth) =>
 
 app.MapHubApi();
 app.MapHubWeb();
+app.MapOAuth(hubOptions.Web);
 app.MapMcp("/mcp");
 
 app.Run();

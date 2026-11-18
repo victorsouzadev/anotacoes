@@ -11,7 +11,7 @@
     # nginx-proxy-manager (subdomínio → notas-caddy:8080), que manda X-Forwarded-Proto.
     # No teste local, CEREBRO_PERMITIR_HTTP=sim libera o HTTP.
     @cerebro_sem_tls {
-        path /cerebro /cerebro/* /dav /dav/* /ops /ops/* /api/mcp /api/mcp/*
+        path /cerebro /cerebro/* /dav /dav/* /ops /ops/* /api/mcp /api/mcp/* /.well-known/oauth-*
         not path /cerebro/health /ops/health
         expression `{http.request.header.X-Forwarded-Proto} != "https" && "{$CEREBRO_PERMITIR_HTTP:nao}" != "sim"`
     }
@@ -31,6 +31,11 @@
     # Rotas internas do cerebro (ex.: conferência do login do WebDAV) não saem para a internet.
     handle /cerebro/internal/* {
         respond 404
+    }
+
+    # OAuth do MCP do Cérebro (spec 028): o cliente (Claude web) procura o metadata na raiz do domínio.
+    handle /.well-known/oauth-* {
+        reverse_proxy cerebro:8080
     }
 
     # API, MCP (/cerebro/mcp) e bookmarklet. O prefixo sai antes de chegar ao serviço.

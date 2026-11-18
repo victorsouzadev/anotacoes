@@ -1,7 +1,8 @@
 # Plano — ferramenta "Dieta"
 
-> Status: **implementado** (etapas 1 a 7). Backend em `backend/Notas.Api` (`/api/dieta`, `/api/mcp/dieta`),
-> app em [`mobile/dieta`](../../mobile/dieta/README.md). Falta a etapa 8 (tela web).
+> Status: **implementado** (etapas 1 a 8). Backend em `backend/Notas.Api` (`/api/dieta`, `/api/mcp/dieta`),
+> app em [`mobile/dieta`](../../mobile/dieta/README.md) e tela web em `frontend/src/app/features/dieta`
+> (etapa 8, spec 016: sem modo offline nem câmera, que ficam no app).
 >
 > Diferenças em relação ao desenho abaixo: as fotos ficam como BLOB no SQLite do hub (o hub usa SQLite, não
 > Postgres), XP e conquistas são **derivados** dos registros em vez de tabelas de eventos (apagar um registro

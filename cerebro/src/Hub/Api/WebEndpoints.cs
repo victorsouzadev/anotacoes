@@ -15,6 +15,7 @@ public sealed record WebCaptureDto(string? Content, string? Url, List<string>? T
 public sealed record WebDecisionDto(string Path, string? Folder);
 
 public sealed record WebPathDto(string Path);
+public sealed record WebAnexosDto(bool Ligado);
 
 public sealed record WebRevealDto(string Item);
 
@@ -117,6 +118,23 @@ public static class WebEndpoints
         web.MapPost("/ia/testar", TestAi);
         web.MapGet("/transcricao", (TranscriptionSettings t) => Results.Ok(DescribeTranscription(t)));
         web.MapPut("/transcricao", SaveTranscription);
+        // Busca semântica (spec 027): desligada por padrão; ligar acorda o worker para indexar.
+        web.MapGet("/busca-semantica", (HybridSearch busca) => Results.Ok(busca.Estado()));
+        web.MapPut("/busca-semantica", (WebAnexosDto dto, Embeddings emb, HybridSearch busca, VectorIndexWorker worker) =>
+        {
+            if (dto.Ligado && !emb.Resolve().Enabled)
+                return Results.BadRequest(new { error = "Configure uma chave da OpenAI (Transcrição de áudio ou CEREBRO_EMBEDDINGS_API_KEY) antes." });
+            emb.SetLigado(dto.Ligado);
+            if (dto.Ligado) worker.Acordar();
+            return Results.Ok(busca.Estado());
+        });
+        // Leitura de texto de PDFs e imagens (spec 026): desligada por padrão, custa por uso.
+        web.MapGet("/anexos", (AiSettings ai) => Results.Ok(new { ligado = ai.LerAnexos, ia = ai.Resolve().Enabled }));
+        web.MapPut("/anexos", (WebAnexosDto dto, AiSettings ai) =>
+        {
+            ai.SetLerAnexos(dto.Ligado);
+            return Results.Ok(new { ligado = ai.LerAnexos, ia = ai.Resolve().Enabled });
+        });
 
         web.MapGet("/acessos", GetAccess);
         web.MapPost("/acessos/revelar", RevealAccess);
@@ -644,8 +662,8 @@ public static class WebEndpoints
                 exists = vault.Exists(c.Path),
             }));
 
-    private static IResult Search(string? q, NoteIndex index) =>
+    private static async Task<IResult> Search(string? q, string? modo, NoteIndex index, HybridSearch busca, CancellationToken ct) =>
         string.IsNullOrWhiteSpace(q)
             ? Results.Ok(index.List(limit: 30).Select(n => new { n.Path, n.Title, snippet = "", n.Folder }))
-            : Results.Ok(index.Search(q, limit: 30).Select(h => new { h.Path, h.Title, h.Snippet, folder = VaultLayout.FolderOf(h.Path) }));
+            : Results.Ok((await busca.SearchAsync(q, null, 30, modo, ct)).Select(h => new { h.Path, h.Title, h.Snippet, folder = VaultLayout.FolderOf(h.Path) }));
 }

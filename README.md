@@ -25,11 +25,13 @@ inicial, sem exigir outro login nem outro deploy.
   Facts), metas de calorias/macros/água, peso, plano alimentar, fotos de refeição e
   de progresso, gamificação (XP, níveis, sequências, conquistas, desafio semanal) e
   links públicos de progresso com escopos. App Android nativo próprio
-  ([`mobile/dieta`](mobile/dieta/README.md)), API em `/api/dieta` e MCP
+  ([`mobile/dieta`](mobile/dieta/README.md)) e tela web em `/dieta` (dia, registro, água, peso,
+  progresso, perfil e plano, links e assistente), API em `/api/dieta` e MCP
   `/api/mcp/dieta`, que o Segundo Cérebro sincroniza.
 - **Treino** — recebe os treinos do app Android Treino Corrida (repositório
-  `treino-corrida`, offline-first; a conta do hub é opcional): API em `/api/treino`
-  e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
+  `treino-corrida`, offline-first; a conta do hub é opcional): API em `/api/treino`,
+  tela web em `/treino` (só leitura: programa, totais de 7/30/90 dias, km por semana, ritmo e a
+  lista) e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
   Cérebro sincroniza.
 
 - **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
@@ -95,18 +97,39 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
   de checklist marca/desmarca sem precisar abrir o modo de edição.
 - **Notas adesivas**: cor à escolha, tamanho de fonte ajustável (mesmos controles do texto), crescem automaticamente para caber o conteúdo.
 - **Checklist**: itens marcáveis, tamanho de fonte ajustável, redimensionável manualmente (a altura não é mais sobrescrita ao digitar), fundo transparente durante a edição, marca de "✓" no item concluído.
-- **Imagens**: colar direto da área de transferência (Ctrl+V) — redimensionadas/comprimidas no cliente antes de salvar.
+- **Imagens**: colar (Ctrl+V), arrastar arquivos para o canvas (caem no ponto solto, várias em cascata) ou
+  o botão "Inserir imagem" da barra (câmera/galeria no celular) — redimensionadas/comprimidas no cliente
+  antes de salvar, HEIC convertido, e recusadas se a nota passaria do limite de 8 MB.
 - **Seleção múltipla**, mover, redimensionar (alças de canto com área de clique maior que o desenho, pra não errar o alvo), rotacionar, camadas (frente/trás).
 - **Undo/redo** (command pattern), até ~100 passos.
 - **Zoom/pan**: roda do mouse, pinça em touch, atalhos de teclado, "ajustar à tela".
 - **Estilo de papel**: liso, pautado ou quadriculado (preferência só local, não sincronizada).
 - **Tema claro/escuro/automático**.
 - **Múltiplas páginas por nota**: abas no topo do editor para trocar, adicionar (`+ Página`) e excluir páginas — cada página tem seu conjunto independente de elementos, como um caderno.
+  Botão direito (ou toque longo) na aba abre Renomear, Duplicar página, Mover e Excluir (com
+  "Desfazer"); arrastar a aba reordena. Atalhos: Ctrl+PageUp/PageDown ou Alt+←/→ trocam de página,
+  Alt+N cria uma nova.
 - **Exportar PNG**: renderiza a página atual inteira (não só o que está visível na tela) em resolução real, com opção de fundo branco ou transparente.
+- **Exportar PDF** (Mais ações): a nota inteira (uma página do PDF por página da nota) ou só a página
+  atual, em A4 com orientação automática ou no tamanho do conteúdo, a ~200 DPI, gerado no navegador
+  (`shared/pdf.ts`, o mesmo gerador do Editor de Imagens).
+- **Modo leitura** (botão "Ler"): esconde as ferramentas e mostra cada página inteira; ←/→, toque
+  nas bordas ou deslizar trocam de página, F entra em tela cheia, Esc volta a editar. Nada pode ser
+  alterado no modo (componente `note-reader.ts`, também usado pelo link público).
 
 ### Organização
 - **Pastas**: criar, renomear, excluir (notas da pasta excluída voltam para "sem pasta"), mover notas entre pastas.
-- **Busca**: por título **e por conteúdo** (texto, notas adesivas e itens de checklist de todas as páginas da nota).
+- **Link somente leitura** (botão "Compartilhar" no editor): cria links com nome e validade (7, 30, 90
+  dias ou sem) que abrem a nota em modo leitura sem conta, em `/p/nota/<token>`; revogar, mandar a
+  nota para a lixeira ou excluí-la desliga o link. Só o SHA-256 do token fica no banco, então o link
+  completo aparece uma vez, ao criar.
+- **Lixeira**: excluir manda a nota para a Lixeira com o conteúdo intacto (com "Desfazer" na hora);
+  de lá dá para restaurar, excluir para sempre ou esvaziar. O servidor exclui de vez o que está
+  na lixeira há mais de 30 dias (`NotesLixeiraWorker`). A lixeira sincroniza entre aparelhos.
+- **Tags**: cada nota tem tags livres (minúsculas, até 20), editadas no cabeçalho do editor ou no card;
+  a barra lateral lista as tags com a contagem, clicar filtra (várias = a nota precisa ter todas) e o
+  menu da tag renomeia ou tira de todas as notas.
+- **Busca**: por título, tags **e por conteúdo** (texto, notas adesivas e itens de checklist de todas as páginas da nota).
 - **Ordenação**: por última edição, data de criação ou nome.
 - Lista de notas com miniaturas (thumbnail gerado a partir do canvas), duplicar, renomear, excluir.
 
@@ -705,6 +728,8 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `POST /api/auth/register` \| `login` \| `refresh` \| `logout` | Autenticação (compartilhada por todas as ferramentas) |
 | `GET /api/notes?since=` | Lista notas (metadados ou mudanças desde uma data) |
 | `PUT /api/notes/{id}` | Upsert idempotente (id gerado no cliente) |
+| `GET/POST /api/notes/{id}/links`, `DELETE /api/notes/{id}/links/{linkId}` | Links somente leitura da nota (criar, listar, revogar) |
+| `GET /api/notes/publico/{token}` | Nota compartilhada, sem login (só título e páginas; limite por IP) |
 | `GET /api/folders` | Lista pastas do usuário |
 | `POST /api/folders` | Cria pasta |
 | `PUT /api/folders/{id}` | Renomeia pasta |
@@ -774,6 +799,24 @@ echo "sdk.dir=/caminho/do/Android/sdk" > local.properties
 ./gradlew assembleDebug
 ```
 
+## Desenvolvimento guiado por spec (Spec Kit)
+
+Features novas seguem o [Spec Kit](https://github.com/github/spec-kit): as skills
+`/speckit-specify`, `/speckit-plan`, `/speckit-tasks` e `/speckit-implement` ficam em
+`.claude/skills/`, os templates e scripts em `.specify/`, e cada feature ganha uma pasta
+`specs/NNN-nome/` com spec, plano e tarefas. Os princípios que todo plano precisa respeitar
+estão em [`.specify/memory/constitution.md`](.specify/memory/constitution.md); o fluxo
+resumido está em [`CLAUDE.md`](CLAUDE.md).
+
+Para atualizar os templates para uma versão nova do Spec Kit:
+
+```bash
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+specify init --here --force --non-interactive --integration claude --script sh
+```
+
+(A constituição já preenchida é preservada; confira o `git diff` antes de commitar.)
+
 ## Deploy
 
 Ver [DEPLOY.md](DEPLOY.md) — resumo: `python scripts/deploy.py` (envia os arquivos
@@ -783,21 +826,22 @@ pipeline — é distribuído como APK separado, não pelo Caddy/VPS.
 
 ## Roadmap / sugestões de melhoria
 
-Nada abaixo está implementado — é uma lista de ideias levantadas em conversa, por prioridade.
+Cada item do Roadmap virou uma spec do Spec Kit em [`specs/`](specs/README.md), com plano e
+tarefas; o status de cada uma está no índice:
 
-**Confiabilidade**
-- Confirmar que o cron de backup do SQLite está de fato rodando na VPS (único ponto de falha dos dados).
-- HTTPS via subdomínio + Nginx Proxy Manager (hoje é IP puro, senha trafega em claro).
+- **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)) — o hub avisa quem
+  está em `PUBLICADORES` quando o último backup passa de 36 h. O HTTPS por
+  subdomínio já está no ar (cerebro.vsitefy.com.br).
+- **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
+  ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos
+  ([020](specs/020-notas-paginas/spec.md), feito), tags ([021](specs/021-notas-tags/spec.md), feito),
+  arrastar imagens ([022](specs/022-notas-arrastar-imagens/spec.md), feito), link somente leitura
+  ([023](specs/023-notas-link-publico/spec.md), feito) e modo leitura ([024](specs/024-notas-modo-leitura/spec.md), feito).
+- **Outras ferramentas**: recorrência de tarefas na web ([015](specs/015-tarefas-recorrencia-web/spec.md)),
+  telas web da Dieta ([016](specs/016-dieta-web/spec.md), feita) e do Treino ([017](specs/017-treino-web/spec.md), feita),
+  e no Segundo Cérebro texto de anexos ([026](specs/026-cerebro-texto-anexos/spec.md), feito), busca semântica
+  ([027](specs/027-cerebro-busca-semantica/spec.md), feita) e OAuth no MCP ([028](specs/028-cerebro-mcp-oauth/spec.md), feito).
 
-**Funcionalidades**
-- Compartilhar nota por link somente-leitura, sem exigir conta.
-- Arrastar-e-soltar imagens/arquivos direto no canvas (hoje só colar via Ctrl+V).
-- Tags, além de pastas (categorização cruzada, não hierárquica).
-- Modo apresentação/leitura (esconde a toolbar).
-- Lixeira com restaurar — hoje excluir é permanente na prática, embora o campo `deletedAt` já exista internamente como tombstone de sync.
-- Exportar em PDF (hoje só PNG).
-
-**Polish**
-- Atalho de teclado para trocar de página (Ctrl+PageUp/PageDown).
-- Duplicar página (hoje só duplica a nota inteira).
-- Reconhecimento de escrita à mão, colaboração em tempo real, compartilhamento entre usuários, login social, recuperação de senha por e-mail, app mobile nativo — fora do escopo original da v1, mantidos aqui só como registro do que foi conscientemente deixado de fora.
+Reconhecimento de escrita à mão, colaboração em tempo real, compartilhamento entre usuários, login
+social e recuperação de senha por e-mail continuam fora do escopo, registrados só como o que foi
+conscientemente deixado de fora.

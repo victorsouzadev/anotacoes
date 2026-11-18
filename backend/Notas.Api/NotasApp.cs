@@ -149,11 +149,13 @@ public static class NotasApp
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
+        builder.Services.Configure<Notas.Api.Services.Sistema.SistemaOptions>(builder.Configuration.GetSection(Notas.Api.Services.Sistema.SistemaOptions.SectionName));
         builder.Services.AddSingleton<SitesArmazenamento>();
         builder.Services.AddSingleton<FilaSites>();
         builder.Services.AddScoped<ExecutorSites>();
         builder.Services.AddSingleton<IPostgresProvisionador, PostgresProvisionador>();
         builder.Services.AddHostedService<PublicacaoWorker>();
+        builder.Services.AddHostedService<Notas.Api.Services.Lixeira.NotesLixeiraWorker>();
         builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
         builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 
@@ -253,6 +255,16 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
+            // Páginas públicas sem login (link somente leitura de nota, spec 023): por IP, para
+            // dificultar varrer tokens.
+            o.AddPolicy("publico", ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(1),
+                }));
+
             // IA da Dieta (chat e reconhecimento de foto): por usuário, como a das Finanças.
             o.AddPolicy("dieta-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -338,6 +350,7 @@ public static class NotasApp
         });
         app.MapAuthEndpoints();
         app.MapNotesEndpoints();
+        app.MapNotesShareEndpoints();
         app.MapFoldersEndpoints();
         app.MapFinancasEndpoints();
         app.MapAuvpEndpoints();
@@ -356,6 +369,7 @@ public static class NotasApp
         app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapViihMimosEndpoints();
+        app.MapSistemaEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
