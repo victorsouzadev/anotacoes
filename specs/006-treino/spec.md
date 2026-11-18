@@ -65,5 +65,5 @@ O MCP `/api/mcp/treino` oferece `treino_resumo` (andamento, último treino, rece
 
 ## Assumptions
 
-- Não há tela web de Treino no hub; a interface é o app Android.
+- A interface principal é o app Android; a tela web somente leitura veio depois, na spec 017.
 - O contrato segue o mesmo padrão da Dieta (`GET ?desde=`, `PUT /{id}`).

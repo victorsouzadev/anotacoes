@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Draft
+**Status**: Implementado em 2026-11-18
 
 **Input**: Lacuna da spec 006: os treinos chegam do app Treino Corrida, mas só dá para vê-los pelo MCP.
 

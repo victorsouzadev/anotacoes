@@ -67,6 +67,12 @@ const TOOLS: ToolCard[] = [
     downloadLabel: 'Baixar app Android (.apk)',
   },
   {
+    path: '/treino',
+    icon: 'run',
+    title: 'Treino',
+    description: 'Treinos de corrida enviados pelo app Treino Corrida: andamento do programa, totais, km por semana e ritmo.',
+  },
+  {
     path: '/imagens',
     icon: 'image',
     title: 'Editor de Imagens',

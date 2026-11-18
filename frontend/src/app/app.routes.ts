@@ -37,6 +37,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/dieta/dieta.page').then((m) => m.DietaPageComponent),
   },
   {
+    path: 'treino',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/treino/treino.page').then((m) => m.TreinoPageComponent),
+  },
+  {
     path: 'configuracoes',
     canActivate: [authGuard],
     loadComponent: () => import('./features/configuracoes/configuracoes.page').then((m) => m.ConfiguracoesPageComponent),
