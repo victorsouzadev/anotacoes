@@ -4,7 +4,7 @@ Especificações no formato do [Spec Kit](https://github.com/github/spec-kit). A
 são **retroativas**: descrevem o que já existe no código em novembro de 2026, para servir
 de base às mudanças futuras. Não têm `plan.md` nem `tasks.md` porque já foram implementadas.
 
-Feature nova começa com `/speckit-specify` e ganha o próximo número (029 em diante). Mudança
+Feature nova começa com `/speckit-specify` e ganha o próximo número (036 em diante). Mudança
 grande numa ferramenta que já existe pode ser uma spec nova que cita a retroativa dela.
 
 | # | Ferramenta | Spec |
@@ -94,3 +94,53 @@ Todas têm `checklists/requirements.md`.
   corrigido na 018.
 - **Cérebro**: o README dizia que o índice já separava trechos; não separava (o FTS é por nota). A 027
   passou a dividir as notas em trechos para os vetores.
+
+## Divisão em plug-ins (029 a 035)
+
+Pedido em 2026-11-19: dividir o hub em vários repositórios, com este como núcleo e as ferramentas
+conectadas como plug-ins, **todas usando o mesmo banco**. Desenho:
+[Hub e Plug-ins](https://claude.ai/artifact/T4ifWBSrGHX1ikcrpQ9Wfo). A constituição foi emendada
+para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: **planejadas**, nenhuma implementada.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 029 | [Núcleo do hub e contrato de plug-ins](029-nucleo-plugins/spec.md) | 030, 032 | + data-model, contracts |
+| 030 | [Login com chave assimétrica e OAuth no núcleo](030-login-assimetrico/spec.md) | 029, 031 | + data-model, contracts |
+| 031 | [Banco compartilhado entre núcleo e plug-ins](031-banco-compartilhado/spec.md) | 029 | + data-model, contracts |
+| 032 | [Pacotes compartilhados dos plug-ins](032-pacotes-compartilhados/spec.md) | 030, 031 | + contracts |
+| 033 | [Extrair o Segundo Cérebro](033-extrair-cerebro/spec.md) | 029–032 | spec, plan, research, quickstart, tasks |
+| 034 | [Extrair e congelar as ferramentas sem uso](034-extrair-congelados/spec.md) | 033 | spec, plan, research, quickstart, tasks |
+| 035 | [Extrair as ferramentas em uso](035-extrair-ferramentas-ativas/spec.md) | 034 | spec, plan, research, quickstart, tasks |
+
+### Ordem de implementação
+
+1. **030 + 031 + 032 + 029 juntas, ainda neste repositório**: chave assimétrica e selos de login, regras do
+   banco, SDK e `@grafite/ui`, registro de plug-ins. Validadas com o plug-in `hub-exemplo`.
+2. **033** Cérebro (já é serviço à parte).
+3. **034** Criativo (Imagens, Moldes, Bolo 3D, Precificação, app Windows) e Treino, congelados.
+4. **035** Dieta → Tarefas → Anotação → Finanças → Notas, uma por vez.
+
+### Decisões principais
+
+- **Banco**: o `notas.db` atual, montado em todos os containers. Cada plug-in é dono só das tabelas do
+  seu prefixo e tem histórico de migração próprio; extrair uma ferramenta não copia nenhuma linha. O
+  deployer copia o banco antes de cada migração e reverte se uma tabela de outro dono mudar.
+- **Login**: só o núcleo emite tokens (ES256 + JWKS); plug-ins só validam e recebem token com a
+  própria audiência. Como o banco é compartilhado, as linhas de login levam selo HMAC com chave só do
+  núcleo, para que gravar direto no banco não permita entrar como outra pessoa.
+- **URLs antigas** (`/api/dieta`, `/api/mcp/tarefas`, `/cerebro/oauth/*`, `/p/nota/...`) continuam
+  funcionando: apps Android instalados e conectores do Claude não precisam ser refeitos.
+- **Telas**: cada plug-in serve a própria, com o tema e a barra do `@grafite/ui`; sem Module Federation.
+
+### Resultado do analyze
+
+- Toda história de usuário tem tarefa; nenhuma spec ficou com `[NEEDS CLARIFICATION]`.
+- Corrigido durante a revisão: o token do hub mudaria de audiência e quebraria os apps (mantido
+  `notas-vps`); conectores OAuth antigos guardam `/cerebro/oauth/token` (rota legada no núcleo);
+  `/api/core/ia` por id de usuário deixaria um plug-in colher a chave de todos (agora exige o token do
+  usuário); o Estúdio já não existe e o ViihMimos é o backend da Precificação (vai para o criativo).
+- Riscos aceitos e registrados: com SQLite, a separação entre plug-ins é por convenção conferida
+  (teste do SDK + deployer), não por permissão do banco — Postgres com papel por plug-in fica como
+  evolução; e as telas no mesmo domínio podem ler o token do hub (030, Assumptions).
+- Exceções à constituição justificadas em "Complexity Tracking": registro e deploy por plug-in (029),
+  pacotes publicados (032).
