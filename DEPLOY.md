@@ -395,8 +395,8 @@ copia o arquivo para `data/plugins/plugins.lock`; o deployer confere a cada 30 s
 
 ```bash
 cat /opt/notas-vps/data/plugins/estado.json     # versão, anterior, no ar, última falha
-docker logs notas-deployer --tail 50            # o que o deployer fez
-curl -s -X POST -H "Authorization: Bearer $DEPLOYER_TOKEN" http://notas-deployer:8080/plugins/sincronizar  # de dentro da rede
+docker logs notas-vps-deployer-1 --tail 50      # o que o deployer fez
+curl -s -X POST -H "Authorization: Bearer $DEPLOYER_TOKEN" http://deployer:8080/plugins/sincronizar  # de dentro da rede do compose
 ```
 
 Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy; as tabelas e os dados ficam.
