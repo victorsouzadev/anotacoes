@@ -62,12 +62,24 @@ public static class WebEndpoints
                     ValidIssuer = "notas-vps",
                     ValidAudience = "notas-vps",
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256, SecurityAlgorithms.EcdsaSha256],
                     ValidateIssuer = true,
                     ValidateAudience = true,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ClockSkew = TimeSpan.FromSeconds(30),
                 };
+                // Tokens novos do núcleo vêm em ES256 (spec 030): chaves pelo JWKS, HS256 pelo segredo.
+                if (!string.IsNullOrWhiteSpace(web.Jwks))
+                {
+                    var jwks = new JwksDoNucleo(web.Jwks);
+                    var hmac = o.TokenValidationParameters.IssuerSigningKey;
+                    o.TokenValidationParameters.IssuerSigningKeyResolver = (_, token, kid, _) =>
+                    {
+                        var alg = (token as Microsoft.IdentityModel.JsonWebTokens.JsonWebToken)?.Alg;
+                        return alg == SecurityAlgorithms.HmacSha256 ? [hmac] : jwks.Chaves(kid);
+                    };
+                }
             });
 
         var allowed = web.AllowedEmails;

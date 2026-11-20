@@ -1,0 +1,68 @@
+# Workflow reutilizável dos plug-ins (spec 029). No repositório do plug-in:
+#
+#   jobs:
+#     plugin:
+#       uses: victorsouzadev/anotacoes/.github/workflows/plugin.yml@main
+#       permissions: { contents: read, packages: write }
+#
+# Testa (normal e globalization-invariant), confere o plugin.json, sobe o container e espera o health,
+# e na main publica ghcr.io/<dono>/hub-<id>:<commit>. A troca de versão no núcleo é uma linha no plugins.lock
+# (PR no victorsouzadev/anotacoes): o deployer faz o resto e volta sozinho se o health falhar.
+name: Plug-in
+
+on:
+  workflow_call:
+    inputs:
+      testes:
+        description: Projeto de testes
+        type: string
+        default: tests/Plugin.Tests/Plugin.Tests.csproj
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        invariante: ["0", "1"]
+    env:
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: ${{ matrix.invariante }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: SDK do hub
+        run: if [ -f scripts/baixar-sdk.sh ]; then sh scripts/baixar-sdk.sh; fi
+      - run: dotnet test ${{ inputs.testes }} -c Release
+
+  imagem:
+    needs: testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SDK do hub
+        run: if [ -f scripts/baixar-sdk.sh ]; then sh scripts/baixar-sdk.sh; fi
+      - name: Manifesto
+        id: m
+        run: |
+          id=$(jq -r .id plugin.json); rota=$(jq -r .rota plugin.json); health=$(jq -r .health plugin.json)
+          [ "$rota" = "/$id" ] || { echo "rota precisa ser /$id"; exit 1; }
+          case "$health" in "$rota"/*) ;; *) echo "health precisa ficar sob $rota/"; exit 1;; esac
+          echo "imagem=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/hub-$id" >> "$GITHUB_OUTPUT"
+          echo "health=$health" >> "$GITHUB_OUTPUT"
+          echo "porta=$(jq -r .porta plugin.json)" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: docker build --build-arg VERSAO=${GITHUB_SHA::7} -t ${{ steps.m.outputs.imagem }}:${GITHUB_SHA::7} .
+      - name: plugin.json dentro da imagem (o deployer lê dali)
+        run: docker run --rm --network none --entrypoint cat ${{ steps.m.outputs.imagem }}:${GITHUB_SHA::7} /app/plugin.json | jq -e .id
+      - name: Health dentro do container
+        run: |
+          docker run -d --name plugin -e HUB_BANCO=/tmp/notas.db -p 8080:${{ steps.m.outputs.porta }} ${{ steps.m.outputs.imagem }}:${GITHUB_SHA::7}
+          for i in $(seq 1 30); do curl -fsS "http://localhost:8080${{ steps.m.outputs.health }}" && exit 0; sleep 1; done
+          docker logs plugin; exit 1
+      - name: Publica no GHCR (só na main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ${{ steps.m.outputs.imagem }}:${GITHUB_SHA::7}
+          echo "Para trocar a versão no hub: ${{ steps.m.outputs.imagem }}@${GITHUB_SHA::7} no plugins.lock" >> "$GITHUB_STEP_SUMMARY"

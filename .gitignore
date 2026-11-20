@@ -11,3 +11,6 @@ downloads/
 data/sites/
 data/postgres/
 data/cerebro/
+
+# Chaves do núcleo (spec 030): nunca no git.
+data/core/

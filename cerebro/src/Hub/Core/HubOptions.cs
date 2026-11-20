@@ -75,6 +75,9 @@ public sealed class WebOptions
     /// <summary>Mesmo JWT_SECRET do notas-api. Vazio = tela web desligada.</summary>
     public string JwtSecret { get; set; } = "";
 
+    /// <summary>JWKS do núcleo (spec 030), para aceitar os tokens ES256. Vazio = só HS256.</summary>
+    public string Jwks { get; set; } = "";
+
     /// <summary>E-mails com acesso, separados por vírgula. O vault é de uma pessoa só.</summary>
     public string Usuarios { get; set; } = "";
 

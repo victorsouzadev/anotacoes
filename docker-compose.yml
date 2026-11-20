@@ -34,6 +34,8 @@ services:
       # Estado do backup gravado pelo scripts/backup.sh (spec 025).
       - Sistema__BackupStatus=/data/db/backup-status.json
       - Sistema__BackupExterno=/data/db/backup-externo.json
+      - Core__Chaves=/data/core/chaves
+      - Plugins__Estado=/data/plugins/estado.json
       - Sites__Publicadores=${PUBLICADORES:-}
       - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
       - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}
@@ -54,6 +56,10 @@ services:
       - ViihMimos__Usuarios=${VIIH_MIMOS_USUARIOS:-}
     volumes:
       - ./data/db:/data/db
+      # Chaves do núcleo (spec 030): assinatura ES256 e selo do login. Só neste serviço, nunca nos plug-ins.
+      - ./data/core/chaves:/data/core/chaves
+      # Estado dos plug-ins gravado pelo deployer (spec 029), lido por GET /api/plugins
+      - ./data/plugins:/data/plugins:ro
       - ./data/sites:/data/sites
       - ./data/anotacao:/anotacao
       - ./data/cerebro/hub/access:/access:ro
@@ -75,6 +81,8 @@ services:
       - ./downloads:/srv-downloads/downloads:ro
       # sites publicados (só leitura: quem escreve é a API)
       - ./data/sites:/srv-sites:ro
+      # trechos gerados pelo deployer para cada plug-in (spec 029)
+      - ./data/plugins/caddy:/etc/caddy/plugins.d:ro
     environment:
       - SITES_DOMINIO=${SITES_DOMINIO:-191-252-177-244.sslip.io}
     # "sites" é a rede dos containers dos apps publicados: o Caddy entra nela para
@@ -99,8 +107,15 @@ services:
       - DEPLOYER_REDE=notas-sites
       # pg_dump/pg_restore antes de cada deploy rodam dentro deste container (docker exec).
       - DEPLOYER_POSTGRES=notas-postgres
+      # Plug-ins (spec 029): caminho de data/db NO HOST, montado em cada plug-in (banco compartilhado, spec 031).
+      - PLUGINS_BANCO_HOST_DIR=${PLUGINS_BANCO_HOST_DIR:-/opt/notas-vps/data/db}
+      - PLUGINS_REDE=${PLUGINS_REDE:-notas-vps_default}
+      - PLUGINS_CADDY=notas-caddy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      # plugins.lock (copiado pelo deploy), estado, trechos do Caddy e cópias do banco antes de cada migração
+      - ./data/plugins:/plugins
+      - ./data/db:/data/db
 
   # Postgres compartilhado dos sites publicados: cada site ganha um banco e um usuário
   # próprios (site_<slug>), criados pela API. Os apps o acessam como postgres:5432 pela
@@ -170,6 +185,7 @@ services:
       - Hub__Casa__McpToken=${CASA_MCP_TOKEN:-}
       # Login único do hub: o mesmo JWT_SECRET do serviço "api", e só estes e-mails.
       - Hub__Web__JwtSecret=${JWT_SECRET:-}
+      - Hub__Web__Jwks=http://api:8080/.well-known/jwks.json
       - Hub__Web__Usuarios=${CEREBRO_USUARIOS:-}
       # Login do WebDAV inicial. A tela (aba Conectar) pode trocar; aí este deixa de valer.
       - Hub__WebdavUser=${CEREBRO_WEBDAV_USER:-}

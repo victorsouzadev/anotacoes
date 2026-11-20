@@ -8,6 +8,11 @@ import { PublicarService } from '../publicar/publicar.service';
 import { CerebroService } from '../cerebro/cerebro.service';
 import { AnotacaoService } from '../anotacao/anotacao.service';
 import { SistemaService, alertaBackup } from '../../core/sistema.service';
+import { PluginsService, ItemDoHub, mesclarCards } from '../../core/plugins.service';
+
+/** Ícones que um plug-in pode pedir no manifesto; outro nome cai no ícone do card antigo ou em "grid". */
+const ICONES_DE_PLUGIN: readonly IconName[] = ['pen', 'wallet', 'checklist', 'apple', 'run', 'image', 'box', 'cake',
+  'calculator', 'globe', 'sticky', 'edit', 'grid', 'book', 'tag', 'share'];
 
 interface ToolCard {
   path: string;
@@ -19,6 +24,9 @@ interface ToolCard {
   downloadLabel?: string;
   /** Mostra o link do instalador do Windows, quando houver um publicado. */
   windows?: boolean;
+  /** Plug-in (spec 029): página fora do Angular, aberta por link comum. */
+  externo?: boolean;
+  indisponivel?: boolean;
 }
 
 /** Só aparece para quem está em PUBLICADORES no servidor. */
@@ -126,11 +134,19 @@ const TOOLS: ToolCard[] = [
         <div class="grid">
           @for (tool of tools(); track tool.path) {
             <div class="tool-card-wrapper">
-              <a class="tool-card" [routerLink]="tool.path">
-                <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
-                <span class="tool-title">{{ tool.title }}</span>
-                <span class="tool-description">{{ tool.description }}</span>
-              </a>
+              @if (tool.externo) {
+                <a class="tool-card" [href]="tool.path" [class.indisponivel]="tool.indisponivel">
+                  <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
+                  <span class="tool-title">{{ tool.title }}</span>
+                  <span class="tool-description">{{ tool.indisponivel ? 'Indisponível agora. ' : '' }}{{ tool.description }}</span>
+                </a>
+              } @else {
+                <a class="tool-card" [routerLink]="tool.path">
+                  <span class="tool-icon"><app-icon [name]="tool.icon" [size]="22" /></span>
+                  <span class="tool-title">{{ tool.title }}</span>
+                  <span class="tool-description">{{ tool.description }}</span>
+                </a>
+              }
               @if (tool.downloadUrl) {
                 <a class="tool-download" [href]="tool.downloadUrl" [attr.download]="tool.downloadFileName">
                   <app-icon name="download" [size]="13" /> {{ tool.downloadLabel }}
@@ -215,6 +231,7 @@ const TOOLS: ToolCard[] = [
       transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
     }
     .tool-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--accent); }
+    .tool-card.indisponivel { opacity: .6; }
     .tool-icon {
       display: inline-flex; align-items: center; justify-content: center;
       width: 44px; height: 44px; border-radius: var(--radius);
@@ -250,12 +267,13 @@ export class HubPageComponent {
   private readonly temAnotacao = signal(false);
   /** Faixa de backup atrasado (spec 025), só para quem opera o servidor. */
   readonly alerta = signal<string | null>(null);
-  readonly tools = computed(() => [
+  private readonly plugins = signal<ItemDoHub[]>([]);
+  readonly tools = computed(() => mesclarCards([
     ...(this.temAnotacao() ? [ANOTACAO] : []),
     ...TOOLS,
     ...(this.temCerebro() ? [CEREBRO] : []),
     ...(this.podePublicar() ? [PUBLICAR] : []),
-  ]);
+  ], this.plugins(), ICONES_DE_PLUGIN) as ToolCard[]);
 
   constructor(
     public auth: AuthService,
@@ -265,8 +283,10 @@ export class HubPageComponent {
     cerebro: CerebroService,
     anotacao: AnotacaoService,
     sistema: SistemaService,
+    plugins: PluginsService,
   ) {
     windows.check();
+    void plugins.listar().then((l) => this.plugins.set(l), () => undefined);
     void anotacao.estado().then((e) => this.temAnotacao.set(e.habilitado), () => undefined);
     void publicar.permissao().then((r) => {
       this.podePublicar.set(r.podePublicar);

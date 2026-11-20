@@ -82,6 +82,22 @@
         reverse_proxy cerebro-webdav:8080
     }
 
+    # Chaves públicas do núcleo (spec 030): os plug-ins validam o login por aqui.
+    handle /.well-known/jwks.json {
+        reverse_proxy api:8080
+    }
+
+    # @grafite/ui (spec 032): CSS, barra e token dos plug-ins, no mesmo domínio do hub.
+    handle_path /grafite/* {
+        root * /srv-grafite
+        header Cache-Control "public, max-age=300"
+        file_server
+    }
+
+    # Plug-ins (spec 029): um arquivo por plug-in, gerado pelo deployer. Rotas mais longas ganham das
+    # genéricas abaixo (o Caddy ordena os "handle" de caminho pelo tamanho), então /api/dieta/* vai ao plug-in.
+    import /etc/caddy/plugins.d/*.caddy
+
     handle /api/* {
         reverse_proxy api:8080 {
             flush_interval -1

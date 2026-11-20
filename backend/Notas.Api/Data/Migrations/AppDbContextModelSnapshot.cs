@@ -1123,6 +1123,9 @@ namespace Notas.Api.Data.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Selo")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1755,12 +1758,256 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Selo")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.McpToken", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Plugin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevogadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Selo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimoUso")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UsuarioId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Hash")
+                        .IsUnique();
+
+                    b.ToTable("core_mcp_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.OAuthCliente", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUris")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimoUso")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("core_oauth_clientes", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.OAuthCodigo", b =>
+                {
+                    b.Property<string>("Hash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CodeChallenge")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Plugin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUri")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UsadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UsuarioId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Hash");
+
+                    b.ToTable("core_oauth_codigos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.OAuthPedido", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CodeChallenge")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Plugin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUri")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("core_oauth_pedidos", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.OAuthRevogado", b =>
+                {
+                    b.Property<string>("Jti")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Plugin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Jti");
+
+                    b.HasIndex("Plugin");
+
+                    b.ToTable("core_oauth_revogados", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Auth.OAuthToken", b =>
+                {
+                    b.Property<string>("Hash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClienteId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiraEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Familia")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Plugin")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RevogadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Selo")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UltimoJti")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimoJtiExpira")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UsadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UsuarioId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Hash");
+
+                    b.HasIndex("Familia");
+
+                    b.HasIndex("UsuarioId", "ClienteId");
+
+                    b.ToTable("core_oauth_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Notas.Api.Services.Plugins.PluginEstado", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Manifesto")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("NoAr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SegredoServicoHash")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UltimaFalha")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimoHealth")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Versao")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VersaoAnterior")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("core_plugins_estado", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>

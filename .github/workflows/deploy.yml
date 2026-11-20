@@ -152,7 +152,8 @@ jobs:
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
             --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
-            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy
+            --exclude='pacotes/*/bin' --exclude='pacotes/*/obj' --exclude=pacotes/grafite-ui/node_modules \
+            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy plugins.lock pacotes
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -180,10 +181,14 @@ jobs:
             # sobrevive no disco e volta pro contexto de build do Docker (foi assim que
             # kanban/tasks-kanban.page.ts órfão quebrou o build do frontend depois do
             # rename pra projects/project-board.page.ts). Limpa antes de extrair.
-            rm -rf backend frontend caddy deployer cerebro ops scripts
+            rm -rf backend frontend caddy deployer cerebro ops scripts pacotes
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
-            mkdir -p data/db data/sites
+            mkdir -p data/db data/sites data/core/chaves
+            chmod 700 data/core data/core/chaves
+            # Plug-ins (spec 029): o deployer lê o lock desta pasta (cp mantém o arquivo que ele vigia).
+            mkdir -p data/plugins/caddy
+            cp plugins.lock data/plugins/plugins.lock
             # Scripts do host (backup, spec 036): executáveis e só o root altera. Antes deste passo o deploy
             # não levava scripts/ e o backup.sh da VPS ficou meses sem rodar (666, versão de julho).
             # A pasta também: o tar preserva o dono do CI (usuário deploy), que poderia trocar um script rodado pelo root.

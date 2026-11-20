@@ -635,7 +635,9 @@ notas-vps/
 │   ├── Services/Financas/            # extração de lançamentos (OpenRouter/Anthropic + fallback
 │   │                                 # heurístico, com entrada de imagem/PDF/planilha), orçamento
 │   │                                 # (validação, rateio), metas e o relógio no fuso do usuário
-│   ├── Auth/TokenService.cs          # emissão/validação/rotação de JWT (login único, vale pra tudo)
+│   ├── Auth/                         # TokenService (ES256 + JWKS), ChavesDeAssinatura e Selo das linhas de login (030)
+│   ├── Services/Plugins/             # registro de plug-ins, health a cada 30 s, módulos do núcleo (029)
+│   ├── Services/Auth/OAuthDoNucleo.cs # OAuth dos MCPs dos plug-ins, tokens MCP estáticos e revogados (030)
 │   └── Dtos/                         # Dtos.cs (Notas) + FinancasDtos.cs + OrcamentoDtos.cs
 │                                     # + MetaDtos.cs + TasksDtos.cs
 ├── frontend/src/app/
@@ -657,6 +659,8 @@ notas-vps/
 │       ├── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
 │       │                             # orçamento, metas de reserva e histórico
 │       └── tasks/                    # lista, categorias, pomodoro, estatísticas, lixeira
+├── pacotes/                          # Hub.Plugin.Sdk (.NET) e grafite-ui (visual, barra, token): ver pacotes/README.md (032)
+├── plugins.lock                      # plug-ins no ar (id: imagem@commit), lido pelo deployer (029)
 ├── mobile/                           # app Android nativo (Kotlin/Compose) da ferramenta Tarefas
 │   ├── app/src/main/java/com/organizador/app/
 │   │   ├── data/sync/                # sincronização completa com o backend (mesma conta do hub)

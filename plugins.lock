@@ -1,0 +1,5 @@
+# Plug-ins do hub (spec 029). Uma linha por plug-in:
+#   id: imagem@versão        (versão = commit curto do repositório do plug-in, a tag da imagem no GHCR)
+# Linha comentada = desligado: o container para e os dados ficam. O deployer confere este arquivo a cada 30 s.
+# Exemplo (desligado até a imagem do hub-exemplo usar o SDK):
+# exemplo: ghcr.io/victorsouzadev/hub-exemplo@0000000

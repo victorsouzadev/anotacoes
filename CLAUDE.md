@@ -17,7 +17,9 @@ mudança relevante, siga as skills nesta ordem:
 
 As specs 001–014 em `specs/` são retroativas (o que já existe, por ferramenta), as 015–028 já foram
 implementadas e as 029–035 planejam a divisão em núcleo + plug-ins com banco compartilhado e a 036 a cópia do backup fora da VPS, que vem antes delas (ver a ordem
-em `specs/README.md`). Leia a spec da
+em `specs/README.md`). A base das 029 a 032 (login ES256 com JWKS e selo, registro de plug-ins pelo
+`plugins.lock`, banco compartilhado, SDK e `@grafite/ui` em `pacotes/`) já está no código; as extrações (033 a 035)
+seguem a receita do `DEPLOY.md` ("Núcleo e plug-ins"). Leia a spec da
 ferramenta antes de mudá-la. Correções pequenas não precisam de spec. O Spec Kit **não cria branch** aqui: trabalhe na
 branch da sessão. A feature ativa fica em `.specify/feature.json` (local, fora do git).
 
