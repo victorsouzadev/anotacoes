@@ -4,7 +4,7 @@ Especificações no formato do [Spec Kit](https://github.com/github/spec-kit). A
 são **retroativas**: descrevem o que já existe no código em novembro de 2026, para servir
 de base às mudanças futuras. Não têm `plan.md` nem `tasks.md` porque já foram implementadas.
 
-Feature nova começa com `/speckit-specify` e ganha o próximo número (036 em diante). Mudança
+Feature nova começa com `/speckit-specify` e ganha o próximo número (037 em diante). Mudança
 grande numa ferramenta que já existe pode ser uma spec nova que cita a retroativa dela.
 
 | # | Ferramenta | Spec |
@@ -144,3 +144,44 @@ para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: **planejadas
   evolução; e as telas no mesmo domínio podem ler o token do hub (030, Assumptions).
 - Exceções à constituição justificadas em "Complexity Tracking": registro e deploy por plug-in (029),
   pacotes publicados (032).
+
+## Cópia do backup fora da VPS (036)
+
+Pedido em 2026-11-20, depois de um achado de produção: o cron do backup disparava todo dia, mas o
+`scripts/backup.sh` da VPS estava sem permissão de execução (`666`) e na versão de julho, porque o
+`deploy.yml` não empacota `scripts/`. O último backup era de 2026-07-09 e a saída do cron era descartada.
+Corrigido à mão no mesmo dia (script da `main`, `755`, log em `/var/log/notas-backup.log`); a 036 trata a
+causa e o risco maior: todos os dados e todas as cópias estão no mesmo disco. Status: **planejada**.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 036 | [Cópia do backup fora da VPS](036-backup-externo/spec.md) | 025 | + data-model, contracts |
+
+### Ordem
+
+**036 vem antes da 029–035**: a 031 concentra todos os plug-ins no mesmo `notas.db`, e a cópia externa
+precisa existir antes de qualquer migração de plug-in.
+
+### Decisões principais
+
+- `restic` para um bucket S3 compatível de outro provedor (recomendado Backblaze B2), cifrado na VPS,
+  deduplicado, com retenção 7 diárias / 4 semanais / 6 mensais. A senha fica também fora da VPS.
+- O instantâneo leva as cópias consistentes do dia, os dumps do Postgres, o restante de `data/` (cobre os
+  plug-ins sem mudar o script) e o `.env`, porque sem as chaves do núcleo (030) os logins deixam de valer.
+- Conferência semanal: `restic check` parcial e restauração do `notas.db` com `PRAGMA integrity_check`.
+  Ensaio completo numa máquina que não é a VPS antes de dar a spec como concluída e a cada 6 meses.
+- Estado em `data/db/backup-externo.json`, separado do `backup-status.json` da 025 (que não muda de formato).
+  O hub alerta com 36 h sem cópia externa ou 8 dias sem conferência.
+- O deploy passa a levar `scripts/` com `755 root:root`; a limpeza dos 14 dias só apaga os arquivos do script
+  (a versão antiga apagou `backups/estudio-2026-10-25/` em 2026-11-20).
+
+### Resultado do analyze
+
+- Todo requisito (FR-001 a FR-012) tem tarefa; nenhum `[NEEDS CLARIFICATION]`.
+- Corrigido: guardar o estado externo dentro do `backup-status.json` faria cada backup local apagar o
+  registro da conferência semanal; virou um arquivo próprio.
+- Corrigido: o modelo de dados tinha dois campos para "último sucesso"; ficou só `concluidoEm`, com
+  `falhaEm`/`erro` para a falha mais recente.
+- Exceção à constituição justificada em "Complexity Tracking": `restic` no host (Princípio VIII).
+- Fora da spec, registrado: `/opt/financas-vps/scripts/backup.sh` está com o mesmo `666` sem execução
+  (outro repositório); object lock e segundo destino externo.
