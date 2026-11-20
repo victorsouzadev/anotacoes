@@ -34,6 +34,7 @@ services:
       # Estado do backup gravado pelo scripts/backup.sh (spec 025).
       - Sistema__BackupStatus=/data/db/backup-status.json
       - Sistema__BackupExterno=/data/db/backup-externo.json
+      - Core__Chaves=/data/core/chaves
       - Sites__Publicadores=${PUBLICADORES:-}
       - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
       - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}
@@ -54,6 +55,8 @@ services:
       - ViihMimos__Usuarios=${VIIH_MIMOS_USUARIOS:-}
     volumes:
       - ./data/db:/data/db
+      # Chaves do núcleo (spec 030): assinatura ES256 e selo do login. Só neste serviço, nunca nos plug-ins.
+      - ./data/core/chaves:/data/core/chaves
       - ./data/sites:/data/sites
       - ./data/anotacao:/anotacao
       - ./data/cerebro/hub/access:/access:ro
@@ -170,6 +173,7 @@ services:
       - Hub__Casa__McpToken=${CASA_MCP_TOKEN:-}
       # Login único do hub: o mesmo JWT_SECRET do serviço "api", e só estes e-mails.
       - Hub__Web__JwtSecret=${JWT_SECRET:-}
+      - Hub__Web__Jwks=http://api:8080/.well-known/jwks.json
       - Hub__Web__Usuarios=${CEREBRO_USUARIOS:-}
       # Login do WebDAV inicial. A tela (aba Conectar) pode trocar; aí este deixa de valer.
       - Hub__WebdavUser=${CEREBRO_WEBDAV_USER:-}

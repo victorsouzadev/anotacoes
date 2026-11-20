@@ -183,7 +183,8 @@ jobs:
             rm -rf backend frontend caddy deployer cerebro ops scripts
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
-            mkdir -p data/db data/sites
+            mkdir -p data/db data/sites data/core/chaves
+            chmod 700 data/core data/core/chaves
             # Scripts do host (backup, spec 036): executáveis e só o root altera. Antes deste passo o deploy
             # não levava scripts/ e o backup.sh da VPS ficou meses sem rodar (666, versão de julho).
             # A pasta também: o tar preserva o dono do CI (usuário deploy), que poderia trocar um script rodado pelo root.

@@ -2,10 +2,10 @@
 
 ## Phase 2: Foundational
 
-- [ ] T001 `ChavesDeAssinatura` (gerar no primeiro boot, carregar, rotacionar, JWKS com atual + anterior) em `backend/Notas.Api/Auth/`, com testes
-- [ ] T002 `TokenService` assinando ES256 com `kid`; validação aceita HS256 só até `AceitarHs256Ate`; testes
-- [ ] T003 Coluna `Selo` (HMAC) em `users`, `refresh_tokens`, `core_oauth_tokens`, `core_mcp_tokens`; selar linhas antigas no boot; login e refresh recusam selo inválido; testes de escrita direta no banco
-- [ ] T004 Montar `data/core/chaves` só no serviço `api` em `docker-compose.yml`; incluir no backup (025)
+- [x] T001 `ChavesDeAssinatura` (gerar no primeiro boot, carregar, rotacionar, JWKS com atual + anterior) em `backend/Notas.Api/Auth/`, com testes
+- [x] T002 `TokenService` assinando ES256 com `kid`; validação aceita HS256 só até `AceitarHs256Ate`; testes
+- [x] T003 Coluna `Selo` (HMAC) em `users`, `refresh_tokens`, `core_oauth_tokens`, `core_mcp_tokens`; selar linhas antigas no boot; login e refresh recusam selo inválido; testes de escrita direta no banco
+- [x] T004 Montar `data/core/chaves` só no serviço `api` em `docker-compose.yml`; incluir no backup (025)
 
 ## Phase 3: User Story 1 e 4 - Um login, apps sem quebrar (P1) 🎯 MVP
 

@@ -9,6 +9,9 @@ public class User
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>HMAC do núcleo sobre Id, Email e PasswordHash (spec 030): linha gravada por fora não loga.</summary>
+    public string? Selo { get; set; }
 }
 
 public class RefreshToken
@@ -20,6 +23,9 @@ public class RefreshToken
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? RevokedAt { get; set; }
     public string? ReplacedBy { get; set; }
+
+    /// <summary>HMAC do núcleo sobre TokenHash, UserId e ExpiresAt (spec 030).</summary>
+    public string? Selo { get; set; }
 }
 
 public class Folder

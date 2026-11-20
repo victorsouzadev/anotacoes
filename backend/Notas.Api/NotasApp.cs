@@ -40,6 +40,14 @@ public class NotasAppOptions
 /// </summary>
 public static class NotasApp
 {
+    /// <summary><c>data/db/notas.db</c> → <c>data/core/chaves</c>; qualquer outro banco (testes, desktop) → <c>&lt;banco&gt;.chaves</c>.</summary>
+    internal static string PastaChavesPadrao(string banco)
+    {
+        var arq = Path.GetFullPath(banco);
+        var dir = Path.GetDirectoryName(arq) ?? ".";
+        return Path.GetFileName(dir) == "db" ? Path.Combine(dir, "..", "core", "chaves") : arq + ".chaves";
+    }
+
     public static WebApplication Build(string[] args, NotasAppOptions? options = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, WebRootPath = options?.WebRoot, ContentRootPath = options?.ContentRoot });
@@ -54,7 +62,17 @@ public static class NotasApp
         var maxBody = builder.Configuration.GetValue<long?>("Kestrel:MaxBodyBytes") ?? 10 * 1024 * 1024;
         builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = maxBody);
 
-        builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite(connectionString));
+        // Chaves do núcleo (spec 030): por padrão em <pasta do banco>/../core/chaves.
+        var opcoesChaves = builder.Configuration.GetSection(ChavesOptions.SectionName).Get<ChavesOptions>() ?? new ChavesOptions();
+        var pastaChaves = builder.Configuration[$"{ChavesOptions.SectionName}:Chaves"] is { Length: > 0 } pc
+            ? pc
+            : PastaChavesPadrao(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource);
+        var chaves = new ChavesDeAssinatura(pastaChaves);
+        var aceitarHs256Ate = opcoesChaves.AceitarHs256Ate?.ToUniversalTime() ?? DateTime.UtcNow.AddMinutes(15);
+        builder.Services.AddSingleton(chaves);
+        builder.Services.AddSingleton<SeloInterceptor>();
+        builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseSqlite(connectionString)
+            .AddInterceptors(sp.GetRequiredService<SeloInterceptor>()));
         builder.Services.AddSingleton<TokenService>();
 
         // Enums (ferramenta Finanças) trafegam como string no JSON, em vez de índice numérico.
@@ -228,7 +246,7 @@ public static class NotasApp
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(o => o.TokenValidationParameters = TokenService.ValidationParameters(jwtSecret));
+            .AddJwtBearer(o => o.TokenValidationParameters = TokenService.ValidationParameters(jwtSecret, chaves, aceitarHs256Ate));
         builder.Services.AddAuthorization();
 
         builder.Services.AddRateLimiter(o =>
@@ -311,6 +329,7 @@ public static class NotasApp
             db.Database.Migrate();
             db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             TacoSeed.Aplicar(db);
+            Selo.SelarExistentes(db, chaves, pastaChaves);
         }
 
         // A autenticação vem antes do limitador porque a política "financas-ia" particiona

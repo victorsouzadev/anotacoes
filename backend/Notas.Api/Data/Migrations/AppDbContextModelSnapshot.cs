@@ -1123,6 +1123,9 @@ namespace Notas.Api.Data.Migrations
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Selo")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1753,6 +1756,9 @@ namespace Notas.Api.Data.Migrations
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Selo")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");

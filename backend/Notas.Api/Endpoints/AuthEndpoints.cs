@@ -10,6 +10,13 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
+        // Chaves públicas do núcleo (spec 030): plug-ins validam os tokens por aqui, sem segredo nenhum.
+        app.MapGet("/.well-known/jwks.json", (ChavesDeAssinatura chaves, HttpContext ctx) =>
+        {
+            ctx.Response.Headers.CacheControl = "public, max-age=300";
+            return Results.Json(chaves.Jwks());
+        });
+
         var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", async (RegisterRequest req, AppDbContext db, TokenService tokens) =>
@@ -32,20 +39,21 @@ public static class AuthEndpoints
             return Results.Created($"/api/users/{user.Id}", await IssueTokens(user, db, tokens));
         });
 
-        group.MapPost("/login", async (LoginRequest req, AppDbContext db, TokenService tokens) =>
+        group.MapPost("/login", async (LoginRequest req, AppDbContext db, TokenService tokens, ChavesDeAssinatura chaves) =>
         {
             var email = req.Email?.Trim().ToLowerInvariant() ?? "";
             var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
-            if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password ?? "", user.PasswordHash))
+            // Sem selo do núcleo a linha foi gravada por fora (spec 030): mesma resposta de senha errada.
+            if (user is null || !Selo.Confere(chaves, user) || !BCrypt.Net.BCrypt.Verify(req.Password ?? "", user.PasswordHash))
                 return Results.Json(new { error = "E-mail ou senha incorretos." }, statusCode: 401);
             return Results.Ok(await IssueTokens(user, db, tokens));
         });
 
-        group.MapPost("/refresh", async (RefreshRequest req, AppDbContext db, TokenService tokens) =>
+        group.MapPost("/refresh", async (RefreshRequest req, AppDbContext db, TokenService tokens, ChavesDeAssinatura chaves) =>
         {
             var hash = TokenService.HashToken(req.RefreshToken ?? "");
             var stored = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
-            if (stored is null)
+            if (stored is null || !Selo.Confere(chaves, stored))
                 return Results.Json(new { error = "Sessão inválida." }, statusCode: 401);
 
             if (stored.RevokedAt is not null)
@@ -60,7 +68,9 @@ public static class AuthEndpoints
             if (stored.ExpiresAt < DateTime.UtcNow)
                 return Results.Json(new { error = "Sessão expirada." }, statusCode: 401);
 
-            var user = await db.Users.FirstAsync(u => u.Id == stored.UserId);
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == stored.UserId);
+            if (user is null || !Selo.Confere(chaves, user))
+                return Results.Json(new { error = "Sessão inválida." }, statusCode: 401);
             var response = await IssueTokens(user, db, tokens, saveNow: false);
             stored.RevokedAt = DateTime.UtcNow;
             stored.ReplacedBy = TokenService.HashToken(response.RefreshToken);
