@@ -82,6 +82,11 @@ public class McpToken
     public string? Selo { get; set; }
 }
 
+public sealed record ClienteImportado(string Id, string? Nome, List<string>? RedirectUris, DateTimeOffset CriadoEm, DateTimeOffset? UltimoUso);
+public sealed record RefreshImportado(string Hash, string ClienteId, string? Email, string? Familia, DateTimeOffset ExpiraEm);
+public sealed record ImportacaoOAuthDto(List<ClienteImportado>? Clientes, List<RefreshImportado>? Refresh);
+public sealed record ResultadoImportacao(int Clientes, int Tokens, int Ignorados);
+
 public sealed record TokensOAuth(string AccessToken, string RefreshToken, int ExpiresIn);
 
 /// <summary>
@@ -260,6 +265,47 @@ public sealed class OAuthDoNucleo(AppDbContext db, TokenService tokens, ChavesDe
         db.McpTokens.Add(t);
         await db.SaveChangesAsync();
         return (t, token);
+    }
+
+    /// <summary>
+    /// Importação única do OAuth antigo de um plug-in (spec 033): clientes e refresh tokens ativos, só em hash.
+    /// Repetir não duplica nada; e-mail sem usuário no núcleo fica de fora.
+    /// </summary>
+    public async Task<ResultadoImportacao> Importar(string plugin, ImportacaoOAuthDto dto)
+    {
+        var existentes = (await db.OAuthClientes.Select(c => c.Id).ToListAsync()).ToHashSet();
+        var clientes = 0;
+        foreach (var c in dto.Clientes ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(c.Id) || !existentes.Add(c.Id)) continue;
+            db.OAuthClientes.Add(new OAuthCliente
+            {
+                Id = c.Id, Nome = c.Nome ?? "", RedirectUris = System.Text.Json.JsonSerializer.Serialize(c.RedirectUris ?? []),
+                CriadoEm = c.CriadoEm.UtcDateTime, UltimoUso = c.UltimoUso?.UtcDateTime,
+            });
+            clientes++;
+        }
+        var usuarios = (await db.Users.Select(u => new { u.Id, u.Email }).ToListAsync())
+            .GroupBy(u => u.Email.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Id);
+        var hashes = (await db.OAuthTokens.Select(t => t.Hash).ToListAsync()).ToHashSet();
+        int tokens = 0, ignorados = 0;
+        foreach (var t in dto.Refresh ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(t.Hash) || t.Hash.Length != 64 || t.ExpiraEm.UtcDateTime <= Agora
+                || !existentes.Contains(t.ClienteId) || !usuarios.TryGetValue((t.Email ?? "").ToLowerInvariant(), out var usuarioId))
+            { ignorados++; continue; }
+            if (!hashes.Add(t.Hash)) continue;
+            var linha = new OAuthToken
+            {
+                Hash = t.Hash, ClienteId = t.ClienteId, Plugin = plugin, UsuarioId = usuarioId, Email = t.Email!,
+                Familia = string.IsNullOrWhiteSpace(t.Familia) ? Guid.NewGuid().ToString("N") : t.Familia, ExpiraEm = t.ExpiraEm.UtcDateTime,
+            };
+            linha.Selo = SeloDe(chaves, linha);
+            db.OAuthTokens.Add(linha);
+            tokens++;
+        }
+        await db.SaveChangesAsync();
+        return new ResultadoImportacao(clientes, tokens, ignorados);
     }
 
     /// <summary>Para o plug-in (60 s): jti revogados ainda válidos e os tokens MCP estáticos ativos dele (só hashes).</summary>

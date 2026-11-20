@@ -2,18 +2,18 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Criar o repositório `hub-cerebro` no GitHub (usuário) e `git subtree split --prefix=cerebro` para ele
+- [x] T001 Criar o repositório `hub-cerebro` no GitHub (usuário) e `git subtree split --prefix=cerebro` para ele
 - [ ] T002 Copiar `frontend/src/app/features/cerebro/` (menos `autorizar.page.ts`) e a página `/capturar` para `hub-cerebro/web/`, com build Angular próprio
 
 ## Phase 2: Foundational
 
-- [ ] T003 `Program.cs` com `AdicionarPlugin`, auth por JWKS e `plugin.json` (rotas legadas `/cerebro/*`, `/capturar`)
-- [ ] T004 `CerebroDb` com `UsarBancoDoHub("cerebro")`: `cerebro_capturas`, `cerebro_configuracoes`; teste `TabelasDoPlugin`
-- [ ] T005 `POST /api/core/oauth/importar` no núcleo (uma vez por plug-in, token de serviço), com teste
+- [x] T003 `Program.cs` com `AdicionarPlugin`, auth por JWKS e `plugin.json` (rotas legadas `/cerebro/*`, `/capturar`) — feito com o `JwksDoNucleo` que o Cérebro já tinha e `UsePathBase("/cerebro")`; troca pelo SDK quando a Release `sdk-v1.0.0` existir
+- [x] T004 `CerebroDb` com `UsarBancoDoHub("cerebro")`: `cerebro_capturas`, `cerebro_configuracoes`; teste `TabelasDoPlugin`
+- [x] T005 `POST /api/core/oauth/importar` no núcleo (uma vez por plug-in, token de serviço), com teste
 
 ## Phase 3: User Story 1 - Nada muda para quem usa (P1) 🎯 MVP
 
-- [ ] T006 [US1] `Migracao033` (capturas, configurações, OAuth via importar; contagens; `hub.db.pre-033`), idempotente, com testes
+- [x] T006 [US1] `Migracao033` (capturas, configurações, OAuth via importar; contagens; `hub.db.pre-033`), idempotente, com testes — o `hub.db` fica intacto (acessos e WebDAV seguem nele) e ganha o marcador `hub.db.migrado-033`
 - [ ] T007 [US1] IA do núcleo no `ClaudeClassifier`/`Embeddings`, com cópia única da chave atual se o núcleo não tiver
 - [ ] T008 [US1] Reindexação em background quando o índice derivado falta; busca responde "indexando"
 - [ ] T009 [US1] Ensaio com cópia de produção (quickstart passos 1–2)
