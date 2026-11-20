@@ -1,31 +1,39 @@
 <!--
 Relatório de sincronização
-- Versão: (template) → 1.0.0 (primeira ratificação)
-- Princípios criados: I a VIII (todos novos)
-- Seções criadas: Restrições técnicas, Fluxo de desenvolvimento, Governança
-- Templates: plan-template.md usa "Constitution Check" genérico, que lê este arquivo ✅;
-  spec-template.md e tasks-template.md não precisam de mudança ✅
-- Pendências: nenhuma
+- Versão: 1.0.0 → 2.0.0 (MAJOR: Princípio I redefinido)
+- Princípio I: "Um hub, um login, um backend" → "Um hub, um login, um banco". Ferramentas podem
+  ser plug-ins em repositório próprio, desde que sigam o contrato da spec 029, usem o login do
+  núcleo (spec 030) e o banco compartilhado (spec 031).
+- Restrições técnicas: linhas "Plug-ins", "Banco" e "Deploy" atualizadas; "MCP" ganha a rota do plug-in.
+- Templates: sem mudança ✅
+- Pendências: o código ainda é monólito até a 029 ser implementada; até lá, a forma antiga (pasta em
+  features/ e Endpoints no Notas.Api) continua válida.
+- Histórico: 1.0.0 (2026-11-18) primeira ratificação.
 -->
 
 # Constituição do notas-vps
 
 Hub pessoal de ferramentas (Notas, Finanças, Tarefas, Dieta, Treino, Editor de Imagens,
 Moldes, Publicar, Segundo Cérebro, Anotação, Precificação...) com um único login, um único
-backend e apps nativos que compartilham a mesma conta. Esta constituição vale para toda
+banco e apps nativos que compartilham a mesma conta. As ferramentas podem morar no núcleo ou
+em repositórios de plug-in. Esta constituição vale para toda
 spec, plano e lista de tarefas gerada pelo Spec Kit neste repositório.
 
 ## Princípios
 
-### I. Um hub, um login, um backend
-Toda ferramenta nova entra como mais uma opção do hub, nunca como outro produto:
-- Frontend: uma pasta em `frontend/src/app/features/<ferramenta>/`, rota lazy-loaded em
-  `app.routes.ts` e card em `features/hub/hub.page.ts`.
-- Backend: um `Endpoints/<Ferramenta>Endpoints.cs` no `Notas.Api`, com tabelas e DTOs
-  próprios, reaproveitando JWT, usuários e banco.
-- Proibido criar outro sistema de login, outro deploy ou outro domínio para uma ferramenta.
-  Serviço separado (como `cerebro/`, `deployer/`, `ops/`) só com justificativa escrita no
-  plano (isolamento de segurança, runtime diferente, processo de longa duração).
+### I. Um hub, um login, um banco
+Toda ferramenta é uma opção do hub, nunca outro produto. Ela pode viver em dois lugares:
+- **Módulo no núcleo**: pasta em `frontend/src/app/features/<ferramenta>/` e
+  `Endpoints/<Ferramenta>Endpoints.cs` no `Notas.Api`, como sempre foi.
+- **Plug-in**: repositório próprio (`hub-<id>`), com container próprio, seguindo o contrato
+  da spec 029 (`plugin.json`, health, rotas em `/<id>/`) e o SDK da spec 032.
+
+Nos dois casos:
+- O login é o do núcleo: só o núcleo emite tokens; o plug-in só valida (spec 030).
+- O banco é um só, o `notas.db` compartilhado; cada ferramenta é dona apenas das suas tabelas
+  e não lê nem grava as de outra (spec 031).
+- O deploy passa pelo deployer do núcleo; proibido outro domínio, outro login ou deploy por fora.
+- Serviço que não é ferramenta (`deployer/`, `ops/`) continua exigindo justificativa no plano.
 
 ### II. Dados do usuário são sagrados
 - Nunca perder dado: mudanças de schema são compatíveis com o que já está gravado
@@ -72,7 +80,7 @@ depender da cultura do servidor.
 
 ### VIII. Simplicidade
 Comece pelo menor recurso que resolve o caso real. Sem dependência nova, camada, serviço ou
-abstração sem necessidade demonstrada no plano. SQLite no `Notas.Api` até que haja motivo
+abstração sem necessidade demonstrada no plano. SQLite compartilhado até que haja motivo
 medido para outra coisa. Complexidade extra é registrada na tabela "Complexity Tracking" do
 plano com o motivo e a alternativa mais simples rejeitada.
 
@@ -81,12 +89,14 @@ plano com o motivo e a alternativa mais simples rejeitada.
 | Camada | Padrão |
 |---|---|
 | Frontend | Angular 21, standalone components, signals, rotas lazy por ferramenta |
-| Backend | ASP.NET Core 9, Minimal APIs, EF Core + SQLite (WAL) |
+| Backend | ASP.NET Core 9 (núcleo) ou .NET 9+ (plug-ins), Minimal APIs, EF Core + SQLite (WAL) |
+| Banco | Um `notas.db` compartilhado; cada ferramenta com prefixo de tabela e histórico de migração próprios (spec 031) |
+| Plug-ins | Repositório `hub-<id>`, imagem no GHCR, `plugin.json`, `Hub.Plugin.Sdk` e `@grafite/ui` (specs 029 e 032) |
 | Serviços à parte | .NET 10 (`cerebro/`, `ops/`), `deployer/` é o único com `docker.sock` |
 | Android | Kotlin + Jetpack Compose, Room, local-first |
 | Desktop | WPF + WebView2 hospedando o mesmo `NotasApp` |
-| MCP | Cada ferramenta pode expor MCP em `/api/mcp/<ferramenta>`, com o mesmo login |
-| Deploy | Docker Compose na VPS, via GitHub Actions a cada push em `main` (ver `DEPLOY.md`) |
+| MCP | Cada ferramenta pode expor MCP em `/api/mcp/<ferramenta>` (núcleo) ou `/<id>/mcp` (plug-in), com o mesmo login |
+| Deploy | Docker Compose na VPS, via GitHub Actions; plug-ins entram pela versão fixada em `plugins.lock` do núcleo (ver `DEPLOY.md`) |
 
 Trocar uma tecnologia desta tabela exige emenda a esta constituição.
 
@@ -110,4 +120,4 @@ versionadas em SemVer: MAJOR para remover ou redefinir princípio, MINOR para pr
 seção nova, PATCH para redação. Todo plano e revisão de PR verifica conformidade; violação
 só é aceita quando justificada na tabela "Complexity Tracking" do plano.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-18 | **Last Amended**: 2026-11-18
+**Version**: 2.0.0 | **Ratified**: 2026-11-18 | **Last Amended**: 2026-11-19

@@ -15,8 +15,9 @@ mudança relevante, siga as skills nesta ordem:
 5. `/speckit-analyze` (opcional) — consistência entre spec, plano e tarefas
 6. `/speckit-implement` — executa as tarefas
 
-As specs 001–014 em `specs/` são retroativas (o que já existe, por ferramenta) e as 015–028 são o backlog
-planejado (ver a ordem em `specs/README.md`). Leia a spec da
+As specs 001–014 em `specs/` são retroativas (o que já existe, por ferramenta), as 015–028 já foram
+implementadas e as 029–035 planejam a divisão em núcleo + plug-ins com banco compartilhado e a 036 a cópia do backup fora da VPS, que vem antes delas (ver a ordem
+em `specs/README.md`). Leia a spec da
 ferramenta antes de mudá-la. Correções pequenas não precisam de spec. O Spec Kit **não cria branch** aqui: trabalhe na
 branch da sessão. A feature ativa fica em `.specify/feature.json` (local, fora do git).
 

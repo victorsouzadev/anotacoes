@@ -1,0 +1,9 @@
+# Research: Pacotes compartilhados dos plug-ins
+
+- **Onde publicar**: **Decision** GitHub Packages (NuGet e npm) da conta, com `GITHUB_TOKEN` na CI dos plug-ins. **Alternatives**: nuget.org/npmjs públicos (rejeitado: expõe a estrutura do hub sem necessidade); pasta compartilhada na VPS (rejeitado: CI no GitHub não enxerga).
+- **Frontend**: **Decision** CSS (tokens, fontes) + web components nativos (`customElements.define`) em TypeScript compilado para ES2022. Funcionam em Angular de qualquer versão, em HTML puro e no Compose WebView se preciso. **Alternatives**: biblioteca Angular (rejeitado: prende a versão); Tailwind preset (rejeitado: o hub não usa Tailwind).
+- **`<grafite-barra>`**: mostra "Hub", o plug-in atual, a lista de `/api/plugins`, a conta e o seletor de tema; lê e grava o tema no mesmo `localStorage` do hub (mesma origem, já que tudo está sob o mesmo domínio).
+- **Login no frontend do plug-in**: **Decision** o token do hub fica no `localStorage` da origem (como hoje); `token-plugin.ts` troca por `aud=<id>` (030) e renova 1 min antes de vencer. Como tudo está no mesmo domínio, não há login novo.
+- **SDK com dois alvos**: `net9.0;net10.0`, porque o núcleo e a maioria das ferramentas estão em .NET 9 e o Cérebro em .NET 10.
+- **IA**: `IaDoHub.ObterConfiguracao()` chama `GET /api/core/ia` repassando o token do usuário da requisição atual (nunca o token de serviço, para um plug-in comprometido não colher a chave de todos) e devolve provedor, modelo e chave (em memória, nunca gravada pelo plug-in). Sem chave → `null`, e o plug-in segue o fallback (Princípio IV).
+- **Compatibilidade de contrato**: **Decision** o núcleo aceita `contrato` N e N-1; o SDK expõe `Contrato.Versao`. Plug-ins congelados ficam em N-1 por até 12 meses; depois, uma spec decide atualizar ou desligar.

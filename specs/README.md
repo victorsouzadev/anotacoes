@@ -4,7 +4,7 @@ Especificações no formato do [Spec Kit](https://github.com/github/spec-kit). A
 são **retroativas**: descrevem o que já existe no código em novembro de 2026, para servir
 de base às mudanças futuras. Não têm `plan.md` nem `tasks.md` porque já foram implementadas.
 
-Feature nova começa com `/speckit-specify` e ganha o próximo número (029 em diante). Mudança
+Feature nova começa com `/speckit-specify` e ganha o próximo número (037 em diante). Mudança
 grande numa ferramenta que já existe pode ser uma spec nova que cita a retroativa dela.
 
 | # | Ferramenta | Spec |
@@ -94,3 +94,94 @@ Todas têm `checklists/requirements.md`.
   corrigido na 018.
 - **Cérebro**: o README dizia que o índice já separava trechos; não separava (o FTS é por nota). A 027
   passou a dividir as notas em trechos para os vetores.
+
+## Divisão em plug-ins (029 a 035)
+
+Pedido em 2026-11-19: dividir o hub em vários repositórios, com este como núcleo e as ferramentas
+conectadas como plug-ins, **todas usando o mesmo banco**. Desenho:
+[Hub e Plug-ins](https://claude.ai/artifact/T4ifWBSrGHX1ikcrpQ9Wfo). A constituição foi emendada
+para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: **planejadas**, nenhuma implementada.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 029 | [Núcleo do hub e contrato de plug-ins](029-nucleo-plugins/spec.md) | 030, 032 | + data-model, contracts |
+| 030 | [Login com chave assimétrica e OAuth no núcleo](030-login-assimetrico/spec.md) | 029, 031 | + data-model, contracts |
+| 031 | [Banco compartilhado entre núcleo e plug-ins](031-banco-compartilhado/spec.md) | 029 | + data-model, contracts |
+| 032 | [Pacotes compartilhados dos plug-ins](032-pacotes-compartilhados/spec.md) | 030, 031 | + contracts |
+| 033 | [Extrair o Segundo Cérebro](033-extrair-cerebro/spec.md) | 029–032 | spec, plan, research, quickstart, tasks |
+| 034 | [Extrair e congelar as ferramentas sem uso](034-extrair-congelados/spec.md) | 033 | spec, plan, research, quickstart, tasks |
+| 035 | [Extrair as ferramentas em uso](035-extrair-ferramentas-ativas/spec.md) | 034 | spec, plan, research, quickstart, tasks |
+
+### Ordem de implementação
+
+1. **030 + 031 + 032 + 029 juntas, ainda neste repositório**: chave assimétrica e selos de login, regras do
+   banco, SDK e `@grafite/ui`, registro de plug-ins. Validadas com o plug-in `hub-exemplo`.
+2. **033** Cérebro (já é serviço à parte).
+3. **034** Criativo (Imagens, Moldes, Bolo 3D, Precificação, app Windows) e Treino, congelados.
+4. **035** Dieta → Tarefas → Anotação → Finanças → Notas, uma por vez.
+
+### Decisões principais
+
+- **Banco**: o `notas.db` atual, montado em todos os containers. Cada plug-in é dono só das tabelas do
+  seu prefixo e tem histórico de migração próprio; extrair uma ferramenta não copia nenhuma linha. O
+  deployer copia o banco antes de cada migração e reverte se uma tabela de outro dono mudar.
+- **Login**: só o núcleo emite tokens (ES256 + JWKS); plug-ins só validam e recebem token com a
+  própria audiência. Como o banco é compartilhado, as linhas de login levam selo HMAC com chave só do
+  núcleo, para que gravar direto no banco não permita entrar como outra pessoa.
+- **URLs antigas** (`/api/dieta`, `/api/mcp/tarefas`, `/cerebro/oauth/*`, `/p/nota/...`) continuam
+  funcionando: apps Android instalados e conectores do Claude não precisam ser refeitos.
+- **Telas**: cada plug-in serve a própria, com o tema e a barra do `@grafite/ui`; sem Module Federation.
+
+### Resultado do analyze
+
+- Toda história de usuário tem tarefa; nenhuma spec ficou com `[NEEDS CLARIFICATION]`.
+- Corrigido durante a revisão: o token do hub mudaria de audiência e quebraria os apps (mantido
+  `notas-vps`); conectores OAuth antigos guardam `/cerebro/oauth/token` (rota legada no núcleo);
+  `/api/core/ia` por id de usuário deixaria um plug-in colher a chave de todos (agora exige o token do
+  usuário); o Estúdio já não existe e o ViihMimos é o backend da Precificação (vai para o criativo).
+- Riscos aceitos e registrados: com SQLite, a separação entre plug-ins é por convenção conferida
+  (teste do SDK + deployer), não por permissão do banco — Postgres com papel por plug-in fica como
+  evolução; e as telas no mesmo domínio podem ler o token do hub (030, Assumptions).
+- Exceções à constituição justificadas em "Complexity Tracking": registro e deploy por plug-in (029),
+  pacotes publicados (032).
+
+## Cópia do backup fora da VPS (036)
+
+Pedido em 2026-11-20, depois de um achado de produção: o cron do backup disparava todo dia, mas o
+`scripts/backup.sh` da VPS estava sem permissão de execução (`666`) e na versão de julho, porque o
+`deploy.yml` não empacota `scripts/`. O último backup era de 2026-07-09 e a saída do cron era descartada.
+Corrigido à mão no mesmo dia (script da `main`, `755`, log em `/var/log/notas-backup.log`); a 036 trata a
+causa e o risco maior: todos os dados e todas as cópias estão no mesmo disco. Status: **planejada**.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 036 | [Cópia do backup fora da VPS](036-backup-externo/spec.md) | 025 | + data-model, contracts |
+
+### Ordem
+
+**036 vem antes da 029–035**: a 031 concentra todos os plug-ins no mesmo `notas.db`, e a cópia externa
+precisa existir antes de qualquer migração de plug-in.
+
+### Decisões principais
+
+- `restic` para um bucket S3 compatível de outro provedor (recomendado Backblaze B2), cifrado na VPS,
+  deduplicado, com retenção 7 diárias / 4 semanais / 6 mensais. A senha fica também fora da VPS.
+- O instantâneo leva as cópias consistentes do dia, os dumps do Postgres, o restante de `data/` (cobre os
+  plug-ins sem mudar o script) e o `.env`, porque sem as chaves do núcleo (030) os logins deixam de valer.
+- Conferência semanal: `restic check` parcial e restauração do `notas.db` com `PRAGMA integrity_check`.
+  Ensaio completo numa máquina que não é a VPS antes de dar a spec como concluída e a cada 6 meses.
+- Estado em `data/db/backup-externo.json`, separado do `backup-status.json` da 025 (que não muda de formato).
+  O hub alerta com 36 h sem cópia externa ou 8 dias sem conferência.
+- O deploy passa a levar `scripts/` com `755 root:root`; a limpeza dos 14 dias só apaga os arquivos do script
+  (a versão antiga apagou `backups/estudio-2026-10-25/` em 2026-11-20).
+
+### Resultado do analyze
+
+- Todo requisito (FR-001 a FR-012) tem tarefa; nenhum `[NEEDS CLARIFICATION]`.
+- Corrigido: guardar o estado externo dentro do `backup-status.json` faria cada backup local apagar o
+  registro da conferência semanal; virou um arquivo próprio.
+- Corrigido: o modelo de dados tinha dois campos para "último sucesso"; ficou só `concluidoEm`, com
+  `falhaEm`/`erro` para a falha mais recente.
+- Exceção à constituição justificada em "Complexity Tracking": `restic` no host (Princípio VIII).
+- Fora da spec, registrado: `/opt/financas-vps/scripts/backup.sh` está com o mesmo `666` sem execução
+  (outro repositório); object lock e segundo destino externo.
