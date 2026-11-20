@@ -25,6 +25,8 @@ public class PluginEstado
     public bool NoAr { get; set; }
     public DateTime? UltimoHealth { get; set; }
     public string? UltimaFalha { get; set; }
+    /// <summary>SHA-256 do HUB_SEGREDO_SERVICO que o deployer deu ao container (chamadas a /api/core/*).</summary>
+    public string? SegredoServicoHash { get; set; }
 }
 
 public record ItemDoHub(string Id, string Nome, string Icone, string Rota, string Origem, string Estado, string Versao,
@@ -53,7 +55,7 @@ public static class RegistroDePlugins
 
     private record Manifesto(string Id, string Nome, string Icone, string? Descricao, string Rota, int Porta, string Health, string? Android);
     private record EstadoDeployer(string Id, string Versao, string? VersaoAnterior, JsonElement? Manifesto, bool NoAr,
-        string? UltimaFalha, bool Ativo);
+        string? UltimaFalha, bool Ativo, string? SegredoServicoHash);
 
     /// <summary>Lê o estado do deployer e leva para a tabela; desligados saem da lista (os dados ficam).</summary>
     public static async Task Importar(AppDbContext db, string arquivo, CancellationToken ct)
@@ -85,6 +87,7 @@ public static class RegistroDePlugins
             l.VersaoAnterior = e.VersaoAnterior;
             l.Manifesto = e.Manifesto.Value.GetRawText();
             l.UltimaFalha = e.UltimaFalha;
+            l.SegredoServicoHash = e.SegredoServicoHash;
             if (!e.NoAr) l.NoAr = false;
         }
         foreach (var sobra in linhas.Keys.Except(lido.Keys).ToList()) db.PluginsEstado.Remove(linhas[sobra]);

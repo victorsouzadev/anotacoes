@@ -71,6 +71,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Notas.Api.Services.Plugins.PluginEstado> PluginsEstado => Set<Notas.Api.Services.Plugins.PluginEstado>();
+    public DbSet<Notas.Api.Services.Auth.OAuthCliente> OAuthClientes => Set<Notas.Api.Services.Auth.OAuthCliente>();
+    public DbSet<Notas.Api.Services.Auth.OAuthPedido> OAuthPedidos => Set<Notas.Api.Services.Auth.OAuthPedido>();
+    public DbSet<Notas.Api.Services.Auth.OAuthCodigo> OAuthCodigos => Set<Notas.Api.Services.Auth.OAuthCodigo>();
+    public DbSet<Notas.Api.Services.Auth.OAuthToken> OAuthTokens => Set<Notas.Api.Services.Auth.OAuthToken>();
+    public DbSet<Notas.Api.Services.Auth.OAuthRevogado> OAuthRevogados => Set<Notas.Api.Services.Auth.OAuthRevogado>();
+    public DbSet<Notas.Api.Services.Auth.McpToken> McpTokens => Set<Notas.Api.Services.Auth.McpToken>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<NoteShare> NoteShares => Set<NoteShare>();
@@ -153,6 +159,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.ToTable("core_plugins_estado");
             e.HasKey(x => x.Id);
+        });
+        // OAuth do núcleo (spec 030).
+        b.Entity<Notas.Api.Services.Auth.OAuthCliente>(e => { e.ToTable("core_oauth_clientes"); e.HasKey(x => x.Id); });
+        b.Entity<Notas.Api.Services.Auth.OAuthPedido>(e => { e.ToTable("core_oauth_pedidos"); e.HasKey(x => x.Id); });
+        b.Entity<Notas.Api.Services.Auth.OAuthCodigo>(e => { e.ToTable("core_oauth_codigos"); e.HasKey(x => x.Hash); });
+        b.Entity<Notas.Api.Services.Auth.OAuthToken>(e =>
+        {
+            e.ToTable("core_oauth_tokens");
+            e.HasKey(x => x.Hash);
+            e.HasIndex(x => x.Familia);
+            e.HasIndex(x => new { x.UsuarioId, x.ClienteId });
+        });
+        b.Entity<Notas.Api.Services.Auth.OAuthRevogado>(e => { e.ToTable("core_oauth_revogados"); e.HasKey(x => x.Jti); e.HasIndex(x => x.Plugin); });
+        b.Entity<Notas.Api.Services.Auth.McpToken>(e =>
+        {
+            e.ToTable("core_mcp_tokens");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Hash).IsUnique();
         });
 
         b.Entity<User>(e =>

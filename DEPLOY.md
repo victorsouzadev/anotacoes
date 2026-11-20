@@ -372,6 +372,49 @@ arquivos. Quem tem o `OPS_MCP_TOKEN` controla a VPS inteira. Fica atrás do prof
 `https://<subdomínio>/ops/mcp`, só por HTTPS. Como ligar, conectar, auditar e trocar o token:
 [ops/README.md](ops/README.md).
 
+## Núcleo e plug-ins (specs 029 a 032)
+
+**Login (030).** O núcleo assina os tokens com ES256. As chaves ficam em `data/core/chaves/` (`<kid>.pem`, `jwks.json`,
+`selo.key`), geradas no primeiro boot, montadas só no `api` e levadas pela cópia externa (036). Nunca vão para o git.
+- Tokens HS256 antigos (assinados com o `JWT_SECRET`) valem até 15 min depois do boot (`Core__AceitarHs256Ate` muda isso).
+  Quem estiver logado continua: o refresh devolve um token ES256.
+- `users`, `refresh_tokens`, `core_oauth_tokens` e `core_mcp_tokens` têm a coluna `Selo` (HMAC com `selo.key`). Linha gravada
+  por fora do núcleo não loga. As linhas que já existiam são seladas uma vez, no primeiro boot (arquivo `selado-em`).
+- Perder `data/core/chaves` derruba todos os logins (cada um entra de novo) e invalida os selos: restaure da cópia externa.
+- `JWT_SECRET` continua no `.env`: cifra as chaves de IA guardadas no banco (`ProtetorDeSegredos`).
+
+**Plug-ins (029).** `plugins.lock` na raiz, uma linha por plug-in (`id: imagem@commit`); linha comentada desliga. O deploy
+copia o arquivo para `data/plugins/plugins.lock`; o deployer confere a cada 30 s e, para cada mudança:
+1. baixa a imagem (imagem privada do GHCR: `docker login ghcr.io` na VPS uma vez, com um token `read:packages`);
+2. lê `/app/plugin.json` e confere as regras (rotas reservadas, prefixo de tabela, sobreposição com outros plug-ins);
+3. copia o `notas.db` para `data/plugins/copias/` (guarda 5) e retrata o esquema;
+4. sobe `plugin-<id>` na rede do hub com `data/db` montado e as variáveis `HUB_*` (nunca `JWT_SECRET` nem `data/core`);
+5. espera o health por 60 s e compara o esquema: se falhar ou se mudou tabela de outro dono, restaura a cópia e volta a
+   versão anterior. O motivo aparece em `data/plugins/estado.json` e em `GET /api/plugins` (`ultimaFalha`);
+6. grava `data/plugins/caddy/<id>.caddy` (rota do plug-in e `rotasLegadas`, sem reescrever o caminho) e recarrega o Caddy.
+
+```bash
+cat /opt/notas-vps/data/plugins/estado.json     # versão, anterior, no ar, última falha
+docker logs notas-deployer --tail 50            # o que o deployer fez
+curl -s -X POST -H "Authorization: Bearer $DEPLOYER_TOKEN" http://notas-deployer:8080/plugins/sincronizar  # de dentro da rede
+```
+
+Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy; as tabelas e os dados ficam.
+
+**Banco compartilhado (031).** Cada plug-in usa o mesmo `notas.db`, só nas tabelas do seu prefixo, com histórico
+`__EFMigrationsHistory_<id>`. O `scripts/backup.sh` copia o arquivo inteiro, então já cobre todos os plug-ins.
+
+**Receita de extração (031, usada nas 033 a 035).**
+1. No plug-in: copiar as entidades com os mesmos nomes de tabela e colunas; a primeira migração tem `Up` vazio (as
+   tabelas já existem) e o teste `Dados.TabelasForaDoDono` dá vazio com as tabelas antigas em `tabelas.legadas`.
+2. No núcleo: tirar as entidades do `AppDbContext` com uma migração de `Up` vazio, à mão (o EF geraria `DropTable`; o
+   teste `Migracoes_do_nucleo_nao_apagam_tabela_alheia` falha se ficar). Rotas antigas vão para `rotasLegadas`.
+3. Ordem: deploy do núcleo sem a ferramenta só depois do plug-in no ar com a mesma versão de esquema.
+
+**OAuth do núcleo (030).** Os endpoints (`/api/core/oauth/*`, `/.well-known/oauth-protected-resource/<id>/mcp`) já existem,
+mas o Caddy ainda manda `/.well-known/oauth-*` e `/cerebro/oauth/*` para o Cérebro: a virada, com a importação dos clientes
+do `hub.db`, é na extração do Cérebro (033).
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.

@@ -174,6 +174,11 @@ public class SincronizadorTests : IDisposable
         Assert.True(e.NoAr);
         Assert.Equal("v1", e.Versao);
         Assert.Single(Directory.GetFiles(Path.Combine(_pasta, "copias")));
+        var segredo = Run().Single(a => a.StartsWith("HUB_SEGREDO_SERVICO="))["HUB_SEGREDO_SERVICO=".Length..];
+        Assert.True(segredo.Length >= 40);
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(segredo))).ToLowerInvariant(),
+            e.SegredoServicoHash);
+        Assert.DoesNotContain(segredo, File.ReadAllText(Path.Combine(_pasta, "estado.json")));
     }
 
     [Fact]

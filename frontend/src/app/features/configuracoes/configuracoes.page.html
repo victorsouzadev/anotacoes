@@ -295,6 +295,19 @@
             <p class="alerta-texto">Restauração nunca conferida.</p>
           }
         }
+        @if (plugins().length) {
+          <h3>Plug-ins</h3>
+          <ul class="arquivos-backup">
+            @for (p of plugins(); track p.id) {
+              <li>
+                <strong>{{ p.nome }}</strong> · <code>{{ p.versao }}</code> ·
+                <span [class.alerta-texto]="p.estado !== 'no-ar'">{{ p.estado === 'no-ar' ? 'no ar' : 'indisponível' }}</span>
+                @if (p.ultimaFalha) { <br><span class="alerta-texto">Última versão recusada: {{ p.ultimaFalha }}</span> }
+              </li>
+            }
+          </ul>
+          <p class="ajuda">Versões no <code>plugins.lock</code>; estado em <code>data/plugins/estado.json</code> (deployer).</p>
+        }
         <p class="ajuda">Para rodar à mão na VPS: <code>/opt/notas-vps/scripts/backup.sh</code>. Para conferir o agendamento: <code>crontab -l</code>. Cópia externa: <code>scripts/backup-externo.sh</code>; conferência: <code>scripts/backup-conferir.sh</code>; log em <code>/var/log/notas-backup.log</code>.</p>
       </div>
     }

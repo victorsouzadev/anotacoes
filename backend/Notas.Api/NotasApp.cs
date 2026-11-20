@@ -74,6 +74,8 @@ public static class NotasApp
         builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseSqlite(connectionString)
             .AddInterceptors(sp.GetRequiredService<SeloInterceptor>()));
         builder.Services.AddSingleton<TokenService>();
+        builder.Services.AddScoped<Notas.Api.Services.Auth.OAuthDoNucleo>(sp => new(
+            sp.GetRequiredService<AppDbContext>(), sp.GetRequiredService<TokenService>(), sp.GetRequiredService<ChavesDeAssinatura>()));
 
         // Registro de plug-ins (spec 029): estado do deployer + health a cada 30 s.
         builder.Services.Configure<Notas.Api.Services.Plugins.PluginsOptions>(
@@ -396,6 +398,7 @@ public static class NotasApp
         app.MapViihMimosEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
+        app.MapOAuthNucleoEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

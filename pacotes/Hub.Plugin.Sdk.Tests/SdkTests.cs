@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.IdentityModel.Tokens;
@@ -69,7 +70,7 @@ public class SdkTests : IAsyncLifetime
     private static string Token(SecurityKey chave, string alg, string aud, string kid = "k1") =>
         new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
             new JwtHeader(new SigningCredentials(chave, alg)) { ["kid"] = kid },
-            new JwtPayload("notas-vps", aud, [new Claim("sub", "u-1"), new Claim("email", "a@b.c")], null, DateTime.UtcNow.AddMinutes(10))));
+            new JwtPayload("notas-vps", aud, [new Claim("sub", "u-1"), new Claim("email", "a@b.c"), new Claim("jti", Guid.NewGuid().ToString("N"))], null, DateTime.UtcNow.AddMinutes(10))));
 
     private async Task<HttpStatusCode> Chamar(string? token)
     {
@@ -102,6 +103,28 @@ public class SdkTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, await Chamar(Token(forjada, SecurityAlgorithms.EcdsaSha256, "exemplo")));
         var hmac = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(new string('x', 64)));
         Assert.Equal(HttpStatusCode.Unauthorized, await Chamar(Token(hmac, SecurityAlgorithms.HmacSha256, "exemplo")));
+    }
+
+    [Fact]
+    public async Task Jti_revogado_e_token_mcp_estatico()
+    {
+        var token = Token(_nucleo, SecurityAlgorithms.EcdsaSha256, "exemplo");
+        var jti = new JwtSecurityTokenHandler().ReadJwtToken(token).Id;
+        var mcp = "hub_token-estatico-de-teste";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(mcp))).ToLowerInvariant();
+        Environment.SetEnvironmentVariable("HUB_SEGREDO_SERVICO", "segredo");
+        var r = _app.Services.GetRequiredService<RevogacoesDoNucleo>();
+        var falso = new RevogacoesDoNucleo(new OpcoesDoHub { Nucleo = "http://nucleo" },
+            new HttpClient(new JwksFalso($$"""{"jtis":["{{jti}}"],"mcp":[{"hash":"{{hash}}","usuario":"u-9","email":"m@x.y"}]}""")));
+        await falso.Atualizar(default);
+        Assert.True(falso.Revogado(jti));
+        Assert.Equal(("u-9", "m@x.y"), falso.DonoDoTokenMcp(mcp));
+        Assert.Null(falso.DonoDoTokenMcp("hub_outro"));
+
+        // No app: o mesmo estado passa pela instância registrada.
+        Assert.Equal(HttpStatusCode.OK, await Chamar(token));
+        Assert.Equal(HttpStatusCode.Unauthorized, await Chamar(mcp));
+        Assert.NotNull(r);
     }
 
     [Fact]

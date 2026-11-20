@@ -15,6 +15,7 @@ import {
 import { ConfiguracaoIaService } from './configuracao-ia.service';
 import { mensagemDeErro } from '../../core/erro-http';
 import { BackupEstado, SistemaService, idadeTexto, tamanhoTexto } from '../../core/sistema.service';
+import { ItemDoHub, PluginsService } from '../../core/plugins.service';
 import { PublicarService } from '../publicar/publicar.service';
 
 @Component({
@@ -46,6 +47,9 @@ export class ConfiguracoesPageComponent {
   readonly confirmandoRemocaoUpscale = signal(false);
   /** Estado do backup (spec 025): só carregado para quem está em PUBLICADORES. */
   readonly backup = signal<BackupEstado | null>(null);
+  /** Plug-ins instalados (spec 029), com versão e a última versão recusada pelo deployer. */
+  readonly plugins = signal<ItemDoHub[]>([]);
+  private readonly registro = inject(PluginsService);
   readonly idade = idadeTexto;
   readonly tamanho = tamanhoTexto;
   private readonly sistema = inject(SistemaService);
@@ -84,7 +88,10 @@ export class ConfiguracoesPageComponent {
   constructor() {
     this.carregar();
     void this.publicar.permissao().then((r) => {
-      if (r.podePublicar) void this.sistema.backup().then((b) => this.backup.set(b));
+      if (r.podePublicar) {
+        void this.sistema.backup().then((b) => this.backup.set(b));
+        void this.registro.listar().then((l) => this.plugins.set(l.filter((i) => i.origem === 'plugin')), () => undefined);
+      }
     });
   }
 

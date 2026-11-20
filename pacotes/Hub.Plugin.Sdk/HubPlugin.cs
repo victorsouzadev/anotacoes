@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -60,11 +61,28 @@ public static class HubPlugin
         var jwks = new JwksDoNucleo(o.Jwks, http);
         builder.Services.AddSingleton(jwks);
 
-        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        var revogacoes = new RevogacoesDoNucleo(o, http);
+        builder.Services.AddSingleton(revogacoes);
+        builder.Services.AddHostedService<VigiaDasRevogacoes>();
+
+        // Um Bearer "hub_..." é token MCP estático; o resto é JWT do núcleo (login ou OAuth).
+        builder.Services.AddAuthentication("Hub")
+            .AddPolicyScheme("Hub", "Login do hub", p => p.ForwardDefaultSelector = ctx =>
+                ctx.Request.Headers.Authorization.ToString().StartsWith("Bearer hub_") ? TokenMcpHandler.Esquema : JwtBearerDefaults.AuthenticationScheme)
+            .AddScheme<AuthenticationSchemeOptions, TokenMcpHandler>(TokenMcpHandler.Esquema, null)
             .AddJwtBearer(b =>
             {
                 b.MapInboundClaims = false;
                 b.TokenValidationParameters = ParametrosDeValidacao(o, jwks);
+                // Acesso OAuth revogado no núcleo para em até 60 s (spec 030).
+                b.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = ctx =>
+                    {
+                        if (revogacoes.Revogado(ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value)) ctx.Fail("token revogado");
+                        return Task.CompletedTask;
+                    },
+                };
             });
         builder.Services.AddAuthorization();
         builder.WebHost.UseUrls($"http://+:{m.Porta}");

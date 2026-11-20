@@ -29,7 +29,7 @@ public class ConfiguracaoPlugins
 }
 
 public record EstadoPlugin(string Id, string Imagem, string Versao, string? VersaoAnterior, Manifesto? Manifesto,
-    bool NoAr, string? UltimaFalha, DateTime AtualizadoEm, bool Ativo);
+    bool NoAr, string? UltimaFalha, DateTime AtualizadoEm, bool Ativo, string? SegredoServicoHash = null);
 
 /// <summary>
 /// Leva os containers ao que diz o <c>plugins.lock</c> (spec 029): sobe, atualiza, volta e desliga plug-ins,
@@ -146,7 +146,8 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
         var antes = RetratoDoEsquema();
 
         await docker(["rm", "-f", Plugins.NomeContainer(e.Id)], TimeSpan.FromSeconds(60));
-        var run = await docker(ArgumentosRun(e, manifesto!), TimeSpan.FromMinutes(2));
+        var segredo = NovoSegredo();
+        var run = await docker(ArgumentosRun(e, manifesto!, segredo), TimeSpan.FromMinutes(2));
         var motivo = run.Codigo != 0 ? "o container não subiu: " + Curto(run.Erro) : null;
         if (motivo is null && !await EsperarHealth(manifesto!, ct)) motivo = $"health sem 200 em {cfg.EsperaHealth.TotalSeconds:0} s";
 
@@ -161,10 +162,11 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
             if (atual?.Manifesto is { } anterior && atual.Versao != e.Versao)
             {
                 // Volta automática para a versão que estava no ar.
-                await docker(ArgumentosRun(new EntradaLock(e.Id, atual.Imagem, atual.Versao, true), anterior), TimeSpan.FromMinutes(2));
+                var segredoAnterior = NovoSegredo();
+                await docker(ArgumentosRun(new EntradaLock(e.Id, atual.Imagem, atual.Versao, true), anterior, segredoAnterior), TimeSpan.FromMinutes(2));
                 var voltou = await EsperarHealth(anterior, ct);
                 GravarCaddy(anterior);
-                return Falha(motivo) with { NoAr = voltou };
+                return Falha(motivo) with { NoAr = voltou, SegredoServicoHash = HashDe(segredoAnterior) };
             }
             ApagarCaddy(e.Id);
             return Falha(motivo) with { NoAr = false };
@@ -173,14 +175,20 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
         GravarCaddy(manifesto!);
         log.LogInformation("Plug-in {Id} no ar em {Versao}", e.Id, e.Versao);
         return new EstadoPlugin(e.Id, e.Imagem, e.Versao,
-            atual?.Versao != e.Versao ? atual?.Versao : atual?.VersaoAnterior, manifesto, true, null, DateTime.UtcNow, true);
+            atual?.Versao != e.Versao ? atual?.Versao : atual?.VersaoAnterior, manifesto, true, null, DateTime.UtcNow, true,
+            HashDe(segredo));
     }
 
     /// <summary>
     /// <c>docker run</c> do plug-in: rede do hub, só <c>data/db</c> montado (nunca <c>data/core</c>, spec 030),
     /// sem <c>JWT_SECRET</c> nem segredo do núcleo no ambiente.
     /// </summary>
-    public List<string> ArgumentosRun(EntradaLock e, Manifesto m)
+    /// <summary>Segredo de serviço do container (chamadas a /api/core/*); o núcleo só conhece o hash, pelo estado.</summary>
+    private static string NovoSegredo() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string HashDe(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s))).ToLowerInvariant();
+
+    public List<string> ArgumentosRun(EntradaLock e, Manifesto m, string segredoServico)
     {
         var a = new List<string>
         {
@@ -195,6 +203,7 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
             "-e", "HUB_JWKS=" + cfg.Jwks,
             "-e", "HUB_NUCLEO=" + cfg.Nucleo,
             "-e", "VERSAO=" + e.Versao,
+            "-e", "HUB_SEGREDO_SERVICO=" + segredoServico,
         };
         if (cfg.MemoriaPorPlugin is { } mem) a.AddRange(["--memory", mem]);
         a.Add(e.Referencia);

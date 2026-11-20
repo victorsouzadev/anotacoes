@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-18
 
-**Status**: Implementado em 2026-11-18
+**Status**: Implementado em 2026-11-18. Spec 030 (2026-11-20): o servidor OAuth passa ao núcleo (`/api/core/oauth/*`, recurso `<hub>/<plug-in>/mcp`, acesso JWT ES256 de 15 min com `aud=<plug-in>`); revogação chega ao plug-in em até 60 s (`/api/core/revogados`), não mais na próxima chamada. A virada das rotas deste servidor é na 033.
 
 **Input**: Fora da PoC (spec 011): "OAuth 2.1 no MCP — token bearer (ou `?key=`) por enquanto". Hoje o Claude web recebe o token dentro da URL do conector.
 

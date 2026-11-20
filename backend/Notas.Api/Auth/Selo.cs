@@ -61,6 +61,8 @@ public sealed class SeloInterceptor(ChavesDeAssinatura chaves) : SaveChangesInte
             {
                 case User u: u.Selo = Selo.De(chaves, u); break;
                 case RefreshToken t: t.Selo = Selo.De(chaves, t); break;
+                case Notas.Api.Services.Auth.OAuthToken o: o.Selo = Notas.Api.Services.Auth.OAuthDoNucleo.SeloDe(chaves, o); break;
+                case Notas.Api.Services.Auth.McpToken m: m.Selo = Notas.Api.Services.Auth.OAuthDoNucleo.SeloDe(chaves, m); break;
             }
         }
     }
