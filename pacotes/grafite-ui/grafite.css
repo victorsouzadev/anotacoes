@@ -4,6 +4,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 @import "grafite-tokens.css";
+@import "grafite-componentes.css";
 
 * { box-sizing: border-box; }
 html, body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text);

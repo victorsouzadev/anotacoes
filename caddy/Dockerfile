@@ -13,4 +13,4 @@ FROM caddy:2-alpine
 COPY caddy/Caddyfile.local /etc/caddy/Caddyfile
 COPY --from=fe /app/dist/frontend/browser /srv
 # @grafite/ui servido aos plug-ins em /grafite/ (spec 032)
-COPY pacotes/grafite-ui/grafite.css pacotes/grafite-ui/grafite-tokens.css pacotes/grafite-ui/grafite-barra.js pacotes/grafite-ui/token-plugin.js /srv-grafite/
+COPY pacotes/grafite-ui/grafite.css pacotes/grafite-ui/grafite-tokens.css pacotes/grafite-ui/grafite-componentes.css pacotes/grafite-ui/grafite-barra.js pacotes/grafite-ui/token-plugin.js /srv-grafite/

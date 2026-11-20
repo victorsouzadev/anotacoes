@@ -131,7 +131,9 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
         }
 
         var pull = await docker(["pull", e.Referencia], TimeSpan.FromMinutes(5));
-        if (pull.Codigo != 0) return Falha("não baixou a imagem: " + Curto(pull.Erro));
+        // Sem registro (ensaio local, GHCR fora do ar), vale a imagem que já está no host.
+        if (pull.Codigo != 0 && (await docker(["image", "inspect", e.Referencia], TimeSpan.FromSeconds(20))).Codigo != 0)
+            return Falha("não baixou a imagem: " + Curto(pull.Erro));
 
         var lido = await docker(["run", "--rm", "--network", "none", "--entrypoint", "cat", e.Referencia, "/app/plugin.json"],
             TimeSpan.FromMinutes(1));
