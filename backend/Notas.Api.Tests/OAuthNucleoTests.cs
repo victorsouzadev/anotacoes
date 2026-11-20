@@ -226,6 +226,78 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         }
         Assert.DoesNotContain((await Revogados()).GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == "abc");
     }
+
+    [Fact]
+    public async Task Importar_traz_clientes_e_refresh_do_hub_db_e_o_refresh_antigo_continua_valendo()
+    {
+        await GarantirPlugin();
+        var email = $"imp_{Guid.NewGuid():N}@example.com";
+        var u = _factory.CreateClient();
+        await u.PostAsJsonAsync("/api/auth/register", new { email, password = "Sup3rSecret!" });
+        var cliente = "cli_" + Guid.NewGuid().ToString("N");
+        var refresh = "refresh-antigo-" + Guid.NewGuid().ToString("N");
+        var corpo = new
+        {
+            clientes = new[] { new { id = cliente, nome = "Claude", redirectUris = new[] { Redirect }, criadoEm = DateTimeOffset.UtcNow.AddDays(-3) } },
+            refresh = new object[]
+            {
+                new { hash = Hash(refresh), clienteId = cliente, email = email.ToUpperInvariant(), familia = "f1", expiraEm = DateTimeOffset.UtcNow.AddDays(10) },
+                new { hash = Hash("vencido"), clienteId = cliente, email, familia = "f2", expiraEm = DateTimeOffset.UtcNow.AddDays(-1) },
+                new { hash = Hash("sem-usuario"), clienteId = cliente, email = "ninguem@example.com", familia = "f3", expiraEm = DateTimeOffset.UtcNow.AddDays(10) },
+            },
+        };
+        var c = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.PostAsJsonAsync("/api/core/oauth/importar", corpo)).StatusCode);
+        c.DefaultRequestHeaders.Authorization = new("Bearer", SegredoServico);
+        var r = await (await c.PostAsJsonAsync("/api/core/oauth/importar", corpo)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(1, r.GetProperty("clientes").GetInt32());
+        Assert.Equal(1, r.GetProperty("tokens").GetInt32());
+        Assert.Equal(2, r.GetProperty("ignorados").GetInt32());
+        var de_novo = await (await c.PostAsJsonAsync("/api/core/oauth/importar", corpo)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, de_novo.GetProperty("clientes").GetInt32());
+        Assert.Equal(0, de_novo.GetProperty("tokens").GetInt32());
+
+        var tok = await _factory.CreateClient().PostAsync("/api/core/oauth/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token", ["refresh_token"] = refresh, ["client_id"] = cliente,
+        }));
+        Assert.Equal(HttpStatusCode.OK, tok.StatusCode);
+        var acesso = (await tok.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString();
+        Assert.Equal("exemplo", new JwtSecurityTokenHandler().ReadJwtToken(acesso).Audiences.Single());
+    }
+
+    [Fact]
+    public async Task Ia_do_nucleo_so_com_token_do_usuario_para_plugin_que_usa_ia()
+    {
+        await GarantirPlugin();
+        using (var s = _factory.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!db.PluginsEstado.Any(p => p.Id == "comia"))
+            {
+                db.PluginsEstado.Add(new PluginEstado { Id = "comia", Versao = "v1", SegredoServicoHash = Hash("outro-segredo-0123456789-0123456789-01"),
+                    Manifesto = """{"id":"comia","nome":"Com IA","icone":"grid","rota":"/comia","porta":8080,"health":"/comia/api/health","usaIa":true}""" });
+                await db.SaveChangesAsync();
+            }
+        }
+        var hub = await Logado();
+        async Task<string> TokenDe(string plugin) =>
+            (await (await hub.PostAsJsonAsync("/api/auth/token-plugin", new { plugin })).Content.ReadFromJsonAsync<JsonElement>())
+                .GetProperty("access_token").GetString()!;
+
+        var c = _factory.CreateClient();
+        c.DefaultRequestHeaders.Authorization = new("Bearer", await TokenDe("comia"));
+        var r = await c.GetAsync("/api/core/ia");
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.True((await r.Content.ReadFromJsonAsync<JsonElement>()).TryGetProperty("chave", out _));
+
+        c.DefaultRequestHeaders.Authorization = new("Bearer", await TokenDe("exemplo"));
+        Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/core/ia")).StatusCode);
+        c.DefaultRequestHeaders.Authorization = hub.DefaultRequestHeaders.Authorization;
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.GetAsync("/api/core/ia")).StatusCode);
+        c.DefaultRequestHeaders.Authorization = new("Bearer", SegredoServico);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await c.GetAsync("/api/core/ia")).StatusCode);
+    }
 }
 
 file static class DbExt

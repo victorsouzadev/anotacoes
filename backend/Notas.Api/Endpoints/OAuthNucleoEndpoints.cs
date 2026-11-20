@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -182,6 +182,37 @@ public static class OAuthNucleoEndpoints
         });
 
         // Plug-ins, a cada 60 s, com o segredo de serviço que o deployer deu a cada um.
+        app.MapPost("/api/core/oauth/importar", async (ImportacaoOAuthDto dto, HttpRequest r, AppDbContext db, OAuthDoNucleo s) =>
+            await PluginDoServico(r, db) is { } plugin ? Results.Ok(await s.Importar(plugin, dto)) : Results.Unauthorized());
+        // Spec 032/033: provedor, modelo e chave de IA DO USUÁRIO do token (aud=<plug-in com usaIa>). Nunca com o token
+        // de serviço, para um plug-in comprometido não colher a chave de todos.
+        app.MapGet("/api/core/ia", async (HttpRequest r, AppDbContext db, Notas.Api.Auth.ChavesDeAssinatura chaves,
+            Notas.Api.Services.Financas.Llm.ILlmExtractorFactory llm, CancellationToken ct) =>
+        {
+            var h = r.Headers.Authorization.ToString();
+            if (!h.StartsWith("Bearer ")) return Results.Unauthorized();
+            var aud = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().CanReadToken(h[7..])
+                ? new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(h[7..]).Audiences.FirstOrDefault() : null;
+            var manifesto = aud is null ? null
+                : await db.PluginsEstado.Where(p => p.Id == aud).Select(p => p.Manifesto).FirstOrDefaultAsync(ct);
+            if (manifesto is null) return Results.Unauthorized();
+            using (var m = System.Text.Json.JsonDocument.Parse(manifesto))
+                if (!m.RootElement.TryGetProperty("usaIa", out var usa) || usa.ValueKind != System.Text.Json.JsonValueKind.True)
+                    return Results.Forbid();
+            var p = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+            {
+                ValidIssuer = Notas.Api.Auth.TokenService.Emissor, ValidAudience = aud, ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromSeconds(30), ValidAlgorithms = [Microsoft.IdentityModel.Tokens.SecurityAlgorithms.EcdsaSha256],
+                IssuerSigningKeys = chaves.Validas,
+            };
+            var v = await new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler().ValidateTokenAsync(h[7..], p);
+            if (!v.IsValid || !v.Claims.TryGetValue("sub", out var s) || s is not string sub) return Results.Unauthorized();
+            var c = await llm.ResolverCredenciaisAsync(sub, ct);
+            return string.IsNullOrWhiteSpace(c.Chave) || c.Provedor == "heuristico"
+                ? Results.Ok(new { provedor = (string?)null, modelo = (string?)null, chave = (string?)null })
+                : Results.Ok(new { provedor = c.Provedor, modelo = c.Modelo, chave = c.Chave });
+        });
+
         app.MapGet("/api/core/revogados", async (HttpRequest r, AppDbContext db, OAuthDoNucleo s) =>
             await PluginDoServico(r, db) is { } plugin ? Results.Ok(await s.Revogados(plugin)) : Results.Unauthorized());
     }

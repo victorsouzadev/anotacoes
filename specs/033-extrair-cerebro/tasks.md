@@ -9,7 +9,7 @@
 
 - [ ] T003 `Program.cs` com `AdicionarPlugin`, auth por JWKS e `plugin.json` (rotas legadas `/cerebro/*`, `/capturar`)
 - [ ] T004 `CerebroDb` com `UsarBancoDoHub("cerebro")`: `cerebro_capturas`, `cerebro_configuracoes`; teste `TabelasDoPlugin`
-- [ ] T005 `POST /api/core/oauth/importar` no núcleo (uma vez por plug-in, token de serviço), com teste
+- [x] T005 `POST /api/core/oauth/importar` no núcleo (uma vez por plug-in, token de serviço), com teste
 
 ## Phase 3: User Story 1 - Nada muda para quem usa (P1) 🎯 MVP
 
