@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Notas.Api.Auth;
 using Notas.Api.Data;
@@ -18,6 +19,22 @@ public static class AuthEndpoints
         });
 
         var group = app.MapGroup("/api/auth").RequireRateLimiting("auth");
+
+        // Troca do token do hub por um token com aud=<plug-in> (spec 030), só para plug-in registrado (029).
+        group.MapPost("/token-plugin", async (TokenPluginRequest req, ClaimsPrincipal quem, AppDbContext db, TokenService tokens) =>
+        {
+            var id = req.Plugin?.Trim() ?? "";
+            if (!await db.PluginsEstado.AnyAsync(p => p.Id == id))
+                return Results.NotFound(new { error = "Plug-in não registrado." });
+            var sub = quem.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub) ?? quem.FindFirstValue(ClaimTypes.NameIdentifier);
+            var email = quem.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email) ?? quem.FindFirstValue(ClaimTypes.Email);
+            if (sub is null || email is null) return Results.Unauthorized();
+            return Results.Ok(new
+            {
+                access_token = tokens.CreateAccessToken(sub, email, id),
+                expires_in = (int)TokenService.AccessTokenLifetime.TotalSeconds,
+            });
+        }).RequireAuthorization();
 
         group.MapPost("/register", async (RegisterRequest req, AppDbContext db, TokenService tokens) =>
         {
@@ -112,3 +129,5 @@ public static class AuthEndpoints
         catch { return false; }
     }
 }
+
+public record TokenPluginRequest(string? Plugin);

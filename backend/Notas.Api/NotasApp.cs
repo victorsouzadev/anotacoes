@@ -75,6 +75,12 @@ public static class NotasApp
             .AddInterceptors(sp.GetRequiredService<SeloInterceptor>()));
         builder.Services.AddSingleton<TokenService>();
 
+        // Registro de plug-ins (spec 029): estado do deployer + health a cada 30 s.
+        builder.Services.Configure<Notas.Api.Services.Plugins.PluginsOptions>(
+            builder.Configuration.GetSection(Notas.Api.Services.Plugins.PluginsOptions.SectionName));
+        builder.Services.AddHttpClient(nameof(Notas.Api.Services.Plugins.CacheDeHealth), c => c.Timeout = TimeSpan.FromSeconds(3));
+        builder.Services.AddHostedService<Notas.Api.Services.Plugins.CacheDeHealth>();
+
         // Enums (ferramenta Finanças) trafegam como string no JSON, em vez de índice numérico.
         builder.Services.ConfigureHttpJsonOptions(o =>
             o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -389,6 +395,7 @@ public static class NotasApp
         app.MapAnotacaoEndpoints();
         app.MapViihMimosEndpoints();
         app.MapSistemaEndpoints();
+        app.MapPluginsEndpoints();
         app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);

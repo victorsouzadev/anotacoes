@@ -18,6 +18,22 @@ var cfg = new Configuracao
 };
 var docker = builder.Configuration["DOCKER_BIN"] ?? "docker";
 
+// Plug-ins (spec 029): só liga com o caminho de data/db no host, que é montado em cada plug-in.
+if (builder.Configuration["PLUGINS_BANCO_HOST_DIR"] is { Length: > 0 } bancoHost)
+{
+    var cfgPlugins = new ConfiguracaoPlugins
+    {
+        BancoNoHost = bancoHost,
+        RedeHub = builder.Configuration["PLUGINS_REDE"] ?? "notas-vps_default",
+        ContainerCaddy = builder.Configuration["PLUGINS_CADDY"] ?? "notas-caddy",
+    };
+    builder.Services.AddSingleton(sp => new SincronizadorDePlugins(cfgPlugins,
+        (a, t) => sp.GetRequiredService<Func<List<string>, TimeSpan, Task<Resultado>>>()(a, t),
+        new HttpClient { Timeout = TimeSpan.FromSeconds(5) }, sp.GetRequiredService<ILogger<SincronizadorDePlugins>>()));
+    builder.Services.AddHostedService<VigiaDoLock>();
+}
+builder.Services.AddSingleton<Func<List<string>, TimeSpan, Task<Resultado>>>(_ => (a, t) => Docker(a, t, CancellationToken.None));
+
 var app = builder.Build();
 var tokenBytes = Encoding.UTF8.GetBytes("Bearer " + token);
 
@@ -34,6 +50,16 @@ app.Use(async (ctx, next) =>
 });
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+app.MapGet("/plugins", (IServiceProvider sp) =>
+    sp.GetService<SincronizadorDePlugins>() is { } s ? Results.Ok(s.LerEstado().Values) : Results.Ok(Array.Empty<object>()));
+
+app.MapPost("/plugins/sincronizar", async (IServiceProvider sp, CancellationToken ct) =>
+{
+    if (sp.GetService<SincronizadorDePlugins>() is not { } s) return Results.Problem("plug-ins desligados (PLUGINS_BANCO_HOST_DIR)", statusCode: 503);
+    await s.SincronizarSeMudou(forcar: true, ct);
+    return Results.Ok(s.LerEstado().Values);
+});
 
 app.MapGet("/apps", async (CancellationToken ct) =>
 {
@@ -167,7 +193,22 @@ async Task<Resultado> Docker(List<string> argumentos, TimeSpan limite, Cancellat
     }
 }
 
-record Resultado(int Codigo, string Saida, string Erro);
+public record Resultado(int Codigo, string Saida, string Erro);
+
+/// <summary>Confere o plugins.lock a cada 30 s e no boot; o deploy do núcleo só troca o arquivo.</summary>
+sealed class VigiaDoLock(SincronizadorDePlugins s, ILogger<VigiaDoLock> log) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        var primeira = true;
+        while (!ct.IsCancellationRequested)
+        {
+            try { await s.SincronizarSeMudou(forcar: primeira, ct); primeira = false; }
+            catch (Exception e) when (e is not OperationCanceledException) { log.LogError(e, "Sincronização de plug-ins falhou"); }
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        }
+    }
+}
 
 sealed class ApagarAoFim(string arquivo) : IDisposable
 {

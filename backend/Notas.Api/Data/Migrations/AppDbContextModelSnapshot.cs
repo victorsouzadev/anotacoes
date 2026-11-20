@@ -1769,6 +1769,36 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Services.Plugins.PluginEstado", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Manifesto")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("NoAr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UltimaFalha")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UltimoHealth")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Versao")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VersaoAnterior")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("core_plugins_estado", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)

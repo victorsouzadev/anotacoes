@@ -70,6 +70,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Notas.Api.Services.Plugins.PluginEstado> PluginsEstado => Set<Notas.Api.Services.Plugins.PluginEstado>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<NoteShare> NoteShares => Set<NoteShare>();
@@ -147,6 +148,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // Registro de plug-ins (spec 029): tabela do núcleo, prefixo core_.
+        b.Entity<Notas.Api.Services.Plugins.PluginEstado>(e =>
+        {
+            e.ToTable("core_plugins_estado");
+            e.HasKey(x => x.Id);
+        });
+
         b.Entity<User>(e =>
         {
             e.ToTable("users");

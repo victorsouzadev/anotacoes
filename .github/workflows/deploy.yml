@@ -152,7 +152,7 @@ jobs:
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
             --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
-            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy
+            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy plugins.lock
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -185,6 +185,9 @@ jobs:
             rm deploy.tar.gz
             mkdir -p data/db data/sites data/core/chaves
             chmod 700 data/core data/core/chaves
+            # Plug-ins (spec 029): o deployer lê o lock desta pasta (cp mantém o arquivo que ele vigia).
+            mkdir -p data/plugins/caddy
+            cp plugins.lock data/plugins/plugins.lock
             # Scripts do host (backup, spec 036): executáveis e só o root altera. Antes deste passo o deploy
             # não levava scripts/ e o backup.sh da VPS ficou meses sem rodar (666, versão de julho).
             # A pasta também: o tar preserva o dono do CI (usuário deploy), que poderia trocar um script rodado pelo root.
