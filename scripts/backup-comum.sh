@@ -16,7 +16,7 @@ limpar_backups() {
   find "$1" -maxdepth 1 -type f \( -name 'notas-*' -o -name 'site-*' -o -name 'pg-*' \) -mtime +"$2" -delete
 }
 
-# Carrega repositório, senha e chave do bucket. O arquivo fica fora do repositório e do compose (600, root).
+# Carrega repositório e senha (e RCLONE_CONFIG para o Google Drive). O arquivo fica fora do repositório e do compose (600, root).
 carregar_config() {
   if [ ! -r "$CONFIG" ]; then
     echo "configuração ausente: $CONFIG" >&2

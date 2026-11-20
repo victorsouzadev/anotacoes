@@ -5,7 +5,7 @@
 set -u
 
 DIR=$(cd "$(dirname "$0")" && pwd)
-# shellcheck source=backup-comum.sh
+# shellcheck source=SCRIPTDIR/backup-comum.sh
 . "$DIR/backup-comum.sh"
 
 falhar() {

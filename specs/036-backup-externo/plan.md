@@ -4,13 +4,13 @@
 
 ## Summary
 
-No fim de uma execução sem erro do `scripts/backup.sh`, um script novo envia com `restic` um instantâneo cifrado e deduplicado para um bucket S3 compatível de outro provedor, aplica a retenção e grava `data/db/backup-externo.json`. Um segundo script confere a cópia toda semana restaurando o `notas.db`. O `Notas.Api` lê o arquivo novo ao lado do da 025 e o hub alerta. O deploy passa a levar `scripts/`, e a limpeza local deixa de apagar o que não é do script.
+No fim de uma execução sem erro do `scripts/backup.sh`, um script novo envia com `restic` um instantâneo cifrado e deduplicado para o Google Drive (via `rclone`), aplica a retenção e grava `data/db/backup-externo.json`. Um segundo script confere a cópia toda semana restaurando o `notas.db`. O `Notas.Api` lê o arquivo novo ao lado do da 025 e o hub alerta. O deploy passa a levar `scripts/`, e a limpeza local deixa de apagar o que não é do script.
 
 ## Technical Context
 
 **Language/Version**: Shell POSIX (`sh`), C# .NET 9 (`Notas.Api`), Angular 21
-**Primary Dependencies**: `restic` (apt, no host da VPS), `sqlite3` (já instalado), `flock` (util-linux)
-**Storage**: bucket S3 compatível (externo); `data/db/backup-externo.json` (estado)
+**Primary Dependencies**: `restic` e `rclone` (apt, no host da VPS), `sqlite3` (já instalado), `flock` (util-linux)
+**Storage**: pasta `notas-vps-backup` no Google Drive (externo); `data/db/backup-externo.json` (estado)
 **Testing**: xUnit (`BackupStatusTests` ganha casos do externo e da conferência); teste de shell `scripts/tests/backup-limpeza.test.sh` (limpeza só apaga os padrões do script) e `shellcheck` no CI
 **Target Platform**: host da VPS (cron do root), fora de containers
 **Project Type**: ops + web
@@ -60,4 +60,4 @@ README.md                                  # Roadmap/Confiabilidade
 
 | Violação | Por que é preciso | Alternativa mais simples rejeitada |
 |---|---|---|
-| `restic` instalado no host | Cifrar, deduplicar, reter e conferir uma cópia remota com segurança | `rclone` + `gpg` em shell: duas ferramentas, 180 MB/dia sem deduplicação, retenção e conferência escritas à mão (mais código, mais chance de erro silencioso, que foi a causa do incidente) |
+| `restic` e `rclone` instalados no host | Cifrar, deduplicar, reter e conferir uma cópia remota com segurança | `rclone` + `gpg` em shell: duas ferramentas, 180 MB/dia sem deduplicação, retenção e conferência escritas à mão (mais código, mais chance de erro silencioso, que foi a causa do incidente) |

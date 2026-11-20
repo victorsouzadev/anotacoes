@@ -14,13 +14,13 @@
 
 Respondidas com a opção recomendada.
 
-- Q: Para onde vai a cópia? → A: Um bucket de armazenamento de objetos compatível com S3, de um provedor diferente do da VPS (recomendado: Backblaze B2; Cloudflare R2 ou outro S3 servem sem mudar nada além da configuração).
+- Q: Para onde vai a cópia? → A: Uma pasta no Google Drive da conta do Victor (outro provedor, sem conta nova), acessada pelo `rclone` com escopo `drive.file`. Revisto em 2026-11-20: a primeira resposta era um bucket S3 (Backblaze B2); o Victor preferiu não criar conta nova. Um S3 continua servindo trocando só a configuração.
 - Q: A cópia é cifrada? → A: Sim, cifrada na VPS antes de sair. O provedor nunca vê o conteúdo. A senha da cópia fica também fora da VPS (gerenciador de senhas do Victor); sem ela a cópia não serve.
 - Q: O que entra? → A: Tudo de que uma VPS nova precisa para voltar igual: a cópia consistente do `notas.db` e dos bancos dos sites feita pelo backup diário, os dumps do Postgres, o restante de `data/` (Cérebro, Anotação, sites, ops) sem os arquivos vivos de banco, e o `.env` (que guarda as chaves do núcleo; depois da 030, a chave de assinatura e a chave dos selos HMAC).
 - Q: Com que frequência? → A: Uma vez por dia, logo depois do backup local das 4h, na mesma execução.
 - Q: Quanto tempo guardar? → A: 7 diárias, 4 semanais e 6 mensais.
 - Q: Como saber que a cópia restaura? → A: Toda semana a VPS confere a integridade da cópia remota e restaura o `notas.db` mais recente numa pasta temporária para rodar `PRAGMA integrity_check`. Além disso, uma restauração completa é ensaiada à mão numa máquina que não é a VPS ao terminar a implementação e depois a cada 6 meses.
-- Q: E se a VPS for invadida e apagar a cópia remota? → A: A chave de acesso fica limitada ao bucket, e o bucket guarda as versões apagadas ou sobrescritas por 30 dias. Bloqueio de objeto (object lock) fica fora desta spec.
+- Q: E se a VPS for invadida e apagar a cópia remota? → A: O token do Drive só enxerga os arquivos que o próprio `rclone` criou (escopo `drive.file`), e o que ele apaga vai para a lixeira do Drive, que guarda por 30 dias. Risco aceito: quem tiver o token pode, com esforço, apagar de vez; bloqueio de objeto fica fora desta spec.
 - Q: Onde aparece o estado? → A: No mesmo lugar da 025: um arquivo de estado irmão do `backup-status.json` (que não muda de formato) registra a cópia externa e a conferência; a faixa do hub e a seção "Servidor" mostram as duas idades, e o alerta usa o mesmo prazo de 36 h.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -31,7 +31,7 @@ Todo dia, depois do backup local, uma cópia cifrada de tudo o que a VPS precisa
 
 **Why this priority**: É o maior risco do projeto. O backup local protege contra erro de software, não contra perder a máquina. A divisão em plug-ins (029–035) põe ainda mais ferramentas no mesmo `notas.db`.
 
-**Independent Test**: Numa máquina que não é a VPS, com a senha e a chave do bucket, restaurar a cópia mais recente, subir o compose e entrar no hub com a conta de sempre, vendo notas, tarefas e finanças do dia anterior.
+**Independent Test**: Numa máquina que não é a VPS, com a senha da cópia e o acesso ao Drive, restaurar a cópia mais recente, subir o compose e entrar no hub com a conta de sempre, vendo notas, tarefas e finanças do dia anterior.
 
 **Acceptance Scenarios**:
 
@@ -48,7 +48,7 @@ O administrador vê no hub há quanto tempo foram a última cópia local, a últ
 
 **Why this priority**: O incidente de 2026-11-20 mostrou que um backup sem aviso de falha é o mesmo que nenhum backup.
 
-**Independent Test**: Trocar a chave do bucket por uma inválida e rodar o script: a faixa "Cópia externa atrasada" aparece no prazo; corrigir a chave e rodar de novo: some.
+**Independent Test**: Trocar o token do Drive por um inválido e rodar o script: a faixa "Cópia externa atrasada" aparece no prazo; corrigir a chave e rodar de novo: some.
 
 **Acceptance Scenarios**:
 
@@ -77,7 +77,7 @@ Os scripts de backup que rodam na VPS são os do repositório, executáveis, e c
 ### Edge Cases
 
 - Senha da cópia ausente ou errada na VPS: a cópia não roda, o status marca erro e nada é enviado sem cifrar.
-- Bucket cheio ou conta suspensa: tratado como falha de rede (cenário 1.3).
+- Drive cheio (cota de 15 GB dividida com Gmail e Fotos) ou token revogado: tratado como falha de rede (cenário 1.3).
 - Duas execuções ao mesmo tempo (cron + manual): a segunda espera ou desiste, sem corromper a cópia.
 - Disco da VPS quase cheio (hoje 77%): a cópia externa não cria arquivos temporários grandes em disco.
 - Restauração parcial (só um site, só o Cérebro): possível a partir do mesmo instantâneo.
@@ -99,7 +99,7 @@ Os scripts de backup que rodam na VPS são os do repositório, executáveis, e c
 - **FR-009**: A saída do backup MUST ir para `/var/log/notas-backup.log` com rotação.
 - **FR-010**: A limpeza do backup local MUST apagar só os arquivos que o script criou.
 - **FR-011**: O DEPLOY.md MUST ter o procedimento de restauração completa numa máquina nova, ensaiado pelo menos uma vez antes de a spec ser dada como concluída.
-- **FR-012**: Nenhum segredo (senha da cópia, chave do bucket) MUST aparecer no repositório, no log, no `backup-status.json` ou na API.
+- **FR-012**: Nenhum segredo (senha da cópia, token do Drive) MUST aparecer no repositório, no log, no `backup-status.json` ou na API.
 
 ### Key Entities
 
@@ -118,7 +118,7 @@ Os scripts de backup que rodam na VPS são os do repositório, executáveis, e c
 
 ## Assumptions
 
-- O Victor cria a conta e o bucket no provedor e guarda a senha da cópia no gerenciador de senhas; nada disso é feito pelo Claude.
+- O Victor autoriza o `rclone` na conta Google pelo próprio PC (`rclone authorize "drive"`) e guarda a senha da cópia no gerenciador de senhas; nada disso é feito pelo Claude.
 - A VPS tem saída para a internet na porta 443.
 - O backup local da 025 continua como está (diário, 14 dias), com o ajuste da limpeza (FR-010).
 - O `/opt/financas-vps` e o `/opt/forge-vps` têm backups próprios com o mesmo defeito de permissão; ficam fora desta spec (outro repositório), mas o achado é registrado no `specs/README.md`.

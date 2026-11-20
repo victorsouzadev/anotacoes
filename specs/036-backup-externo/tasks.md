@@ -6,7 +6,7 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 
 ## Phase 1: Setup
 
-- [ ] T001 🔐 Victor cria o bucket, o lifecycle de 30 dias e a chave restrita, e guarda senha e chave no gerenciador de senhas (quickstart, "Preparar")
+- [ ] T001 🔐 Victor roda `rclone authorize "drive" --drive-scope drive.file` no PC e guarda a senha da cópia no gerenciador de senhas (quickstart, "Preparar")
 
 ## Phase 2: Foundational (corrige a causa do incidente)
 
@@ -21,7 +21,7 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - [x] T007 [US1] `scripts/backup-comum.sh`: carrega `/root/.config/notas-backup.env` (falha clara se ausente), `flock` em `/run/notas-backup.lock`, função de gravar a parte `copia`/`conferencia` de `data/db/backup-externo.json` por temporário + `mv`
 - [x] T008 [US1] `scripts/backup-externo.sh`: `restic backup` com os caminhos e exclusões do data-model, tag `notas-vps`; `restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`; grava `copia` com sucesso ou erro sem segredos
 - [x] T009 [US1] `scripts/backup.sh` chama `backup-externo.sh` só depois de gravar `backup-status.json` (já garantido pelo `set -e`); falha da cópia externa não desfaz o backup local
-- [ ] T010 🔐 [US1] Na VPS: `apt install restic`, criar `/root/.config/notas-backup.env`, `restic init`, rodar uma vez e conferir o instantâneo (quickstart, "Configurar")
+- [ ] T010 🔐 [US1] Na VPS: `apt install restic rclone`, criar `/root/.config/rclone/rclone.conf` com o token e `/root/.config/notas-backup.env`, `restic init`, rodar uma vez e conferir o instantâneo (quickstart, "Configurar")
 
 ## Phase 4: User Story 2 - Estado e conferência (P1)
 
@@ -58,3 +58,4 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - O instantâneo leva a pasta `backups/` inteira (não só `notas-*`, `site-*`, `pg-*`): a deduplicação do restic deixa o custo igual e nada de outro dono se perde.
 - `.gitattributes` passa a fixar LF nos `.sh`: o `deploy.py` empacota a cópia local do Windows, e um `#!/bin/sh` com CRLF não roda.
 - O `rm -rf scripts` do deploy apaga o `scripts/backup.sh.antigo-20261120` deixado na VPS na correção manual.
+- Destino trocado para o Google Drive em 2026-11-20 (pedido do Victor, sem conta nova). Os scripts não mudam: o `restic` fala com o Drive pelo `rclone` a partir do `RESTIC_REPOSITORY`.
