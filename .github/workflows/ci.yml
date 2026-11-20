@@ -66,6 +66,28 @@ jobs:
       - run: shellcheck -x scripts/*.sh scripts/tests/*.sh
       - run: sh scripts/tests/backup.test.sh
 
+  # Pacotes dos plug-ins (spec 032): SDK .NET e @grafite/ui.
+  pacotes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pacotes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - run: dotnet test Hub.Plugin.Sdk.Tests --configuration Release
+      - name: SDK em modo globalization-invariant
+        run: dotnet test Hub.Plugin.Sdk.Tests --configuration Release
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm test
+        working-directory: pacotes/grafite-ui
+
   # Ferramenta "Publicar": o serviço que cria os containers dos apps.
   deployer-build:
     runs-on: ubuntu-latest

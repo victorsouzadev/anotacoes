@@ -1,0 +1,23 @@
+/* @grafite/ui (spec 032): tokens do Grafite, iguais no hub e em todos os plug-ins.
+ * Fonte única: o hub importa este arquivo (frontend/src/styles.css) e o Caddy o serve em /grafite/grafite.css.
+ * Tema: segue o sistema; [data-theme="light"|"dark"] no <html> força um dos dois (chave "theme" do hub). */
+@import url("https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+@import "grafite-tokens.css";
+
+* { box-sizing: border-box; }
+html, body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
+button, input, textarea, select { font-family: inherit; color: inherit; }
+
+/* <grafite-barra> */
+.grafite-barra { display: flex; align-items: center; gap: 14px; padding: 12px 24px; background: var(--surface);
+  border-bottom: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+.grafite-barra a { text-decoration: none; color: var(--text-muted, var(--text)); }
+.grafite-barra a[aria-current="page"] { color: var(--text); font-weight: 600; }
+.grafite-barra a.off { opacity: .5; }
+.grafite-barra .marca { font-family: var(--font-heading); font-size: 17px; color: var(--text); }
+.grafite-barra .itens { display: flex; gap: 12px; flex: 1; flex-wrap: wrap; }
+.grafite-barra .conta { color: var(--text-muted, var(--text)); font-size: 13px; }
+.grafite-barra button { background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }

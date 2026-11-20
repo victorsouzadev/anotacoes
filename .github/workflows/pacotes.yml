@@ -1,0 +1,43 @@
+# Publica o SDK dos plug-ins (spec 032) quando a <Version> do csproj muda na main.
+# O pacote vai como anexo de uma Release deste repositório (público): os repositórios dos plug-ins,
+# privados, baixam o .nupkg sem token nenhum (o GitHub Packages exigiria um token em cada um).
+name: Pacotes
+
+on:
+  push:
+    branches: [main]
+    paths: ['pacotes/Hub.Plugin.Sdk/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Versão
+        id: v
+        run: |
+          v=$(grep -oP '(?<=<Version>)[^<]+' pacotes/Hub.Plugin.Sdk/Hub.Plugin.Sdk.csproj)
+          echo "versao=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "sdk-v$v" >/dev/null 2>&1; then echo "existe=1" >> "$GITHUB_OUTPUT"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Testa e empacota
+        if: steps.v.outputs.existe != '1'
+        run: |
+          dotnet test pacotes/Hub.Plugin.Sdk.Tests -c Release
+          dotnet pack pacotes/Hub.Plugin.Sdk -c Release -o saida
+      - name: Release
+        if: steps.v.outputs.existe != '1'
+        run: |
+          gh release create "sdk-v${{ steps.v.outputs.versao }}" saida/*.nupkg \
+            --title "Hub.Plugin.Sdk ${{ steps.v.outputs.versao }}" \
+            --notes "SDK dos plug-ins do hub (spec 032). Uso: pacotes/README.md."
+        env:
+          GH_TOKEN: ${{ github.token }}

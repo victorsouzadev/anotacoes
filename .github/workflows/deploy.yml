@@ -152,7 +152,8 @@ jobs:
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
             --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
-            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy plugins.lock
+            --exclude='pacotes/*/bin' --exclude='pacotes/*/obj' --exclude=pacotes/grafite-ui/node_modules \
+            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy plugins.lock pacotes
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -180,7 +181,7 @@ jobs:
             # sobrevive no disco e volta pro contexto de build do Docker (foi assim que
             # kanban/tasks-kanban.page.ts órfão quebrou o build do frontend depois do
             # rename pra projects/project-board.page.ts). Limpa antes de extrair.
-            rm -rf backend frontend caddy deployer cerebro ops scripts
+            rm -rf backend frontend caddy deployer cerebro ops scripts pacotes
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             mkdir -p data/db data/sites data/core/chaves
