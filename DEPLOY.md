@@ -149,7 +149,12 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    Entrar com a conta de sempre e conferir notas, tarefas e finanças do dia anterior. O `.env` restaurado
    traz as chaves do núcleo, então os logins e os tokens continuam valendo.
 
-   Último ensaio de restauração completa: **ainda não feito** (tarefa T023 da spec 036).
+   Último ensaio de restauração: **2026-11-20**, no PC do Victor (Windows + Docker), cópia `19e6ccf6`.
+   Do zero (restic instalado, Drive autorizado) até os arquivos no disco: **2 min** (4342 arquivos, 113 MiB,
+   10 s de download). O `notas-*.db` restaurado tinha o mesmo SHA-256 do da VPS e `integrity_check` ok, e a
+   API subiu com ele e o `.env` restaurado (`/api/health` ok, migrações sem erro), sem rede para não chamar
+   serviços externos. Ficaram de fora o login pelo navegador, o `pg_restore` dos sites e o Caddy: ensaiar
+   no próximo. Próximo ensaio: até 2027-05.
 
 ## Atualizações seguintes
 

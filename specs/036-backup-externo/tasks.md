@@ -43,7 +43,7 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - [x] T020 [P] DEPLOY.md: preparar provedor, configurar, cron (as duas linhas), conferir estado, restauração completa (sites e `pg_restore` incluídos), onde está a senha, data do último ensaio
 - [x] T021 [P] `Sistema__BackupExterno` no `docker-compose.yml` (o `.env.example` não tem as variáveis `Sistema__`) e README (Roadmap/Confiabilidade)
 - [x] T022 `dotnet test` (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`), `npx ng test`, `ng build`, CI inteira verde
-- [ ] T023 🔐 Ensaio de restauração completa numa máquina que não é a VPS, cronometrado (quickstart); registrar no DEPLOY.md
+- [x] T023 🔐 Ensaio de restauração completa numa máquina que não é a VPS, cronometrado (quickstart); registrar no DEPLOY.md
 
 ## Dependências
 
@@ -60,4 +60,6 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - O `rm -rf scripts` do deploy apaga o `scripts/backup.sh.antigo-20261120` deixado na VPS na correção manual.
 - Destino trocado para o Google Drive em 2026-11-20 (pedido do Victor, sem conta nova). Os scripts não mudam: o `restic` fala com o Drive pelo `rclone` a partir do `RESTIC_REPOSITORY`.
 - 2026-11-20: Drive autorizado (escopo `drive.file`), repositório `9df59296f8` criado, primeira cópia `19e6ccf6` (18 MB) e conferência ok. O `restic init` falhou uma vez com `RATE_LIMIT_EXCEEDED` (cliente OAuth compartilhado do rclone); se repetir, criar um cliente OAuth próprio.
+- T023 (2026-11-20): restauração no PC em 2 min; API de pé com o banco e o `.env` restaurados. Ficaram para o próximo ensaio o login pelo navegador, o `pg_restore` dos sites e o Caddy (ver DEPLOY.md).
+- O rclone avisa que o cliente OAuth compartilhado do Google Drive será desativado em 2026: criar um cliente próprio (<https://rclone.org/drive/#making-your-own-client-id>) na VPS antes disso.
 - T019: os scripts vieram `755 root:root`, mas a pasta `scripts/` ficou com dono `deploy` (o tar preserva o dono do CI); o deploy passou a fazer `chown -R root:root scripts`.
