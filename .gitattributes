@@ -1,0 +1,3 @@
+# Scripts rodam no Linux da VPS: sempre LF, mesmo vindo de um checkout no Windows (deploy.py empacota a cópia local).
+*.sh text eol=lf
+scripts/logrotate-* text eol=lf

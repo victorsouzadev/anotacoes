@@ -164,7 +164,7 @@ precisa existir antes de qualquer migração de plug-in.
 
 ### Decisões principais
 
-- `restic` para um bucket S3 compatível de outro provedor (recomendado Backblaze B2), cifrado na VPS,
+- `restic` para o Google Drive do Victor (via `rclone`, escopo `drive.file`; comparado com B2 e GitHub), cifrado na VPS,
   deduplicado, com retenção 7 diárias / 4 semanais / 6 mensais. A senha fica também fora da VPS.
 - O instantâneo leva as cópias consistentes do dia, os dumps do Postgres, o restante de `data/` (cobre os
   plug-ins sem mudar o script) e o `.env`, porque sem as chaves do núcleo (030) os logins deixam de valer.

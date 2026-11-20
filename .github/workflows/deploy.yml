@@ -152,7 +152,7 @@ jobs:
             --exclude=deployer/*/bin --exclude=deployer/*/obj \
             --exclude='cerebro/*/*/bin' --exclude='cerebro/*/*/obj' \
             --exclude='ops/*/*/bin' --exclude='ops/*/*/obj' \
-            backend frontend deployer cerebro ops docker-compose.yml docker-compose.vps.yml caddy
+            backend frontend deployer cerebro ops scripts docker-compose.yml docker-compose.vps.yml caddy
 
       - name: Envia pacote para a VPS
         uses: appleboy/scp-action@v0.1.7
@@ -180,10 +180,16 @@ jobs:
             # sobrevive no disco e volta pro contexto de build do Docker (foi assim que
             # kanban/tasks-kanban.page.ts órfão quebrou o build do frontend depois do
             # rename pra projects/project-board.page.ts). Limpa antes de extrair.
-            rm -rf backend frontend caddy deployer cerebro ops
+            rm -rf backend frontend caddy deployer cerebro ops scripts
             tar -xzf deploy.tar.gz
             rm deploy.tar.gz
             mkdir -p data/db data/sites
+            # Scripts do host (backup, spec 036): executáveis e só o root altera. Antes deste passo o deploy
+            # não levava scripts/ e o backup.sh da VPS ficou meses sem rodar (666, versão de julho).
+            chown root:root scripts/*.sh scripts/logrotate-*
+            chmod 755 scripts/*.sh
+            chmod 644 scripts/logrotate-*
+            install -m 644 -o root -g root scripts/logrotate-notas-backup /etc/logrotate.d/notas-backup
             docker stop hermes || true
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build api
             docker compose -f docker-compose.yml -f docker-compose.vps.yml build caddy

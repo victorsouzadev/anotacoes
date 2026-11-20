@@ -45,7 +45,7 @@ public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sit
         var biblioteca = await db.ImageLibrary.CountAsync(i => i.UserId == uid, ct);
         sb.Append($"Biblioteca: {biblioteca} artes guardadas.\n");
         sb.Append("\n## Servidor\n").Append(Notas.Api.Services.Sistema.BackupStatus.Linha(
-            Notas.Api.Services.Sistema.BackupStatus.Ler(sistema.Value.BackupStatus, DateTime.UtcNow))).Append('\n');
+            Notas.Api.Services.Sistema.BackupStatus.LerCompleto(sistema.Value, DateTime.UtcNow))).Append('\n');
         return sb.ToString().TrimEnd();
     }
 

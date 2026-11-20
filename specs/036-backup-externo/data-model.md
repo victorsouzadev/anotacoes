@@ -33,15 +33,23 @@ Gravado por `backup-externo.sh` e `backup-conferir.sh`, sempre lendo o anterior 
 ## `/root/.config/notas-backup.env` (novo, fora do repositório, `600`)
 
 ```sh
-RESTIC_REPOSITORY=s3:https://s3.us-west-004.backblazeb2.com/<bucket>
+RESTIC_REPOSITORY=rclone:gdrive:notas-vps-backup
 RESTIC_PASSWORD=<senha guardada também no gerenciador de senhas>
-AWS_ACCESS_KEY_ID=<keyID da chave restrita ao bucket>
-AWS_SECRET_ACCESS_KEY=<applicationKey>
+RCLONE_CONFIG=/root/.config/rclone/rclone.conf
+```
+
+## `/root/.config/rclone/rclone.conf` (novo, fora do repositório, `600`)
+
+```ini
+[gdrive]
+type = drive
+scope = drive.file
+token = <colado do rclone authorize rodado no PC do Victor>
 ```
 
 ## Instantâneo (restic)
 
-- Caminhos: `/opt/notas-vps/backups` (só `notas-*`, `site-*`, `pg-*`), `/opt/notas-vps/data`, `/opt/notas-vps/.env`.
+- Caminhos: `/opt/notas-vps/backups`, `/opt/notas-vps/data`, `/opt/notas-vps/.env`.
 - Exclusões: `data/db/notas.db*`, `data/sites/*/data/app.db*`, `data/postgres`.
 - Tag: `notas-vps`. Retenção: `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`.
 

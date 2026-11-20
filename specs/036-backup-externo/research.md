@@ -9,13 +9,15 @@
 - `/opt/financas-vps/scripts/backup.sh` tem o mesmo `666`; fica fora desta spec.
 - Tamanho atual: `data/` ≈ 180 MB (sites 85, postgres 47, cerebro 21, anotacao 18, db 4,5); disco da VPS em 77%.
 
-## Decisão: restic para um bucket S3 compatível
+## Decisão: restic para o Google Drive (via rclone)
 
 - **Escolhido**: `restic` (pacote `apt`, binário único). Cifra na origem (AES-256 + senha do repositório), deduplica (o diário de 180 MB vira poucos MB por dia), tem retenção (`forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`), `check --read-data-subset` e `restore --include`, e trava concorrência no próprio repositório.
 - **Rejeitado: `rclone` + `age`/`gpg`**: duas ferramentas, sem deduplicação (180 MB por dia), retenção e conferência feitas à mão em shell.
 - **Rejeitado: `rsync` para outra máquina do Victor**: depende de uma máquina ligada e com IP; não é outro provedor.
 - **Rejeitado: snapshot do provedor da VPS**: mesmo provedor e mesma conta; não cobre o risco principal.
-- **Provedor**: qualquer S3 compatível. Recomendado Backblaze B2 (10 GB grátis, chave por bucket, "keep prior versions for N days" no lifecycle). R2 também serve.
+- **Provedor**: Google Drive da conta do Victor (decidido em 2026-11-20, depois de comparar com Backblaze B2 e GitHub). O `restic` usa o backend `rclone:` (`RESTIC_REPOSITORY=rclone:gdrive:notas-vps-backup`); o `rclone` é um pacote do apt. Cota grátis de 15 GB dividida com Gmail e Fotos; com deduplicação a cópia fica em ~200 MB.
+- **Rejeitado: GitHub (releases + `age`)**: o `restic` não grava lá, então sem deduplicação (~2,5 GB com a retenção), e o token de escrita da VPS apaga releases sem lixeira. Não é feito para backup.
+- **Rejeitado por agora: Backblaze B2**: é o mais adequado (versões protegidas por regra do bucket), mas exige conta nova. Volta a ser a opção se o Drive der problema; troca só a configuração.
 
 ## Decisão: arquivo de estado separado
 
@@ -23,12 +25,13 @@ O `backup.sh` reescreve `backup-status.json` inteiro a cada execução. Se a par
 
 ## Decisão: segredos fora do `.env` do compose
 
-Repositório, senha e chave do bucket ficam em `/root/.config/notas-backup.env` (`600`), lido só pelos scripts. O `.env` do compose é montado em containers; esse arquivo não. O `.env` entra **no** instantâneo (cifrado), porque sem ele as chaves do núcleo (030) se perdem e os logins deixam de valer.
+Repositório e senha ficam em `/root/.config/notas-backup.env` (`600`), lido só pelos scripts. O `.env` do compose é montado em containers; esse arquivo não. O `.env` entra **no** instantâneo (cifrado), porque sem ele as chaves do núcleo (030) se perdem e os logins deixam de valer.
 
 ## Decisão: proteção contra apagamento
 
-- Chave de aplicação restrita ao bucket.
-- Lifecycle do bucket guardando versões ocultas/apagadas por 30 dias: uma VPS invadida que rode `restic forget` ou apague objetos não destrói a cópia antes de alguém perceber (o alerta é de 36 h).
+- O token OAuth do `rclone` usa o escopo `drive.file`: só vê os arquivos que o próprio `rclone` criou, nunca o resto do Drive.
+- O `rclone` manda para a lixeira do Drive o que apaga (padrão `--drive-use-trash=true`), e a lixeira guarda por 30 dias: uma VPS invadida que rode `restic forget` não destrói a cópia antes de alguém perceber (o alerta é de 36 h). Quem tiver o token ainda pode esvaziar a lixeira pela API: risco aceito.
+- O token fica em `/root/.config/rclone/rclone.conf` (`600`); `RCLONE_CONFIG` aponta para ele no `notas-backup.env`.
 - Object lock rejeitado por agora: complica o `prune` e não é necessário para o risco medido.
 
 ## Decisão: o que fica fora do instantâneo

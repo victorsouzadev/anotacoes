@@ -57,6 +57,15 @@ jobs:
         env:
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
 
+  # Scripts do host (backup das specs 025 e 036): shellcheck e testes sem rede.
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y -qq jq shellcheck
+      - run: shellcheck -x scripts/*.sh scripts/tests/*.sh
+      - run: sh scripts/tests/backup.test.sh
+
   # Ferramenta "Publicar": o serviço que cria os containers dos apps.
   deployer-build:
     runs-on: ubuntu-latest
