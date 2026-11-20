@@ -675,7 +675,12 @@ notas-vps/
 ├── caddy/                            # Caddyfile + Dockerfile (build do Angular embutido)
 ├── scripts/
 │   ├── deploy.py                     # empacota e envia via SFTP
-│   └── backup.sh                     # backup do SQLite (cron na VPS)
+│   ├── backup.sh                     # backup do SQLite e dos sites (cron na VPS); chama a cópia externa
+│   ├── backup-externo.sh             # cópia cifrada fora da VPS com restic (spec 036)
+│   ├── backup-conferir.sh            # conferência semanal da restauração (spec 036)
+│   ├── backup-comum.sh               # limpeza, trava, configuração e estado (backup-externo.json)
+│   ├── logrotate-notas-backup        # rotação de /var/log/notas-backup.log (instalada pelo deploy)
+│   └── tests/backup.test.sh          # testes dos scripts (CI, job "scripts")
 ├── docker-compose.yml / .local.yml / .vps.yml
 └── DEPLOY.md
 ```
@@ -830,7 +835,8 @@ Cada item do Roadmap virou uma spec do Spec Kit em [`specs/`](specs/README.md), 
 tarefas; o status de cada uma está no índice:
 
 - **Confiabilidade**: backup monitorado ([025](specs/025-backup-monitorado/spec.md)) — o hub avisa quem
-  está em `PUBLICADORES` quando o último backup passa de 36 h. O HTTPS por
+  está em `PUBLICADORES` quando o último backup passa de 36 h — e cópia cifrada fora da VPS com
+  conferência semanal da restauração ([036](specs/036-backup-externo/spec.md)). O HTTPS por
   subdomínio já está no ar (cerebro.vsitefy.com.br).
 - **Notas**: lixeira com restaurar ([018](specs/018-notas-lixeira/spec.md), feita), exportar PDF
   ([019](specs/019-notas-exportar-pdf/spec.md), feito), duplicar página e atalhos

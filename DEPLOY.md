@@ -80,15 +80,74 @@ A porta 80/443 do host já pertence ao nginx-proxy-manager (NPM), usado pelo con
    ```bash
    apt install -y sqlite3   # se ainda não instalado
    crontab -e
-   # adicionar:
-   0 4 * * * /opt/notas-vps/scripts/backup.sh
+   # adicionar (a saída vai para o log; sem isso o cron descarta os erros):
+   0 4 * * * /opt/notas-vps/scripts/backup.sh >> /var/log/notas-backup.log 2>&1
    ```
+
+   O deploy leva `scripts/` com `755 root:root` e instala a rotação do log em
+   `/etc/logrotate.d/notas-backup`. A limpeza dos 14 dias só apaga `notas-*`, `site-*` e `pg-*` direto em
+   `backups/`; outras pastas e arquivos ali não são tocados.
 
    Cada execução sem erro grava `data/db/backup-status.json`. O hub lê esse arquivo
    (`GET /api/sistema/backup`) e mostra uma faixa de alerta para os e-mails de `PUBLICADORES`
    quando o último backup tem mais de 36 h; a seção **Servidor** em `/configuracoes` traz os
    detalhes, e o resumo do MCP criativo leva a mesma linha para o diário do Segundo Cérebro.
    Para conferir na VPS: `crontab -l` e `cat /opt/notas-vps/data/db/backup-status.json`.
+
+7. Cópia do backup fora da VPS (spec 036). Sem ela, perder a VPS é perder os dados **e** as cópias.
+
+   **Preparar (uma vez, fora da VPS):**
+   - Criar um bucket privado num S3 compatível de outro provedor (recomendado: Backblaze B2,
+     `notas-vps-backup`) e, no lifecycle, manter versões antigas/apagadas por 30 dias.
+   - Criar uma chave de aplicação restrita a esse bucket.
+   - Gerar uma senha longa para a cópia. **Guardar a senha e a chave no gerenciador de senhas**: sem a
+     senha a cópia não abre, e ela não pode existir só na VPS.
+
+   **Configurar na VPS:**
+   ```bash
+   apt install -y restic jq
+   install -d -m 700 /root/.config
+   install -m 600 /dev/null /root/.config/notas-backup.env
+   # preencher:
+   #   RESTIC_REPOSITORY=s3:https://s3.<região>.backblazeb2.com/notas-vps-backup
+   #   RESTIC_PASSWORD=<senha da cópia>
+   #   AWS_ACCESS_KEY_ID=<keyID>
+   #   AWS_SECRET_ACCESS_KEY=<applicationKey>
+   set -a; . /root/.config/notas-backup.env; set +a
+   restic init
+   crontab -e
+   # adicionar a conferência semanal:
+   0 5 * * 0 /opt/notas-vps/scripts/backup-conferir.sh >> /var/log/notas-backup.log 2>&1
+   /opt/notas-vps/scripts/backup.sh >> /var/log/notas-backup.log 2>&1
+   /opt/notas-vps/scripts/backup-conferir.sh >> /var/log/notas-backup.log 2>&1
+   cat /opt/notas-vps/data/db/backup-externo.json
+   ```
+
+   O `backup.sh` chama o `backup-externo.sh` no fim de cada backup local sem erro. A cópia leva as cópias
+   consistentes de `backups/`, todo `data/` (menos os arquivos vivos do SQLite e o `data/postgres`) e o
+   `.env`, cifrados na VPS, com retenção de 7 diárias, 4 semanais e 6 mensais. A conferência de domingo lê
+   10% dos dados remotos e restaura o `notas.db` mais recente para rodar `PRAGMA integrity_check`. O estado
+   fica em `data/db/backup-externo.json`; o hub avisa com 36 h sem cópia externa ou 8 dias sem conferência.
+
+   **Restaurar tudo numa máquina nova** (ensaiar a cada 6 meses; anote a data abaixo):
+   ```bash
+   export RESTIC_REPOSITORY=... RESTIC_PASSWORD=... AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
+   restic snapshots --tag notas-vps
+   restic restore latest --target /tmp/restauro
+   git clone https://github.com/victorsouzadev/anotacoes /opt/notas-vps && cd /opt/notas-vps
+   cp /tmp/restauro/opt/notas-vps/.env .
+   cp -a /tmp/restauro/opt/notas-vps/data .
+   cp "$(ls /tmp/restauro/opt/notas-vps/backups/notas-*.db | tail -1)" data/db/notas.db
+   # bancos SQLite dos sites: copiar o site-<slug>-*.db mais recente para data/sites/<slug>/data/app.db
+   # Postgres dos sites: subir o notas-postgres e, para cada pg-site_<slug>-*.dump mais recente,
+   #   docker exec -i notas-postgres createdb -U postgres site_<slug>
+   #   docker exec -i notas-postgres pg_restore -U postgres -d site_<slug> < arquivo.dump
+   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+   ```
+   Entrar com a conta de sempre e conferir notas, tarefas e finanças do dia anterior. O `.env` restaurado
+   traz as chaves do núcleo, então os logins e os tokens continuam valendo.
+
+   Último ensaio de restauração completa: **ainda não feito** (tarefa T023 da spec 036).
 
 ## Atualizações seguintes
 

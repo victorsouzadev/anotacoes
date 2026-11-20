@@ -18,7 +18,7 @@ public static class SistemaEndpoints
             var id = user.UserId();
             var email = await db.Users.AsNoTracking().Where(u => u.Id == id).Select(u => u.Email).FirstOrDefaultAsync();
             if (!sites.Value.PodePublicar(email)) return Results.Forbid();
-            return Results.Ok(BackupStatus.Ler(sistema.Value.BackupStatus, DateTime.UtcNow));
+            return Results.Ok(BackupStatus.LerCompleto(sistema.Value, DateTime.UtcNow));
         }).RequireAuthorization();
     }
 }

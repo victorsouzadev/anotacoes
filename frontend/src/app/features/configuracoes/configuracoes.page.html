@@ -273,7 +273,29 @@
         } @else {
           <p class="alerta-texto">Nenhum backup registrado.</p>
         }
-        <p class="ajuda">Para rodar à mão na VPS: <code>/opt/notas-vps/scripts/backup.sh</code>. Para conferir o agendamento: <code>crontab -l</code>.</p>
+        @if (b.externo; as x) {
+          <h3>Cópia fora da VPS</h3>
+          @if (x.registrado) {
+            <p [class.alerta-texto]="x.atrasado">
+              Última cópia: {{ x.concluidoEm | date: 'dd/MM/yyyy HH:mm' }} (há {{ idade(x.idadeHoras ?? 0) }}){{ x.atrasado ? ' — atrasada' : '' }} · {{ tamanho(x.bytesTotal) }} no destino
+            </p>
+          } @else {
+            <p class="alerta-texto">Cópia externa nunca registrada.</p>
+          }
+          @if (x.ultimaFalha; as f) {
+            <p class="alerta-texto">Falhou em {{ f.em | date: 'dd/MM/yyyy HH:mm' }}: <code>{{ f.erro }}</code></p>
+          }
+        }
+        @if (b.conferencia; as c) {
+          @if (c.registrado) {
+            <p [class.alerta-texto]="c.atrasado">
+              Restauração conferida em {{ c.concluidoEm | date: 'dd/MM/yyyy HH:mm' }} (há {{ idade(c.idadeHoras ?? 0) }}){{ !c.ok ? ' — com erro' : c.atrasado ? ' — atrasada' : '' }}
+            </p>
+          } @else {
+            <p class="alerta-texto">Restauração nunca conferida.</p>
+          }
+        }
+        <p class="ajuda">Para rodar à mão na VPS: <code>/opt/notas-vps/scripts/backup.sh</code>. Para conferir o agendamento: <code>crontab -l</code>. Cópia externa: <code>scripts/backup-externo.sh</code>; conferência: <code>scripts/backup-conferir.sh</code>; log em <code>/var/log/notas-backup.log</code>.</p>
       </div>
     }
   </main>

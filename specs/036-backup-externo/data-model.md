@@ -41,7 +41,7 @@ AWS_SECRET_ACCESS_KEY=<applicationKey>
 
 ## Instantâneo (restic)
 
-- Caminhos: `/opt/notas-vps/backups` (só `notas-*`, `site-*`, `pg-*`), `/opt/notas-vps/data`, `/opt/notas-vps/.env`.
+- Caminhos: `/opt/notas-vps/backups`, `/opt/notas-vps/data`, `/opt/notas-vps/.env`.
 - Exclusões: `data/db/notas.db*`, `data/sites/*/data/app.db*`, `data/postgres`.
 - Tag: `notas-vps`. Retenção: `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`.
 

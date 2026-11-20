@@ -7,6 +7,25 @@ export interface BackupArquivo {
   bytes: number;
 }
 
+/** Cópia fora da VPS (spec 036): concluidoEm é sempre o último sucesso. */
+export interface BackupExterno {
+  registrado: boolean;
+  concluidoEm: string | null;
+  idadeHoras: number | null;
+  atrasado: boolean;
+  ultimaFalha: { em: string; erro: string } | null;
+  bytesTotal: number;
+}
+
+/** Conferência semanal da restauração (spec 036). */
+export interface BackupConferencia {
+  registrado: boolean;
+  concluidoEm: string | null;
+  idadeHoras: number | null;
+  atrasado: boolean;
+  ok: boolean;
+}
+
 export interface BackupEstado {
   registrado: boolean;
   concluidoEm: string | null;
@@ -14,6 +33,8 @@ export interface BackupEstado {
   atrasado: boolean;
   arquivos: BackupArquivo[];
   totalBytes: number;
+  externo?: BackupExterno | null;
+  conferencia?: BackupConferencia | null;
 }
 
 /** Idade em português, como o backend escreve no resumo do MCP. */
@@ -26,11 +47,30 @@ export function idadeTexto(horas: number): string {
   return (dias === 1 ? '1 dia' : `${dias} dias`) + (resto > 0 ? ` e ${resto} h` : '');
 }
 
-/** Texto da faixa de alerta do hub; null quando está tudo em dia. */
+/** Texto da faixa de alerta do hub (local, cópia externa e conferência); null quando está tudo em dia. */
 export function alertaBackup(e: BackupEstado | null): string | null {
-  if (!e || !e.atrasado) return null;
-  if (!e.registrado) return 'Nenhum backup registrado. Confira o cron do scripts/backup.sh na VPS.';
-  return `Backup atrasado: o último terminou há ${idadeTexto(e.idadeHoras ?? 0)}.`;
+  if (!e) return null;
+  const problemas: string[] = [];
+  if (e.atrasado) {
+    problemas.push(e.registrado
+      ? `Backup atrasado: o último terminou há ${idadeTexto(e.idadeHoras ?? 0)}.`
+      : 'Nenhum backup registrado. Confira o cron do scripts/backup.sh na VPS.');
+  }
+  const x = e.externo;
+  if (x?.atrasado) {
+    problemas.push(x.registrado
+      ? `Cópia externa atrasada: a última terminou há ${idadeTexto(x.idadeHoras ?? 0)}.`
+      : 'Cópia externa nunca registrada.');
+  }
+  const c = e.conferencia;
+  if (c?.atrasado) {
+    problemas.push(!c.registrado
+      ? 'Restauração nunca conferida.'
+      : !c.ok
+        ? 'A última conferência da restauração falhou.'
+        : `Restauração não conferida há ${idadeTexto(c.idadeHoras ?? 0)}.`);
+  }
+  return problemas.length ? problemas.join(' ') : null;
 }
 
 export function tamanhoTexto(bytes: number): string {

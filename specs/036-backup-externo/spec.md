@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-20
 
-**Status**: Planejada (vem antes da 029)
+**Status**: Código implementado em 2026-11-20; falta a configuração na VPS e o ensaio de restauração (tarefas 🔐)
 
 **Input**: Pendência registrada na 025 ("cópia fora da VPS fica como próximo passo") e achado de produção de 2026-11-20: o cron do backup disparava todo dia, mas o `scripts/backup.sh` da VPS estava sem permissão de execução e numa versão de julho; o último backup era de 2026-07-09 e ninguém percebeu, porque a saída do cron era descartada. Hoje todos os dados do hub (e, depois da 031, de todos os plug-ins) estão num único disco de uma única VPS, e as cópias também.
 

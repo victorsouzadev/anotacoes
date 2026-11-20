@@ -1,11 +1,12 @@
 #!/bin/sh
 # Backup do SQLite (seguro com WAL). Agendar via cron na VPS:
-#   0 4 * * * /opt/notas-vps/scripts/backup.sh
-# Requer: apt install sqlite3
+#   0 4 * * * /opt/notas-vps/scripts/backup.sh >> /var/log/notas-backup.log 2>&1
+# Requer: apt install sqlite3 (e restic + jq para a cópia fora da VPS, spec 036)
 set -e
 
-BASE="${BASE_DIR:-/opt/notas-vps}"
-BACKUPS="$BASE/backups"
+DIR=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=backup-comum.sh
+. "$DIR/backup-comum.sh"
 DATE=$(date +%Y%m%d-%H%M)
 
 mkdir -p "$BACKUPS"
@@ -25,8 +26,8 @@ if docker ps --format '{{.Names}}' | grep -qx notas-postgres; then
   done
 fi
 
-# retenção: 14 dias
-find "$BACKUPS" -type f -mtime +14 -delete
+# retenção: 14 dias, só dos arquivos que este script cria
+limpar_backups "$BACKUPS" 14
 
 # Estado para o hub (/api/sistema/backup): só chega aqui se nada acima falhou (set -e).
 # Lista os arquivos desta execução; escreve num temporário e troca, para nunca ficar pela metade.
@@ -44,3 +45,9 @@ printf '{"concluidoEm":"%s","arquivos":[%s],"totalBytes":%s}\n' "$(date -u +%Y-%
 mv "$STATUS.tmp" "$STATUS"
 
 echo "Backup ok: $BACKUPS/notas-$DATE.db"
+
+# Cópia fora da VPS (spec 036). Uma falha aqui fica registrada em backup-externo.json e no log,
+# mas não desfaz o backup local, que já está gravado.
+if [ -x "$DIR/backup-externo.sh" ]; then
+  "$DIR/backup-externo.sh" || echo "Aviso: a cópia externa falhou; o backup local continua valendo." >&2
+fi
