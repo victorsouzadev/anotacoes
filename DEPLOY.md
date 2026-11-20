@@ -385,7 +385,7 @@ arquivos. Quem tem o `OPS_MCP_TOKEN` controla a VPS inteira. Fica atrás do prof
 
 **Plug-ins (029).** `plugins.lock` na raiz, uma linha por plug-in (`id: imagem@commit`); linha comentada desliga. O deploy
 copia o arquivo para `data/plugins/plugins.lock`; o deployer confere a cada 30 s e, para cada mudança:
-1. baixa a imagem (imagem privada do GHCR: `docker login ghcr.io` na VPS uma vez, com um token `read:packages`);
+1. baixa a imagem (imagem privada do GHCR: `docker login ghcr.io` na VPS uma vez, como root, com um token classic só `read:packages`; o `docker-compose.yml` monta o `/root/.docker/config.json` no deployer, só leitura. O arquivo precisa existir antes de subir o deployer, senão o Docker cria uma pasta no lugar);
 2. lê `/app/plugin.json` e confere as regras (rotas reservadas, prefixo de tabela, sobreposição com outros plug-ins);
 3. copia o `notas.db` para `data/plugins/copias/` (guarda 5) e retrata o esquema;
 4. sobe `plugin-<id>` na rede do hub com `data/db` montado e as variáveis `HUB_*` (nunca `JWT_SECRET` nem `data/core`);
