@@ -6,7 +6,7 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 
 ## Phase 1: Setup
 
-- [ ] T001 🔐 Victor roda `rclone authorize "drive" --drive-scope drive.file` no PC e guarda a senha da cópia no gerenciador de senhas (quickstart, "Preparar")
+- [x] T001 🔐 Victor roda `rclone authorize "drive" --drive-scope drive.file` no PC e guarda a senha da cópia no gerenciador de senhas (quickstart, "Preparar")
 
 ## Phase 2: Foundational (corrige a causa do incidente)
 
@@ -21,7 +21,7 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - [x] T007 [US1] `scripts/backup-comum.sh`: carrega `/root/.config/notas-backup.env` (falha clara se ausente), `flock` em `/run/notas-backup.lock`, função de gravar a parte `copia`/`conferencia` de `data/db/backup-externo.json` por temporário + `mv`
 - [x] T008 [US1] `scripts/backup-externo.sh`: `restic backup` com os caminhos e exclusões do data-model, tag `notas-vps`; `restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`; grava `copia` com sucesso ou erro sem segredos
 - [x] T009 [US1] `scripts/backup.sh` chama `backup-externo.sh` só depois de gravar `backup-status.json` (já garantido pelo `set -e`); falha da cópia externa não desfaz o backup local
-- [ ] T010 🔐 [US1] Na VPS: `apt install restic rclone`, criar `/root/.config/rclone/rclone.conf` com o token e `/root/.config/notas-backup.env`, `restic init`, rodar uma vez e conferir o instantâneo (quickstart, "Configurar")
+- [x] T010 🔐 [US1] Na VPS: `apt install restic rclone`, criar `/root/.config/rclone/rclone.conf` com o token e `/root/.config/notas-backup.env`, `restic init`, rodar uma vez e conferir o instantâneo (quickstart, "Configurar")
 
 ## Phase 4: User Story 2 - Estado e conferência (P1)
 
@@ -32,17 +32,17 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - [x] T015 [US2] `sistema.service.ts` e faixa do `hub.page.ts`: alerta para qualquer das três partes atrasada
 - [x] T016 [US2] Seção "Servidor" em `/configuracoes`: três datas, última falha e comandos de conferência
 - [x] T017 [US2] `criativo_resumo` com a linha nova (`CriativoMcpTools.cs`)
-- [ ] T018 🔐 [US2] Na VPS: cron de domingo 05:00 do `backup-conferir.sh` e uma execução manual
+- [x] T018 🔐 [US2] Na VPS: cron de domingo 05:00 do `backup-conferir.sh` e uma execução manual
 
 ## Phase 5: User Story 3 - Deploy e log (P2)
 
-- [ ] T019 🔐 [US3] Depois do primeiro deploy com T004: conferir permissões de `scripts/`, o logrotate instalado e o crontab com `>> /var/log/notas-backup.log 2>&1`
+- [x] T019 🔐 [US3] Depois do primeiro deploy com T004: conferir permissões de `scripts/`, o logrotate instalado e o crontab com `>> /var/log/notas-backup.log 2>&1`
 
 ## Phase 6: Polish
 
 - [x] T020 [P] DEPLOY.md: preparar provedor, configurar, cron (as duas linhas), conferir estado, restauração completa (sites e `pg_restore` incluídos), onde está a senha, data do último ensaio
 - [x] T021 [P] `Sistema__BackupExterno` no `docker-compose.yml` (o `.env.example` não tem as variáveis `Sistema__`) e README (Roadmap/Confiabilidade)
-- [ ] T022 `dotnet test` (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`), `npx ng test`, `ng build`, CI inteira verde
+- [x] T022 `dotnet test` (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`), `npx ng test`, `ng build`, CI inteira verde
 - [ ] T023 🔐 Ensaio de restauração completa numa máquina que não é a VPS, cronometrado (quickstart); registrar no DEPLOY.md
 
 ## Dependências
@@ -59,3 +59,5 @@ Tarefas marcadas com 🔐 dependem do Victor (conta, senha) ou gravam na VPS: s�
 - `.gitattributes` passa a fixar LF nos `.sh`: o `deploy.py` empacota a cópia local do Windows, e um `#!/bin/sh` com CRLF não roda.
 - O `rm -rf scripts` do deploy apaga o `scripts/backup.sh.antigo-20261120` deixado na VPS na correção manual.
 - Destino trocado para o Google Drive em 2026-11-20 (pedido do Victor, sem conta nova). Os scripts não mudam: o `restic` fala com o Drive pelo `rclone` a partir do `RESTIC_REPOSITORY`.
+- 2026-11-20: Drive autorizado (escopo `drive.file`), repositório `9df59296f8` criado, primeira cópia `19e6ccf6` (18 MB) e conferência ok. O `restic init` falhou uma vez com `RATE_LIMIT_EXCEEDED` (cliente OAuth compartilhado do rclone); se repetir, criar um cliente OAuth próprio.
+- T019: os scripts vieram `755 root:root`, mas a pasta `scripts/` ficou com dono `deploy` (o tar preserva o dono do CI); o deploy passou a fazer `chown -R root:root scripts`.
