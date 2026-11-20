@@ -186,7 +186,9 @@ jobs:
             mkdir -p data/db data/sites
             # Scripts do host (backup, spec 036): executáveis e só o root altera. Antes deste passo o deploy
             # não levava scripts/ e o backup.sh da VPS ficou meses sem rodar (666, versão de julho).
-            chown root:root scripts/*.sh scripts/logrotate-*
+            # A pasta também: o tar preserva o dono do CI (usuário deploy), que poderia trocar um script rodado pelo root.
+            chown -R root:root scripts
+            chmod 755 scripts scripts/tests
             chmod 755 scripts/*.sh
             chmod 644 scripts/logrotate-*
             install -m 644 -o root -g root scripts/logrotate-notas-backup /etc/logrotate.d/notas-backup
