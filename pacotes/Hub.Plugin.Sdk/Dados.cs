@@ -20,11 +20,23 @@ public static class Dados
     /// Com a retentativa, uma transação explícita do EF (<c>BeginTransaction</c>) tem de rodar dentro de
     /// <c>db.Database.CreateExecutionStrategy().ExecuteAsync(...)</c>.
     /// </summary>
+    /// <remarks>
+    /// Com <c>HUB_BANCO</c> no formato do Npgsql (<c>Host=...</c>), usa o Postgres do hub (spec 038): o papel do plug-in
+    /// já tem <c>search_path = &lt;id&gt;, nucleo</c>, então os nomes das tabelas não mudam.
+    /// </remarks>
     public static DbContextOptionsBuilder UsarBancoDoHub(this DbContextOptionsBuilder o, OpcoesDoHub hub) =>
-        o.UseSqlite($"Data Source={hub.Banco};Default Timeout=5;Pooling=False", s => s
+        EhPostgres(hub.Banco)
+            ? o.UseNpgsql(hub.Banco, n => n
+                .MigrationsHistoryTable("__EFMigrationsHistory_" + hub.Id)
+                .EnableRetryOnFailure(5, TimeSpan.FromSeconds(2), null))
+            : o.UseSqlite($"Data Source={hub.Banco};Default Timeout=5;Pooling=False", s => s
                 .MigrationsHistoryTable("__EFMigrationsHistory_" + hub.Id)
                 .ExecutionStrategy(d => new RetentativaDoHub(d)))
             .AddInterceptors(new ConexaoDoHub(), new OcupadoDoHub());
+
+    /// <summary>Se o banco do hub é o Postgres (connection string do Npgsql) e não um arquivo do SQLite.</summary>
+    public static bool EhPostgres(string banco) =>
+        banco.Contains("Host=", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Quantas vezes o banco respondeu <c>SQLITE_BUSY</c>/<c>SQLITE_LOCKED</c> mesmo depois do <c>busy_timeout</c>

@@ -57,6 +57,17 @@ jobs:
   # Pacotes dos plug-ins (spec 032): SDK .NET e @grafite/ui.
   pacotes:
     runs-on: ubuntu-latest
+    # Spec 038: o Esquema do SDK também roda contra um Postgres de verdade.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: teste
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      HUB_PG_TESTE: Host=localhost;Port=5432;Username=postgres;Password=teste;Database=postgres
     defaults:
       run:
         working-directory: pacotes
