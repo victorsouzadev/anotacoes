@@ -3,3 +3,4 @@
 # Linha comentada = desligado: o container para e os dados ficam. O deployer confere este arquivo a cada 30 s.
 # Exemplo (desligado até a imagem do hub-exemplo usar o SDK):
 # exemplo: ghcr.io/victorsouzadev/hub-exemplo@0000000
+cerebro: ghcr.io/victorsouzadev/hub-cerebro@fb84a0b
