@@ -14,8 +14,8 @@
 
 ## Phase 4: User Story 2 - Tarefas (P1)
 
-- [ ] T007 [US2] Criar `hub-tarefas`; mover `TasksEndpoints`, `TarefasMcpTools`, telas `tasks`, testes e `mobile/app`
-- [ ] T008 [US2] `TarefasDb` (`tasks_*`, base), rotas legadas `/api/tasks`, `/api/mcp/tarefas`, `/tasks`
+- [x] T007 [US2] Criar `hub-tarefas`; mover `TasksEndpoints`, `TarefasMcpTools`, telas `tasks`, testes e `mobile/app`
+- [x] T008 [US2] `TarefasDb` (`tasks_*`, base), rotas legadas `/api/tasks`, `/api/mcp/tarefas`, `/tasks`
 - [ ] T009 [US2] Ensaio, deploy, conferência; remover do núcleo
 
 ## Phase 5: User Story 3 - Anotação (P2)
