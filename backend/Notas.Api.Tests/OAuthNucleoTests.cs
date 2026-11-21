@@ -248,15 +248,16 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         using (var s = _factory.Services.CreateScope())
         {
             var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
-            if (!db.PluginsEstado.Any(p => p.Id == id))
-            {
+            // Outro teste pode já ter registrado o plug-in com outro segredo: aqui vale o deste teste.
+            var existente = db.PluginsEstado.SingleOrDefault(p => p.Id == id);
+            if (existente is not null) existente.SegredoServicoHash = Hash(segredo);
+            else
                 db.PluginsEstado.Add(new PluginEstado
                 {
                     Id = id, Versao = "v1", Manifesto = $$"""{"id":"{{id}}","nome":"{{id}}","icone":"grid","rota":"/{{id}}","porta":8080,"health":"/{{id}}/api/health"}""",
                     SegredoServicoHash = Hash(segredo),
                 });
-                await db.SaveChangesAsync();
-            }
+            await db.SaveChangesAsync();
         }
         var c = await Logado();
         var token = (await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "apps" })).Content.ReadFromJsonAsync<JsonElement>())
