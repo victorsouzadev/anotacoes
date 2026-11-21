@@ -118,6 +118,8 @@ services:
       # plugins.lock (copiado pelo deploy), estado, trechos do Caddy e cópias do banco antes de cada migração
       - ./data/plugins:/plugins
       - ./data/db:/data/db
+      # Login do ghcr.io (token read:packages) feito no host: o cliente docker daqui é quem manda as credenciais no pull.
+      - /root/.docker/config.json:/root/.docker/config.json:ro
 
   # Postgres compartilhado dos sites publicados: cada site ganha um banco e um usuário
   # próprios (site_<slug>), criados pela API. Os apps o acessam como postgres:5432 pela
