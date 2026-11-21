@@ -1,5 +1,7 @@
 # Feature Specification: Tela web do Treino
 
+> **Onde o código mora (spec 034)**: no plug-in `treino`, repositório [hub-treino](https://github.com/victorsouzadev/hub-treino). Os caminhos do núcleo citados abaixo (`backend/Notas.Api`, `frontend/src/app/features`) são de antes da extração.
+
 **Feature Branch**: `017-treino-web` (sem branch própria)
 
 **Created**: 2026-11-18

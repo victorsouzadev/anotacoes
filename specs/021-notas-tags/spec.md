@@ -1,5 +1,7 @@
 # Feature Specification: Tags nas notas
 
+> **Onde o código mora (spec 035)**: no plug-in `notas`, repositório [hub-notas](https://github.com/victorsouzadev/hub-notas). Os caminhos do núcleo citados abaixo (`backend/Notas.Api`, `frontend/src/app/features`) são de antes da extração.
+
 **Feature Branch**: `021-notas-tags` (sem branch própria)
 
 **Created**: 2026-11-18

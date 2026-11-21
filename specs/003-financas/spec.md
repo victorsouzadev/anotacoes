@@ -1,5 +1,7 @@
 # Feature Specification: Finanças
 
+> **Onde o código mora (spec 035)**: no plug-in `financas`, repositório [hub-financas](https://github.com/victorsouzadev/hub-financas). Os caminhos do núcleo citados abaixo (`backend/Notas.Api`, `frontend/src/app/features`) são de antes da extração.
+
 **Feature Branch**: `003-financas` (spec retroativa, sem branch)
 
 **Created**: 2026-11-18

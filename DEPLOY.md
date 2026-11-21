@@ -475,6 +475,16 @@ Ordem da troca, sempre com confirmação:
 5. Só então o PR que tira o código do núcleo (migração `ExtracaoCongelados`, de `Up` vazio: as tabelas ficam).
 Voltar antes do passo 5 é comentar as linhas do lock: o núcleo ainda tem as rotas.
 
+**Ferramentas ativas como plug-ins (035).** Dieta, Tarefas, Anotação, Finanças e Notas são os plug-ins `dieta`, `tarefas`,
+`anotacao`, `financas` e `notas` (repositórios `hub-<id>`), com CI própria a cada push. Cada um usa as tabelas que já
+estavam no `notas.db` (migração `Base`), e as URLs antigas (`/api/notes`, `/api/folders`, `/notes`, `/p/nota`, `/api/tasks`,
+`/tasks`, `/api/financas`, `/api/mcp/<ferramenta>`...) chegam por `rotasLegadas`. No núcleo ficaram só migrações de `Up`
+vazio (`ExtracaoDieta`, `ExtracaoTarefas`, `ExtracaoFinancas`, `ExtracaoNotas`...): as tabelas e os dados ficam.
+- Configuração própria de cada um em `data/plugins/env/<id>.env` (root, 600), como nas 033 e 034.
+- Voltar uma ferramenta para o núcleo é reverter o PR que a removeu e comentar a linha do lock, nessa ordem de deploy.
+- Conferir depois de cada troca: `cat data/plugins/estado.json`, `GET /<id>/health`, a tela em `/<id>/` e
+  `select MigrationId from __EFMigrationsHistory_<id>` (só leitura).
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.

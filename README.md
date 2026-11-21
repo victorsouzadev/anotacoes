@@ -249,7 +249,7 @@ reabre quando quiser.
 
 > Desde a spec 035 é o plug-in [hub-tarefas](https://github.com/victorsouzadev/hub-tarefas) (tela em `/tarefas`, `/tasks` redireciona; API `/api/tasks` e MCP `/api/mcp/tarefas` como rotas legadas). O texto abaixo descreve o comportamento, que não mudou.
 
-Web (`frontend/src/app/features/tasks`) **e** [app Android nativo](mobile/) — as
+Web (`web/` do hub-tarefas) **e** [app Android nativo](mobile/) — as
 duas pontas conversam com o mesmo backend e, quando logadas na mesma conta, com os
 mesmos dados.
 
@@ -606,7 +606,7 @@ modo individual. Não há atalho de teclado para aprovar o lote.
   de volta para o run local.
 - **Acesso**: só os e-mails de `Anotacao__Usuarios` em `data/plugins/env/anotacao.env`, e só por HTTPS (o Caddy recusa
   `/api/anotacao` em HTTP). Sem lote ou fora da lista, a ferramenta aparece como desligada.
-- Código: `Endpoints/AnotacaoEndpoints.cs`, `Services/Anotacao/` e `features/anotacao/`.
+- Código: no hub-anotacao (a API e a tela saíram do núcleo na spec 035).
 
 ## Modelo de dados (visão geral)
 
@@ -637,9 +637,9 @@ notas-vps/
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # só sobe o NotasApp
 │   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta do núcleo)
-│   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
+│   ├── Data/AppDbContext.cs          # EF Core: só o que é do núcleo (users, tokens, configurações, sites); as tabelas das ferramentas são dos plug-ins
 │   ├── Data/CategoriasDaExtracao.cs  # enums da extração por LLM, usados pelo "Testar" da tela de IA
-│   ├── Endpoints/                    # Auth, Notes, Folders, Configurações de IA, Sites, núcleo (Minimal APIs, um arquivo por ferramenta)
+│   ├── Endpoints/                    # Auth, Configurações de IA, Sites, núcleo (Minimal APIs, um arquivo por ferramenta)
 │   ├── Services/Sites/               # Publicar: extração do ZIP, disco (versões, link current, backup), fila de publicação
 │   ├── Services/Seguranca/           # cifra dos segredos guardados no banco (chaves de API)
 │   ├── Services/Financas/Llm/        # IA de cada usuário (provedor, modelo, chave) e o extrator do "Testar"
@@ -700,7 +700,7 @@ de contexto e atalhos), `illustration-toolbar.ts`, `illustration-controlbar.ts`
 `illustration-layers.ts`, `illustration-font-picker.ts`, `illustration-num.ts`
 (campo numérico com arrasto) e `illustration-icons.ts`.
 
-O gerador de Moldes mora em `frontend/src/app/features/moldes/`, com a geometria
+O gerador de Moldes mora em `web/src/app/features/moldes/` do hub-criativo, com a geometria
 fora do Angular e testada em `moldes.spec.ts`: `geometria.ts` (retas, arcos,
 cantos arredondados, abas, tracejado), `modelo.ts` (tipos e campos declarativos —
 a tela monta o formulário sozinha), `caixas.ts` e `toppers.ts` (um gerador por
@@ -710,7 +710,7 @@ emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts
 `decalque-estado.ts` e `decalque-painel.ts` (cantos e revisão das linhas),
 `analise-ia.service.ts` (catálogo enviado à IA e conferência dos valores), `folha.ts`
 (distribuição na folha, SVG e DXF), `impressao.ts` (leitura da foto e PNG 300 DPI) e
-`moldes.page.*`. No backend, `Services/Moldes/AnalisadorDeEmbalagem.cs` e
+`moldes.page.*`. No backend do hub-criativo, `Services/Moldes/AnalisadorDeEmbalagem.cs` e
 `Endpoints/MoldesEndpoints.cs`. Novo molde = um `TipoMolde` em `caixas.ts`
 ou `toppers.ts` registrado em `catalogo.ts`.
 
