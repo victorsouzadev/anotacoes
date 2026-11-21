@@ -16,11 +16,11 @@
 - [x] T006 [US1] `Migracao033` (capturas, configurações, OAuth via importar; contagens; `hub.db.pre-033`), idempotente, com testes — o `hub.db` fica intacto (acessos e WebDAV seguem nele) e ganha o marcador `hub.db.migrado-033`
 - [x] T007 [US1] IA do núcleo no `ClaudeClassifier`/`Embeddings`, com cópia única da chave atual se o núcleo não tiver — `IaDoNucleo` lê `/api/core/ia` com o token do usuário (em memória, 10 min) e vale antes da do Cérebro; sem chave no núcleo, segue a atual (a cópia para o núcleo fica para quando ele tiver rota de gravação). Embeddings seguem com a chave do servidor
 - [x] T008 [US1] Reindexação em background quando o índice derivado falta; busca responde "indexando" (MCP, `X-Indexando` na tela e `indexando` no health)
-- [ ] T009 [US1] Ensaio com cópia de produção (quickstart passos 1–2)
+- [x] T009 [US1] Ensaio com cópia de produção (quickstart passos 1–2)
 
 ## Phase 4: User Story 2 - Deploy pelo repositório (P1)
 
-- [ ] T010 [US2] CI do `hub-cerebro` com `plugin.yml`; linha no `plugins.lock`; serviço `cerebro` sai do `docker-compose.yml`
+- [x] T010 [US2] CI do `hub-cerebro` com `plugin.yml`; linha no `plugins.lock`; serviço `cerebro` sai do `docker-compose.yml`
 
 ## Phase 5: User Story 3 - Tokens em um só lugar (P2)
 

@@ -100,7 +100,7 @@ Todas têm `checklists/requirements.md`.
 Pedido em 2026-11-19: dividir o hub em vários repositórios, com este como núcleo e as ferramentas
 conectadas como plug-ins, **todas usando o mesmo banco**. Desenho:
 [Hub e Plug-ins](https://claude.ai/artifact/T4ifWBSrGHX1ikcrpQ9Wfo). A constituição foi emendada
-para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: **planejadas**, nenhuma implementada.
+para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: a base (029 a 032) está no código com pendências; a 033 (Cérebro) está em produção desde 20/11/2026 (falta T011 e T012); 034 e 035 ainda não começaram.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
@@ -151,7 +151,7 @@ Pedido em 2026-11-20, depois de um achado de produção: o cron do backup dispar
 `scripts/backup.sh` da VPS estava sem permissão de execução (`666`) e na versão de julho, porque o
 `deploy.yml` não empacota `scripts/`. O último backup era de 2026-07-09 e a saída do cron era descartada.
 Corrigido à mão no mesmo dia (script da `main`, `755`, log em `/var/log/notas-backup.log`); a 036 trata a
-causa e o risco maior: todos os dados e todas as cópias estão no mesmo disco. Status: **planejada**.
+causa e o risco maior: todos os dados e todas as cópias estão no mesmo disco. Status: **concluída**.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
