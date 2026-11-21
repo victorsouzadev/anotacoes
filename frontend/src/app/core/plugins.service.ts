@@ -14,6 +14,8 @@ export interface ItemDoHub {
   descricao?: string | null;
   android?: string | null;
   ultimaFalha?: string | null;
+  /** Caminho do MCP do plug-in (`mcp` do plugin.json), se tiver. */
+  mcp?: string | null;
 }
 
 /** Card do hub. Plug-in é página à parte (fora do Angular): abre por link comum, não pelo roteador. */

@@ -415,3 +415,8 @@ h2 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
 
 .alerta-texto { color: var(--atencao); font-weight: 600; }
 .arquivos-backup { margin: 8px 0; padding-left: 18px; font-size: 13px; color: var(--text-muted); }
+
+/* Conexões (spec 030) */
+.link-perigo { background: none; border: none; color: var(--danger); padding: 0 0 0 8px; font-size: 13px; cursor: pointer; }
+.token-novo { word-break: break-all; }
+.linha-token { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

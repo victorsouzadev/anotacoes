@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -18,8 +18,8 @@ public sealed record NovoMcpTokenDto(string Plugin);
 
 /// <summary>
 /// OAuth do núcleo para os MCPs dos plug-ins (spec 030). As metadata ficam em <c>/.well-known/oauth-*</c> e os
-/// endpoints em <c>/api/core/oauth/*</c>. Enquanto o Cérebro não for extraído (spec 033), o Caddy continua
-/// mandando <c>/.well-known/oauth-*</c> e <c>/cerebro/oauth/*</c> para o servidor dele: a virada é na 033.
+/// endpoints em <c>/api/core/oauth/*</c>. Os conectores criados antes (spec 028) usam <c>/cerebro/oauth/*</c> e as
+/// metadata sem sufixo: o Caddy manda essas rotas para cá e o núcleo responde por elas, como recurso do Cérebro.
 /// </summary>
 public static class OAuthNucleoEndpoints
 {
@@ -52,25 +52,44 @@ public static class OAuthNucleoEndpoints
                 })
                 : Results.NotFound());
 
-        app.MapGet("/.well-known/oauth-authorization-server", (HttpRequest r) =>
+        // Legado da 028: recurso sem sufixo e servidor em /cerebro. Os endpoints apontam para o núcleo.
+        app.MapGet("/.well-known/oauth-protected-resource", (HttpRequest r) => Results.Json(new
         {
-            var b = Base(r);
-            return Results.Json(new
-            {
-                issuer = b,
-                authorization_endpoint = b + "/api/core/oauth/authorize",
-                token_endpoint = b + "/api/core/oauth/token",
-                registration_endpoint = b + "/api/core/oauth/register",
-                revocation_endpoint = b + "/api/core/oauth/revoke",
-                response_types_supported = new[] { "code" },
-                grant_types_supported = new[] { "authorization_code", "refresh_token" },
-                code_challenge_methods_supported = new[] { "S256" },
-                token_endpoint_auth_methods_supported = new[] { "none" },
-            });
+            resource = $"{Base(r)}/{Legado}/mcp",
+            authorization_servers = new[] { Base(r) },
+            bearer_methods_supported = new[] { "header" },
+            scopes_supported = new[] { Legado },
+        }));
+        app.MapGet("/.well-known/oauth-authorization-server/{id}", (string id, HttpRequest r) => Servidor(r));
+        app.MapGet("/.well-known/oauth-authorization-server", (HttpRequest r) => Servidor(r));
+
+        MapearOAuth(app.MapGroup("/api/core/oauth").RequireRateLimiting("publico"), recursoPadrao: false);
+        MapearOAuth(app.MapGroup($"/{Legado}/oauth").RequireRateLimiting("publico"), recursoPadrao: true);
+        MapearTela(app);
+    }
+
+    /// <summary>Plug-in dos conectores da spec 028, que não mandam <c>resource</c>.</summary>
+    public const string Legado = "cerebro";
+
+    private static IResult Servidor(HttpRequest r)
+    {
+        var b = Base(r);
+        return Results.Json(new
+        {
+            issuer = b,
+            authorization_endpoint = b + "/api/core/oauth/authorize",
+            token_endpoint = b + "/api/core/oauth/token",
+            registration_endpoint = b + "/api/core/oauth/register",
+            revocation_endpoint = b + "/api/core/oauth/revoke",
+            response_types_supported = new[] { "code" },
+            grant_types_supported = new[] { "authorization_code", "refresh_token" },
+            code_challenge_methods_supported = new[] { "S256" },
+            token_endpoint_auth_methods_supported = new[] { "none" },
         });
+    }
 
-        var oauth = app.MapGroup("/api/core/oauth").RequireRateLimiting("publico");
-
+    private static void MapearOAuth(RouteGroupBuilder oauth, bool recursoPadrao)
+    {
         oauth.MapPost("/register", async (RegistroOAuthDto dto, OAuthDoNucleo s) =>
         {
             var uris = (dto.RedirectUris ?? []).Select(u => u.Trim()).Where(u => u.Length > 0).Distinct().ToList();
@@ -99,7 +118,8 @@ public static class OAuthNucleoEndpoints
             var challenge = q["code_challenge"].FirstOrDefault() ?? "";
             if (q["code_challenge_method"].FirstOrDefault() != "S256" || challenge.Length is < 43 or > 128)
                 return Results.Redirect(Erro("invalid_request", "PKCE S256 obrigatório."));
-            if (await PluginDoRecurso(q["resource"].FirstOrDefault(), r, db) is not { } plugin)
+            var recurso = q["resource"].FirstOrDefault() ?? (recursoPadrao ? $"{Base(r)}/{Legado}/mcp" : null);
+            if (await PluginDoRecurso(recurso, r, db) is not { } plugin)
                 return Results.Redirect(Erro("invalid_target", "resource precisa ser <hub>/<plug-in>/mcp de um plug-in instalado."));
             var p = await s.CriarPedido(cliente.Id, plugin, redirect, challenge, state);
             return Results.Redirect($"{Base(r)}/autorizar?pedido={Uri.EscapeDataString(p.Id)}");
@@ -127,16 +147,20 @@ public static class OAuthNucleoEndpoints
             if (r.HasFormContentType && (await r.ReadFormAsync())["token"].FirstOrDefault() is { Length: > 0 } token) await s.RevogarToken(token);
             return Results.Ok();
         });
+    }
 
+    private static void MapearTela(IEndpointRouteBuilder app)
+    {
         // Tela do hub: /autorizar e Configurações → Conexões (login do hub).
         var tela = app.MapGroup("/api/core/oauth").RequireAuthorization();
-        tela.MapGet("/pedido/{id}", async (string id, OAuthDoNucleo s) =>
+        tela.MapGet("/pedido/{id}", async (string id, OAuthDoNucleo s, AppDbContext db) =>
         {
             var p = await s.Pedido(id);
             var c = p is null ? null : await s.Cliente(p.ClienteId);
-            return p is null || c is null
-                ? Results.NotFound(new { error = "Pedido de autorização vencido. Volte ao aplicativo e tente de novo." })
-                : Results.Ok(new { cliente = c.Nome, plugin = p.Plugin, redirect_host = new Uri(p.RedirectUri).Host });
+            if (p is null || c is null)
+                return Results.NotFound(new { error = "Pedido de autorização vencido. Volte ao aplicativo e tente de novo." });
+            var manifesto = await db.PluginsEstado.Where(x => x.Id == p.Plugin).Select(x => x.Manifesto).FirstOrDefaultAsync();
+            return Results.Ok(new { cliente = c.Nome, plugin = p.Plugin, plugin_nome = NomeDoPlugin(manifesto) ?? p.Plugin, redirect_host = new Uri(p.RedirectUri).Host });
         });
         tela.MapPost("/consentir", async (ConsentimentoDto dto, ClaimsPrincipal u, OAuthDoNucleo s) =>
         {
@@ -224,6 +248,17 @@ public static class OAuthNucleoEndpoints
         if (!h.StartsWith("Bearer ") || h.Length < 40) return null;
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(h[7..]))).ToLowerInvariant();
         return await db.PluginsEstado.Where(p => p.SegredoServicoHash == hash).Select(p => p.Id).FirstOrDefaultAsync();
+    }
+
+    private static string? NomeDoPlugin(string? manifesto)
+    {
+        if (manifesto is null) return null;
+        try
+        {
+            using var m = System.Text.Json.JsonDocument.Parse(manifesto);
+            return m.RootElement.TryGetProperty("nome", out var n) ? n.GetString() : null;
+        }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 
     private static string? UsuarioId(ClaimsPrincipal u) =>

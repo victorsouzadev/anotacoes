@@ -17,6 +17,7 @@ import { mensagemDeErro } from '../../core/erro-http';
 import { BackupEstado, SistemaService, idadeTexto, tamanhoTexto } from '../../core/sistema.service';
 import { ItemDoHub, PluginsService } from '../../core/plugins.service';
 import { PublicarService } from '../publicar/publicar.service';
+import { AppAutorizado, ConexoesService, TokenMcp } from '../../core/conexoes.service';
 
 @Component({
   selector: 'app-configuracoes-page',
@@ -55,6 +56,16 @@ export class ConfiguracoesPageComponent {
   private readonly sistema = inject(SistemaService);
   private readonly publicar = inject(PublicarService);
 
+  /** Conexões (spec 030): apps autorizados pelo OAuth do núcleo e tokens MCP estáticos, por plug-in. */
+  private readonly conexoes = inject(ConexoesService);
+  readonly apps = signal<AppAutorizado[]>([]);
+  readonly tokensMcp = signal<TokenMcp[]>([]);
+  readonly pluginsComMcp = signal<ItemDoHub[]>([]);
+  /** Token recém-gerado: aparece uma vez só. */
+  readonly tokenNovo = signal<{ plugin: string; token: string } | null>(null);
+  readonly erroConexoes = signal<string | null>(null);
+  pluginDoToken = '';
+
   // Campos do formulário.
   provedor: ProvedorIa = '';
   modelo = '';
@@ -87,12 +98,66 @@ export class ConfiguracoesPageComponent {
 
   constructor() {
     this.carregar();
+    void this.carregarConexoes();
     void this.publicar.permissao().then((r) => {
       if (r.podePublicar) {
         void this.sistema.backup().then((b) => this.backup.set(b));
         void this.registro.listar().then((l) => this.plugins.set(l.filter((i) => i.origem === 'plugin')), () => undefined);
       }
     });
+  }
+
+  nomeDoPlugin(id: string): string {
+    return this.pluginsComMcp().find((p) => p.id === id)?.nome ?? id;
+  }
+
+  async carregarConexoes(): Promise<void> {
+    try {
+      const [apps, tokens, itens] = await Promise.all([this.conexoes.autorizados(), this.conexoes.tokens(), this.registro.listar()]);
+      this.apps.set(apps);
+      this.tokensMcp.set(tokens);
+      const comMcp = itens.filter((i) => i.origem === 'plugin' && !!i.mcp);
+      this.pluginsComMcp.set(comMcp);
+      if (!this.pluginDoToken && comMcp.length) this.pluginDoToken = comMcp[0].id;
+    } catch (e) {
+      this.erroConexoes.set(mensagemDeErro(e, 'Não foi possível carregar as conexões'));
+    }
+  }
+
+  async revogarApp(a: AppAutorizado): Promise<void> {
+    if (!confirm(`Revogar o acesso de ${a.nome} ao ${this.nomeDoPlugin(a.plugin)}?`)) return;
+    try {
+      await this.conexoes.revogarApp(a.id);
+      await this.carregarConexoes();
+    } catch (e) {
+      this.erroConexoes.set(mensagemDeErro(e, 'Não foi possível revogar'));
+    }
+  }
+
+  async gerarToken(): Promise<void> {
+    if (!this.pluginDoToken) return;
+    try {
+      const t = await this.conexoes.criarToken(this.pluginDoToken);
+      this.tokenNovo.set({ plugin: t.plugin, token: t.token });
+      await this.carregarConexoes();
+    } catch (e) {
+      this.erroConexoes.set(mensagemDeErro(e, 'Não foi possível gerar o token'));
+    }
+  }
+
+  async revogarToken(t: TokenMcp): Promise<void> {
+    if (!confirm(`Revogar este token do ${this.nomeDoPlugin(t.plugin)}? Quem usa ele perde o acesso em até 1 minuto.`)) return;
+    try {
+      await this.conexoes.revogarToken(t.id);
+      if (this.tokenNovo()?.plugin === t.plugin) this.tokenNovo.set(null);
+      await this.carregarConexoes();
+    } catch (e) {
+      this.erroConexoes.set(mensagemDeErro(e, 'Não foi possível revogar'));
+    }
+  }
+
+  copiar(texto: string): void {
+    void navigator.clipboard?.writeText(texto);
   }
 
   private carregar(): void {
