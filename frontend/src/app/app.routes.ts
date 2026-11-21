@@ -37,11 +37,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/dieta/dieta.page').then((m) => m.DietaPageComponent),
   },
   {
-    path: 'treino',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/treino/treino.page').then((m) => m.TreinoPageComponent),
-  },
-  {
     // Consentimento do OAuth do MCP do Cérebro (spec 028). Fora de /cerebro, que o Caddy manda ao serviço.
     path: 'autorizar',
     canActivate: [authGuard],
@@ -107,26 +102,6 @@ export const routes: Routes = [
     path: 'tasks/ajuda',
     canActivate: [authGuard],
     loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
-  },
-  {
-    path: 'imagens',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/imagem/image-editor.page').then((m) => m.ImageEditorPageComponent),
-  },
-  {
-    path: 'bolo-3d',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/cake/cake-simulator.page').then((m) => m.CakeSimulatorPageComponent),
-  },
-  {
-    path: 'moldes',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/moldes/moldes.page').then((m) => m.MoldesPageComponent),
-  },
-  {
-    path: 'precificacao',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/precificacao/precificacao.page').then((m) => m.PrecificacaoPageComponent),
   },
   {
     path: 'cerebro',

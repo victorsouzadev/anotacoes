@@ -100,10 +100,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TaskProject> TaskProjects => Set<TaskProject>();
     public DbSet<KanbanLane> KanbanLanes => Set<KanbanLane>();
     public DbSet<TaskProjectMembership> TaskProjectMemberships => Set<TaskProjectMembership>();
-    public DbSet<ImageProject> ImageProjects => Set<ImageProject>();
-    public DbSet<ImageLibraryItem> ImageLibrary => Set<ImageLibraryItem>();
-    public DbSet<ImagePreferences> ImagePreferences => Set<ImagePreferences>();
-    public DbSet<ImageSocialTemplate> ImageSocialTemplates => Set<ImageSocialTemplate>();
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
@@ -115,8 +111,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DietaPlanoItem> DietaPlano => Set<DietaPlanoItem>();
     public DbSet<DietaFoto> DietaFotos => Set<DietaFoto>();
     public DbSet<DietaCompartilhamento> DietaCompartilhamentos => Set<DietaCompartilhamento>();
-    public DbSet<TreinoAtividade> TreinoAtividades => Set<TreinoAtividade>();
-    public DbSet<TreinoPlano> TreinoPlanos => Set<TreinoPlano>();
 
     // SQLite não guarda DateTimeKind — toda leitura do banco volta com Kind=Unspecified, mesmo
     // que o valor gravado fosse UTC. Sem isso, o JSON de uma entidade recém-criada (ainda em
@@ -248,27 +242,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        b.Entity<TreinoAtividade>(e =>
-        {
-            e.ToTable("treino_atividades");
-            e.Property(x => x.Titulo).IsRequired().HasMaxLength(200);
-            e.Property(x => x.Tipo).HasMaxLength(10);
-            e.Property(x => x.Meta).HasMaxLength(200);
-            e.Property(x => x.Nota).HasMaxLength(2000);
-            e.HasIndex(x => new { x.UserId, x.Inicio });
-            e.HasIndex(x => new { x.UserId, x.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TreinoPlano>(e =>
-        {
-            e.ToTable("treino_planos");
-            e.HasKey(x => x.UserId);
-            e.Property(x => x.Programa).IsRequired().HasMaxLength(200);
-            e.Property(x => x.ProximaSessao).HasMaxLength(200);
-            e.HasOne<User>().WithOne().HasForeignKey<TreinoPlano>(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
         b.Entity<DietaPeso>(e =>
         {
             e.ToTable("dieta_pesos");
@@ -342,46 +315,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Chave).IsRequired().HasMaxLength(128);
             e.HasIndex(x => new { x.SiteId, x.Chave }).IsUnique();
             e.HasOne<Site>().WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ImageProject>(e =>
-        {
-            e.ToTable("imagem_projetos");
-            e.Property(p => p.Name).IsRequired().HasMaxLength(300);
-            e.Property(p => p.Data).IsRequired();
-            e.HasIndex(p => new { p.UserId, p.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ImagePreferences>(e =>
-        {
-            e.ToTable("imagem_preferencias");
-            e.HasKey(p => p.UserId);
-            e.Property(p => p.Data).IsRequired();
-            e.HasOne<User>().WithOne().HasForeignKey<ImagePreferences>(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ImageSocialTemplate>(e =>
-        {
-            e.ToTable("imagem_modelos");
-            e.Property(t => t.Name).IsRequired().HasMaxLength(120);
-            e.Property(t => t.Group).HasMaxLength(20);
-            e.Property(t => t.Replaces).HasMaxLength(64);
-            e.Property(t => t.Data).IsRequired();
-            e.Property(t => t.Thumb).IsRequired();
-            e.HasIndex(t => new { t.UserId, t.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ImageLibraryItem>(e =>
-        {
-            e.ToTable("imagem_biblioteca");
-            e.Property(i => i.Name).IsRequired().HasMaxLength(200);
-            e.Property(i => i.Origin).HasMaxLength(20);
-            e.Property(i => i.Data).IsRequired();
-            e.Property(i => i.Thumb).IsRequired();
-            e.HasIndex(i => new { i.UserId, i.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(i => i.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Transacao>(e =>

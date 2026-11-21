@@ -26,6 +26,8 @@ interface ToolCard {
   windows?: boolean;
   /** Plug-in (spec 029): página fora do Angular, aberta por link comum. */
   externo?: boolean;
+  /** Ferramenta do plug-in criativo (spec 034): fica indisponível junto com ele. */
+  criativo?: boolean;
   indisponivel?: boolean;
 }
 
@@ -74,11 +76,13 @@ const TOOLS: ToolCard[] = [
     downloadFileName: 'Dieta.apk',
     downloadLabel: 'Baixar app Android (.apk)',
   },
+  // Spec 034: Treino é o plug-in treino (o card dele toma este lugar quando está registrado).
   {
     path: '/treino',
     icon: 'run',
     title: 'Treino',
     description: 'Treinos de corrida enviados pelo app Treino Corrida: andamento do programa, totais, km por semana e ritmo.',
+    externo: true,
   },
   {
     path: '/imagens',
@@ -86,24 +90,32 @@ const TOOLS: ToolCard[] = [
     title: 'Editor de Imagens',
     description: 'Print & cut pra ScanNCut (contorno, remoção de fundo, folha A4/A3) e moldes SVG: encaixe fotos nos buracos do molde, em camadas com ordem e transparência.',
     windows: true,
+    externo: true,
+    criativo: true,
   },
   {
     path: '/moldes',
     icon: 'box',
     title: 'Moldes',
     description: 'Gerador de moldes para Silhouette: caixa milk, bombom, sacolinha, pirâmide, cone, topo de bolo e topper com foto — por medidas, com corte e vinco.',
+    externo: true,
+    criativo: true,
   },
   {
     path: '/bolo-3d',
     icon: 'cake',
     title: 'Simulador de Bolo 3D',
     description: 'Monte um bolo em 3D: camadas, sabores, cobertura, granulado, cerejas e velas para acender.',
+    externo: true,
+    criativo: true,
   },
   {
     path: '/precificacao',
     icon: 'calculator',
     title: 'Precificação',
     description: 'Calculadora de precificação para papelaria personalizada: materiais, HH, HM, custos fixos, margem e preço sugerido.',
+    externo: true,
+    criativo: true,
   },
 ];
 
@@ -217,12 +229,17 @@ export class HubPageComponent {
   /** Faixa de backup atrasado (spec 025), só para quem opera o servidor. */
   readonly alerta = signal<string | null>(null);
   private readonly plugins = signal<ItemDoHub[]>([]);
-  readonly tools = computed(() => mesclarCards([
-    ...(this.temAnotacao() ? [ANOTACAO] : []),
-    ...TOOLS,
-    ...(this.temCerebro() ? [CEREBRO] : []),
-    ...(this.podePublicar() ? [PUBLICAR] : []),
-  ], this.plugins(), ICONES_DE_PLUGIN) as ToolCard[]);
+  readonly tools = computed(() => {
+    // O plug-in criativo não ganha card próprio: as quatro ferramentas dele já estão nos cards fixos.
+    const criativo = this.plugins().find((p) => p.id === 'criativo');
+    const fixos = TOOLS.map((t) => (t.criativo && criativo && criativo.estado !== 'no-ar' ? { ...t, indisponivel: true } : t));
+    return mesclarCards([
+      ...(this.temAnotacao() ? [ANOTACAO] : []),
+      ...fixos,
+      ...(this.temCerebro() ? [CEREBRO] : []),
+      ...(this.podePublicar() ? [PUBLICAR] : []),
+    ], this.plugins().filter((p) => p.id !== 'criativo'), ICONES_DE_PLUGIN) as ToolCard[];
+  });
 
   constructor(
     public auth: AuthService,
