@@ -62,7 +62,7 @@ services:
       - ./data/plugins:/data/plugins:ro
       - ./data/sites:/data/sites
       - ./data/anotacao:/anotacao
-      - ./data/cerebro/hub/access:/access:ro
+      - ./data/plugins/dados/cerebro/hub/access:/access:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
@@ -207,7 +207,8 @@ services:
     volumes:
       - ./data/ops:/data
       # Hash do token gerado na tela do Segundo Cérebro (substitui o OPS_MCP_TOKEN quando existe).
-      - ./data/cerebro/hub/access:/access:ro
+      # Desde a spec 033 o estado do Cérebro mora na pasta de dados do plug-in.
+      - ./data/plugins/dados/cerebro/hub/access:/access:ro
     mem_limit: 128m
 
 networks:
