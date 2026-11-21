@@ -236,30 +236,35 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         Assert.DoesNotContain((await Revogados()).GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == OAuthDoNucleo.Hash(token));
     }
 
-    [Fact]
-    public async Task Token_apps_vale_nos_plugins_que_eram_mcp_dos_apps()
+    [Theory]
+    [InlineData("treino")]
+    [InlineData("dieta")]
+    [InlineData("tarefas")]
+    [InlineData("financas")]
+    public async Task Token_apps_vale_nos_plugins_que_eram_mcp_dos_apps(string id)
     {
         await GarantirPlugin();
-        const string segredoTreino = "segredo-de-servico-do-treino-com-tamanho-suficiente";
+        var segredo = $"segredo-de-servico-do-{id}-com-tamanho-suficiente";
         using (var s = _factory.Services.CreateScope())
         {
             var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
-            if (!db.PluginsEstado.Any(p => p.Id == "treino"))
-            {
+            // Outro teste pode já ter registrado o plug-in com outro segredo: aqui vale o deste teste.
+            var existente = db.PluginsEstado.SingleOrDefault(p => p.Id == id);
+            if (existente is not null) existente.SegredoServicoHash = Hash(segredo);
+            else
                 db.PluginsEstado.Add(new PluginEstado
                 {
-                    Id = "treino", Versao = "v1", Manifesto = """{"id":"treino","nome":"Treino","icone":"run","rota":"/treino","porta":8080,"health":"/treino/api/health"}""",
-                    SegredoServicoHash = Hash(segredoTreino),
+                    Id = id, Versao = "v1", Manifesto = $$"""{"id":"{{id}}","nome":"{{id}}","icone":"grid","rota":"/{{id}}","porta":8080,"health":"/{{id}}/api/health"}""",
+                    SegredoServicoHash = Hash(segredo),
                 });
-                await db.SaveChangesAsync();
-            }
+            await db.SaveChangesAsync();
         }
         var c = await Logado();
         var token = (await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "apps" })).Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("token").GetString()!;
-        var treino = _factory.CreateClient();
-        treino.DefaultRequestHeaders.Authorization = new("Bearer", segredoTreino);
-        var rev = await treino.GetFromJsonAsync<JsonElement>("/api/core/revogados");
+        var plugin = _factory.CreateClient();
+        plugin.DefaultRequestHeaders.Authorization = new("Bearer", segredo);
+        var rev = await plugin.GetFromJsonAsync<JsonElement>("/api/core/revogados");
         Assert.Contains(rev.GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == OAuthDoNucleo.Hash(token));
         // Outro plug-in não recebe o token dos apps.
         Assert.DoesNotContain((await Revogados()).GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == OAuthDoNucleo.Hash(token));
@@ -303,7 +308,10 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         {
             var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
             var protetor = s.ServiceProvider.GetRequiredService<Notas.Api.Services.Seguranca.IProtetorDeSegredos>();
-            if (!db.PluginsEstado.Any(p => p.Id == "financas"))
+            // O teste do token dos apps também registra a "financas" (com outro segredo): aqui vale o deste teste.
+            var existente = db.PluginsEstado.SingleOrDefault(p => p.Id == "financas");
+            if (existente is not null) existente.SegredoServicoHash = Hash(segredo);
+            else
                 db.PluginsEstado.Add(new PluginEstado
                 {
                     Id = "financas", Versao = "v1", Manifesto = """{"id":"financas","nome":"Finanças","icone":"wallet","rota":"/financas","porta":8080,"health":"/financas/api/health"}""",
