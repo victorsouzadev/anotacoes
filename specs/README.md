@@ -4,7 +4,7 @@ Especificações no formato do [Spec Kit](https://github.com/github/spec-kit). A
 são **retroativas**: descrevem o que já existe no código em novembro de 2026, para servir
 de base às mudanças futuras. Não têm `plan.md` nem `tasks.md` porque já foram implementadas.
 
-Feature nova começa com `/speckit-specify` e ganha o próximo número (037 em diante). Mudança
+Feature nova começa com `/speckit-specify` e ganha o próximo número (038 em diante). Mudança
 grande numa ferramenta que já existe pode ser uma spec nova que cita a retroativa dela.
 
 | # | Ferramenta | Spec |
@@ -185,3 +185,14 @@ precisa existir antes de qualquer migração de plug-in.
 - Exceção à constituição justificada em "Complexity Tracking": `restic` no host (Princípio VIII).
 - Fora da spec, registrado: `/opt/financas-vps/scripts/backup.sh` está com o mesmo `666` sem execução
   (outro repositório); object lock e segundo destino externo.
+
+## Esquema do núcleo sem migrações (037)
+
+Pedido em 2026-11-21: o repositório principal fica só com o núcleo. As 84 migrações do EF (com o histórico de
+tabelas das ferramentas que viraram plug-ins) saem, e o núcleo cria as próprias tabelas pelo modelo ao subir.
+Fecha o SC-004 da 035 contando tudo. Status: **em andamento** (falta o deploy e os plug-ins criarem as próprias
+tabelas num hub novo).
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 037 | [Esquema do núcleo sem migrações](037-esquema-nucleo-sem-migracoes/spec.md) | 035 | plan, tasks |

@@ -39,4 +39,4 @@
 ## Phase 8: Polish
 
 - [x] T019 [P] Atualizar as retroativas 002–005, 012 e as evoluções 015–024 (onde o código mora), README, `DEPLOY.md`, constituição (tabela de restrições)
-- [x] T020 Conferir SC-004 (tamanho do `Notas.Api`): em 21/11/2026, 5.782 linhas de código sem as migrações (8,6% das ~67 mil) e 61.827 com elas. Com migrações o critério **não** fecha: quase tudo são os `*.Designer.cs` históricos (~2 mil linhas cada). Fechar exigiria compactar as migrações numa base nova, decisão à parte.
+- [x] T020 Conferir SC-004 (tamanho do `Notas.Api`): em 21/11/2026, 5.782 linhas de código sem as migrações (8,6% das ~67 mil) e 61.827 com elas. Com migrações o critério **não** fecha: quase tudo são os `*.Designer.cs` históricos (~2 mil linhas cada). Resolvido na spec 037: o núcleo ficou sem migrações e o `Notas.Api` tem 5.877 linhas contando tudo (8,8%).

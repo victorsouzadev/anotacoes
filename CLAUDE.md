@@ -16,7 +16,7 @@ mudança relevante, siga as skills nesta ordem:
 6. `/speckit-implement` — executa as tarefas
 
 As specs 001–014 em `specs/` são retroativas (o que já existe, por ferramenta), as 015–028 já foram
-implementadas e as 029–035 planejam a divisão em núcleo + plug-ins com banco compartilhado e a 036 a cópia do backup fora da VPS, que vem antes delas (ver a ordem
+implementadas e as 029–035 planejam a divisão em núcleo + plug-ins com banco compartilhado , a 036 a cópia do backup fora da VPS, que vem antes delas, e a 037 tira as migrações do núcleo (ver a ordem
 em `specs/README.md`). A base das 029 a 032 (login ES256 com JWKS e selo, registro de plug-ins pelo
 `plugins.lock`, banco compartilhado, SDK e `@grafite/ui` em `pacotes/`) já está no código; as extrações (033 a 035)
 seguem a receita do `DEPLOY.md` ("Núcleo e plug-ins"). Leia a spec da

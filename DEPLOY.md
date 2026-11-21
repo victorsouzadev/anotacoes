@@ -414,8 +414,8 @@ Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy
 **Receita de extração (031, usada nas 033 a 035).**
 1. No plug-in: copiar as entidades com os mesmos nomes de tabela e colunas; a primeira migração tem `Up` vazio (as
    tabelas já existem) e o teste `Dados.TabelasForaDoDono` dá vazio com as tabelas antigas em `tabelas.legadas`.
-2. No núcleo: tirar as entidades do `AppDbContext` com uma migração de `Up` vazio, à mão (o EF geraria `DropTable`; o
-   teste `Migracoes_do_nucleo_nao_apagam_tabela_alheia` falha se ficar). Rotas antigas vão para `rotasLegadas`.
+2. No núcleo: tirar as entidades do `AppDbContext`. Desde a spec 037 o núcleo não tem migrações: as tabelas que saem do
+   modelo ficam no banco, sem uso pelo núcleo. Rotas antigas vão para `rotasLegadas`.
 3. Ordem: deploy do núcleo sem a ferramenta só depois do plug-in no ar com a mesma versão de esquema.
 
 **OAuth do núcleo (030).** Os endpoints (`/api/core/oauth/*`, `/.well-known/oauth-protected-resource/<id>/mcp`) já existem,
@@ -478,12 +478,20 @@ Voltar antes do passo 5 é comentar as linhas do lock: o núcleo ainda tem as ro
 **Ferramentas ativas como plug-ins (035).** Dieta, Tarefas, Anotação, Finanças e Notas são os plug-ins `dieta`, `tarefas`,
 `anotacao`, `financas` e `notas` (repositórios `hub-<id>`), com CI própria a cada push. Cada um usa as tabelas que já
 estavam no `notas.db` (migração `Base`), e as URLs antigas (`/api/notes`, `/api/folders`, `/notes`, `/p/nota`, `/api/tasks`,
-`/tasks`, `/api/financas`, `/api/mcp/<ferramenta>`...) chegam por `rotasLegadas`. No núcleo ficaram só migrações de `Up`
-vazio (`ExtracaoDieta`, `ExtracaoTarefas`, `ExtracaoFinancas`, `ExtracaoNotas`...): as tabelas e os dados ficam.
+`/tasks`, `/api/financas`, `/api/mcp/<ferramenta>`...) chegam por `rotasLegadas`. As tabelas e os dados ficaram no
+banco; o núcleo não tem mais migrações (spec 037).
 - Configuração própria de cada um em `data/plugins/env/<id>.env` (root, 600), como nas 033 e 034.
 - Voltar uma ferramenta para o núcleo é reverter o PR que a removeu e comentar a linha do lock, nessa ordem de deploy.
 - Conferir depois de cada troca: `cat data/plugins/estado.json`, `GET /<id>/health`, a tela em `/<id>/` e
   `select MigrationId from __EFMigrationsHistory_<id>` (só leitura).
+
+**Esquema do núcleo sem migrações (037).** O núcleo não tem pasta `Migrations`: ao subir, `EsquemaNucleo.Garantir`
+gera o esquema pelo modelo do `AppDbContext`, cria com `IF NOT EXISTS` as tabelas e os índices que faltam e acrescenta as
+colunas novas do modelo. Não apaga nada, e o `__EFMigrationsHistory` antigo fica no banco sem uso.
+- Coluna nova: só mudar a entidade. Coluna NOT NULL sem padrão entra com `''`, `0` ou `X''` nas linhas que já existem.
+- Remover, renomear ou trocar o tipo de uma coluna não é automático: backup, SQL à mão no banco (com confirmação) e só
+  depois o deploy do código.
+- Os plug-ins guardam as próprias migrações nos repositórios deles (`__EFMigrationsHistory_<id>`).
 
 ## Migração futura para subdomínio + SSL via NPM
 
