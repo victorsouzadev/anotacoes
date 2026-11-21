@@ -19,7 +19,7 @@
 ## Phase 4: User Story 2 - Núcleo menor (P1)
 
 - [X] T008 [US2] Remover do núcleo endpoints, services, MCP tools e entidades (migração `ExtracaoCongelados`, vazia, sem `DropTable`), telas e rotas, `desktop/`, `desktop.yml`, jobs da CI. Na branch `feat/034-remover-do-nucleo`: só vai para a main depois dos dois plug-ins no ar (DEPLOY.md, "Plug-ins congelados").
-- [X] T009 [US2] Marcar os dois como `congelado` no manifesto (campo novo no schema, no SDK 1.2.0, no deployer e em Configurações → Servidor). As linhas do `plugins.lock` entram depois que as imagens forem publicadas.
+- [X] T009 [US2] Marcar os dois como `congelado` no manifesto (campo novo no schema, no SDK 1.2.0, no deployer e em Configurações → Servidor). As linhas do `plugins.lock` entraram no PR #88 (`treino@9f50297`, `criativo@a33ca6c`, `cerebro@48cf58b`); telas, redirecionamentos, APIs e MCPs nas URLs antigas conferidos na VPS em 21/11/2026, servidos pelos plug-ins.
 
 ## Phase 5: Polish
 
