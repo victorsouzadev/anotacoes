@@ -594,12 +594,13 @@ usa «Deixar para depois» no que quiser ver com calma (volta no modo «Um por v
 resto de uma vez. Selecionar um trecho do relato também marca (com as repetições), como no
 modo individual. Não há atalho de teclado para aprovar o lote.
 
-- **Dados**: nada vai para o banco nem para o repositório. A API lê o lote em `data/anotacao`
+- **Plug-in** [hub-anotacao](https://github.com/victorsouzadev/hub-anotacao) (spec 035): API e tela num repositório próprio.
+- **Dados**: nada vai para o banco nem para o repositório. O plug-in lê o lote em `data/plugins/dados/anotacao/anotacao`
   (`documents.jsonl` e `claude_proposals.jsonl`, montados por
   `scripts/claude_proposals.py pacote`) e acrescenta cada decisão ao `manual_review.jsonl`
   dali, no formato da revisão em Streamlit. `claude_proposals.py trazer` leva as decisões
   de volta para o run local.
-- **Acesso**: só os e-mails em `ANOTACAO_USUARIOS`, e só por HTTPS (o Caddy recusa
+- **Acesso**: só os e-mails de `Anotacao__Usuarios` em `data/plugins/env/anotacao.env`, e só por HTTPS (o Caddy recusa
   `/api/anotacao` em HTTP). Sem lote ou fora da lista, a ferramenta aparece como desligada.
 - Código: `Endpoints/AnotacaoEndpoints.cs`, `Services/Anotacao/` e `features/anotacao/`.
 

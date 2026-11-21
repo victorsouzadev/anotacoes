@@ -47,7 +47,7 @@ const CEREBRO: ToolCard = {
   description: 'Vault do Obsidian na VPS: capture ideias e links, revise a Inbox classificada pelo Claude e busque nas notas.',
 };
 
-/** Só aparece quando o servidor aponta para a pasta local de um run (Anotacao__RunDir). */
+/** Plug-in hub-anotacao (spec 035): o card só aparece para quem está em Anotacao__Usuarios, que o /api/anotacao/estado do plug-in responde. */
 const ANOTACAO: ToolCard = {
   path: '/anotacao',
   icon: 'edit',
@@ -238,7 +238,7 @@ export class HubPageComponent {
       ...fixos,
       ...(this.temCerebro() ? [CEREBRO] : []),
       ...(this.podePublicar() ? [PUBLICAR] : []),
-    ], this.plugins().filter((p) => p.id !== 'criativo'), ICONES_DE_PLUGIN) as ToolCard[];
+    ], this.plugins().filter((p) => p.id !== 'criativo' && (p.id !== 'anotacao' || this.temAnotacao())), ICONES_DE_PLUGIN) as ToolCard[];
   });
 
   constructor(

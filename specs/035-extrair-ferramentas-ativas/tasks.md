@@ -20,8 +20,8 @@
 
 ## Phase 5: User Story 3 - Anotação (P2)
 
-- [ ] T010 [US3] Criar `hub-anotacao`; mover `AnotacaoEndpoints`, `Services/Anotacao`, tela; `dados: ["/anotacao"]`; rotas `/api/anotacao`, `/anotacao`
-- [ ] T011 [US3] Ensaio, deploy, conferência; remover do núcleo
+- [x] T010 [US3] Criar `hub-anotacao`; mover `AnotacaoEndpoints`, `Services/Anotacao`, tela; `dados: ["/anotacao"]`; rotas `/api/anotacao`, `/anotacao`
+- [x] T011 [US3] Ensaio, deploy, conferência; remover do núcleo
 
 ## Phase 6: User Story 4 - Finanças (P2)
 
