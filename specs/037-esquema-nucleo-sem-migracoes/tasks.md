@@ -7,5 +7,5 @@
 - [x] T005 Conferir o esquema gerado contra uma cópia do banco de produção (só leitura na VPS): em 21/11/2026, as 14 tabelas e os 12 índices batem; só muda a ordem de algumas colunas
 - [x] T006 Documentação: README, DEPLOY, constituição e SC-004 da 035
 - [ ] T007 Abrir o PR com a CI inteira verde
-- [ ] T008 (fora deste PR) Plug-ins criam as próprias tabelas também dentro do hub
-- [ ] T009 (precisa de confirmação) Deploy com backup antes
+- [x] T008 Plug-ins criam as próprias tabelas também num hub novo (PR #1 em hub-notas, hub-financas, hub-tarefas e hub-dieta; o hub-anotacao não usa banco)
+- [x] T009 Deploy: em 21/11/2026, `eca421a` no ar, health ok, os cinco plug-ins respondem 200 e o banco segue com 60 tabelas

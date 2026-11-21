@@ -190,8 +190,7 @@ precisa existir antes de qualquer migração de plug-in.
 
 Pedido em 2026-11-21: o repositório principal fica só com o núcleo. As 84 migrações do EF (com o histórico de
 tabelas das ferramentas que viraram plug-ins) saem, e o núcleo cria as próprias tabelas pelo modelo ao subir.
-Fecha o SC-004 da 035 contando tudo. Status: **em andamento** (falta o deploy e os plug-ins criarem as próprias
-tabelas num hub novo).
+Fecha o SC-004 da 035 contando tudo. Status: **concluída**. Desenho da arquitetura em `docs/arquitetura-hub.html`.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
