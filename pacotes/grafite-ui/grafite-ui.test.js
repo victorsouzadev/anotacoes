@@ -86,5 +86,24 @@ describe('barra do hub', () => {
     await Promise.resolve();
     expect(el.querySelector('.conta').textContent).toBe('eu@x.y');
     expect(el.querySelector('.marca').getAttribute('href')).toBe('/');
+    expect(el.querySelector('.config').getAttribute('href')).toBe('/configuracoes');
+    expect(document.getElementById('grafite-barra-estilo')).not.toBeNull();
+  });
+
+  it('o app pode tratar tema e sair (hub Angular)', async () => {
+    localStorage.clear();
+    localStorage.setItem('notas.accessToken', 'x');
+    globalThis.fetch = async () => ({ ok: false });
+    const el = document.createElement('grafite-barra');
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    let tema = null;
+    el.addEventListener('grafite-tema', (e) => { tema = e.detail; e.preventDefault(); });
+    el.addEventListener('grafite-sair', (e) => e.preventDefault());
+    el.querySelector('.tema').click();
+    expect(tema).toBe('dark');
+    expect(localStorage.getItem('theme')).toBeNull();
+    el.querySelector('.sair').click();
+    expect(localStorage.getItem('notas.accessToken')).toBe('x');
   });
 });

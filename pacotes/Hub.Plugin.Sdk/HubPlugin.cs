@@ -77,6 +77,15 @@ public static class HubPlugin
                 // Acesso OAuth revogado no núcleo para em até 60 s (spec 030).
                 b.Events = new JwtBearerEvents
                 {
+                    // Sem login no MCP, o cliente descobre o OAuth do núcleo pela metadata do recurso.
+                    OnChallenge = ctx =>
+                    {
+                        if (!ctx.Request.Path.StartsWithSegments(m.Mcp ?? m.Rota + "/mcp")) return Task.CompletedTask;
+                        ctx.HandleResponse();
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        ctx.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{McpDoPlugin.MetadataDoRecurso(ctx.Request, m)}\"";
+                        return Task.CompletedTask;
+                    },
                     OnTokenValidated = ctx =>
                     {
                         if (revogacoes.Revogado(ctx.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value)) ctx.Fail("token revogado");
@@ -84,7 +93,9 @@ public static class HubPlugin
                     },
                 };
             });
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorizationBuilder().AddPolicy(McpDoPlugin.Politica, p => p
+            .RequireAuthenticatedUser().RequireAssertion(ctx => McpDoPlugin.Permite(ctx.User, m.Id)));
+        builder.Services.AddSingleton(new IaDoHub(o, http));
         builder.WebHost.UseUrls($"http://+:{m.Porta}");
         return m;
     }

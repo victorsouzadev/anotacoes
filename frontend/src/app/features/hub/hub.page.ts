@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { CUSTOM_ELEMENTS_SCHEMA, Component, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ThemeService } from '../../core/theme.service';
@@ -111,19 +111,11 @@ const TOOLS: ToolCard[] = [
   selector: 'app-hub-page',
   standalone: true,
   imports: [RouterLink, IconComponent],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
   template: `
     <div class="page">
-      <header class="top-bar">
-        <h1><span class="brand-mark"><app-icon name="grid" [size]="14" /></span> Ferramentas</h1>
-        <div class="top-bar-actions">
-          <a class="config-link" routerLink="/configuracoes" title="Configurações">
-            <app-icon name="more" [size]="16" />
-          </a>
-          <button class="theme-toggle" (click)="theme.cycle()" [title]="themeLabel()"><app-icon [name]="themeIconName()" [size]="16" /></button>
-          <span class="user-email">{{ auth.user()?.email }}</span>
-          <button class="logout" (click)="auth.logout()"><app-icon name="logout" [size]="14" /> Sair</button>
-        </div>
-      </header>
+      <!-- A mesma barra dos plug-ins (spec 032, T010); tema e sair passam pelo ThemeService e pelo AuthService. -->
+      <grafite-barra atual="hub" (grafite-tema)="trocarTema($event)" (grafite-sair)="sair($event)"></grafite-barra>
 
       <main class="content">
         @if (alerta(); as a) {
@@ -165,47 +157,6 @@ const TOOLS: ToolCard[] = [
   `,
   styles: [`
     .page { min-height: 100dvh; background: var(--bg); }
-    .top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 14px 28px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-    .top-bar h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em; }
-    .brand-mark {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: 8px;
-      background: var(--accent); color: var(--accent-contrast);
-      flex-shrink: 0;
-    }
-    .top-bar-actions { display: flex; align-items: center; gap: 14px; }
-    .config-link {
-      display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: var(--radius-sm);
-      color: var(--text-muted);
-      text-decoration: none;
-      flex-shrink: 0;
-    }
-    .config-link:hover { border-color: var(--accent); color: var(--accent); }
-    .theme-toggle {
-      border: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: var(--radius-sm);
-      width: 32px; height: 32px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
-    .user-email { font-size: 12px; color: var(--text-muted); }
-    .logout { display: flex; align-items: center; gap: 5px; border: none; background: none; color: var(--text-muted); font-size: 12px; font-weight: 600; }
-    .logout:hover { color: var(--danger); }
 
     .content { max-width: 900px; margin: 0 auto; padding: 48px 28px; }
     .alerta {
@@ -255,8 +206,6 @@ const TOOLS: ToolCard[] = [
     .tool-download:hover { border-color: var(--accent); color: var(--accent); }
 
     @media (max-width: 760px) {
-      .top-bar { padding: 12px 16px; }
-      .user-email { display: none; }
       .content { padding: 28px 16px; }
     }
   `],
@@ -295,19 +244,14 @@ export class HubPageComponent {
     void cerebro.disponivel().then((ok) => this.temCerebro.set(ok));
   }
 
-  themeIconName(): IconName {
-    switch (this.theme.pref()) {
-      case 'dark': return 'moon';
-      case 'light': return 'sun';
-      default: return 'monitor';
-    }
+  trocarTema(e: Event): void {
+    e.preventDefault();
+    const t = (e as CustomEvent<string>).detail;
+    if (t === 'system' || t === 'light' || t === 'dark') this.theme.set(t);
   }
 
-  themeLabel(): string {
-    switch (this.theme.pref()) {
-      case 'dark': return 'Tema: escuro (clique para claro)';
-      case 'light': return 'Tema: claro (clique para automático)';
-      default: return 'Tema: automático (clique para escuro)';
-    }
+  sair(e: Event): void {
+    e.preventDefault();
+    this.auth.logout();
   }
 }

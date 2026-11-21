@@ -622,7 +622,7 @@ desenhar. Uma linha sem esse prefixo é texto comum, exatamente como antes.
 ```
 notas-vps/
 ├── ops/                              # MCP de operação da VPS (shell de root, containers, arquivos), ver ops/README.md
-├── cerebro/                          # Segundo Cérebro: serviço .NET 10 (API, MCP, worker), ver cerebro/README.md
+├── cerebro/                          # cópia antiga do Segundo Cérebro: o plug-in mora em hub-cerebro (spec 033); sai na T012
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # só sobe o NotasApp
 │   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta); o desktop hospeda a mesma
@@ -659,7 +659,10 @@ notas-vps/
 │       ├── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
 │       │                             # orçamento, metas de reserva e histórico
 │       └── tasks/                    # lista, categorias, pomodoro, estatísticas, lixeira
-├── pacotes/                          # Hub.Plugin.Sdk (.NET) e grafite-ui (visual, barra, token): ver pacotes/README.md (032)
+├── pacotes/                          # pacotes dos plug-ins (032): ver pacotes/README.md
+│   ├── Hub.Plugin.Sdk/               # login pelo JWKS, MCP, IA, segredos, banco compartilhado e migração de base (031)
+│   ├── grafite-ui/                   # visual, <grafite-barra> e token do plug-in
+│   └── plugin.schema.json            # JSON Schema do plugin.json (contrato 1)
 ├── plugins.lock                      # plug-ins no ar (id: imagem@commit), lido pelo deployer (029)
 ├── mobile/                           # app Android nativo (Kotlin/Compose) da ferramenta Tarefas
 │   ├── app/src/main/java/com/organizador/app/
@@ -684,6 +687,7 @@ notas-vps/
 │   ├── backup-conferir.sh            # conferência semanal da restauração (spec 036)
 │   ├── backup-comum.sh               # limpeza, trava, configuração e estado (backup-externo.json)
 │   ├── logrotate-notas-backup        # rotação de /var/log/notas-backup.log (instalada pelo deploy)
+│   ├── carga-sqlite.sh               # 3 processos gravando no mesmo SQLite; conta "database is locked" (031)
 │   └── tests/backup.test.sh          # testes dos scripts (CI, job "scripts")
 ├── docker-compose.yml / .local.yml / .vps.yml
 └── DEPLOY.md
@@ -723,10 +727,11 @@ emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts
 `Endpoints/MoldesEndpoints.cs`. Novo molde = um `TipoMolde` em `caixas.ts`
 ou `toppers.ts` registrado em `catalogo.ts`.
 
-Para adicionar uma nova ferramenta: uma pasta em `frontend/src/app/features/<ferramenta>/`
-com uma rota lazy-loaded em `app.routes.ts`, um card na tela `features/hub/hub.page.ts`,
-e no backend um `Endpoints/<Ferramenta>Endpoints.cs` (mapeado em `Program.cs`) com suas
-tabelas/DTOs próprios — login, JWT e banco continuam compartilhados.
+Ferramenta nova é um plug-in (specs 029 a 032): um repositório próprio criado do `hub-modelo`, com o
+`Hub.Plugin.Sdk` e o `@grafite/ui`, e uma linha no `plugins.lock`. O banco continua um só (`notas.db`, spec 031):
+cada plug-in grava só nas tabelas com o prefixo dele e tem o próprio `__EFMigrationsHistory_<id>`; ao extrair uma
+ferramenta que já existe, a primeira migração do plug-in é uma `MigracaoDeBase`, conferida contra o banco antes de
+ser registrada. O núcleo (`backend/`, `frontend/`) fica com login, hub, Configurações e o que ainda não foi extraído.
 
 ## API (resumo)
 
