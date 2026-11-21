@@ -1,0 +1,81 @@
+<title>Arquitetura do hub</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Figtree:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* Papel e grafite: página única, desenho no centro, notas curtas embaixo */
+:root{--papel:#f6f5f1;--folha:#ffffff;--grafite:#2b2b29;--lapis:#6c6b66;--traco:#c9c7bf;--nucleo:#ece9f7;--nucleo-t:#3a3480;--plugin:#e3f2ec;--plugin-t:#0b5643;--dado:#efede6;--dado-t:#444441;
+--serif:"Newsreader",Georgia,serif;--sans:"Figtree",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--papel:#1b1b1a;--folha:#242422;--grafite:#ecebe6;--lapis:#a9a8a1;--traco:#4a4945;--nucleo:#2e2a5c;--nucleo-t:#d9d5fa;--plugin:#0f3b31;--plugin-t:#c8ecdf;--dado:#353532;--dado-t:#e2e0d8;color-scheme:dark}}
+:root[data-theme="dark"]{--papel:#1b1b1a;--folha:#242422;--grafite:#ecebe6;--lapis:#a9a8a1;--traco:#4a4945;--nucleo:#2e2a5c;--nucleo-t:#d9d5fa;--plugin:#0f3b31;--plugin-t:#c8ecdf;--dado:#353532;--dado-t:#e2e0d8;color-scheme:dark}
+body{background:var(--papel);color:var(--grafite);font-family:var(--sans);font-size:15px;line-height:1.6}
+main{max-width:860px;margin:0 auto;padding-block:32px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:24px}
+h1{font-family:var(--serif);font-weight:500;font-size:30px;margin:0;text-wrap:balance}
+.sub{color:var(--lapis);margin:4px 0 0}
+.mono{font-family:var(--mono);font-size:13px}
+.desenho{background:var(--folha);border:1px solid var(--traco);border-radius:12px;padding:16px;overflow-x:auto}
+svg{display:block;width:100%;min-width:560px;height:auto}
+svg text{font-family:var(--sans);fill:var(--grafite)}
+.n rect{fill:var(--nucleo);stroke:var(--nucleo-t)} .n text{fill:var(--nucleo-t)}
+.p>rect{fill:var(--plugin);stroke:var(--plugin-t)} .p>text{fill:var(--plugin-t)}
+.d rect{fill:var(--dado);stroke:var(--lapis)} .d text{fill:var(--dado-t)}
+.b rect{fill:var(--folha);stroke:var(--lapis)}
+.s{font-size:12px;fill:var(--lapis)} .n .s{fill:var(--nucleo-t);opacity:.8} .d .s{fill:var(--dado-t);opacity:.8}
+.t{font-size:14px;font-weight:500}
+.seta{stroke:var(--lapis);stroke-width:1;fill:none}
+.notas{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px 28px}
+.notas div{min-width:0} .notas h2{font-family:var(--serif);font-weight:500;font-size:18px;margin:0 0 4px}
+.notas p{margin:0;color:var(--lapis)}
+.legenda{display:flex;flex-wrap:wrap;gap:16px;color:var(--lapis);font-size:13px}
+.legenda span{display:inline-flex;align-items:center;gap:6px}
+.legenda i{width:14px;height:14px;border-radius:3px;border:1px solid var(--lapis);display:inline-block}
+</style>
+<main>
+<header>
+<h1>Arquitetura do hub</h1>
+<p class="sub">Núcleo e plug-ins na VPS, com banco compartilhado. Estado em 21/11/2026, depois das specs 035 e 037 (núcleo <span class="mono">eca421a</span>).</p>
+</header>
+<div class="legenda"><span><i style="background:var(--nucleo)"></i>Núcleo (este repositório)</span><span><i style="background:var(--plugin)"></i>Plug-ins (repositório próprio)</span><span><i style="background:var(--dado)"></i>Dados</span></div>
+<div class="desenho">
+<svg viewBox="0 0 680 690" role="img" aria-labelledby="tt"><title id="tt">Clientes chegam pelo Caddy, que encaminha para o núcleo e para oito plug-ins; todos usam o notas.db; o GitHub entrega as imagens.</title>
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round"/></marker></defs>
+<g class="b"><rect x="60" y="20" width="170" height="44" rx="8"/><text class="t" x="145" y="47" text-anchor="middle">Navegador / PWA</text></g>
+<g class="b"><rect x="255" y="20" width="170" height="44" rx="8"/><text class="t" x="340" y="47" text-anchor="middle">App Android</text></g>
+<g class="b"><rect x="450" y="20" width="170" height="44" rx="8"/><text class="t" x="535" y="47" text-anchor="middle">Claude (MCP)</text></g>
+<rect x="30" y="96" width="620" height="470" rx="20" fill="none" stroke="var(--traco)" stroke-dasharray="4 4"/>
+<text class="t" x="50" y="120">VPS (Docker)</text>
+<line class="seta" x1="145" y1="64" x2="250" y2="128" marker-end="url(#a)"/>
+<line class="seta" x1="340" y1="64" x2="340" y2="128" marker-end="url(#a)"/>
+<line class="seta" x1="535" y1="64" x2="430" y2="128" marker-end="url(#a)"/>
+<g class="b"><rect x="190" y="130" width="300" height="56" rx="8"/><text class="t" x="340" y="153" text-anchor="middle">notas-caddy</text><text class="s" x="340" y="173" text-anchor="middle">HTTPS e rotas por prefixo</text></g>
+<g class="n"><rect x="60" y="226" width="250" height="56" rx="8"/><text class="t" x="185" y="249" text-anchor="middle">Núcleo (notas-api)</text><text class="s" x="185" y="269" text-anchor="middle">Login, hub, IA, Publicar</text></g>
+<g class="n"><rect x="330" y="226" width="140" height="56" rx="8"/><text class="t" x="400" y="249" text-anchor="middle">Deployer</text><text class="s" x="400" y="269" text-anchor="middle">plugins.lock</text></g>
+<g class="n"><rect x="490" y="226" width="140" height="56" rx="8"/><text class="t" x="560" y="249" text-anchor="middle">Ops</text><text class="s" x="560" y="269" text-anchor="middle">Backup e saúde</text></g>
+<line class="seta" x1="300" y1="186" x2="220" y2="224" marker-end="url(#a)"/>
+<path class="seta" d="M190 158 L45 158 L45 380 L58 380" marker-end="url(#a)"/>
+<line class="seta" x1="400" y1="282" x2="400" y2="308" marker-end="url(#a)"/>
+<g class="p"><rect x="60" y="310" width="570" height="150" rx="16"/><text class="t" x="80" y="335">Plug-ins (repositórios hub-&lt;id&gt;)</text></g>
+<g class="b">
+<rect x="80" y="350" width="120" height="40" rx="6"/><text class="t" x="140" y="375" text-anchor="middle">Notas</text>
+<rect x="214" y="350" width="120" height="40" rx="6"/><text class="t" x="274" y="375" text-anchor="middle">Finanças</text>
+<rect x="348" y="350" width="120" height="40" rx="6"/><text class="t" x="408" y="375" text-anchor="middle">Tarefas</text>
+<rect x="482" y="350" width="120" height="40" rx="6"/><text class="t" x="542" y="375" text-anchor="middle">Dieta</text>
+<rect x="80" y="402" width="120" height="40" rx="6"/><text class="t" x="140" y="427" text-anchor="middle">Anotação</text>
+<rect x="214" y="402" width="120" height="40" rx="6"/><text class="t" x="274" y="427" text-anchor="middle">Cérebro</text>
+<rect x="348" y="402" width="120" height="40" rx="6"/><text class="t" x="408" y="427" text-anchor="middle">Criativo</text>
+<rect x="482" y="402" width="120" height="40" rx="6"/><text class="t" x="542" y="427" text-anchor="middle">Treino</text>
+</g>
+<line class="seta" x1="190" y1="460" x2="190" y2="488" marker-end="url(#a)"/>
+<g class="d"><rect x="60" y="490" width="260" height="56" rx="8"/><text class="t" x="190" y="513" text-anchor="middle">notas.db</text><text class="s" x="190" y="533" text-anchor="middle">SQLite compartilhado</text></g>
+<g class="d"><rect x="340" y="490" width="140" height="56" rx="8"/><text class="t" x="410" y="513" text-anchor="middle">Postgres</text><text class="s" x="410" y="533" text-anchor="middle">Bancos dos sites</text></g>
+<g class="d"><rect x="500" y="490" width="130" height="56" rx="8"/><text class="t" x="565" y="513" text-anchor="middle">Backup</text><text class="s" x="565" y="533" text-anchor="middle">Cópia externa</text></g>
+<g class="b"><rect x="190" y="600" width="300" height="56" rx="8"/><text class="t" x="340" y="623" text-anchor="middle">GitHub</text><text class="s" x="340" y="643" text-anchor="middle">Repositórios, CI e imagens</text></g>
+</svg>
+</div>
+<section class="notas">
+<div><h2>Entrada</h2><p>O notas-caddy manda o hub e as rotas da <span class="mono">/api</span> para o núcleo, e cada <span class="mono">/&lt;id&gt;/</span> para o plug-in dela. As URLs antigas chegam pelas rotasLegadas.</p></div>
+<div><h2>Núcleo</h2><p>Login (assina os tokens que os plug-ins conferem pelo JWKS), hub, Configurações de IA, Publicar e o registro de plug-ins. Cria as próprias tabelas pelo modelo ao subir, sem migrações (spec 037).</p></div>
+<div><h2>Plug-ins</h2><p>Cada um tem repositório, CI e histórico de migrações próprios. O deployer sobe a versão travada no <span class="mono">plugins.lock</span>.</p></div>
+<div><h2>Dados</h2><p>Núcleo e plug-ins usam o mesmo <span class="mono">notas.db</span>, cada ferramenta com o seu prefixo de tabela. Os sites publicados usam o Postgres, e o backup tem cópia fora da VPS (spec 036).</p></div>
+<div><h2>Entrega</h2><p>A CI de cada repositório gera a imagem, e o merge no main dispara o deploy na VPS.</p></div>
+</section>
+</main>
