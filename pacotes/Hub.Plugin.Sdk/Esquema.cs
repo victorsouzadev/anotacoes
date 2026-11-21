@@ -48,10 +48,9 @@ public static class Esquema
         db.Database.GenerateCreateScript()
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(c => c.Length > 0 && !c.StartsWith("--"))
-            .Select(c => c
-                .Replace("CREATE TABLE \"", "CREATE TABLE IF NOT EXISTS \"")
-                .Replace("CREATE UNIQUE INDEX \"", "CREATE UNIQUE INDEX IF NOT EXISTS \"")
-                .Replace("CREATE INDEX \"", "CREATE INDEX IF NOT EXISTS \""));
+            // O Npgsql só põe aspas nos nomes quando precisa; o SQLite sempre põe.
+            .Select(c => System.Text.RegularExpressions.Regex.Replace(c,
+                @"^CREATE (UNIQUE INDEX|INDEX|TABLE) (?!IF NOT EXISTS)", "CREATE $1 IF NOT EXISTS "));
 
     internal static bool EhPostgres(DbContext db) =>
         db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
