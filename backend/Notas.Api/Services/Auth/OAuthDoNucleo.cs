@@ -309,13 +309,24 @@ public sealed class OAuthDoNucleo(AppDbContext db, TokenService tokens, ChavesDe
     }
 
     /// <summary>Para o plug-in (60 s): jti revogados ainda válidos e os tokens MCP estáticos ativos dele (só hashes).</summary>
-    public async Task<object> Revogados(string plugin)
+    /// <summary>
+    /// Plug-ins que eram MCPs dos apps no núcleo (spec 034): continuam aceitando o token "apps" de Conexões e o
+    /// arquivo antigo da tela do Cérebro, para os conectores e a rotina dos apps não quebrarem na extração.
+    /// </summary>
+    public static readonly string[] HerdamTokenDosApps = ["treino", "criativo"];
+
+    /// <summary>Para o plug-in (60 s): jti revogados ainda válidos e os tokens MCP estáticos ativos dele (só hashes).</summary>
+    public async Task<object> Revogados(string plugin, (string Hash, string Usuario, string Email)? tokenDoArquivo = null)
     {
         await db.OAuthRevogados.Where(r => r.ExpiraEm < Agora).ExecuteDeleteAsync();
         var jtis = await db.OAuthRevogados.Where(r => r.Plugin == plugin).Select(r => r.Jti).ToListAsync();
-        var mcp = (await db.McpTokens.Where(t => t.Plugin == plugin && t.RevogadoEm == null).ToListAsync())
+        var herda = HerdamTokenDosApps.Contains(plugin);
+        var donos = herda ? new[] { plugin, "apps" } : [plugin];
+        var mcp = (await db.McpTokens.Where(t => donos.Contains(t.Plugin) && t.RevogadoEm == null).ToListAsync())
             .Where(t => t.Selo == SeloDe(chaves, t))
             .Select(t => new { hash = t.Hash, usuario = t.UsuarioId, email = t.Email }).ToList();
+        if (herda && tokenDoArquivo is { } a && mcp.All(m => m.hash != a.Hash))
+            mcp.Add(new { hash = a.Hash, usuario = a.Usuario, email = a.Email });
         return new { jtis, mcp };
     }
 }

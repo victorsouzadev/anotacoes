@@ -65,10 +65,11 @@ public static class HubPlugin
         builder.Services.AddSingleton(revogacoes);
         builder.Services.AddHostedService<VigiaDasRevogacoes>();
 
-        // Um Bearer "hub_..." é token MCP estático; o resto é JWT do núcleo (login ou OAuth).
+        // Token que não é JWT (Bearer "hub_..." ou o antigo dos apps, ou ?key= de conector que só aceita URL) é token
+        // MCP estático; o resto é JWT do núcleo (login ou OAuth).
         builder.Services.AddAuthentication("Hub")
             .AddPolicyScheme("Hub", "Login do hub", p => p.ForwardDefaultSelector = ctx =>
-                ctx.Request.Headers.Authorization.ToString().StartsWith("Bearer hub_") ? TokenMcpHandler.Esquema : JwtBearerDefaults.AuthenticationScheme)
+                TokenMcpHandler.TokenEstatico(ctx.Request) is not null ? TokenMcpHandler.Esquema : JwtBearerDefaults.AuthenticationScheme)
             .AddScheme<AuthenticationSchemeOptions, TokenMcpHandler>(TokenMcpHandler.Esquema, null)
             .AddJwtBearer(b =>
             {

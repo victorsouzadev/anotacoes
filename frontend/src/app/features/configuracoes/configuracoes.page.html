@@ -351,6 +351,7 @@
               <li>
                 <strong>{{ p.nome }}</strong> · <code>{{ p.versao }}</code> ·
                 <span [class.alerta-texto]="p.estado !== 'no-ar'">{{ p.estado === 'no-ar' ? 'no ar' : 'indisponível' }}</span>
+                @if (p.congelado) { · <span title="Sem evolução: fica na versão do plugins.lock (spec 034)">congelado</span> }
                 @if (p.ultimaFalha) { <br><span class="alerta-texto">Última versão recusada: {{ p.ultimaFalha }}</span> }
               </li>
             }

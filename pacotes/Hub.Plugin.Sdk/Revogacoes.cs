@@ -75,11 +75,25 @@ public sealed class TokenMcpHandler(IOptionsMonitor<AuthenticationSchemeOptions>
 {
     public const string Esquema = "McpDoHub";
 
+    /// <summary>
+    /// Token MCP estático da requisição: Bearer que não é JWT (sem os dois pontos do JWS) ou <c>?key=</c>, que os
+    /// conectores do Claude web usam por só aceitarem URL. Null quando é JWT ou não há token.
+    /// </summary>
+    public static string? TokenEstatico(Microsoft.AspNetCore.Http.HttpRequest r)
+    {
+        var h = r.Headers.Authorization.ToString();
+        if (h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var t = h[7..].Trim();
+            return t.Length > 0 && t.Count(c => c == '.') != 2 ? t : null;
+        }
+        return h.Length == 0 && r.Query["key"].FirstOrDefault() is { Length: > 0 } k ? k : null;
+    }
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var h = Request.Headers.Authorization.ToString();
-        if (!h.StartsWith("Bearer hub_")) return Task.FromResult(AuthenticateResult.NoResult());
-        if (revogacoes.DonoDoTokenMcp(h[7..]) is not { } dono) return Task.FromResult(AuthenticateResult.Fail("token MCP inválido"));
+        if (TokenEstatico(Request) is not { } token) return Task.FromResult(AuthenticateResult.NoResult());
+        if (revogacoes.DonoDoTokenMcp(token) is not { } dono) return Task.FromResult(AuthenticateResult.Fail("token MCP inválido"));
         var id = new ClaimsIdentity([new Claim("sub", dono.Usuario), new Claim("email", dono.Email)], Esquema, "email", null);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(id), Esquema)));
     }

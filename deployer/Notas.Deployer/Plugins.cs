@@ -16,7 +16,8 @@ public record TabelasManifesto(string Prefixo, List<string>? Legadas);
 /// <summary><c>plugin.json</c>, contrato 1 (specs/029-nucleo-plugins/contracts/plugin-manifesto.md).</summary>
 public record Manifesto(
     string Id, string Nome, string Icone, string? Descricao, int Contrato, string Rota, int Porta, string Health,
-    string? Mcp, List<string>? RotasLegadas, TabelasManifesto Tabelas, bool UsaIa, List<string>? Dados, string? Android)
+    string? Mcp, List<string>? RotasLegadas, TabelasManifesto Tabelas, bool UsaIa, List<string>? Dados, string? Android,
+    bool Congelado = false)
 {
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {

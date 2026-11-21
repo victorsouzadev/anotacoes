@@ -16,6 +16,8 @@ export interface ItemDoHub {
   ultimaFalha?: string | null;
   /** Caminho do MCP do plug-in (`mcp` do plugin.json), se tiver. */
   mcp?: string | null;
+  /** Sem evolução (spec 034): fica na versão do plugins.lock. */
+  congelado?: boolean;
 }
 
 /** Card do hub. Plug-in é página à parte (fora do Angular): abre por link comum, não pelo roteador. */

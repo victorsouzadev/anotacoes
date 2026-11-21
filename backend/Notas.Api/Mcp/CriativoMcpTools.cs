@@ -66,25 +66,5 @@ public sealed class CriativoMcpTools(AppDbContext db, IOptions<SitesOptions> sit
             string.Join('\n', lista.Select(p => $"- {p.Name} · alterado em {p.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", Br)}"));
     }
 
-    private async Task<string> SitesMarkdown(CancellationToken ct)
-    {
-        var uid = user.Id;
-        var lista = await db.Sites.AsNoTracking().Where(s => s.OwnerUserId == uid).OrderBy(s => s.Nome).ToListAsync(ct);
-        if (lista.Count == 0) return "Nenhum site publicado.";
-        var ids = lista.Select(s => s.Id).ToList();
-        var deploys = await db.Deployments.AsNoTracking().Where(x => ids.Contains(x.SiteId)).ToListAsync(ct);
-        var sb = new StringBuilder();
-        foreach (var s in lista)
-        {
-            var doSite = deploys.Where(x => x.SiteId == s.Id).OrderByDescending(x => x.CriadoEm).ToList();
-            var atual = doSite.FirstOrDefault(x => x.Id == s.CurrentDeploymentId);
-            var ultimo = doSite.FirstOrDefault();
-            sb.Append($"- **{s.Nome}** ({sites.Value.Url(s.Slug)})")
-              .Append(s.Parado ? " · parado" : atual is null ? " · sem versão no ar" : $" · no ar a versão {atual.Versao} ({atual.Tipo})");
-            if (ultimo is not null && ultimo != atual)
-                sb.Append($" · último deploy: versão {ultimo.Versao} {ultimo.Status} em {ultimo.CriadoEm.ToLocalTime().ToString("dd/MM HH:mm", Br)}");
-            sb.Append('\n');
-        }
-        return sb.ToString().TrimEnd();
-    }
+    private Task<string> SitesMarkdown(CancellationToken ct) => ResumoDeSites.Markdown(db, sites.Value, user.Id, ct);
 }
