@@ -6,6 +6,8 @@
 
 **Status**: Implementado — spec retroativa, descreve o comportamento atual
 
+> **Spec 034 (21/11/2026)**: extraída do núcleo para o plug-in **congelado** [hub-criativo](https://github.com/victorsouzadev/hub-criativo), com as mesmas URLs (rotas legadas), as mesmas tabelas e os mesmos testes. Os caminhos de arquivo citados abaixo ficam lá.
+
 **Input**: Levantamento do código existente: `features/cake` (rota `/bolo-3d`) e seção "Simulador de Bolo 3D" do README.
 
 ## User Scenarios & Testing *(mandatory)*

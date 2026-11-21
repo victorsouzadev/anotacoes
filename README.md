@@ -28,7 +28,7 @@ inicial, sem exigir outro login nem outro deploy.
   ([`mobile/dieta`](mobile/dieta/README.md)) e tela web em `/dieta` (dia, registro, água, peso,
   progresso, perfil e plano, links e assistente), API em `/api/dieta` e MCP
   `/api/mcp/dieta`, que o Segundo Cérebro sincroniza.
-- **Treino** — recebe os treinos do app Android Treino Corrida (repositório
+- **Treino** (plug-in congelado [hub-treino](https://github.com/victorsouzadev/hub-treino), spec 034) — recebe os treinos do app Android Treino Corrida (repositório
   `treino-corrida`, offline-first; a conta do hub é opcional): API em `/api/treino`,
   tela web em `/treino` (só leitura: programa, totais de 7/30/90 dias, km por semana, ritmo e a
   lista) e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
@@ -277,6 +277,10 @@ mesmos dados.
 
 ### Editor de Imagens
 
+> Desde a spec 034, o Editor de Imagens, os Moldes, o Simulador de Bolo 3D e a Precificação são o plug-in
+> congelado [hub-criativo](https://github.com/victorsouzadev/hub-criativo) (telas em `/criativo/...`; os links antigos
+> redirecionam e as APIs ficam nas mesmas URLs). O que está descrito abaixo continua valendo, com o código lá.
+
 Uma rota (`/imagens`), quatro modos (Print & Cut, Molde SVG, Redes sociais e
 Ilustração), escolhidos na barra do app. Todos convivem no mesmo projeto salvo
 (`/api/imagens/projetos`, um JSON opaco de até 9 MB com as artes embutidas em data
@@ -469,12 +473,12 @@ A interface segue o Illustrator, o Inkscape e o Photoshop, ocupando a tela intei
 
 #### Versão Windows (offline)
 
-O editor também existe como programa do Windows (`desktop/`), que funciona sem
+O editor também existe como programa do Windows (`desktop/` do hub-criativo), que funciona sem
 internet: a mesma página e a mesma API rodando dentro do programa, IAs de remover
 fundo e ampliar na placa de vídeo (ONNX Runtime + DirectML), projetos em arquivo
 `.edimg`, exportação direto em pasta, impressão em tamanho real com calibração,
 "Abrir no Silhouette Studio", fontes do Windows e pasta monitorada no lote. Detalhes,
-instalador e a avaliação do corte direto pela USB em [`desktop/README.md`](desktop/README.md).
+instalador e a avaliação do corte direto pela USB no `desktop/README.md` do hub-criativo.
 
 ### Moldes
 
@@ -625,7 +629,7 @@ notas-vps/
 ├── cerebro/                          # cópia antiga do Segundo Cérebro: o plug-in mora em hub-cerebro (spec 033); sai na T012
 ├── backend/Notas.Api/
 │   ├── Program.cs                    # só sobe o NotasApp
-│   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta); o desktop hospeda a mesma
+│   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta do núcleo)
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
 │   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
 │   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
@@ -670,7 +674,6 @@ notas-vps/
 │   │   ├── data/remote/AuthApi.kt    # login/registro/refresh contra /api/auth/*
 │   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
 │   └── README.md
-├── desktop/                          # Editor de Imagens pra Windows (WPF + WebView2, API e IA locais) — ver desktop/README.md
 ├── deployer/                         # Publicar: único serviço com docker.sock; cria os containers site-<slug>
 ├── exemplos/publicar/recados/        # app de exemplo (front + API C# + SQLite) e o contrato para publicar
 ├── docs/poc-multi-app/DISCOVERY.md   # desenho da ferramenta Publicar
@@ -693,7 +696,7 @@ notas-vps/
 └── DEPLOY.md
 ```
 
-O modo Molde SVG do Editor de Imagens mora em `frontend/src/app/features/imagem/`:
+O modo Molde SVG do Editor de Imagens mora em `web/src/app/features/imagem/` do hub-criativo:
 `svg-template.ts` (parse, saneamento, geometria e serialização — sem Angular, com
 testes em `svg-template.spec.ts`), `template-store.ts` (estado em signals, provido
 pela page pra sobreviver à troca de modo) e `template-mode.ts` (o componente do

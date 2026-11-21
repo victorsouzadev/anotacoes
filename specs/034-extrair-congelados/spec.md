@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-19
 
-**Status**: Planejado
+**Status**: Em andamento (código pronto nas branches; troca na VPS pendente)
 
 **Input**: Levantamento de uso de 25/10 a 18/11/2026: Editor de Imagens sem acesso desde 28/09, Treino sem nenhum dado, Precificação em 2 dias, Moldes e Bolo 3D sem medição (rodam só no navegador). Retroativas: [006](../006-treino/spec.md), [007](../007-editor-imagens/spec.md), [008](../008-moldes/spec.md), [009](../009-bolo-3d/spec.md), [013](../013-precificacao/spec.md); evoluções 017, 019, 022 (helpers movidos para `shared/`).
 
