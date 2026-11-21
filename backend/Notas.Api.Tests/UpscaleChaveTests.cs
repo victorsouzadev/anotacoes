@@ -41,11 +41,12 @@ public class UpscaleChaveTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         return await res.Content.ReadFromJsonAsync<JsonElement>();
     }
 
+    /// <summary>O que Configurações mostra; o Editor (plug-in criativo, spec 034) lê a mesma chave pelo /api/core/ia.</summary>
     private async Task<bool> EditorVeAmpliacaoAsync()
     {
-        var res = await _client.GetAsync("/api/imagens/upscale");
+        var res = await _client.GetAsync("/api/configuracoes/ia");
         res.EnsureSuccessStatusCode();
-        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("disponivel").GetBoolean();
+        return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("upscaleDisponivel").GetBoolean();
     }
 
     [Fact]
@@ -114,16 +115,5 @@ public class UpscaleChaveTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
             new { provedor = "", modelo = (string?)null, chaveApi = (string?)null, chaveUpscale = "r8_" });
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
-    }
-
-    [Fact]
-    public async Task Ampliar_sem_chave_explica_onde_cadastrar()
-    {
-        var res = await _client.PostAsJsonAsync("/api/imagens/upscale",
-            new { imagem = "data:image/png;base64,AAECAwQ=", escala = 2 });
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
-        var corpo = await res.Content.ReadAsStringAsync();
-        Assert.Contains("Configurações", corpo);
     }
 }

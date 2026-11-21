@@ -41,11 +41,6 @@ public static class ModulosDoNucleo
         ("financas", "Finanças", "wallet", "/financas"),
         ("tarefas", "Tarefas", "checklist", "/tasks"),
         ("dieta", "Dieta", "apple", "/dieta"),
-        ("treino", "Treino", "run", "/treino"),
-        ("imagens", "Editor de Imagens", "image", "/imagens"),
-        ("moldes", "Moldes", "box", "/moldes"),
-        ("bolo-3d", "Simulador de Bolo 3D", "cake", "/bolo-3d"),
-        ("precificacao", "Precificação", "calculator", "/precificacao"),
     ];
 }
 

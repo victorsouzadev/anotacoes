@@ -6,6 +6,8 @@
 
 **Status**: Implementado em 2026-11-18
 
+> **Spec 034 (21/11/2026)**: extraída do núcleo para o plug-in **congelado** [hub-treino](https://github.com/victorsouzadev/hub-treino), com as mesmas URLs (rotas legadas), as mesmas tabelas e os mesmos testes. Os caminhos de arquivo citados abaixo ficam lá.
+
 **Input**: Lacuna da spec 006: os treinos chegam do app Treino Corrida, mas só dá para vê-los pelo MCP.
 
 ## Clarifications

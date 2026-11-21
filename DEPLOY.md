@@ -349,9 +349,10 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
 - O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
 
-## MCPs dos apps do hub (Tarefas, Finanças, Publicar/Imagens, Dieta)
+## MCPs dos apps do hub (Tarefas, Finanças, Dieta; Criativo e Treino nos plug-ins)
 
-O `api` serve `/api/mcp/tarefas`, `/api/mcp/financas`, `/api/mcp/criativo` e `/api/mcp/dieta` (só leitura, exceto os
+O `api` serve `/api/mcp/tarefas`, `/api/mcp/financas` e `/api/mcp/dieta` (`/api/mcp/criativo` e `/api/mcp/treino` são dos
+plug-ins desde a spec 034, nas mesmas URLs e com o mesmo token) (só leitura, exceto os
 registros rápidos da Dieta: refeição, peso e água), autenticados pelo
 token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.json`, montado só leitura em
 `/access`). O Cérebro usa esses MCPs na rotina de sincronização. Detalhes em
@@ -439,6 +440,35 @@ Troca (033, T009 e T010), sempre com confirmação:
 4. Depois do deploy: `cat data/plugins/estado.json`, `curl http://127.0.0.1:8090/cerebro/health` e o smoke test
    (`cerebro/scripts/smoke-test.sh`). Voltar é comentar a linha do lock e repor o serviço no compose.
 
+**Plug-ins congelados (034).** O Editor de Imagens, os Moldes, o Bolo 3D e a Precificação são o plug-in `criativo`
+([hub-criativo](https://github.com/victorsouzadev/hub-criativo)); o Treino é o `treino` ([hub-treino](https://github.com/victorsouzadev/hub-treino)).
+Os dois têm `"congelado": true` no manifesto: ficam na versão do `plugins.lock`, sem CI a cada mudança do núcleo
+(Configurações → Servidor mostra "congelado"). Usam as tabelas `imagem_*` e `treino_*` que já estavam no `notas.db`
+(migração `Base`, conferida com o banco na primeira subida), e as URLs antigas por `rotasLegadas`: `/api/imagens`,
+`/api/moldes`, `/api/precificacao`, `/api/treino` e os MCPs `/api/mcp/criativo` e `/api/mcp/treino`. As telas ficam em
+`/criativo/...` e `/treino/`; `/imagens`, `/moldes`, `/bolo-3d` e `/precificacao` redirecionam.
+- O núcleo entrega a esses dois plug-ins, na lista de revogações, o token "MCPs dos apps" de Conexões e o do arquivo
+  antigo do Cérebro (SDK 1.2.0 aceita token que não é JWT e `?key=`). Sites e a linha do backup do `criativo_resumo`
+  vêm de `/api/core/criativo/resumo` (segredo de serviço, só o plug-in criativo).
+- A IA e a chave própria de ampliação vêm do `/api/core/ia`. As chaves do servidor e o painel da Viih Mimos vão em
+  `data/plugins/env/criativo.env` (root, 600): `Upscale__ApiKey`, `ViihMimos__Url`, `ViihMimos__Chave`, `ViihMimos__Usuarios`
+  (os mesmos valores do `.env` do núcleo).
+- A rotina dos apps do Cérebro chama `http://api:8080/api/mcp/<app>` pela rede interna, sem o Caddy: para `treino` e
+  `criativo` ela passa a usar `http://plugin-<id>:8080/api/mcp/<id>` (hub-cerebro).
+- O app Windows mora no `desktop/` do hub-criativo e continua hospedando o `NotasApp` inteiro, compilado do núcleo no
+  commit fixo `NUCLEO_REF` do `desktop.yml` dele (o último com o código do Editor).
+
+Ordem da troca, sempre com confirmação:
+1. PR do SDK 1.2.0 e do núcleo (token dos apps, `/api/core/criativo/resumo`, chave de ampliação, campo `congelado`).
+   Na main, o workflow Pacotes publica a Release `sdk-v1.2.0`.
+2. PRs do hub-treino e do hub-criativo: a CI baixa o SDK 1.2.0, testa e publica as imagens.
+3. Na VPS: `data/plugins/env/criativo.env` com as chaves acima.
+4. PR com as linhas `treino: ghcr.io/victorsouzadev/hub-treino@<commit>` e `criativo: ghcr.io/victorsouzadev/hub-criativo@<commit>`
+   no `plugins.lock`. Conferir `estado.json`, os cards, `/criativo/imagens`, `/criativo/moldes`, `/criativo/bolo-3d`,
+   `/criativo/precificacao`, `/treino/` e os MCPs nas URLs antigas.
+5. Só então o PR que tira o código do núcleo (migração `ExtracaoCongelados`, de `Up` vazio: as tabelas ficam).
+Voltar antes do passo 5 é comentar as linhas do lock: o núcleo ainda tem as rotas.
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.
@@ -448,9 +478,10 @@ Troca (033, T009 e T010), sempre com confirmação:
 
 ## Instalador do Editor de Imagens pra Windows
 
-Não faz parte do deploy da main: é o workflow **Desktop (Windows)** (Actions ›
-Run workflow). Ele grava o `Setup.exe` e o pacote de atualização em
+Não faz parte do deploy da main: desde a spec 034 é o workflow **Desktop (Windows)** do
+[hub-criativo](https://github.com/victorsouzadev/hub-criativo) (Actions › Run workflow), que precisa dos segredos
+`VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY` cadastrados naquele repositório. Ele grava o `Setup.exe` e o pacote de atualização em
 `/opt/notas-vps/downloads/windows`, que o Caddy serve em `/downloads/windows/`
 (volume `./downloads` no `docker-compose.yml`). O site mostra o botão "Baixar
 para Windows" assim que existe um `versao.json` lá. Usa os mesmos segredos
-`VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY` do deploy. Detalhes em `desktop/README.md`.
+`VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY` do deploy. Detalhes no `desktop/README.md` do hub-criativo.

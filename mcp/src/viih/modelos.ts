@@ -1,4 +1,5 @@
-// Gerado por frontend/src/app/features/imagem/social-mcp-catalog.spec.ts — não edite à mão.
+// Gerado pelo social-mcp-catalog.spec.ts do Editor de Imagens. Desde a spec 034 o editor é o plug-in congelado
+// hub-criativo e este arquivo fica fixo (ver mcp/README.md).
 import type { ModeloIa } from './catalogo.js';
 
 export const MODELOS_DO_EDITOR: ModeloIa[] = [

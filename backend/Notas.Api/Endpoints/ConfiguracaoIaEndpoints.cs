@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Notas.Api.Data;
 using Notas.Api.Dtos;
 using Notas.Api.Services.Financas.Llm;
-using Notas.Api.Services.Imagens;
 using Notas.Api.Services.Seguranca;
 
 namespace Notas.Api.Endpoints;
@@ -17,18 +16,18 @@ public static class ConfiguracaoIaEndpoints
         var grupo = app.MapGroup("/api/configuracoes/ia").RequireAuthorization();
 
         grupo.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, ILlmExtractorFactory factory,
-            IUpscalerFactory upscale, CancellationToken ct) =>
+            IConfiguration cfg, CancellationToken ct) =>
         {
             var userId = user.UserId();
             var config = await db.ConfiguracoesIa.AsNoTracking().FirstOrDefaultAsync(c => c.UserId == userId, ct);
             var efetiva = await factory.ResolverAsync(userId, ct);
-            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            var ampliacao = Ampliacao(config, cfg);
 
             return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         grupo.MapPut("/", async (SalvarConfiguracaoIaRequest req, ClaimsPrincipal user, AppDbContext db,
-            IProtetorDeSegredos protetor, ILlmExtractorFactory factory, IUpscalerFactory upscale,
+            IProtetorDeSegredos protetor, ILlmExtractorFactory factory, IConfiguration cfg,
             CancellationToken ct) =>
         {
             var provedor = (req.Provedor ?? "").Trim().ToLowerInvariant();
@@ -101,12 +100,12 @@ public static class ConfiguracaoIaEndpoints
             await db.SaveChangesAsync(ct);
 
             var efetiva = await factory.ResolverAsync(userId, ct);
-            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            var ampliacao = Ampliacao(config, cfg);
             return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         grupo.MapDelete("/chave-upscale", async (ClaimsPrincipal user, AppDbContext db,
-            ILlmExtractorFactory factory, IUpscalerFactory upscale, CancellationToken ct) =>
+            ILlmExtractorFactory factory, IConfiguration cfg, CancellationToken ct) =>
         {
             var userId = user.UserId();
             var config = await db.ConfiguracoesIa.FirstOrDefaultAsync(c => c.UserId == userId, ct);
@@ -118,12 +117,12 @@ public static class ConfiguracaoIaEndpoints
             await db.SaveChangesAsync(ct);
 
             var efetiva = await factory.ResolverAsync(userId, ct);
-            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            var ampliacao = Ampliacao(config, cfg);
             return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
         grupo.MapDelete("/chave", async (ClaimsPrincipal user, AppDbContext db, ILlmExtractorFactory factory,
-            IUpscalerFactory upscale, CancellationToken ct) =>
+            IConfiguration cfg, CancellationToken ct) =>
         {
             var userId = user.UserId();
             var config = await db.ConfiguracoesIa.FirstOrDefaultAsync(c => c.UserId == userId, ct);
@@ -135,7 +134,7 @@ public static class ConfiguracaoIaEndpoints
             await db.SaveChangesAsync(ct);
 
             var efetiva = await factory.ResolverAsync(userId, ct);
-            var ampliacao = await upscale.ResolverAsync(userId, ct);
+            var ampliacao = Ampliacao(config, cfg);
             return Results.Ok(Montar(config, efetiva, ampliacao));
         });
 
@@ -202,6 +201,14 @@ public static class ConfiguracaoIaEndpoints
             }
         }).RequireRateLimiting("financas-ia");
     }
+
+    /// <summary>De quem é a chave da ampliação de imagem (Replicate), usada pelo plug-in criativo (spec 034).</summary>
+    public record UpscaleEfetivo(bool Disponivel, bool ChavePropria);
+
+    private static UpscaleEfetivo Ampliacao(ConfiguracaoIa? config, IConfiguration cfg) =>
+        config?.ChaveUpscaleCifrada is { Length: > 0 }
+            ? new UpscaleEfetivo(true, true)
+            : new UpscaleEfetivo(!string.IsNullOrWhiteSpace(cfg["Upscale:ApiKey"]), false);
 
     private static ConfiguracaoIaResponse Montar(
         ConfiguracaoIa? config, ConfiguracaoEfetiva efetiva, UpscaleEfetivo ampliacao)

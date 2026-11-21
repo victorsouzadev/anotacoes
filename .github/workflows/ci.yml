@@ -103,21 +103,6 @@ jobs:
       - run: dotnet build Notas.Deployer.sln --configuration Release
       - run: dotnet test Notas.Deployer.sln --no-build --configuration Release
 
-  # O programa desktop é WPF (só roda no Windows), mas compila no Linux: pega
-  # erro de código aqui, sem esperar o instalador (workflow Desktop).
-  desktop-build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: desktop
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 9.0.x
-      - run: dotnet build EditorImagens.sln --configuration Release
-      - run: dotnet test tests/EditorImagens.Ia.Tests --no-build --configuration Release
-
   # Ferramenta "Segundo Cérebro": serviço próprio em .NET 10 (o backend segue no 9).
   cerebro-build:
     runs-on: ubuntu-latest

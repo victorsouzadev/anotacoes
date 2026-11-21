@@ -12,8 +12,6 @@ using Notas.Api.Services.Dieta;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Financas.Chat;
-using Notas.Api.Services.Imagens;
-using Notas.Api.Services.Moldes;
 using Notas.Api.Services.Seguranca;
 using Notas.Api.Services.Sites;
 
@@ -129,49 +127,6 @@ public static class NotasApp
             c.Timeout = TimeSpan.FromSeconds(
                 Math.Clamp(builder.Configuration.GetValue("Anthropic:TimeoutSegundos", 20), 5, 120)));
 
-        // Ferramenta "Editor de Imagens": ampliação de foto pequena por super-resolução
-        // num serviço externo. Sem chave (Upscale__ApiKey) o recurso fica desligado e o
-        // editor nem oferece o botão.
-        builder.Services.Configure<UpscaleOptions>(builder.Configuration.GetSection(UpscaleOptions.SectionName));
-        // Cliente nomeado, e não tipado: a chave é de quem está logado, então o
-        // ampliador é construído por requisição (ver UpscalerFactory).
-        builder.Services.AddHttpClient(nameof(ReplicateUpscaler), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                Math.Clamp(builder.Configuration.GetValue("Upscale:TimeoutSegundos", 90), 15, 300) + 15));
-        builder.Services.Configure<RelightOptions>(builder.Configuration.GetSection(RelightOptions.SectionName));
-        builder.Services.AddHttpClient(nameof(ReplicateRelighter), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                Math.Clamp(builder.Configuration.GetValue("Relight:TimeoutSegundos", 180), 30, 600) + 15));
-        builder.Services.Configure<RemoveBgOptions>(builder.Configuration.GetSection(RemoveBgOptions.SectionName));
-        builder.Services.AddHttpClient(nameof(ReplicateBackgroundRemover), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                Math.Clamp(builder.Configuration.GetValue("RemoveBg:TimeoutSegundos", 90), 15, 300) + 15));
-        builder.Services.AddScoped<IUpscalerFactory, UpscalerFactory>();
-
-        // Nomear os elementos do editor é outra conversa com o LLM (imagens entram,
-        // nomes de arquivo saem), então tem cliente próprio — com o timeout de anexo,
-        // que é o caso dele.
-        builder.Services.AddHttpClient(nameof(NomeadorDeElementos), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
-
-        // Legendas de Instagram: prévia do post entra, texto sai. Mesmo teto de
-        // tempo do nomeador, porque também leva imagem.
-        builder.Services.AddHttpClient(nameof(LegendistaInstagram), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
-
-        // Post com IA: várias fotos entram, modelo e textos saem.
-        builder.Services.AddHttpClient(nameof(MontadorDePost), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
-
-        // Moldes: foto de embalagem entra, tipo de molde e medidas saem. Também
-        // leva imagem, então usa o mesmo teto de tempo dos outros com anexo.
-        builder.Services.AddHttpClient(nameof(AnalisadorDeEmbalagem), c =>
-            c.Timeout = TimeSpan.FromSeconds(
-                builder.Configuration.GetValue("OpenRouter:TimeoutComAnexosSegundos", 120) + 15));
-
         // Ferramenta "Publicar": ZIPs viram sites em <slug>.<domínio>. Os containers são
         // criados pelo serviço deployer (único com docker.sock); a API só fala HTTP com ele.
         builder.Services.Configure<SitesOptions>(builder.Configuration.GetSection(SitesOptions.SectionName));
@@ -187,10 +142,6 @@ public static class NotasApp
 
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
-        builder.Services.AddScoped<INomeadorDeElementos, NomeadorDeElementos>();
-        builder.Services.AddScoped<ILegendistaInstagram, LegendistaInstagram>();
-        builder.Services.AddScoped<IMontadorDePost, MontadorDePost>();
-        builder.Services.AddScoped<IAnalisadorDeEmbalagem, AnalisadorDeEmbalagem>();
 
         // Ferramenta "Dieta": gamificação derivada dos registros e consulta de código de barras.
         builder.Services.AddScoped<DietaProgresso>();
@@ -205,10 +156,6 @@ public static class NotasApp
 
         // Ferramenta "Anotação": aprovação das pré-anotações do Claude nos relatos do mestrado.
         // Só liga com Anotacao__RunDir apontando para uma pasta local; na VPS fica desligada.
-        // Precificação guardada no painel da Viih Mimos (ViihMimos__Url/Chave/Usuarios).
-        builder.Services.Configure<Notas.Api.Endpoints.ViihMimosOptions>(
-            builder.Configuration.GetSection(Notas.Api.Endpoints.ViihMimosOptions.SectionName));
-        builder.Services.AddHttpClient(Notas.Api.Endpoints.ViihMimosEndpoints.ClienteHttp, c => c.Timeout = TimeSpan.FromSeconds(20));
         builder.Services.Configure<Notas.Api.Services.Anotacao.AnotacaoOptions>(
             builder.Configuration.GetSection(Notas.Api.Services.Anotacao.AnotacaoOptions.SectionName));
         builder.Services.AddSingleton<Notas.Api.Services.Anotacao.AnotacaoArquivos>();
@@ -225,7 +172,8 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
-        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas, /criativo e /dieta.
+        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas e /dieta. Os de /criativo e /treino
+        // são dos plug-ins desde a spec 034 (o Caddy manda essas URLs para eles).
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
@@ -233,7 +181,7 @@ public static class NotasApp
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (tarefas, finanças, sites, imagens, dieta e treinos de corrida). Só leitura, " +
+                "Dados das ferramentas do hub do usuário (tarefas, finanças e dieta). Só leitura, " +
                 "exceto os registros rápidos da dieta (refeição, peso e água).")
             .WithHttpTransport(o =>
             {
@@ -249,9 +197,7 @@ public static class NotasApp
             })
             .WithTools<Notas.Api.Mcp.TarefasMcpTools>()
             .WithTools<Notas.Api.Mcp.FinancasMcpTools>()
-            .WithTools<Notas.Api.Mcp.CriativoMcpTools>()
-            .WithTools<Notas.Api.Mcp.DietaMcpTools>()
-            .WithTools<Notas.Api.Mcp.TreinoMcpTools>();
+            .WithTools<Notas.Api.Mcp.DietaMcpTools>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -389,18 +335,14 @@ public static class NotasApp
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();
         app.MapTasksEndpoints();
-        app.MapImagemEndpoints();
         app.MapSitesEndpoints();
-        app.MapMoldesEndpoints();
         app.MapDietaEndpoints();
         app.MapDietaIaEndpoints();
-        app.MapTreinoEndpoints();
         app.MapAnotacaoEndpoints();
-        app.MapViihMimosEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|criativo|dieta|treino)$)}");
+        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|dieta)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 
