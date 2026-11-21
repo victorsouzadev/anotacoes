@@ -14,6 +14,11 @@ public class ConfiguracaoPlugins
     public string Banco { get; init; } = "/data/db/notas.db";
     /// <summary>Caminho de data/db NO HOST, montado em /data/db de cada plug-in.</summary>
     public required string BancoNoHost { get; init; }
+    /// <summary>
+    /// Pasta NO HOST com os arquivos dos plug-ins fora do banco (spec 033): cada item de <c>dados</c> do manifesto
+    /// (<c>/data/&lt;nome&gt;</c>) é montado de <c>&lt;DadosNoHost&gt;/&lt;id&gt;/&lt;nome&gt;</c>. Sem ela, nada além do banco é montado.
+    /// </summary>
+    public string? DadosNoHost { get; init; }
     /// <summary>Rede do compose do hub (o Caddy e a API alcançam plugin-&lt;id&gt; por ela).</summary>
     public string RedeHub { get; init; } = "notas-vps_default";
     public string ContainerCaddy { get; init; } = "notas-caddy";
@@ -205,6 +210,9 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
             "-e", "VERSAO=" + e.Versao,
             "-e", "HUB_SEGREDO_SERVICO=" + segredoServico,
         };
+        if (cfg.DadosNoHost is { Length: > 0 } dados)
+            foreach (var d in m.Dados ?? [])
+                a.AddRange(["-v", $"{dados.TrimEnd('/')}/{e.Id}/{d["/data/".Length..]}:{d}"]);
         if (cfg.MemoriaPorPlugin is { } mem) a.AddRange(["--memory", mem]);
         a.Add(e.Referencia);
         return a;

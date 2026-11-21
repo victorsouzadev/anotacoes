@@ -54,6 +54,30 @@ public class PluginsTests
         Assert.Contains(Plugins.Validar(null, "dieta", []), x => x.Contains("plugin.json"));
     }
 
+    [Theory]
+    [InlineData("/data/db")]
+    [InlineData("/data/core")]
+    [InlineData("/data/../etc")]
+    [InlineData("/etc")]
+    [InlineData("/data/vault/sub")]
+    public void Dados_so_em_pasta_propria(string d) =>
+        Assert.Contains(Plugins.Validar(M() with { Dados = [d] }, "dieta", []), p => p.Contains("dados"));
+
+    [Fact]
+    public void Dados_montados_por_plugin_so_com_a_pasta_do_host_configurada()
+    {
+        var m = M("cerebro") with { Dados = ["/data/vault", "/data/hub"] };
+        Assert.Empty(Plugins.Validar(m, "cerebro", []));
+        var e = new EntradaLock("cerebro", "ghcr.io/x/hub-cerebro", "abc1234", true);
+        SincronizadorDePlugins S(string? dados) => new(new ConfiguracaoPlugins { BancoNoHost = "/opt/h/data/db", DadosNoHost = dados },
+            (_, _) => Task.FromResult(new Resultado(0, "", "")), new HttpClient(), NullLogger.Instance);
+
+        var a = S("/opt/h/data/plugins/dados/").ArgumentosRun(e, m, "s");
+        Assert.Contains("/opt/h/data/plugins/dados/cerebro/vault:/data/vault", a);
+        Assert.Contains("/opt/h/data/plugins/dados/cerebro/hub:/data/hub", a);
+        Assert.Equal(["/opt/h/data/db:/data/db"], S(null).ArgumentosRun(e, m, "s").Where(x => x.Contains(":/data/")));
+    }
+
     [Fact]
     public void Contrato_anterior_ainda_vale() => Assert.Empty(Plugins.Validar(M(contrato: 0), "dieta", []));
 

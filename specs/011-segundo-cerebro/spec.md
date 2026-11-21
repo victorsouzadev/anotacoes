@@ -8,6 +8,8 @@
 
 **Input**: Levantamento do código existente: `cerebro/` (.NET 10), `features/cerebro`, `cerebro/README.md` e seção "Segundo Cérebro" do README.
 
+> **Onde o código mora (spec 033):** o Cérebro virou o plug-in [hub-cerebro](https://github.com/victorsouzadev/hub-cerebro) (API, MCP, worker e as telas em `web/`). Até a troca em produção (033, T010) a VPS ainda roda a cópia em `cerebro/` e `frontend/src/app/features/cerebro/` deste repositório; mudanças novas vão no hub-cerebro.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Manter o vault na VPS e usar o Obsidian como sempre (Priority: P1)

@@ -24,6 +24,7 @@ if (builder.Configuration["PLUGINS_BANCO_HOST_DIR"] is { Length: > 0 } bancoHost
     var cfgPlugins = new ConfiguracaoPlugins
     {
         BancoNoHost = bancoHost,
+        DadosNoHost = builder.Configuration["PLUGINS_DADOS_HOST_DIR"],
         RedeHub = builder.Configuration["PLUGINS_REDE"] ?? "notas-vps_default",
         ContainerCaddy = builder.Configuration["PLUGINS_CADDY"] ?? "notas-caddy",
     };

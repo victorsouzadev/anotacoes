@@ -8,6 +8,8 @@
 
 **Input**: Fora da PoC (spec 011 e `cerebro/README.md`): "PDF e imagens (OCR) — o arquivo é salvo e linkado, sem extração".
 
+> **Onde o código mora (spec 033):** o Cérebro virou o plug-in [hub-cerebro](https://github.com/victorsouzadev/hub-cerebro) (API, MCP, worker e as telas em `web/`). Até a troca em produção (033, T010) a VPS ainda roda a cópia em `cerebro/` e `frontend/src/app/features/cerebro/` deste repositório; mudanças novas vão no hub-cerebro.
+
 ## Clarifications
 
 ### Session 2026-11-18
