@@ -242,8 +242,19 @@ public static class OAuthNucleoEndpoints
                 : Results.Ok(new { provedor = c.Provedor, modelo = c.Modelo, chave = c.Chave });
         });
 
-        app.MapGet("/api/core/revogados", async (HttpRequest r, AppDbContext db, OAuthDoNucleo s) =>
-            await PluginDoServico(r, db) is { } plugin ? Results.Ok(await s.Revogados(plugin)) : Results.Unauthorized());
+        app.MapGet("/api/core/revogados", async (HttpRequest r, AppDbContext db, OAuthDoNucleo s, Mcp.AppsMcpAuth arquivo) =>
+        {
+            if (await PluginDoServico(r, db) is not { } plugin) return Results.Unauthorized();
+            // Spec 034: o token dos apps gerado na tela do Cérebro (arquivo) também vale nos MCPs extraídos.
+            (string, string, string)? doArquivo = null;
+            if (OAuthDoNucleo.HerdamTokenDosApps.Contains(plugin) && arquivo.Current() is { } a)
+            {
+                var email = a.Email.ToLowerInvariant();
+                if (await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email) is { } dono)
+                    doArquivo = (Convert.ToHexString(a.Hash).ToLowerInvariant(), dono.Id, dono.Email);
+            }
+            return Results.Ok(await s.Revogados(plugin, doArquivo));
+        });
     }
 
     /// <summary>Plug-in dono do <c>Authorization: Bearer &lt;HUB_SEGREDO_SERVICO&gt;</c>, comparado pelo hash.</summary>

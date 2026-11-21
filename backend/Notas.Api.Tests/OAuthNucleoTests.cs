@@ -237,6 +237,35 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
     }
 
     [Fact]
+    public async Task Token_apps_vale_nos_plugins_que_eram_mcp_dos_apps()
+    {
+        await GarantirPlugin();
+        const string segredoTreino = "segredo-de-servico-do-treino-com-tamanho-suficiente";
+        using (var s = _factory.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!db.PluginsEstado.Any(p => p.Id == "treino"))
+            {
+                db.PluginsEstado.Add(new PluginEstado
+                {
+                    Id = "treino", Versao = "v1", Manifesto = """{"id":"treino","nome":"Treino","icone":"run","rota":"/treino","porta":8080,"health":"/treino/api/health"}""",
+                    SegredoServicoHash = Hash(segredoTreino),
+                });
+                await db.SaveChangesAsync();
+            }
+        }
+        var c = await Logado();
+        var token = (await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "apps" })).Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("token").GetString()!;
+        var treino = _factory.CreateClient();
+        treino.DefaultRequestHeaders.Authorization = new("Bearer", segredoTreino);
+        var rev = await treino.GetFromJsonAsync<JsonElement>("/api/core/revogados");
+        Assert.Contains(rev.GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == OAuthDoNucleo.Hash(token));
+        // Outro plug-in não recebe o token dos apps.
+        Assert.DoesNotContain((await Revogados()).GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == OAuthDoNucleo.Hash(token));
+    }
+
+    [Fact]
     public async Task Revogados_exige_o_segredo_de_servico_do_plugin()
     {
         await GarantirPlugin();

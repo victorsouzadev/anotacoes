@@ -106,6 +106,21 @@ public class SdkTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, await Chamar(Token(hmac, SecurityAlgorithms.HmacSha256, "exemplo")));
     }
 
+    [Theory]
+    [InlineData("Bearer hub_abc", null, "hub_abc")]
+    [InlineData("Bearer tokenAntigoDosApps-sem-pontos", null, "tokenAntigoDosApps-sem-pontos")]
+    [InlineData("Bearer a.b.c", null, null)]          // JWT: vai para o JwtBearer
+    [InlineData("", "chave-da-url", "chave-da-url")]  // conector do Claude web (?key=)
+    [InlineData("Bearer a.b.c", "x", null)]           // com Authorization, a URL não vale
+    [InlineData("", null, null)]
+    public void Token_estatico_vem_do_bearer_nao_jwt_ou_da_url(string auth, string? key, string? esperado)
+    {
+        var ctx = new DefaultHttpContext();
+        if (auth.Length > 0) ctx.Request.Headers.Authorization = auth;
+        if (key is not null) ctx.Request.QueryString = new QueryString("?key=" + key);
+        Assert.Equal(esperado, TokenMcpHandler.TokenEstatico(ctx.Request));
+    }
+
     [Fact]
     public async Task Jti_revogado_e_token_mcp_estatico()
     {
