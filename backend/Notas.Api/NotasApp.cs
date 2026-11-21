@@ -1,4 +1,3 @@
-using Notas.Api.Services.Financas.Auvp;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -10,7 +9,6 @@ using Notas.Api.Data;
 using Notas.Api.Endpoints;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
-using Notas.Api.Services.Financas.Chat;
 using Notas.Api.Services.Seguranca;
 using Notas.Api.Services.Sites;
 
@@ -80,36 +78,16 @@ public static class NotasApp
         builder.Services.AddHttpClient(nameof(Notas.Api.Services.Plugins.CacheDeHealth), c => c.Timeout = TimeSpan.FromSeconds(3));
         builder.Services.AddHostedService<Notas.Api.Services.Plugins.CacheDeHealth>();
 
-        // Enums (ferramenta Finanças) trafegam como string no JSON, em vez de índice numérico.
+        // Enums trafegam como string no JSON, em vez de índice numérico.
         builder.Services.ConfigureHttpJsonOptions(o =>
             o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-        // Ferramenta "Finanças": extração de lançamentos por LLM, com fallback heurístico
-        // local quando nenhuma chave de API está configurada.
+        // IA de cada usuário (Configurações → IA e /api/core/ia para os plug-ins com usaIa). A extração de lançamentos
+        // fica aqui só para o botão "Testar" da tela de IA; a Finanças é o plug-in hub-financas desde a spec 035.
         builder.Services.Configure<AnthropicOptions>(builder.Configuration.GetSection(AnthropicOptions.SectionName));
         builder.Services.Configure<OpenRouterOptions>(builder.Configuration.GetSection(OpenRouterOptions.SectionName));
-        builder.Services.Configure<ExtracaoOptions>(builder.Configuration.GetSection(ExtracaoOptions.SectionName));
         builder.Services.Configure<FinancasOptions>(builder.Configuration.GetSection(FinancasOptions.SectionName));
         builder.Services.AddSingleton<FinancasClock>();
-
-        // Importação da AUVP Financeiro (open banking). Sem Auvp__BaseUrl a
-        // integração fica desligada e a tela não oferece o botão.
-        builder.Services.Configure<AuvpOptions>(builder.Configuration.GetSection(AuvpOptions.SectionName));
-        builder.Services.AddHttpClient(nameof(AuvpCliente), c =>
-            {
-                c.Timeout = TimeSpan.FromSeconds(
-                    Math.Clamp(builder.Configuration.GetValue("Auvp:TimeoutSegundos", 30), 5, 120));
-                // Sem User-Agent o .NET não manda nenhum, e o firewall na frente da
-                // AUVP (Cloudflare) trata cliente anônimo com mais desconfiança.
-                c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Financas/1.0");
-            })
-            // O Cloudflare da AUVP barra alguns IPs de datacenter (403 em HTML). Com
-            // Auvp__Proxy as chamadas saem por outro endereço, sem afetar o resto do app.
-            .ConfigurePrimaryHttpMessageHandler(() => AuvpProxy.Handler(builder.Configuration["Auvp:Proxy"]));
-        builder.Services.AddScoped<IAuvpCliente, AuvpCliente>();
-        builder.Services.AddScoped<AuvpSincronizador>();
-        builder.Services.AddScoped<AuvpEscrita>();
-        builder.Services.AddHostedService<AuvpSincronizacaoAutomatica>();
 
         // Provedor de LLM: OpenRouter (o único que lê imagem/PDF), Anthropic direto, ou o
         // extrator heurístico local. O usuário pode cadastrar a própria chave e o próprio
@@ -142,41 +120,10 @@ public static class NotasApp
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
 
-        builder.Services.AddScoped<TransacaoExtractionService>();
-        builder.Services.AddScoped<OrcamentoService>();
-        builder.Services.AddScoped<MetaService>();
-        builder.Services.AddScoped<PlanejamentoService>();
-        builder.Services.AddScoped<FerramentasFinanceiras>();
-        builder.Services.AddScoped<ChatComFerramentas>();
-        builder.Services.AddScoped<ChatFinanceiro>();
-        builder.Services.AddScoped<IChatModeloCliente, ChatModeloCliente>();
-        // Uma resposta do chat pode encadear várias consultas; cada chamada ao
-        // modelo tem folga bem maior que a extração de um lançamento.
-        builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
-
-        // MCP dos apps para o Segundo Cérebro e o Claude: /api/mcp/financas. Os de /criativo e /treino são dos plug-ins
-        // desde a spec 034 e os de /dieta e /tarefas desde a 035 (o Caddy manda essas URLs para eles).
-        // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
-        builder.Services.AddHttpContextAccessor();
+        // Token dos apps do Cérebro (arquivo do ops): o /api/core/revogados repassa o hash aos plug-ins. Os MCPs dos
+        // apps são todos dos plug-ins desde a spec 035 (o Caddy manda /api/mcp/<app> para eles).
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
         builder.Services.AddHostedService<Notas.Api.Mcp.ArquivoDoOps>();
-        builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
-        builder.Services
-            .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (finanças). Só leitura.")
-            .WithHttpTransport(o =>
-            {
-                o.Stateless = true;
-                o.ConfigureSessionOptions = (http, options, _) =>
-                {
-                    var grupo = (http.Request.RouteValues["grupo"] as string ?? "").ToLowerInvariant();
-                    if (options.ToolCollection is { } tools)
-                        foreach (var t in tools.ToArray())
-                            if (!t.ProtocolTool.Name.StartsWith(grupo + "_", StringComparison.Ordinal)) tools.Remove(t);
-                    return Task.CompletedTask;
-                };
-            })
-            .WithTools<Notas.Api.Mcp.FinancasMcpTools>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -194,10 +141,9 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
-            // Lançamento por texto livre é o único endpoint que custa dinheiro por chamada
-            // (uma requisição ao LLM). O limite é por usuário autenticado, não por IP, para
-            // que um token vazado não consiga queimar a chave da API em laço.
-            o.AddPolicy("financas-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
+            // "Testar" da IA (Configurações) faz uma chamada de verdade ao LLM com a chave do usuário: limite por usuário
+            // autenticado, não por IP, para um token vazado não queimar a chave em laço.
+            o.AddPolicy("ia-teste", ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                     ?? ctx.User.FindFirst("sub")?.Value
                     ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -217,18 +163,6 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
-            // Importar arquivo custa muito mais que interpretar uma frase: uma foto de
-            // cupom vale milhares de tokens e um PDF de extrato, dezenas de milhares.
-            // O limite é bem mais apertado que o do lançamento por texto.
-            o.AddPolicy("financas-importacao", ctx => RateLimitPartition.GetFixedWindowLimiter(
-                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                    ?? ctx.User.FindFirst("sub")?.Value
-                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 10,
-                    Window = TimeSpan.FromMinutes(5),
-                }));
         });
 
         options?.ConfigureServices?.Invoke(builder.Services);
@@ -254,12 +188,8 @@ public static class NotasApp
             Selo.SelarExistentes(db, chaves, pastaChaves);
         }
 
-        // A autenticação vem antes do limitador porque a política "financas-ia" particiona
-        // por usuário: com a ordem invertida, ctx.User estaria vazio e todo mundo atrás do
-        // mesmo IP dividiria a mesma cota.
+        // A autenticação vem antes do limitador porque a política "ia-teste" particiona por usuário.
         app.UseAuthentication();
-        // Depois da autenticação JWT: nas rotas /api/mcp quem decide é o token dos apps (do Cérebro).
-        app.Use((http, next) => Notas.Api.Mcp.AppsMcpAuth.Middleware(http, () => next(http)));
         app.UseRateLimiter();
         app.UseAuthorization();
 
@@ -293,19 +223,11 @@ public static class NotasApp
         app.MapNotesEndpoints();
         app.MapNotesShareEndpoints();
         app.MapFoldersEndpoints();
-        app.MapFinancasEndpoints();
-        app.MapAuvpEndpoints();
-        app.MapFinancasAnaliseEndpoints();
-        app.MapPlanejamentoEndpoints();
-        app.MapChatFinanceiroEndpoints();
-        app.MapOrcamentoEndpoints();
-        app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();
         app.MapSitesEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(financas)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

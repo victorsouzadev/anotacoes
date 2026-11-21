@@ -17,37 +17,6 @@ namespace Notas.Api.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.3");
 
-            modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("AtualizadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ChaveCifrada")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ChaveSufixo")
-                        .HasMaxLength(8)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("UltimaSincronizacaoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("configuracoes_auvp", (string)null);
-                });
-
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoIa", b =>
                 {
                     b.Property<Guid>("Id")
@@ -159,78 +128,6 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("sites_deployments", (string)null);
                 });
 
-            modelBuilder.Entity("Notas.Api.Data.Divida", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("JurosMensal")
-                        .HasColumnType("decimal(6,3)");
-
-                    b.Property<string>("Nome")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("ParcelaMinima")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<decimal>("Saldo")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("financas_dividas", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.FechamentoMes", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Ano")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("AtualizadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Compromisso")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Mes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal?>("MetaPoupanca")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<string>("Reflexao")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Ano", "Mes")
-                        .IsUnique();
-
-                    b.ToTable("financas_fechamentos", (string)null);
-                });
-
             modelBuilder.Entity("Notas.Api.Data.Folder", b =>
                 {
                     b.Property<string>("Id")
@@ -252,83 +149,6 @@ namespace Notas.Api.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("folders", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.MetaAporte", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly>("Data")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("MetaId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Observacoes")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("TransacaoId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Valor")
-                        .HasColumnType("decimal(12,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MetaId");
-
-                    b.HasIndex("TransacaoId")
-                        .IsUnique()
-                        .HasFilter("\"TransacaoId\" IS NOT NULL");
-
-                    b.ToTable("financas_meta_aportes", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ArquivadaEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ConcluidaEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly?>("DataAlvo")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Nome")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Observacoes")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("ValorAlvo")
-                        .HasColumnType("decimal(12,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("financas_metas", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.Note", b =>
@@ -419,143 +239,6 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("note_shares", (string)null);
                 });
 
-            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Ano")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("AtualizadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Mes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Observacoes")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("ValorTotal")
-                        .HasColumnType("decimal(12,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Ano", "Mes")
-                        .IsUnique();
-
-                    b.ToTable("financas_orcamentos", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.OrcamentoItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Categoria")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("OrcamentoId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Percentual")
-                        .HasColumnType("decimal(7,4)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrcamentoId", "Categoria")
-                        .IsUnique();
-
-                    b.ToTable("financas_orcamento_itens", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.PreferenciasFinancas", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("AtualizadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("MesesReserva")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid?>("MetaReservaId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Metodo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("PatrimonioInvestido")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<decimal>("PercentualPagueSePrimeiro")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal?>("SaldoInicialFluxo")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("financas_preferencias", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.ProvisaoAnual", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("MesVencimento")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Nome")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Valor")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.Property<decimal>("ValorReservado")
-                        .HasColumnType("decimal(14,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("financas_provisoes", (string)null);
-                });
-
             modelBuilder.Entity("Notas.Api.Data.RefreshToken", b =>
                 {
                     b.Property<string>("Id")
@@ -592,37 +275,6 @@ namespace Notas.Api.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("refresh_tokens", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.RegraCategoria", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("AtualizadaEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Categoria")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Chave")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Chave")
-                        .IsUnique();
-
-                    b.ToTable("financas_regras_categoria", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.Site", b =>
@@ -694,141 +346,6 @@ namespace Notas.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("sites_variaveis", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.Transacao", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Categoria")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("CategoriaConfirmada")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateOnly>("Competencia")
-                        .HasColumnType("TEXT");
-
-                    b.Property<float>("ConfiancaIa")
-                        .HasColumnType("REAL");
-
-                    b.Property<string>("Conta")
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CriadoEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly>("Data")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Descricao")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("ForaDosTotais")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("FormaPagamento")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("IdExterno")
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Observacoes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OrcamentoAuvp")
-                        .HasMaxLength(40)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("OrigemExterna")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("Parcela")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("RevisarCategoria")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Tags")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("TextoOriginal")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Tipo")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("TotalParcelas")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("Valor")
-                        .HasColumnType("decimal(10,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Competencia");
-
-                    b.HasIndex("UserId", "Data");
-
-                    b.HasIndex("UserId", "OrigemExterna", "IdExterno")
-                        .IsUnique();
-
-                    b.ToTable("financas_transacoes", (string)null);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.TransacaoExcluida", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ExcluidaEm")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("IdExterno")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Origem")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "Origem", "IdExterno")
-                        .IsUnique();
-
-                    b.ToTable("financas_transacoes_excluidas", (string)null);
                 });
 
             modelBuilder.Entity("Notas.Api.Data.User", b =>
@@ -1119,15 +636,6 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("core_segredos_recifrados", (string)null);
                 });
 
-            modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoIa", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
@@ -1146,48 +654,7 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Notas.Api.Data.Divida", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.FechamentoMes", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Notas.Api.Data.Folder", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.MetaAporte", b =>
-                {
-                    b.HasOne("Notas.Api.Data.MetaReserva", null)
-                        .WithMany("Aportes")
-                        .HasForeignKey("MetaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Notas.Api.Data.Transacao", null)
-                        .WithMany()
-                        .HasForeignKey("TransacaoId")
-                        .OnDelete(DeleteBehavior.SetNull);
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
                         .WithMany()
@@ -1210,52 +677,7 @@ namespace Notas.Api.Data.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.OrcamentoItem", b =>
-                {
-                    b.HasOne("Notas.Api.Data.Orcamento", null)
-                        .WithMany("Itens")
-                        .HasForeignKey("OrcamentoId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.PreferenciasFinancas", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.ProvisaoAnual", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Notas.Api.Data.RefreshToken", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.RegraCategoria", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
                         .WithMany()
@@ -1280,34 +702,6 @@ namespace Notas.Api.Data.Migrations
                         .HasForeignKey("SiteId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.Transacao", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.TransacaoExcluida", b =>
-                {
-                    b.HasOne("Notas.Api.Data.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.MetaReserva", b =>
-                {
-                    b.Navigation("Aportes");
-                });
-
-            modelBuilder.Entity("Notas.Api.Data.Orcamento", b =>
-                {
-                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

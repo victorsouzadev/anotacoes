@@ -27,7 +27,7 @@
 
 - [ ] T012 [US4] Criar `hub-financas`; mover Finanças, Orçamento, Meta, Planejamento, ChatFinanceiro, AUVP, `FinancasMcpTools`, tela e testes
 - [ ] T013 [US4] `FinancasDb` (`financas_*` + `configuracoes_auvp`, base); recifrar AUVP na primeira subida (T002)
-- [ ] T014 [US4] Ensaio com totais do painel; deploy; conferência; remover do núcleo
+- [x] T014 [US4] Ensaio com totais do painel; deploy; conferência; remover do núcleo
 
 ## Phase 7: User Story 5 - Notas (P3)
 

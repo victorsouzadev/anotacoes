@@ -9,7 +9,7 @@ inicial, sem exigir outro login nem outro deploy.
 - **Notas** — notas manuscritas: desenho livre, texto, notas adesivas, checklists,
   formas e setas num canvas por página, com várias páginas por nota, pastas, busca,
   exportação de imagem, sincronização entre dispositivos e uso offline.
-- **Finanças** — lançamentos a partir de texto livre ("gastei 45 no mercado hoje")
+- **Finanças** (plug-in [hub-financas](https://github.com/victorsouzadev/hub-financas), spec 035) — lançamentos a partir de texto livre ("gastei 45 no mercado hoje")
   **ou de arquivos** (foto de cupom, PDF de extrato, planilha de fatura), interpretados
   por LLM via OpenRouter, com fallback heurístico local. Dashboard de receitas x
   despesas, **orçamento mensal** (um valor distribuído entre as categorias, com
@@ -67,7 +67,7 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 | Gráficos (Finanças, Tarefas) | Chart.js |
 | Armazenamento local (Notas) | IndexedDB via `idb` (local-first, funciona offline) |
 | App Android (Tarefas) | Kotlin + Jetpack Compose, Room (SQLite) local-first — no repositório hub-tarefas |
-| Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/notes`, `/api/folders`, `/api/financas/*`, `/api/tasks/*`) |
+| Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/notes`, `/api/folders`, `/api/core/*`; as ferramentas extraídas são plug-ins) |
 | Extração de lançamentos (Finanças) | Anthropic Claude via API, com extrator heurístico local como fallback sem chave configurada |
 | Banco | SQLite (EF Core 9), modo WAL — uma tabela por entidade, compartilhando o mesmo arquivo/contexto |
 | Autenticação | JWT (access 15min + refresh 30d com rotação/detecção de reuso), senhas com BCrypt — login único vale para todas as ferramentas, web e Android |
@@ -140,6 +140,8 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 - Indicador de status (salvo / sincronizando / offline / erro) no cabeçalho.
 
 ### Finanças
+
+> Desde a spec 035 é o plug-in [hub-financas](https://github.com/victorsouzadev/hub-financas) (tela em `/financas`; API `/api/financas` e MCP `/api/mcp/financas` como rotas legadas; a chave AUVP foi recifrada com o `SEGREDO_PLUGIN` dele). A tela de IA (`/configuracoes`) e o `/api/core/ia` continuam no núcleo. O texto abaixo descreve o comportamento, que não mudou.
 
 - **Lançamento por texto livre**: campo único onde o usuário descreve o gasto/receita
   como falaria ("gastei 45 reais no mercado hoje", "recebi 3000 de salário dia
@@ -634,18 +636,15 @@ notas-vps/
 │   ├── Program.cs                    # só sobe o NotasApp
 │   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta do núcleo)
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
-│   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
-│   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks, Sites (Minimal APIs, um arquivo por ferramenta)
+│   ├── Data/CategoriasDaExtracao.cs  # enums da extração por LLM, usados pelo "Testar" da tela de IA
+│   ├── Endpoints/                    # Auth, Notes, Folders, Configurações de IA, Sites, núcleo (Minimal APIs, um arquivo por ferramenta)
 │   ├── Services/Sites/               # Publicar: extração do ZIP, disco (versões, link current, backup), fila de publicação
 │   ├── Services/Seguranca/           # cifra dos segredos guardados no banco (chaves de API)
-│   ├── Services/Financas/            # extração de lançamentos (OpenRouter/Anthropic + fallback
-│   │                                 # heurístico, com entrada de imagem/PDF/planilha), orçamento
-│   │                                 # (validação, rateio), metas e o relógio no fuso do usuário
+│   ├── Services/Financas/Llm/        # IA de cada usuário (provedor, modelo, chave) e o extrator do "Testar"
 │   ├── Auth/                         # TokenService (ES256 + JWKS), ChavesDeAssinatura e Selo das linhas de login (030)
 │   ├── Services/Plugins/             # registro de plug-ins, health a cada 30 s, módulos do núcleo (029)
 │   ├── Services/Auth/OAuthDoNucleo.cs # OAuth dos MCPs dos plug-ins, tokens MCP estáticos e revogados (030)
-│   └── Dtos/                         # Dtos.cs (Notas) + FinancasDtos.cs + OrcamentoDtos.cs
-│                                     # + MetaDtos.cs + TasksDtos.cs
+│   └── Dtos/                         # Dtos.cs (Notas) e os das telas do núcleo
 ├── frontend/src/app/
 │   ├── core/                         # auth, theme, interceptor/guard — compartilhados por todas as ferramentas
 │   ├── shared/                       # ícones e outros componentes usados em mais de uma ferramenta
@@ -662,8 +661,6 @@ notas-vps/
 │       │   ├── text-overlay.ts       # edição de texto/sticky (textarea sobreposto)
 │       │   ├── checklist-overlay.ts  # edição de checklist
 │       │   └── editor.page.ts        # página do editor, páginas múltiplas, autosave
-│       └── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
-│                                     # orçamento, metas de reserva e histórico
 ├── pacotes/                          # pacotes dos plug-ins (032): ver pacotes/README.md
 │   ├── Hub.Plugin.Sdk/               # login pelo JWKS, MCP, IA, segredos, banco compartilhado e migração de base (031)
 │   ├── grafite-ui/                   # visual, <grafite-barra> e token do plug-in
@@ -750,35 +747,9 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | `GET/PUT /api/imagens/preferencias` | Preferências da conta no Editor de Imagens (anotações de material) |
 | `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |
 | `POST /api/moldes/analisar` | Foto de embalagem + catálogo de moldes → tipo de molde e medidas estimadas pela IA (valores conferidos contra o catálogo) |
-| `GET /api/financas/capacidades` | Diz se a configuração atual do usuário lê arquivos |
 | `GET /api/configuracoes/ia` \| `PUT` | Provedor, modelo e chave de API do usuário (a chave só volta mascarada) |
 | `POST /api/configuracoes/ia/testar` | Faz uma extração real com a configuração informada, antes de salvar |
 | `DELETE /api/configuracoes/ia/chave` | Remove a chave cadastrada |
-| `POST /api/financas/transacoes` | Registra lançamento a partir de texto livre (aciona o LLM; limitado por usuário) |
-| `POST /api/financas/transacoes/importar` | Importa lançamentos de foto, PDF ou planilha (multipart; limite próprio) |
-| `GET /api/financas/transacoes` | Lista lançamentos (filtros: período, `ano`/`mes`, categoria, tipo, situação) |
-| `PATCH /api/financas/transacoes/{id}` | Corrige campos de um lançamento |
-| `DELETE /api/financas/transacoes/{id}` | Remove lançamento |
-| `GET /api/financas/dashboard/resumo` \| `categorias` \| `tendencias` | Totais e agregações para o dashboard |
-| `GET /api/financas/orcamentos` | Histórico de orçamentos do usuário |
-| `GET /api/financas/orcamentos/atual?ano=&mes=` | Orçamento de um mês (204 quando não há) |
-| `PUT /api/financas/orcamentos` | Cria ou substitui o orçamento do mês (a distribuição precisa somar 100%) |
-| `GET /api/financas/orcamentos/acompanhamento?ano=&mes=` | Planejado x realizado, por categoria e por grupo |
-| `GET /api/financas/orcamentos/modelos?valorTotal=` | Distribuições prontas (50/30/20 etc.), já em reais |
-| `GET /api/financas/orcamentos/categorias` | Categorias que entram na distribuição, com grupo e rótulo |
-| `POST /api/financas/orcamentos/copiar` | Replica a distribuição de um mês em outro |
-| `GET /api/financas/orcamentos/historico?meses=` | Planejado x realizado mês a mês |
-| `DELETE /api/financas/orcamentos/{ano}/{mes}` | Remove o orçamento do mês |
-| `GET /api/financas/metas` | Metas de reserva, com progresso, ritmo e projeção |
-| `POST /api/financas/metas` \| `PUT /api/financas/metas/{id}` | Cria ou edita uma meta |
-| `POST /api/financas/metas/{id}/aportes` | Registra aporte avulso ou vinculado a um lançamento de Investimentos |
-| `GET /api/financas/metas/investimentos-disponiveis` | Lançamentos de investimento ainda não vinculados a nenhuma meta |
-| `GET /api/tasks/categories` | Lista categorias (usado pela web e pelo sync do Android) |
-| `PUT /api/tasks/categories/{id}` | Upsert idempotente (id gerado no cliente) |
-| `DELETE /api/tasks/categories/{id}` | Exclui categoria (sem tombstone — ver limitações em "Tarefas" acima) |
-| `GET /api/tasks/items` | Lista tarefas, inclusive as na lixeira (tombstone `deletedAt`) |
-| `PUT /api/tasks/items/{id}` | Upsert idempotente — mover pra lixeira/restaurar é um upsert com `deletedAt` setado/nulo |
-| `DELETE /api/tasks/items/{id}` | Exclui tarefa definitivamente (ação "excluir para sempre" da lixeira) |
 | `GET /api/health` | Health check |
 
 ## Desenvolvimento local

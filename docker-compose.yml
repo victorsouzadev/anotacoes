@@ -14,15 +14,6 @@ services:
       # fica desligado e o botão nem aparece.
       - Upscale__ApiKey=${REPLICATE_API_TOKEN:-}
       - Upscale__Model=${UPSCALE_MODEL:-nightmareai/real-esrgan}
-      # Importação de transações da AUVP Financeiro (Finanças). A chave é de
-      # cada usuário, cadastrada na tela.
-      - Auvp__BaseUrl=${AUVP_BASE_URL:-https://financas-api.auvp.com.br}
-      - Auvp__HeaderChave=${AUVP_HEADER_CHAVE:-Authorization}
-      - Auvp__PrefixoChave=${AUVP_PREFIXO_CHAVE:-Bearer }
-      - Auvp__IntervaloSincronizacaoHoras=${AUVP_INTERVALO_HORAS:-6}
-      # Proxy HTTP só para a AUVP, se o firewall dela barrar o IP da VPS
-      # (ex.: http://usuario:senha@host:porta). Vazio = conexão direta.
-      - Auvp__Proxy=${AUVP_PROXY:-}
       - Llm__Provider=${LLM_PROVIDER:-}
       # Commit que originou a imagem, devolvido pelo /api/health. Sem isso não há
       # como saber qual build está de pé sem entrar na VPS — e um deploy verde
@@ -42,8 +33,8 @@ services:
       - Sites__Porta=${SITES_PORTA:-8090}
       # Banco Postgres por site (serviço "postgres" abaixo). Sem senha, o recurso fica desligado.
       - Sites__PostgresSenha=${POSTGRES_SENHA:-}
-      # MCPs dos apps (/api/mcp/tarefas, /financas, /criativo) para o Segundo Cérebro e o Claude:
-      # o token é gerado na tela do Cérebro, que grava só o hash e o e-mail do dono neste arquivo.
+      # Token dos MCPs dos apps (que são dos plug-ins desde a spec 035), gerado na tela do Cérebro: o arquivo guarda só
+      # o hash e o e-mail do dono, e o núcleo repassa o hash aos plug-ins pelo /api/core/revogados.
       - Mcp__TokenFile=/access/apps-token.json
       # Precificação ligada ao painel da Viih Mimos: as fichas ficam no banco do painel.
       # VIIH_MIMOS_CHAVE é a HUB_CHAVE do .env do painel; só os e-mails de VIIH_MIMOS_USUARIOS usam.

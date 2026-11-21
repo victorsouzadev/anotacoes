@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
@@ -318,8 +319,10 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
                     SegredoServicoHash = Hash(segredo),
                 });
             db.Users.Add(new User { Id = "u-recifrar-" + linha, Email = linha + "@recifrar.test" });
-            db.ConfiguracoesAuvp.Add(new ConfiguracaoAuvp { Id = linha, UserId = "u-recifrar-" + linha, ChaveCifrada = protetor.Proteger("chave-auvp-clara") });
             await db.SaveChangesAsync();
+            // configuracoes_auvp é do plug-in financas desde a spec 035 (fora do modelo do núcleo): gravada direto.
+            await db.Database.ExecuteSqlAsync(
+                $"INSERT INTO configuracoes_auvp (Id, UserId, ChaveCifrada, AtualizadoEm) VALUES ({linha.ToString().ToUpperInvariant()}, {"u-recifrar-" + linha}, {protetor.Proteger("chave-auvp-clara")}, {DateTime.UtcNow})");
         }
         var pedido = new { tabela = "configuracoes_auvp", linha = linha.ToString() };
 

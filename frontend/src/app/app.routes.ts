@@ -43,11 +43,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/configuracoes/configuracoes.page').then((m) => m.ConfiguracoesPageComponent),
   },
   {
-    path: 'financas',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/financas/financas.page').then((m) => m.FinancasPageComponent),
-  },
-  {
     path: 'cerebro',
     canActivate: [authGuard],
     loadComponent: () => import('./features/cerebro/cerebro.page').then((m) => m.CerebroPageComponent),

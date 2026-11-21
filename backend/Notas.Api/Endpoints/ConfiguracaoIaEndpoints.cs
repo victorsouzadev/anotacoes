@@ -199,7 +199,7 @@ public static class ConfiguracaoIaEndpoints
                 return Results.Ok(new TestarConfiguracaoIaResponse(
                     false, $"Falha inesperada ao testar: {ex.GetType().Name} — {ex.Message}", null));
             }
-        }).RequireRateLimiting("financas-ia");
+        }).RequireRateLimiting("ia-teste");
     }
 
     /// <summary>De quem é a chave da ampliação de imagem (Replicate), usada pelo plug-in criativo (spec 034).</summary>
