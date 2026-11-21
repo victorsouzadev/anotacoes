@@ -142,12 +142,6 @@ public static class NotasApp
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
 
-        // Ferramenta "Anotação": aprovação das pré-anotações do Claude nos relatos do mestrado.
-        // Só liga com Anotacao__RunDir apontando para uma pasta local; na VPS fica desligada.
-        builder.Services.Configure<Notas.Api.Services.Anotacao.AnotacaoOptions>(
-            builder.Configuration.GetSection(Notas.Api.Services.Anotacao.AnotacaoOptions.SectionName));
-        builder.Services.AddSingleton<Notas.Api.Services.Anotacao.AnotacaoArquivos>();
-
         builder.Services.AddScoped<TransacaoExtractionService>();
         builder.Services.AddScoped<OrcamentoService>();
         builder.Services.AddScoped<MetaService>();
@@ -308,7 +302,6 @@ public static class NotasApp
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();
         app.MapSitesEndpoints();
-        app.MapAnotacaoEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
