@@ -7,19 +7,6 @@ on:
     branches-ignore: [main]
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      mobile: ${{ steps.filter.outputs.mobile }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            mobile:
-              - 'mobile/**'
-
   backend-build:
     runs-on: ubuntu-latest
     defaults:
@@ -146,25 +133,6 @@ jobs:
       - run: npm ci
       - run: npx ng build --configuration production
       - run: npx ng test
-
-  mobile-build:
-    needs: changes
-    if: needs.changes.outputs.mobile == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      # Sem "packages", a action pede o pacote "tools", que não existe mais no SDK atual, e falha.
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
-      - run: ./gradlew assembleDebug testDebugUnitTest --no-daemon
 
   mcp-build:
     runs-on: ubuntu-latest

@@ -94,13 +94,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Divida> Dividas => Set<Divida>();
     public DbSet<ProvisaoAnual> ProvisoesAnuais => Set<ProvisaoAnual>();
     public DbSet<FechamentoMes> FechamentosMes => Set<FechamentoMes>();
-    public DbSet<TaskCategory> TaskCategories => Set<TaskCategory>();
-    public DbSet<TaskItem> TaskItems => Set<TaskItem>();
-    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
-    public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
-    public DbSet<TaskProject> TaskProjects => Set<TaskProject>();
-    public DbSet<KanbanLane> KanbanLanes => Set<KanbanLane>();
-    public DbSet<TaskProjectMembership> TaskProjectMemberships => Set<TaskProjectMembership>();
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
@@ -383,78 +376,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.ChaveSufixo).HasMaxLength(8);
             e.HasIndex(c => c.UserId).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TaskCategory>(e =>
-        {
-            e.ToTable("tasks_categories");
-            e.Property(c => c.Name).IsRequired().HasMaxLength(100);
-            e.Property(c => c.ColorHex).IsRequired().HasMaxLength(20);
-            e.HasIndex(c => c.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TaskProject>(e =>
-        {
-            e.ToTable("tasks_projects");
-            e.Property(p => p.Name).IsRequired().HasMaxLength(100);
-            e.Property(p => p.ColorHex).IsRequired().HasMaxLength(20);
-            e.HasIndex(p => p.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<KanbanLane>(e =>
-        {
-            e.ToTable("tasks_kanban_lanes");
-            e.Property(l => l.Name).IsRequired().HasMaxLength(100);
-            e.Property(l => l.ColorHex).IsRequired().HasMaxLength(20);
-            e.HasIndex(l => new { l.ProjectId, l.Position });
-            e.HasOne<User>().WithMany().HasForeignKey(l => l.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskProject>().WithMany().HasForeignKey(l => l.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TaskItem>(e =>
-        {
-            e.ToTable("tasks_items");
-            e.Property(t => t.Title).IsRequired().HasMaxLength(300);
-            e.Property(t => t.Priority).HasConversion<string>().HasMaxLength(20);
-            e.Property(t => t.RecurrenceRule).HasMaxLength(100);
-            e.Property(t => t.LocationLabel).HasMaxLength(300);
-            e.Property(t => t.Subtasks).IsRequired();
-            e.Property(t => t.CategoryIds).IsRequired();
-            e.HasIndex(t => new { t.UserId, t.UpdatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TaskProjectMembership>(e =>
-        {
-            e.ToTable("tasks_project_memberships");
-            e.HasIndex(m => new { m.TaskId, m.ProjectId }).IsUnique();
-            e.HasIndex(m => new { m.ProjectId, m.Position });
-            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(m => m.TaskId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskProject>().WithMany().HasForeignKey(m => m.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<KanbanLane>().WithMany().HasForeignKey(m => m.KanbanLaneId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        b.Entity<TaskComment>(e =>
-        {
-            e.ToTable("tasks_comments");
-            e.Property(c => c.Text).IsRequired().HasMaxLength(2000);
-            e.HasIndex(c => new { c.TaskId, c.CreatedAt });
-            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(c => c.TaskId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TaskAttachment>(e =>
-        {
-            e.ToTable("tasks_attachments");
-            e.Property(a => a.FileName).IsRequired().HasMaxLength(255);
-            e.Property(a => a.ContentType).IsRequired().HasMaxLength(150);
-            e.Property(a => a.DataBase64).IsRequired();
-            e.HasIndex(a => a.TaskId);
-            e.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<TaskItem>().WithMany().HasForeignKey(a => a.TaskId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

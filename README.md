@@ -17,10 +17,10 @@ inicial, sem exigir outro login nem outro deploy.
   **metas de reserva** e exportação em CSV. Provedor, modelo e chave de API são
   configuráveis pela própria interface, em `/configuracoes`.
 - **Tarefas** — tarefas com subtarefas, categorias, prioridade, recorrência,
-  pomodoro e estatísticas. Versão web (`frontend/src/app/features/tasks`) **e**
-  app Android nativo ([`mobile/`](mobile/), Kotlin/Compose, local-first) — o app
+  pomodoro e estatísticas. Plug-in [hub-tarefas](https://github.com/victorsouzadev/hub-tarefas) desde a spec 035: tela em `/tarefas` **e**
+  app Android nativo (`mobile/app` de lá, Kotlin/Compose, local-first) — o app
   funciona 100% offline e, opcionalmente, sincroniza com a mesma conta do hub pra
-  ver as mesmas tarefas no navegador. Ver [mobile/README.md](mobile/README.md).
+  ver as mesmas tarefas no navegador. Ver o README do hub-tarefas.
 - **Dieta** (plug-in [hub-dieta](https://github.com/victorsouzadev/hub-dieta), spec 035) — diário alimentar com a tabela TACO e código de barras (Open Food
   Facts), metas de calorias/macros/água, peso, plano alimentar, fotos de refeição e
   de progresso, gamificação (XP, níveis, sequências, conquistas, desafio semanal) e
@@ -66,7 +66,7 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 | Editor de notas | Canvas 2D próprio (não SVG/DOM), suavização de traço via `perfect-freehand` |
 | Gráficos (Finanças, Tarefas) | Chart.js |
 | Armazenamento local (Notas) | IndexedDB via `idb` (local-first, funciona offline) |
-| App Android (Tarefas) | Kotlin + Jetpack Compose, Room (SQLite) local-first — ver [mobile/README.md](mobile/README.md) |
+| App Android (Tarefas) | Kotlin + Jetpack Compose, Room (SQLite) local-first — no repositório hub-tarefas |
 | Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/notes`, `/api/folders`, `/api/financas/*`, `/api/tasks/*`) |
 | Extração de lançamentos (Finanças) | Anthropic Claude via API, com extrator heurístico local como fallback sem chave configurada |
 | Banco | SQLite (EF Core 9), modo WAL — uma tabela por entidade, compartilhando o mesmo arquivo/contexto |
@@ -242,6 +242,8 @@ A primeira visita abre um **tutorial guiado** pela ferramenta; o botão "?" no t
 reabre quando quiser.
 
 ### Tarefas
+
+> Desde a spec 035 é o plug-in [hub-tarefas](https://github.com/victorsouzadev/hub-tarefas) (tela em `/tarefas`, `/tasks` redireciona; API `/api/tasks` e MCP `/api/mcp/tarefas` como rotas legadas). O texto abaixo descreve o comportamento, que não mudou.
 
 Web (`frontend/src/app/features/tasks`) **e** [app Android nativo](mobile/) — as
 duas pontas conversam com o mesmo backend e, quando logadas na mesma conta, com os
@@ -632,7 +634,6 @@ notas-vps/
 │   ├── NotasApp.cs                   # a aplicação inteira (JWT, forwarded headers, cada ferramenta do núcleo)
 │   ├── Data/AppDbContext.cs          # EF Core: User, RefreshToken, Folder, Note (Notas)
 │   ├── Data/FinancasModels.cs        # EF Core: Transacao, Orcamento, OrcamentoItem + enums (Finanças)
-│   ├── Data/TasksModels.cs           # EF Core: TaskCategory, TaskItem (Tarefas — web + Android)
 │   ├── Endpoints/                    # Auth, Notes, Folders, Financas, Orcamento, Tasks, Sites (Minimal APIs, um arquivo por ferramenta)
 │   ├── Services/Sites/               # Publicar: extração do ZIP, disco (versões, link current, backup), fila de publicação
 │   ├── Services/Seguranca/           # cifra dos segredos guardados no banco (chaves de API)
@@ -660,20 +661,13 @@ notas-vps/
 │       │   ├── text-overlay.ts       # edição de texto/sticky (textarea sobreposto)
 │       │   ├── checklist-overlay.ts  # edição de checklist
 │       │   └── editor.page.ts        # página do editor, páginas múltiplas, autosave
-│       ├── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
-│       │                             # orçamento, metas de reserva e histórico
-│       └── tasks/                    # lista, categorias, pomodoro, estatísticas, lixeira
+│       └── financas/                 # lançamento por texto ou arquivo, dashboard, lista editável,
+│                                     # orçamento, metas de reserva e histórico
 ├── pacotes/                          # pacotes dos plug-ins (032): ver pacotes/README.md
 │   ├── Hub.Plugin.Sdk/               # login pelo JWKS, MCP, IA, segredos, banco compartilhado e migração de base (031)
 │   ├── grafite-ui/                   # visual, <grafite-barra> e token do plug-in
 │   └── plugin.schema.json            # JSON Schema do plugin.json (contrato 1)
 ├── plugins.lock                      # plug-ins no ar (id: imagem@commit), lido pelo deployer (029)
-├── mobile/                           # app Android nativo (Kotlin/Compose) da ferramenta Tarefas
-│   ├── app/src/main/java/com/organizador/app/
-│   │   ├── data/sync/                # sincronização completa com o backend (mesma conta do hub)
-│   │   ├── data/remote/AuthApi.kt    # login/registro/refresh contra /api/auth/*
-│   │   └── ...                       # resto do app (Room, Compose, reminders, widget etc.)
-│   └── README.md
 ├── deployer/                         # Publicar: único serviço com docker.sock; cria os containers site-<slug>
 ├── exemplos/publicar/recados/        # app de exemplo (front + API C# + SQLite) e o contrato para publicar
 ├── docs/poc-multi-app/DISCOVERY.md   # desenho da ferramenta Publicar

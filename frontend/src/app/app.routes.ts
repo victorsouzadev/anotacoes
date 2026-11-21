@@ -48,57 +48,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/financas/financas.page').then((m) => m.FinancasPageComponent),
   },
   {
-    path: 'tasks',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/list/tasks-list.page').then((m) => m.TasksListPageComponent),
-  },
-  {
-    path: 'tasks/categorias',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/categories/tasks-categories.page').then((m) => m.TasksCategoriesPageComponent),
-  },
-  {
-    path: 'tasks/pomodoro',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/pomodoro/tasks-pomodoro.page').then((m) => m.TasksPomodoroPageComponent),
-  },
-  {
-    path: 'tasks/foco/:activityId',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/foco/tasks-foco.page').then((m) => m.TasksFocoPageComponent),
-  },
-  {
-    path: 'tasks/estatisticas',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/statistics/tasks-statistics.page').then((m) => m.TasksStatisticsPageComponent),
-  },
-  {
-    path: 'tasks/lixeira',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/trash/tasks-trash.page').then((m) => m.TasksTrashPageComponent),
-  },
-  {
-    path: 'tasks/projetos',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/projects/tasks-projects.page').then((m) => m.TasksProjectsPageComponent),
-  },
-  {
-    path: 'tasks/projetos/:id',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/projects/project-board.page').then((m) => m.ProjectBoardPageComponent),
-  },
-  { path: 'tasks/kanban', redirectTo: 'tasks/projetos' },
-  {
-    path: 'tasks/calendario',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/calendar/tasks-calendar.page').then((m) => m.TasksCalendarPageComponent),
-  },
-  {
-    path: 'tasks/ajuda',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/tasks/help/tasks-help.page').then((m) => m.TasksHelpPageComponent),
-  },
-  {
     path: 'cerebro',
     canActivate: [authGuard],
     loadComponent: () => import('./features/cerebro/cerebro.page').then((m) => m.CerebroPageComponent),

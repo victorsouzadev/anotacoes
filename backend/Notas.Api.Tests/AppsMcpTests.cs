@@ -36,9 +36,6 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         using var scope = _app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var uid = (await db.Users.FirstAsync(u => u.Email == _email)).Id;
-        db.TaskItems.AddRange(
-            new TaskItem { Id = Guid.NewGuid().ToString(), UserId = uid, Title = "Pagar o IPVA", DueDate = DateTime.UtcNow.Date.AddDays(-2), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-            new TaskItem { Id = Guid.NewGuid().ToString(), UserId = uid, Title = "Ler o livro do clube", IsCompleted = true, CompletedAt = DateTime.UtcNow.AddHours(-1), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
         var hoje = scope.ServiceProvider.GetRequiredService<Notas.Api.Services.Financas.FinancasClock>().Hoje();
         db.Transacoes.Add(new Transacao
         {
@@ -80,7 +77,7 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     public async Task Sem_arquivo_e_sem_token_de_Conexoes_recusa()
     {
         if (File.Exists(_tokenFile)) File.Delete(_tokenFile);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("financas", Listar)).Status);
     }
 
     [Fact]
@@ -93,12 +90,12 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         var r = await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "apps" })).Content.ReadFromJsonAsync<JsonElement>();
         var token = r.GetProperty("token").GetString()!;
 
-        var (status, body) = await Rpc("tarefas", Listar, token);
+        var (status, body) = await Rpc("financas", Listar, token);
         Assert.Equal(HttpStatusCode.OK, status);
-        Assert.Contains("tarefas_listar", body);
+        Assert.Contains("financas_resumo", body);
 
         Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync($"/api/core/mcp-tokens/{r.GetProperty("id").GetString()}")).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar, token)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("financas", Listar, token)).Status);
     }
 
     [Fact]
@@ -127,38 +124,27 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     public async Task Token_errado_ou_ausente_401()
     {
         GravarToken(_email);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar, "outro-token")).Status);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar, null)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("financas", Listar, "outro-token")).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("financas", Listar, null)).Status);
     }
 
     [Fact]
-    public async Task Cada_rota_so_mostra_as_ferramentas_do_grupo()
+    public async Task So_a_rota_das_financas_fica_no_nucleo()
     {
         GravarToken(_email);
-        var (status, tarefas) = await Rpc("tarefas", Listar);
+        var (status, financas) = await Rpc("financas", Listar);
         Assert.Equal(HttpStatusCode.OK, status);
-        Assert.Contains("\"tarefas_resumo\"", tarefas);
-        Assert.DoesNotContain("\"financas_resumo\"", tarefas);
-
-        var financas = (await Rpc("financas", Listar)).Body;
         Assert.Contains("\"financas_resumo_mes\"", financas);
-        Assert.DoesNotContain("\"tarefas_", financas);
 
-        // Specs 034/035: criativo, treino e dieta são dos plug-ins (o Caddy manda essas URLs para eles); aqui não existem mais.
-        Assert.Equal(HttpStatusCode.NotFound, (await Rpc("criativo", Listar)).Status);
-        Assert.Equal(HttpStatusCode.NotFound, (await Rpc("treino", Listar)).Status);
-        Assert.Equal(HttpStatusCode.NotFound, (await Rpc("dieta", Listar)).Status);
-        Assert.Equal(HttpStatusCode.NotFound, (await Rpc("outro", Listar)).Status);
+        // Specs 034/035: criativo, treino, dieta e tarefas são dos plug-ins (o Caddy manda essas URLs para eles).
+        foreach (var grupo in new[] { "criativo", "treino", "dieta", "tarefas", "outro" })
+            Assert.Equal(HttpStatusCode.NotFound, (await Rpc(grupo, Listar)).Status);
     }
 
     [Fact]
-    public async Task Resumos_trazem_os_dados_do_dono_do_cerebro()
+    public async Task Resumo_traz_os_dados_do_dono_do_cerebro()
     {
         GravarToken(_email);
-        var tarefas = (await Rpc("tarefas", Chamar("tarefas_resumo"))).Body;
-        Assert.Contains("Pagar o IPVA", tarefas);
-        Assert.Contains("Ler o livro do clube", tarefas);
-
         var financas = (await Rpc("financas", Chamar("financas_resumo"))).Body;
         Assert.Contains("Saldo", financas);
         Assert.Contains("150,50", financas);
@@ -169,6 +155,6 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
     public async Task Email_sem_conta_no_hub_403()
     {
         GravarToken("ninguem@example.com");
-        Assert.Equal(HttpStatusCode.Forbidden, (await Rpc("tarefas", Listar)).Status);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Rpc("financas", Listar)).Status);
     }
 }
