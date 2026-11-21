@@ -73,13 +73,10 @@ Os posts usam a IA configurada na sua conta do hub (Configurações). As ferrame
 com o painel da Viih Mimos (repositório `ViihMimos`, `admin/`) e só ficam ativas com as variáveis
 `VIIH_PAINEL_*` abaixo. Nada vai ao ar sem `viih_site_publicar`.
 
-O catálogo dos modelos do editor fica em `src/viih/modelos.ts`, gerado a partir do frontend. Um
-teste do frontend (`social-mcp-catalog.spec.ts`) falha se ele ficar desatualizado; para regerar:
-
-```bash
-cd frontend
-UPDATE_MCP_CATALOG=1 npx ng test --watch=false --include=src/app/features/imagem/social-mcp-catalog.spec.ts
-```
+O catálogo dos modelos do editor fica em `src/viih/modelos.ts`. Ele foi gerado a partir dos modelos do Editor de
+Imagens, que desde a spec 034 mora no plug-in congelado [hub-criativo](https://github.com/victorsouzadev/hub-criativo):
+o arquivo fica fixo aqui. Se um modelo do editor mudar lá, copie `describeForAi` de cada `SOCIAL_TEMPLATES` para cá
+(o gerador antigo, `social-mcp-catalog.spec.ts`, está no histórico do núcleo antes da 034).
 
 ## Configuração
 
