@@ -41,7 +41,7 @@ app.MapGet(manifesto.Rota + "/api/eu", (HttpContext c) => c.UsuarioId()).Require
 - **Login**: só ES256 das chaves do JWKS do núcleo, `aud` = id do plug-in. O token do hub (`aud=notas-vps`) também
   vale enquanto `HUB_ACEITAR_AUDIENCIA_LEGADA` não for `false` (apps Android antigos).
 - **Banco**: `UsarBancoDoHub` usa o `notas.db` montado em `/data/db`, histórico `__EFMigrationsHistory_<id>`, WAL e
-  `busy_timeout=5000`. `ReferenciarUsuarios()` mapeia `users` só com o `Id`. Num teste,
+  `busy_timeout=5000`, sem pool de conexões e com nova tentativa quando o banco responde ocupado (1.4.0; transação explícita do EF vai dentro de `CreateExecutionStrategy().ExecuteAsync`). `ReferenciarUsuarios()` mapeia `users` só com o `Id`. Num teste,
   `Dados.TabelasForaDoDono(db.Model, manifesto)` tem de dar vazio.
 - **Base de migração** (ferramenta extraída, tabelas que já existem): `dotnet ef migrations add Base`, troque a classe
   base para `MigracaoDeBase` e apague o `Up`/`Down` gerados (não compilam). Chame `db.MigrarComBase()` em vez de
