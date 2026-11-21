@@ -310,10 +310,10 @@ public sealed class OAuthDoNucleo(AppDbContext db, TokenService tokens, ChavesDe
 
     /// <summary>Para o plug-in (60 s): jti revogados ainda válidos e os tokens MCP estáticos ativos dele (só hashes).</summary>
     /// <summary>
-    /// Plug-ins que eram MCPs dos apps no núcleo (spec 034): continuam aceitando o token "apps" de Conexões e o
+    /// Plug-ins que eram MCPs dos apps no núcleo (specs 034 e 035): continuam aceitando o token "apps" de Conexões e o
     /// arquivo antigo da tela do Cérebro, para os conectores e a rotina dos apps não quebrarem na extração.
     /// </summary>
-    public static readonly string[] HerdamTokenDosApps = ["treino", "criativo"];
+    public static readonly string[] HerdamTokenDosApps = ["treino", "criativo", "dieta", "tarefas", "financas"];
 
     /// <summary>Para o plug-in (60 s): jti revogados ainda válidos e os tokens MCP estáticos ativos dele (só hashes).</summary>
     public async Task<object> Revogados(string plugin, (string Hash, string Usuario, string Email)? tokenDoArquivo = null)
