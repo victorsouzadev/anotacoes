@@ -204,14 +204,10 @@ jobs:
             if grep -q '^COMPOSE_PROFILES=.*publicar' .env 2>/dev/null; then
               docker compose -f docker-compose.yml -f docker-compose.vps.yml build deployer
             fi
-            # Ferramenta "Segundo Cérebro": idem, só com o profile "cerebro" ligado.
+            # Segundo Cérebro: plug-in do deployer (spec 033). O profile "cerebro" liga só o WebDAV, que roda como
+            # root sem capacidades, igual ao plug-in: a pasta do vault é do root.
             if grep -q '^COMPOSE_PROFILES=.*cerebro' .env 2>/dev/null; then
-              # Os containers rodam como CEREBRO_PUID:CEREBRO_PGID (padrão 1000): a pasta precisa ser deles.
-              uid=$(grep -oP '^CEREBRO_PUID=\K[0-9]+' .env || echo 1000)
-              gid=$(grep -oP '^CEREBRO_PGID=\K[0-9]+' .env || echo 1000)
-              mkdir -p data/cerebro/webdav data/cerebro/hub/access
-              chown -R "$uid:$gid" data/cerebro
-              docker compose -f docker-compose.yml -f docker-compose.vps.yml build cerebro
+              mkdir -p data/plugins/dados/cerebro/vault data/plugins/dados/cerebro/hub
             fi
             # MCP de operação da VPS: só com o profile "ops" ligado.
             if grep -q '^COMPOSE_PROFILES=.*ops' .env 2>/dev/null; then

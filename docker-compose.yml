@@ -157,57 +157,22 @@ services:
       - default
       - sites
 
-  # Ferramenta "Segundo Cérebro" (cerebro/README.md): vault do Obsidian na VPS, com
-  # captura por API, Inbox classificada pelo Claude e MCP. O Caddy publica a API em
-  # /cerebro/* e o WebDAV do Obsidian em /dav/*. Atrás do profile "cerebro": ligue
-  # com COMPOSE_PROFILES=...,cerebro no .env. Os .md do vault são a fonte da verdade;
-  # data/cerebro/hub (busca, fila, git) é derivado e pode ser recriado.
-  cerebro:
-    build: ./cerebro
-    profiles: ["cerebro"]
-    restart: unless-stopped
-    user: "${CEREBRO_PUID:-1000}:${CEREBRO_PGID:-1000}"
-    environment:
-      - Hub__VaultPath=/data/webdav/${CEREBRO_VAULT:-Cerebro}
-      - Hub__DataPath=/data/hub
-      - Hub__TimeZone=${TZ:-America/Belem}
-      - Hub__McpToken=${CEREBRO_MCP_TOKEN:-}
-      - Hub__ApiKeys__celular=${CEREBRO_API_KEY_CELULAR:-}
-      - Hub__ApiKeys__whatsapp=${CEREBRO_API_KEY_WHATSAPP:-}
-      - Hub__ApiKeys__navegador=${CEREBRO_API_KEY_NAVEGADOR:-}
-      - Hub__Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
-      - Hub__Anthropic__Model=${CEREBRO_MODELO:-claude-haiku-5-5}
-      # Classificação pela OpenRouter: a mesma chave das Finanças. A tela do Cérebro pode trocar
-      # provedor, modelo e chave (aba Configurações), sem mexer no .env.
-      - Hub__OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
-      - Hub__Transcription__ApiKey=${CEREBRO_OPENAI_API_KEY:-}
-      # Busca semântica (spec 027). Sem ela, usa a chave da transcrição quando é da OpenAI.
-      - Hub__Embeddings__ApiKey=${CEREBRO_EMBEDDINGS_API_KEY:-}
-      - Hub__AutoMoveLowRisk=${CEREBRO_AUTO_MOVER:-false}
-      # App Casa (serviço à parte): o mesmo MCP_TOKEN do casa-api. Vazio = a Casa fica fora da rotina dos apps.
-      - Hub__Casa__McpUrl=${CASA_MCP_URL:-https://casa.vsitefy.com.br/mcp}
-      - Hub__Casa__McpToken=${CASA_MCP_TOKEN:-}
-      # Login único do hub: o mesmo JWT_SECRET do serviço "api", e só estes e-mails.
-      - Hub__Web__JwtSecret=${JWT_SECRET:-}
-      - Hub__Web__Jwks=http://api:8080/.well-known/jwks.json
-      - Hub__Web__Usuarios=${CEREBRO_USUARIOS:-}
-      # Login do WebDAV inicial. A tela (aba Conectar) pode trocar; aí este deixa de valer.
-      - Hub__WebdavUser=${CEREBRO_WEBDAV_USER:-}
-      - Hub__WebdavPass=${CEREBRO_WEBDAV_PASS:-}
-    volumes:
-      - ./data/cerebro/webdav:/data/webdav
-      - ./data/cerebro/hub:/data/hub
-    mem_limit: 256m
+  # O Segundo Cérebro roda como plug-in (spec 033): o deployer sobe "plugin-cerebro" a partir do plugins.lock,
+  # com o vault em data/plugins/dados/cerebro/vault e o estado em data/plugins/dados/cerebro/hub.
+  # A configuração dele (tokens, usuários) fica em data/plugins/env/cerebro.env, fora do git.
 
   # WebDAV que o plugin Remotely Save do Obsidian usa para sincronizar o vault.
-  # O Remotely Save grava em /dav/<CEREBRO_VAULT>, que é a pasta que o "cerebro" lê.
-  # Sem senha própria: o Caddy confere o login no "cerebro" (forward_auth) antes de repassar,
+  # O Remotely Save grava em /dav/<CEREBRO_VAULT>, que é a pasta que o plug-in do Cérebro lê.
+  # Sem senha própria: o Caddy confere o login no plug-in (forward_auth) antes de repassar,
   # para a senha poder ser trocada pela tela. Não publica porta: só o Caddy o alcança.
+  # Roda como root sem capacidades, como o plug-in: o que um grava o outro consegue editar.
   cerebro-webdav:
     image: rclone/rclone:1.71.1
     profiles: ["cerebro"]
     restart: unless-stopped
-    user: "${CEREBRO_PUID:-1000}:${CEREBRO_PGID:-1000}"
+    user: "0:0"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     environment:
       - RCLONE_CONFIG=/tmp/rclone.conf
     command:
@@ -216,11 +181,11 @@ services:
       - /data
       - --addr=:8080
       - --baseurl=/dav
-      # O "cerebro" também escreve no disco: sem isso o WebDAV demoraria minutos para ver as mudanças.
+      # O plug-in também escreve no disco: sem isso o WebDAV demoraria minutos para ver as mudanças.
       - --dir-cache-time=2s
       - --poll-interval=0
     volumes:
-      - ./data/cerebro/webdav:/data
+      - ./data/plugins/dados/cerebro/vault:/data
     mem_limit: 128m
 
   # MCP de operação da VPS (ops/README.md): shell de root no HOST via nsenter, logs e
