@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/victorsouzadev/anotacoes/pacotes/contrato-1/plugin.schema.json",
+  "title": "plugin.json (contrato 1)",
+  "description": "Manifesto de um plug-in do hub (spec 029). O deployer e o SDK conferem as mesmas regras; as que cruzam campos (rota = /<id>, health e mcp sob a rota, conflito com outros plug-ins) ficam no código deles.",
+  "type": "object",
+  "required": [
+    "id",
+    "nome",
+    "icone",
+    "contrato",
+    "rota",
+    "porta",
+    "health",
+    "tabelas"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,30}$"
+    },
+    "nome": {
+      "type": "string",
+      "minLength": 1
+    },
+    "icone": {
+      "type": "string",
+      "minLength": 1
+    },
+    "descricao": {
+      "type": "string"
+    },
+    "contrato": {
+      "type": "integer",
+      "enum": [
+        0,
+        1
+      ]
+    },
+    "rota": {
+      "type": "string",
+      "pattern": "^/[a-z][a-z0-9-]{1,30}$"
+    },
+    "porta": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "health": {
+      "type": "string",
+      "pattern": "^/[a-z][a-z0-9-]{1,30}/"
+    },
+    "mcp": {
+      "type": "string",
+      "pattern": "^/[a-z][a-z0-9-]{1,30}/"
+    },
+    "rotasLegadas": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/[a-z0-9][a-z0-9_-]*(\\.[a-z0-9_-]+)*(/[a-z0-9][a-z0-9_-]*(\\.[a-z0-9_-]+)*)*$",
+        "not": {
+          "pattern": "^/(api/(auth|core|plugins|sistema)|autorizar|\\.well-known|ops|sites)(/|$)"
+        }
+      }
+    },
+    "tabelas": {
+      "type": "object",
+      "required": [
+        "prefixo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "prefixo": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*_$",
+          "not": {
+            "const": "core_"
+          }
+        },
+        "legadas": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "^core_"
+            }
+          }
+        }
+      }
+    },
+    "usaIa": {
+      "type": "boolean"
+    },
+    "dados": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/data/[a-z][a-z0-9-]{0,30}$",
+        "not": {
+          "enum": [
+            "/data/db",
+            "/data/core"
+          ]
+        }
+      }
+    },
+    "android": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

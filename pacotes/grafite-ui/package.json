@@ -1,6 +1,6 @@
 {
   "name": "@grafite/ui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Visual e sessão do hub notas-vps para os plug-ins (spec 032). Servido pelo hub em /grafite/.",
   "type": "module",
   "private": true,

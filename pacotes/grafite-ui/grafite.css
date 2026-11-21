@@ -12,13 +12,4 @@ html, body { margin: 0; font-family: var(--font-body); background: var(--bg); co
 h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 button, input, textarea, select { font-family: inherit; color: inherit; }
 
-/* <grafite-barra> */
-.grafite-barra { display: flex; align-items: center; gap: 14px; padding: 12px 24px; background: var(--surface);
-  border-bottom: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
-.grafite-barra a { text-decoration: none; color: var(--text-muted, var(--text)); }
-.grafite-barra a[aria-current="page"] { color: var(--text); font-weight: 600; }
-.grafite-barra a.off { opacity: .5; }
-.grafite-barra .marca { font-family: var(--font-heading); font-size: 17px; color: var(--text); }
-.grafite-barra .itens { display: flex; gap: 12px; flex: 1; flex-wrap: wrap; }
-.grafite-barra .conta { color: var(--text-muted, var(--text)); font-size: 13px; }
-.grafite-barra button { background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+/* <grafite-barra>: o estilo vem com o próprio componente (grafite-barra.js), para o hub e os plug-ins. */

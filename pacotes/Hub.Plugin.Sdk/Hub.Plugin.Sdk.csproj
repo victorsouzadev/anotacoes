@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageId>Hub.Plugin.Sdk</PackageId>
     <!-- Mudar a versão publica um pacote novo (.github/workflows/pacotes.yml). -->
-    <Version>1.0.0</Version>
-    <Description>SDK dos plug-ins do hub notas-vps: login do núcleo (JWKS), health, banco compartilhado e segredos.</Description>
+    <Version>1.1.0</Version>
+    <Description>SDK dos plug-ins do hub notas-vps: login do núcleo (JWKS), health, banco compartilhado, MCP, IA e segredos.</Description>
     <Authors>victorsouzadev</Authors>
     <RepositoryUrl>https://github.com/victorsouzadev/anotacoes</RepositoryUrl>
   </PropertyGroup>

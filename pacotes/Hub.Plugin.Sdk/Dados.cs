@@ -19,7 +19,14 @@ public static class Dados
     /// </summary>
     public static DbContextOptionsBuilder UsarBancoDoHub(this DbContextOptionsBuilder o, OpcoesDoHub hub) =>
         o.UseSqlite($"Data Source={hub.Banco};Default Timeout=5", s => s.MigrationsHistoryTable("__EFMigrationsHistory_" + hub.Id))
-            .AddInterceptors(new ConexaoDoHub());
+            .AddInterceptors(new ConexaoDoHub(), new OcupadoDoHub());
+
+    /// <summary>
+    /// Quantas vezes o banco respondeu <c>SQLITE_BUSY</c>/<c>SQLITE_LOCKED</c> mesmo depois do <c>busy_timeout</c>
+    /// (spec 031, SC-003). Cada ocorrência também vai para o log com "SQLITE_BUSY", para contar com grep.
+    /// </summary>
+    public static long Ocupado => Interlocked.Read(ref _ocupado);
+    private static long _ocupado;
 
     /// <summary>Mapeia <c>users</c> só com o Id, fora das migrações do plug-in.</summary>
     public static void ReferenciarUsuarios(this ModelBuilder b) =>
@@ -41,6 +48,28 @@ public static class Dados
                         && !(m.Tabelas.Legadas ?? []).Contains(n, StringComparer.OrdinalIgnoreCase))
             .Distinct().Order().ToList();
 
+    internal static bool EhOcupado(Exception e) =>
+        e is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 5 or 6 }
+        || e.InnerException is { } i && EhOcupado(i);
+
+    private sealed class OcupadoDoHub : DbCommandInterceptor
+    {
+        public override void CommandFailed(DbCommand c, CommandErrorEventData e) => Contar(e.Exception);
+
+        public override Task CommandFailedAsync(DbCommand c, CommandErrorEventData e, CancellationToken ct = default)
+        {
+            Contar(e.Exception);
+            return Task.CompletedTask;
+        }
+
+        private static void Contar(Exception e)
+        {
+            if (!EhOcupado(e)) return;
+            var n = Interlocked.Increment(ref _ocupado);
+            Console.Error.WriteLine($"warn: Hub.Plugin.Dados[0] SQLITE_BUSY: banco do hub ocupado depois de 5 s (ocorrência {n} desde a subida)");
+        }
+    }
+
     private sealed class ConexaoDoHub : DbConnectionInterceptor
     {
         public override void ConnectionOpened(DbConnection c, ConnectionEndEventData e) => Pragmas(c);
@@ -54,7 +83,10 @@ public static class Dados
         private static void Pragmas(DbConnection c)
         {
             using var cmd = c.CreateCommand();
-            cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;";
+            // O EF abre conexões só de leitura (Mode=ReadOnly) para saber se o banco existe: nelas não dá para
+            // trocar o journal_mode, e o banco do hub já está em WAL.
+            var soLeitura = c.ConnectionString.Contains("Mode=ReadOnly", StringComparison.OrdinalIgnoreCase);
+            cmd.CommandText = (soLeitura ? "" : "PRAGMA journal_mode=WAL; ") + "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;";
             cmd.ExecuteNonQuery();
         }
     }

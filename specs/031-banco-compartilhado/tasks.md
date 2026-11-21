@@ -8,7 +8,7 @@
 
 ## Phase 3: User Story 1 - Extrair sem migrar dados (P1) 🎯 MVP
 
-- [ ] T004 [US1] Gerador de migração de base (`Up` vazio) e conferência modelo × banco antes de registrar, no SDK
+- [x] T004 [US1] Gerador de migração de base (`Up` vazio) e conferência modelo × banco antes de registrar, no SDK
 - [x] T005 [US1] Receita de extração em `DEPLOY.md`: tirar entidades do `AppDbContext` com migração vazia, base no plug-in, ordem de deploy
 - [ ] T006 [US1] Ensaio com o plug-in de exemplo sobre uma cópia do banco de produção
 
@@ -23,10 +23,10 @@
 
 ## Phase 6: User Story 4 - Concorrência (P2)
 
-- [ ] T010 [US4] `scripts/carga-sqlite.sh` (3 processos) e contador de `SQLITE_BUSY` no log do SDK
+- [x] T010 [US4] `scripts/carga-sqlite.sh` (3 processos) e contador de `SQLITE_BUSY` no log do SDK
 
 ## Phase 7: Polish
 
 - [x] T011 [P] `SEGREDO_PLUGIN` no SDK (AES-GCM) e em `.env.example`
-- [ ] T012 [P] Constituição v2.0.0 já cita a 031; README "Estrutura do projeto"
+- [x] T012 [P] Constituição v2.0.0 já cita a 031; README "Estrutura do projeto"
 - [ ] T013 CI inteira verde
