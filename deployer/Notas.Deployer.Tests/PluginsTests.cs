@@ -79,6 +79,26 @@ public class PluginsTests
     }
 
     [Fact]
+    public void Env_do_plugin_entra_com_env_file_so_quando_existe()
+    {
+        var m = M("cerebro");
+        var e = new EntradaLock("cerebro", "ghcr.io/x/hub-cerebro", "abc1234", true);
+        var pasta = Path.Combine(Path.GetTempPath(), "env-" + Guid.NewGuid().ToString("N"));
+        var cfg = new ConfiguracaoPlugins { Pasta = pasta, BancoNoHost = "/opt/h/data/db" };
+        var s = new SincronizadorDePlugins(cfg, (_, _) => Task.FromResult(new Resultado(0, "", "")), new HttpClient(), NullLogger.Instance);
+
+        Assert.DoesNotContain("--env-file", s.ArgumentosRun(e, m, "s"));
+
+        Directory.CreateDirectory(cfg.PastaEnv);
+        File.WriteAllText(cfg.ArquivoEnv("cerebro"), "Hub__McpToken=x\n");
+        var a = s.ArgumentosRun(e, m, "s");
+        var i = a.IndexOf("--env-file");
+        Assert.Equal(Path.Combine(pasta, "env", "cerebro.env"), a[i + 1]);
+        Assert.DoesNotContain(Path.Combine(pasta, "env", "outro.env"), a);
+        Assert.Equal(e.Referencia, a[^1]);
+    }
+
+    [Fact]
     public void Contrato_anterior_ainda_vale() => Assert.Empty(Plugins.Validar(M(contrato: 0), "dieta", []));
 
     [Fact]

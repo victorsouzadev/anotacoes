@@ -423,11 +423,20 @@ ao núcleo (`/api/core/oauth/importar`); o `hub.db` fica intacto e ganha o marca
 (`/api/core/ia`, lida quando o usuário abre a tela); sem chave lá, vale a que o Cérebro já tinha. Sem `index.db`, o índice
 é reconstruído em segundo plano e a busca avisa "indexando" (`/cerebro/health` mostra `indexando`).
 
+Configuração própria de um plug-in (tokens, listas de usuários) vai em `data/plugins/env/<id>.env` (dono root, modo 600,
+fora do git): o deployer passa o arquivo com `--env-file` quando ele existe. As `HUB_*` do núcleo vêm por `-e` e vencem o arquivo.
+O plug-in roda como `0:0` sem capacidades, então só escreve no que é do root: as pastas de `dados` precisam ter dono root.
+
 Troca (033, T009 e T010), sempre com confirmação:
-1. Ensaio com uma cópia da produção (`data/db/notas.db` e `data/cerebro/`) numa pasta à parte, rodando a imagem nova.
-2. PR com a linha `cerebro: ghcr.io/victorsouzadev/hub-cerebro@<commit>` no `plugins.lock` e sem o serviço `cerebro` no
-   `docker-compose.yml` (o `cerebro-webdav` fica). Montar no plug-in `data/cerebro/webdav` em `/data/vault` e `data/cerebro/hub` em `/data/hub`.
-3. Depois do deploy: `cat data/plugins/estado.json`, `curl http://127.0.0.1:8090/cerebro/health` e o smoke test
+1. Ensaio com uma cópia da produção (`data/db/notas.db` e `data/cerebro/`) numa pasta à parte, rodando a imagem nova
+   como o deployer roda (`--user 0:0 --cap-drop ALL`). Feito em 20/11/2026 com `c71ba6f`: health, tela, `/capturar`, MCP e busca ok.
+2. Na VPS: parar `cerebro`, mover `data/cerebro/webdav` para `data/plugins/dados/cerebro/vault` e `data/cerebro/hub` para
+   `data/plugins/dados/cerebro/hub`, `chown -R 0:0` nas duas, e gravar `data/plugins/env/cerebro.env` com as `Hub__*` do
+   serviço antigo (com `Hub__VaultPath=/data/vault/Cerebro` e `Hub__DataPath=/data/hub`).
+3. PR com a linha `cerebro: ghcr.io/victorsouzadev/hub-cerebro@<commit>` no `plugins.lock`, sem o serviço `cerebro` no
+   `docker-compose.yml`, e o `cerebro-webdav` montando a pasta nova com `user: "0:0"` e `cap_drop: [ALL]` (assim o que
+   ele grava é do root e o plug-in consegue editar).
+4. Depois do deploy: `cat data/plugins/estado.json`, `curl http://127.0.0.1:8090/cerebro/health` e o smoke test
    (`cerebro/scripts/smoke-test.sh`). Voltar é comentar a linha do lock e repor o serviço no compose.
 
 ## Migração futura para subdomínio + SSL via NPM

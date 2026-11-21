@@ -31,6 +31,12 @@ public class ConfiguracaoPlugins
     public string PastaCaddy => Path.Combine(Pasta, "caddy");
     public string PastaCopias => Path.Combine(Pasta, "copias");
     public string ArquivoEstado => Path.Combine(Pasta, "estado.json");
+    /// <summary>
+    /// Configuração própria de cada plug-in (tokens, listas de usuários): <c>env/&lt;id&gt;.env</c>, passado com
+    /// <c>--env-file</c> quando existe. Fica fora do git e do <c>plugins.lock</c>; dono root, modo 600.
+    /// </summary>
+    public string PastaEnv => Path.Combine(Pasta, "env");
+    public string ArquivoEnv(string id) => Path.Combine(PastaEnv, id + ".env");
 }
 
 public record EstadoPlugin(string Id, string Imagem, string Versao, string? VersaoAnterior, Manifesto? Manifesto,
@@ -210,6 +216,8 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
             "-e", "VERSAO=" + e.Versao,
             "-e", "HUB_SEGREDO_SERVICO=" + segredoServico,
         };
+        // No docker run o -e vence o --env-file: o arquivo do plug-in não consegue trocar as HUB_* do núcleo.
+        if (File.Exists(cfg.ArquivoEnv(e.Id))) a.AddRange(["--env-file", cfg.ArquivoEnv(e.Id)]);
         if (cfg.DadosNoHost is { Length: > 0 } dados)
             foreach (var d in m.Dados ?? [])
                 a.AddRange(["-v", $"{dados.TrimEnd('/')}/{e.Id}/{d["/data/".Length..]}:{d}"]);
