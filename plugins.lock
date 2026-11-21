@@ -10,3 +10,4 @@ dieta: ghcr.io/victorsouzadev/hub-dieta@ced100a
 tarefas: ghcr.io/victorsouzadev/hub-tarefas@82ab042
 anotacao: ghcr.io/victorsouzadev/hub-anotacao@44e5029
 financas: ghcr.io/victorsouzadev/hub-financas@fc452d9
+notas: ghcr.io/victorsouzadev/hub-notas@9b424ac
