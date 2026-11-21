@@ -216,7 +216,7 @@ public static class OAuthNucleoEndpoints
         // Spec 032/033: provedor, modelo e chave de IA DO USUÁRIO do token (aud=<plug-in com usaIa>). Nunca com o token
         // de serviço, para um plug-in comprometido não colher a chave de todos.
         app.MapGet("/api/core/ia", async (HttpRequest r, AppDbContext db, Notas.Api.Auth.ChavesDeAssinatura chaves,
-            Notas.Api.Services.Financas.Llm.ILlmExtractorFactory llm, CancellationToken ct) =>
+            Notas.Api.Services.Financas.Llm.ILlmExtractorFactory llm, Notas.Api.Services.Seguranca.IProtetorDeSegredos protetor, CancellationToken ct) =>
         {
             var h = r.Headers.Authorization.ToString();
             if (!h.StartsWith("Bearer ")) return Results.Unauthorized();
@@ -237,9 +237,26 @@ public static class OAuthNucleoEndpoints
             var v = await new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler().ValidateTokenAsync(h[7..], p);
             if (!v.IsValid || !v.Claims.TryGetValue("sub", out var s) || s is not string sub) return Results.Unauthorized();
             var c = await llm.ResolverCredenciaisAsync(sub, ct);
+            // Spec 034: a chave própria da ampliação de imagem (Editor de Imagens, agora no plug-in criativo).
+            var cifrada = await db.ConfiguracoesIa.AsNoTracking().Where(x => x.UserId == sub).Select(x => x.ChaveUpscaleCifrada).FirstOrDefaultAsync(ct);
+            var chaveUpscale = cifrada is { Length: > 0 } ? protetor.Desproteger(cifrada) : null;
             return string.IsNullOrWhiteSpace(c.Chave) || c.Provedor == "heuristico"
-                ? Results.Ok(new { provedor = (string?)null, modelo = (string?)null, chave = (string?)null })
-                : Results.Ok(new { provedor = c.Provedor, modelo = c.Modelo, chave = c.Chave });
+                ? Results.Ok(new { provedor = (string?)null, modelo = (string?)null, chave = (string?)null, chaveUpscale })
+                : Results.Ok(new { provedor = c.Provedor, modelo = c.Modelo, chave = c.Chave, chaveUpscale });
+        });
+
+        // Spec 034: o MCP "criativo" foi para o plug-in, mas sites e backup são do núcleo. Só o plug-in criativo, pelo
+        // segredo de serviço, e só do usuário que ele informa (o dono do token MCP que ele já conferiu).
+        app.MapGet("/api/core/criativo/resumo", async (string usuario, HttpRequest r, AppDbContext db,
+            Microsoft.Extensions.Options.IOptions<Notas.Api.Services.Sites.SitesOptions> sites,
+            Microsoft.Extensions.Options.IOptions<Notas.Api.Services.Sistema.SistemaOptions> sistema, CancellationToken ct) =>
+        {
+            if (await PluginDoServico(r, db) != "criativo") return Results.Unauthorized();
+            return Results.Ok(new
+            {
+                sites = await Notas.Api.Services.Sites.ResumoDeSites.Markdown(db, sites.Value, usuario, ct),
+                servidor = Notas.Api.Services.Sistema.BackupStatus.Linha(Notas.Api.Services.Sistema.BackupStatus.LerCompleto(sistema.Value, DateTime.UtcNow)),
+            });
         });
 
         app.MapGet("/api/core/revogados", async (HttpRequest r, AppDbContext db, OAuthDoNucleo s, Mcp.AppsMcpAuth arquivo) =>

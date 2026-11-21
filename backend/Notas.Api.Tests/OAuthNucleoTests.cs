@@ -266,6 +266,34 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
     }
 
     [Fact]
+    public async Task Resumo_de_sites_so_para_o_plugin_criativo()
+    {
+        await GarantirPlugin();
+        const string segredo = "segredo-de-servico-do-criativo-com-tamanho-suficiente";
+        using (var s = _factory.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!db.PluginsEstado.Any(p => p.Id == "criativo"))
+            {
+                db.PluginsEstado.Add(new PluginEstado
+                {
+                    Id = "criativo", Versao = "v1", Manifesto = """{"id":"criativo","nome":"Criativo","icone":"image","rota":"/criativo","porta":8080,"health":"/criativo/api/health"}""",
+                    SegredoServicoHash = Hash(segredo),
+                });
+                await db.SaveChangesAsync();
+            }
+        }
+        var outro = _factory.CreateClient();
+        outro.DefaultRequestHeaders.Authorization = new("Bearer", SegredoServico);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await outro.GetAsync("/api/core/criativo/resumo?usuario=x")).StatusCode);
+        var criativo = _factory.CreateClient();
+        criativo.DefaultRequestHeaders.Authorization = new("Bearer", segredo);
+        var r = await criativo.GetFromJsonAsync<JsonElement>("/api/core/criativo/resumo?usuario=ninguem");
+        Assert.Equal("Nenhum site publicado.", r.GetProperty("sites").GetString());
+        Assert.False(string.IsNullOrEmpty(r.GetProperty("servidor").GetString()));
+    }
+
+    [Fact]
     public async Task Revogados_exige_o_segredo_de_servico_do_plugin()
     {
         await GarantirPlugin();

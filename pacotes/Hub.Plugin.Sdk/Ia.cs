@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Http;
 namespace Hub.Plugin;
 
 /// <summary>Provedor, modelo e chave de IA do usuário, guardados no núcleo (Configurações → Inteligência artificial).</summary>
-public sealed record ConfiguracaoIa(string? Provedor, string? Modelo, string? Chave)
+/// <param name="ChaveUpscale">Chave própria do serviço de ampliação de imagem (Replicate), se o usuário cadastrou (1.2.0).</param>
+public sealed record ConfiguracaoIa(string? Provedor, string? Modelo, string? Chave, string? ChaveUpscale = null)
 {
     public bool Configurada => !string.IsNullOrWhiteSpace(Provedor) && !string.IsNullOrWhiteSpace(Chave);
 }
