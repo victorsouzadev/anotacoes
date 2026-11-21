@@ -32,11 +32,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/editor/editor.page').then((m) => m.EditorPageComponent),
   },
   {
-    path: 'dieta',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/dieta/dieta.page').then((m) => m.DietaPageComponent),
-  },
-  {
     // Consentimento do OAuth do MCP do Cérebro (spec 028). Fora de /cerebro, que o Caddy manda ao serviço.
     path: 'autorizar',
     canActivate: [authGuard],

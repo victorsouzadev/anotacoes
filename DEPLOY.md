@@ -349,22 +349,23 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
 - O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
 
-## MCPs dos apps do hub (Tarefas, Finanças, Dieta; Criativo e Treino nos plug-ins)
+## MCPs dos apps do hub (Tarefas e Finanças; Criativo, Treino e Dieta nos plug-ins)
 
-O `api` serve `/api/mcp/tarefas`, `/api/mcp/financas` e `/api/mcp/dieta` (`/api/mcp/criativo` e `/api/mcp/treino` são dos
-plug-ins desde a spec 034, nas mesmas URLs e com o mesmo token) (só leitura, exceto os
-registros rápidos da Dieta: refeição, peso e água), autenticados pelo
+O `api` serve `/api/mcp/tarefas` e `/api/mcp/financas` (`/api/mcp/criativo` e `/api/mcp/treino` são dos plug-ins desde a
+spec 034 e `/api/mcp/dieta` desde a 035, nas mesmas URLs e com o mesmo token) (só leitura; no plug-in Dieta, também os
+registros rápidos de refeição, peso e água), autenticados pelo
 token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.json`, montado só leitura em
 `/access`). O Cérebro usa esses MCPs na rotina de sincronização. Detalhes em
 [cerebro/README.md](cerebro/README.md#apps-do-hub-mcps-e-rotina-de-sincronização).
 
 ## App Android da Dieta
 
-O workflow **Android (Dieta)** (tag `dieta-v1.2.3` ou execução manual) gera o APK e grava em
+Desde a spec 035 o app mora no repositório [hub-dieta](https://github.com/victorsouzadev/hub-dieta) (`mobile/dieta`, Gradle
+próprio). O workflow **Android (Dieta)** de lá (tag `dieta-v1.2.3` ou execução manual) gera o APK e grava em
 `/opt/notas-vps/downloads/android`, servido pelo Caddy em
 `https://cerebro.vsitefy.com.br/downloads/android/Dieta.apk` (mesmos segredos `VPS_*` do workflow do
-Windows). A rota `/downloads/android/*` entra no Caddy com o deploy da main. A migração `AddDieta` cria as
-tabelas `dieta_*` e a TACO é carregada na primeira subida da API.
+Windows, cadastrados no hub-dieta). As tabelas `dieta_*` continuam no `notas.db`, agora do plug-in, que carrega a TACO
+na subida.
 
 ## MCP de operação da VPS (ops)
 

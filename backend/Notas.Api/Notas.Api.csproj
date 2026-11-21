@@ -18,7 +18,4 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Data/Seed/taco.csv" LogicalName="Notas.Api.Data.Seed.taco.csv" />
-  </ItemGroup>
 </Project>

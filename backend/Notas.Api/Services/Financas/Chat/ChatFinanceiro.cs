@@ -93,7 +93,7 @@ public delegate Task<string> ExecutarFerramenta(string nome, JsonObject? args, C
 
 /// <summary>
 /// O laço de chat com ferramentas, igual para Anthropic e OpenRouter: o modelo recebe as definições, pede o que
-/// precisa, o laço executa e devolve o resultado até vir a resposta. Usado pelos chats de Finanças e da Dieta.
+/// precisa, o laço executa e devolve o resultado até vir a resposta. Usado pelo chat de Finanças (o da Dieta tem uma cópia no plug-in, spec 035).
 /// </summary>
 public class ChatComFerramentas(ILlmExtractorFactory llm, IChatModeloCliente cliente)
 {

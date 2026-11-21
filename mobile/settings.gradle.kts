@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "OrganizadorApp"
 include(":app")
-include(":dieta")

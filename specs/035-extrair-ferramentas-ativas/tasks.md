@@ -10,7 +10,7 @@
 
 - [X] T004 [US1] Criar `hub-dieta` (usuário); mover `DietaEndpoints`, `DietaIaEndpoints`, `Services/Dieta`, `DietaMcpTools`, tela `dieta`, testes e `mobile/dieta` (Gradle próprio)
 - [X] T005 [US1] `DietaDb` (`dieta_*`, base), `plugin.json` com `/api/dieta`, `/api/mcp/dieta`, `/dieta`; IA do núcleo
-- [ ] T006 [US1] Ensaio, deploy, conferência (quickstart); remover do núcleo, inclusive `android-dieta.yml`
+- [X] T006 [US1] Ensaio, deploy, conferência (quickstart); remover do núcleo, inclusive `android-dieta.yml`
 
 ## Phase 4: User Story 2 - Tarefas (P1)
 
