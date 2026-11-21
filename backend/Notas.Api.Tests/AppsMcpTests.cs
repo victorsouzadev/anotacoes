@@ -82,10 +82,50 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"NOME","arguments":{}}}""".Replace("NOME", nome);
 
     [Fact]
-    public async Task Sem_arquivo_de_token_fica_desligado()
+    public async Task Sem_arquivo_e_sem_token_de_Conexoes_recusa()
     {
         if (File.Exists(_tokenFile)) File.Delete(_tokenFile);
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await Rpc("tarefas", Listar)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar)).Status);
+    }
+
+    [Fact]
+    public async Task Token_apps_de_Conexoes_vale_sem_o_arquivo_e_para_de_valer_ao_revogar()
+    {
+        if (File.Exists(_tokenFile)) File.Delete(_tokenFile);
+        var c = _app.CreateClient();
+        var login = await (await c.PostAsJsonAsync("/api/auth/login", new { email = _email, password = "Sup3rSecret!" })).Content.ReadFromJsonAsync<JsonElement>();
+        c.DefaultRequestHeaders.Authorization = new("Bearer", login.GetProperty("accessToken").GetString());
+        var r = await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "apps" })).Content.ReadFromJsonAsync<JsonElement>();
+        var token = r.GetProperty("token").GetString()!;
+
+        var (status, body) = await Rpc("tarefas", Listar, token);
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Contains("tarefas_listar", body);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync($"/api/core/mcp-tokens/{r.GetProperty("id").GetString()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Rpc("tarefas", Listar, token)).Status);
+    }
+
+    [Fact]
+    public async Task Token_ops_de_Conexoes_vai_para_o_arquivo_do_ops()
+    {
+        var pasta = Path.Combine(Path.GetTempPath(), $"ops-access-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(pasta);
+        var arquivo = Path.Combine(pasta, "ops-tokens.sha256");
+        try
+        {
+            var app = _factory.WithWebHostBuilder(b => b.UseSetting("Ops:TokensFile", arquivo));
+            var c = app.CreateClient();
+            var login = await (await c.PostAsJsonAsync("/api/auth/login", new { email = _email, password = "Sup3rSecret!" })).Content.ReadFromJsonAsync<JsonElement>();
+            c.DefaultRequestHeaders.Authorization = new("Bearer", login.GetProperty("accessToken").GetString());
+            var r = await (await c.PostAsJsonAsync("/api/core/mcp-tokens", new { plugin = "ops" })).Content.ReadFromJsonAsync<JsonElement>();
+            var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(r.GetProperty("token").GetString()!)));
+            Assert.Contains(hash, File.ReadAllLines(arquivo));
+
+            Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync($"/api/core/mcp-tokens/{r.GetProperty("id").GetString()}")).StatusCode);
+            Assert.DoesNotContain(hash, File.ReadAllLines(arquivo));
+        }
+        finally { Directory.Delete(pasta, true); }
     }
 
     [Fact]

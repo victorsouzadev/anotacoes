@@ -188,3 +188,27 @@ public class TokenSourceTests
         Assert.Equal("servidor", source.Origin);
     }
 }
+
+public class TokensDoHubTests
+{
+    [Fact]
+    public void Tokens_de_Conexoes_valem_junto_com_o_da_tela_e_somem_ao_revogar()
+    {
+        static byte[] H(string t) => System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(t));
+        var hub = Path.Combine(Path.GetTempPath(), "ops-hub-" + Guid.NewGuid().ToString("N"));
+        var source = new TokenSource(new OpsOptions { Token = new string('e', 40), TokenHashFile = "", TokensDoHubFile = hub });
+        try
+        {
+            File.WriteAllLines(hub, [Convert.ToHexStringLower(H("um")), Convert.ToHexStringLower(H("dois"))]);
+            Assert.Equal("hub", source.Origin);
+            Assert.True(TokenSource.Confere(H("dois"), source.Aceitos()));
+            Assert.False(TokenSource.Confere(H(new string('e', 40)), source.Aceitos()));
+
+            File.WriteAllLines(hub, [Convert.ToHexStringLower(H("um"))]);
+            File.SetLastWriteTimeUtc(hub, DateTime.UtcNow.AddSeconds(5));
+            Assert.False(TokenSource.Confere(H("dois"), source.Aceitos()));
+        }
+        finally { File.Delete(hub); }
+        Assert.Equal("servidor", source.Origin);
+    }
+}

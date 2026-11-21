@@ -44,17 +44,17 @@ app.Use(async (http, next) =>
 {
     if (http.Request.Path.StartsWithSegments("/mcp"))
     {
-        var tokenHash = tokens.Current();
-        if (tokenHash is null)
+        var aceitos = tokens.Aceitos();
+        if (aceitos.Count == 0)
         {
             http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await http.Response.WriteAsync("MCP desativado: gere o token na tela do Segundo Cérebro ou defina Ops__Token.");
+            await http.Response.WriteAsync("MCP desativado: gere o token em Configurações → Conexões do hub ou defina Ops__Token.");
             return;
         }
         var auth = http.Request.Headers.Authorization.FirstOrDefault();
         var token = auth?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true ? auth[7..].Trim() : null;
         token ??= http.Request.Query["key"].FirstOrDefault();
-        if (string.IsNullOrEmpty(token) || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(token)), tokenHash))
+        if (string.IsNullOrEmpty(token) || !TokenSource.Confere(SHA256.HashData(Encoding.UTF8.GetBytes(token)), aceitos))
         {
             app.Logger.LogWarning("ops: token recusado de {Ip}", http.Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? http.Connection.RemoteIpAddress?.ToString());
             http.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -66,7 +66,7 @@ app.Use(async (http, next) =>
 
 app.UseRateLimiter();
 
-app.MapGet("/health", (HostShell shell) => Results.Ok(new { status = "ok", modo = shell.Mode, mcp = tokens.Current() is not null, token = tokens.Origin }));
+app.MapGet("/health", (HostShell shell) => Results.Ok(new { status = "ok", modo = shell.Mode, mcp = tokens.Aceitos().Count > 0, token = tokens.Origin }));
 app.MapMcp("/mcp").RequireRateLimiting("mcp");
 
 app.Run();

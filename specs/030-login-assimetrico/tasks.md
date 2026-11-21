@@ -29,4 +29,4 @@
 ## Phase 6: Polish
 
 - [x] T015 [P] Atualizar spec 028 (OAuth no núcleo, revogação em até 60 s), `DEPLOY.md` (chave, janela HS256), `.env.example`
-- [ ] T016 CI inteira verde
+- [x] T016 CI inteira verde — PRs #81 a #84 e hub-cerebro#5 verdes em 21/11/2026

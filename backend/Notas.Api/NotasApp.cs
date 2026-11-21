@@ -229,6 +229,7 @@ public static class NotasApp
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
+        builder.Services.AddHostedService<Notas.Api.Mcp.ArquivoDoOps>();
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =

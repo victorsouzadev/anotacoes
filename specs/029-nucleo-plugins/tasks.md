@@ -38,4 +38,4 @@
 
 - [x] T017 [P] Backup (025) inclui as pastas `dados` dos manifestos
 - [x] T018 [P] README ("Estrutura do projeto", seção Plug-ins), `DEPLOY.md`, `CLAUDE.md`
-- [ ] T019 CI inteira verde
+- [x] T019 CI inteira verde — PRs #81 a #84 e hub-cerebro#5 verdes em 21/11/2026

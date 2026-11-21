@@ -29,4 +29,4 @@
 ## Phase 6: Polish
 
 - [x] T012 [P] `pacotes/README.md` (como criar um plug-in), skill `aplicar-grafite` cita o `@grafite/ui`
-- [ ] T013 CI inteira verde
+- [x] T013 CI inteira verde — PRs #81 a #84 e hub-cerebro#5 verdes em 21/11/2026

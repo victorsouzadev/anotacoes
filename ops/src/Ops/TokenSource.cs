@@ -4,41 +4,62 @@ using System.Text;
 namespace Ops;
 
 /// <summary>
-/// Hash do token aceito: o do arquivo escrito pelo Segundo Cérebro (gerado na tela), se existir;
-/// senão o Ops__Token do .env. O arquivo é relido quando a data de modificação muda.
+/// Hashes aceitos: os tokens "ops" de Configurações → Conexões do hub (arquivo que a api grava, spec 033) e o do
+/// arquivo da tela do Segundo Cérebro; sem nenhum dos dois, o Ops__Token do .env. Os arquivos são relidos quando mudam.
 /// </summary>
 public sealed class TokenSource
 {
     private readonly OpsOptions _options;
     private readonly byte[]? _envHash;
-    private readonly object _lock = new();
-    private DateTime _fileStamp;
-    private byte[]? _fileHash;
+    private readonly Arquivo _tela;
+    private readonly Arquivo _hub;
 
     public TokenSource(OpsOptions options)
     {
         _options = options;
         _envHash = options.Token.Length > 0 ? SHA256.HashData(Encoding.UTF8.GetBytes(options.Token)) : null;
+        _tela = new Arquivo(options.TokenHashFile);
+        _hub = new Arquivo(options.TokensDoHubFile);
     }
 
-    public string Origin => ReadFile() is not null ? "tela" : _envHash is not null ? "servidor" : "nenhum";
+    public string Origin => _hub.Ler().Count > 0 ? "hub" : _tela.Ler().Count > 0 ? "tela" : _envHash is not null ? "servidor" : "nenhum";
 
-    public byte[]? Current() => ReadFile() ?? _envHash;
+    /// <summary>Primeiro hash aceito (compatibilidade com quem só olha um).</summary>
+    public byte[]? Current() => Aceitos().FirstOrDefault();
 
-    private byte[]? ReadFile()
+    public IReadOnlyList<byte[]> Aceitos()
     {
-        var path = _options.TokenHashFile;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        lock (_lock)
+        var arquivos = _hub.Ler().Concat(_tela.Ler()).ToList();
+        return arquivos.Count > 0 ? arquivos : _envHash is null ? [] : [_envHash];
+    }
+
+    public static bool Confere(byte[] hash, IReadOnlyList<byte[]> aceitos)
+    {
+        var ok = false;
+        foreach (var a in aceitos) ok |= CryptographicOperations.FixedTimeEquals(hash, a);
+        return ok;
+    }
+
+    private sealed class Arquivo(string? caminho)
+    {
+        private readonly object _lock = new();
+        private DateTime _stamp;
+        private IReadOnlyList<byte[]> _hashes = [];
+
+        public IReadOnlyList<byte[]> Ler()
         {
-            var stamp = File.GetLastWriteTimeUtc(path);
-            if (stamp != _fileStamp)
+            if (string.IsNullOrEmpty(caminho) || !File.Exists(caminho)) return [];
+            lock (_lock)
             {
-                var hex = File.ReadAllText(path).Trim();
-                _fileHash = hex.Length == 64 ? Convert.FromHexString(hex) : null;
-                _fileStamp = stamp;
+                var stamp = File.GetLastWriteTimeUtc(caminho);
+                if (stamp != _stamp)
+                {
+                    _hashes = File.ReadAllLines(caminho).Select(l => l.Trim()).Where(l => l.Length == 64)
+                        .Select(Convert.FromHexString).ToList();
+                    _stamp = stamp;
+                }
+                return _hashes;
             }
-            return _fileHash;
         }
     }
 }

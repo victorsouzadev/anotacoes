@@ -191,17 +191,22 @@ public static class OAuthNucleoEndpoints
             return Results.Ok(await db.McpTokens.Where(t => t.UsuarioId == id && t.RevogadoEm == null)
                 .Select(t => new { t.Id, t.Plugin, t.CriadoEm, t.UltimoUso }).ToListAsync());
         });
-        mcp.MapPost("", async (NovoMcpTokenDto dto, ClaimsPrincipal u, AppDbContext db, OAuthDoNucleo s) =>
+        // Além dos plug-ins, os serviços do núcleo "apps" (/api/mcp/*) e "ops" (MCP da VPS), spec 033 T011.
+        mcp.MapPost("", async (NovoMcpTokenDto dto, ClaimsPrincipal u, AppDbContext db, OAuthDoNucleo s,
+            Notas.Api.Auth.ChavesDeAssinatura chaves, IConfiguration config) =>
         {
-            if (!await db.PluginsEstado.AnyAsync(p => p.Id == dto.Plugin)) return Results.NotFound(new { error = "Plug-in não registrado." });
+            if (!Notas.Api.Mcp.TokensDoNucleo.Destinos.Contains(dto.Plugin) && !await db.PluginsEstado.AnyAsync(p => p.Id == dto.Plugin))
+                return Results.NotFound(new { error = "Plug-in não registrado." });
             var (linha, token) = await s.CriarMcpToken(dto.Plugin, UsuarioId(u)!, Email(u)!);
+            if (linha.Plugin == Notas.Api.Mcp.TokensDoNucleo.Ops) await Notas.Api.Mcp.TokensDoNucleo.GravarOps(db, chaves, config);
             return Results.Ok(new { linha.Id, linha.Plugin, token });
         });
-        mcp.MapDelete("/{id}", async (string id, ClaimsPrincipal u, AppDbContext db) =>
+        mcp.MapDelete("/{id}", async (string id, ClaimsPrincipal u, AppDbContext db, Notas.Api.Auth.ChavesDeAssinatura chaves, IConfiguration config) =>
         {
             var uid = UsuarioId(u);
             var n = await db.McpTokens.Where(t => t.Id == id && t.UsuarioId == uid && t.RevogadoEm == null)
                 .ExecuteUpdateAsync(x => x.SetProperty(t => t.RevogadoEm, DateTime.UtcNow));
+            if (n > 0) await Notas.Api.Mcp.TokensDoNucleo.GravarOps(db, chaves, config);
             return n > 0 ? Results.NoContent() : Results.NotFound();
         });
 
