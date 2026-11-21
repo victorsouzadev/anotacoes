@@ -113,7 +113,6 @@ public static class NotasApp
         builder.Services.AddScoped<ExecutorSites>();
         builder.Services.AddSingleton<IPostgresProvisionador, PostgresProvisionador>();
         builder.Services.AddHostedService<PublicacaoWorker>();
-        // Lixeira das notas (30 dias): o worker roda só no plug-in hub-notas desde a spec 035 (nunca os dois juntos).
         builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
         builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 
@@ -220,9 +219,6 @@ public static class NotasApp
             }
         });
         app.MapAuthEndpoints();
-        app.MapNotesEndpoints();
-        app.MapNotesShareEndpoints();
-        app.MapFoldersEndpoints();
         app.MapConfiguracaoIaEndpoints();
         app.MapSitesEndpoints();
         app.MapSistemaEndpoints();

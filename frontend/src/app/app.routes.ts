@@ -17,21 +17,6 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/register.page').then((m) => m.RegisterPageComponent),
   },
   {
-    // Link somente leitura (spec 023): abre sem login.
-    path: 'p/nota/:token',
-    loadComponent: () => import('./features/notes/public-note.page').then((m) => m.PublicNotePageComponent),
-  },
-  {
-    path: 'notes',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/notes/notes-list.page').then((m) => m.NotesListPageComponent),
-  },
-  {
-    path: 'notes/:id',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/editor/editor.page').then((m) => m.EditorPageComponent),
-  },
-  {
     // Consentimento do OAuth do MCP do Cérebro (spec 028). Fora de /cerebro, que o Caddy manda ao serviço.
     path: 'autorizar',
     canActivate: [authGuard],
