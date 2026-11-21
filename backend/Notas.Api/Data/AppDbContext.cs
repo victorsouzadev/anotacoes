@@ -87,6 +87,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
     public DbSet<ConfiguracaoAuvp> ConfiguracoesAuvp => Set<ConfiguracaoAuvp>();
+    public DbSet<Notas.Api.Services.Seguranca.SegredoRecifrado> SegredosRecifrados => Set<Notas.Api.Services.Seguranca.SegredoRecifrado>();
     public DbSet<TransacaoExcluida> TransacoesExcluidas => Set<TransacaoExcluida>();
     public DbSet<RegraCategoria> RegrasCategoria => Set<RegraCategoria>();
     public DbSet<PreferenciasFinancas> PreferenciasFinancas => Set<PreferenciasFinancas>();
@@ -155,6 +156,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
         });
         // OAuth do núcleo (spec 030).
+        // Spec 035: segredos do núcleo já entregues a um plug-in para recifrar (uma vez por linha).
+        b.Entity<Notas.Api.Services.Seguranca.SegredoRecifrado>(e => { e.ToTable("core_segredos_recifrados"); e.HasKey(x => new { x.Plugin, x.Tabela, x.Linha }); });
         b.Entity<Notas.Api.Services.Auth.OAuthCliente>(e => { e.ToTable("core_oauth_clientes"); e.HasKey(x => x.Id); });
         b.Entity<Notas.Api.Services.Auth.OAuthPedido>(e => { e.ToTable("core_oauth_pedidos"); e.HasKey(x => x.Id); });
         b.Entity<Notas.Api.Services.Auth.OAuthCodigo>(e => { e.ToTable("core_oauth_codigos"); e.HasKey(x => x.Hash); });

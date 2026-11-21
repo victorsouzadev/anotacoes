@@ -1771,6 +1771,25 @@ namespace Notas.Api.Data.Migrations
                     b.ToTable("core_plugins_estado", (string)null);
                 });
 
+            modelBuilder.Entity("Notas.Api.Services.Seguranca.SegredoRecifrado", b =>
+                {
+                    b.Property<string>("Plugin")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tabela")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Linha")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Em")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Plugin", "Tabela", "Linha");
+
+                    b.ToTable("core_segredos_recifrados", (string)null);
+                });
+
             modelBuilder.Entity("Notas.Api.Data.ConfiguracaoAuvp", b =>
                 {
                     b.HasOne("Notas.Api.Data.User", null)
