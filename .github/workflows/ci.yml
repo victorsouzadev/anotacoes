@@ -134,6 +134,37 @@ jobs:
       - run: npx ng build --configuration production
       - run: npx ng test
 
+  # Spec 035 (T015): e2e da sincronização das Notas (computador + celular, offline, lixeira) com o Playwright,
+  # contra a API e o ng serve de verdade. Vai junto para a CI do hub-notas na extração.
+  e2e-notas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: dotnet build backend/Notas.Api
+      - run: mkdir -p .banco && npx playwright test
+        working-directory: e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-notas
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+
   mcp-build:
     runs-on: ubuntu-latest
     defaults:
