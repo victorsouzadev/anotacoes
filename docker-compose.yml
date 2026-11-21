@@ -57,7 +57,6 @@ services:
       # Estado dos plug-ins gravado pelo deployer (spec 029), lido por GET /api/plugins
       - ./data/plugins:/data/plugins:ro
       - ./data/sites:/data/sites
-      - ./data/anotacao:/anotacao
       - ./data/plugins/dados/cerebro/hub/access:/access:ro
       # Spec 033 (T011): hashes dos tokens "ops" de Configurações → Conexões, lidos pelo ops.
       - ./data/ops-access:/ops-access
