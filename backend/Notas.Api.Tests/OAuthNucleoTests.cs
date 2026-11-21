@@ -307,7 +307,10 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         {
             var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
             var protetor = s.ServiceProvider.GetRequiredService<Notas.Api.Services.Seguranca.IProtetorDeSegredos>();
-            if (!db.PluginsEstado.Any(p => p.Id == "financas"))
+            // O teste do token dos apps também registra a "financas" (com outro segredo): aqui vale o deste teste.
+            var existente = db.PluginsEstado.SingleOrDefault(p => p.Id == "financas");
+            if (existente is not null) existente.SegredoServicoHash = Hash(segredo);
+            else
                 db.PluginsEstado.Add(new PluginEstado
                 {
                     Id = "financas", Versao = "v1", Manifesto = """{"id":"financas","nome":"Finanças","icone":"wallet","rota":"/financas","porta":8080,"health":"/financas/api/health"}""",
