@@ -10,10 +10,28 @@ CONFIG="${NOTAS_BACKUP_CONFIG:-/root/.config/notas-backup.env}"
 ESTADO_EXTERNO="${NOTAS_BACKUP_ESTADO:-$BASE/data/db/backup-externo.json}"
 TRAVA="${NOTAS_BACKUP_TRAVA:-/run/notas-backup.lock}"
 
-# Apaga só os arquivos que o backup.sh cria (notas-*, site-*, pg-*), direto na pasta, com mais de N dias.
+# Apaga só os arquivos que o backup.sh cria (notas-*, site-*, pg-*, plugin-*), direto na pasta, com mais de N dias.
 # Outras pastas e arquivos em backups/ nunca são tocados (o find antigo apagou backups/estudio-*/ em 2026-11-20).
 limpar_backups() {
-  find "$1" -maxdepth 1 -type f \( -name 'notas-*' -o -name 'site-*' -o -name 'pg-*' \) -mtime +"$2" -delete
+  find "$1" -maxdepth 1 -type f \( -name 'notas-*' -o -name 'site-*' -o -name 'pg-*' -o -name 'plugin-*' \) -mtime +"$2" -delete
+}
+
+# Pastas "dados" dos plug-ins (spec 029, T017): um plugin-<id>-<data>.tar.gz por plug-in, de data/plugins/dados/<id>.
+# Os SQLite entram por ".backup" (seguro com WAL); os -wal/-shm ficam de fora.
+# copiar_dados_plugins <pasta dados> <destino> <data>
+copiar_dados_plugins() {
+  for dir in "$1"/*/; do
+    [ -d "$dir" ] || continue
+    id=$(basename "$dir")
+    tmp=$(mktemp -d)
+    (cd "$dir" && find . -type f ! -name '*.db' ! -name '*.db-wal' ! -name '*.db-shm' ! -name '*.db-journal' -print0 | tar -cf - --null -T - ) | (cd "$tmp" && tar -xf -)
+    (cd "$dir" && find . -type f -name '*.db') | while read -r db; do
+      mkdir -p "$tmp/$(dirname "$db")"
+      sqlite3 "$dir/$db" ".backup '$tmp/$db'"
+    done
+    tar -czf "$2/plugin-$id-$3.tar.gz" -C "$tmp" .
+    rm -rf "$tmp"
+  done
 }
 
 # Carrega repositório e senha (e RCLONE_CONFIG para o Google Drive). O arquivo fica fora do repositório e do compose (600, root).

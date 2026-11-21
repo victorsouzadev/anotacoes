@@ -36,6 +36,6 @@
 
 ## Phase 7: Polish
 
-- [ ] T017 [P] Backup (025) inclui as pastas `dados` dos manifestos
+- [x] T017 [P] Backup (025) inclui as pastas `dados` dos manifestos
 - [x] T018 [P] README ("Estrutura do projeto", seção Plug-ins), `DEPLOY.md`, `CLAUDE.md`
 - [ ] T019 CI inteira verde

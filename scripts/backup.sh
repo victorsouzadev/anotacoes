@@ -26,6 +26,9 @@ if docker ps --format '{{.Names}}' | grep -qx notas-postgres; then
   done
 fi
 
+# Pastas "dados" dos plug-ins (vault e banco próprio do Cérebro, por exemplo).
+[ -d "$BASE/data/plugins/dados" ] && copiar_dados_plugins "$BASE/data/plugins/dados" "$BACKUPS" "$DATE"
+
 # retenção: 14 dias, só dos arquivos que este script cria
 limpar_backups "$BACKUPS" 14
 

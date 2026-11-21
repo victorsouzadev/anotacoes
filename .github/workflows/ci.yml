@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get install -y -qq jq shellcheck
+      - run: sudo apt-get install -y -qq jq shellcheck sqlite3
       - run: shellcheck -x scripts/*.sh scripts/tests/*.sh
       - run: sh scripts/tests/backup.test.sh
 
