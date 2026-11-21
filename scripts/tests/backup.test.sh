@@ -26,6 +26,7 @@ velho "$BACKUPS/site-loja-20260101-0400.db"
 velho "$BACKUPS/pg-site_loja-20260101-0400.dump"
 velho "$BACKUPS/estudio-2026-10-25/video.mp4"
 velho "$BACKUPS/outra-coisa.tar"
+velho "$BACKUPS/plugin-cerebro-20260101-0400.tar.gz"
 touch "$BACKUPS/notas-20261120-0400.db"
 
 limpar_backups "$BACKUPS" 14
@@ -33,9 +34,28 @@ limpar_backups "$BACKUPS" 14
 if [ ! -e "$BACKUPS/notas-20260101-0400.db" ]; then ok "apaga notas-* antigo"; else falha "apaga notas-* antigo"; fi
 if [ ! -e "$BACKUPS/site-loja-20260101-0400.db" ]; then ok "apaga site-* antigo"; else falha "apaga site-* antigo"; fi
 if [ ! -e "$BACKUPS/pg-site_loja-20260101-0400.dump" ]; then ok "apaga pg-* antigo"; else falha "apaga pg-* antigo"; fi
+if [ ! -e "$BACKUPS/plugin-cerebro-20260101-0400.tar.gz" ]; then ok "apaga plugin-* antigo"; else falha "apaga plugin-* antigo"; fi
 if [ -e "$BACKUPS/notas-20261120-0400.db" ]; then ok "mantém notas-* recente"; else falha "mantém notas-* recente"; fi
 if [ -e "$BACKUPS/estudio-2026-10-25/video.mp4" ]; then ok "não entra em subpastas"; else falha "não entra em subpastas"; fi
 if [ -e "$BACKUPS/outra-coisa.tar" ]; then ok "não apaga arquivo de outro dono"; else falha "não apaga arquivo de outro dono"; fi
+
+# ---- pastas dados dos plug-ins ----
+if command -v sqlite3 >/dev/null 2>&1; then
+  D="$TMP/dados/cerebro"
+  mkdir -p "$D/vault/notas" "$D/hub"
+  echo "# Oi" > "$D/vault/notas/a.md"
+  sqlite3 "$D/hub/hub.db" "PRAGMA journal_mode=WAL; CREATE TABLE t(x); INSERT INTO t VALUES (42);" >/dev/null
+  touch "$D/hub/hub.db-shm"
+  copiar_dados_plugins "$TMP/dados" "$BACKUPS" 20261121-0400
+  ARQ="$BACKUPS/plugin-cerebro-20261121-0400.tar.gz"
+  if [ -f "$ARQ" ]; then ok "gera plugin-<id>-<data>.tar.gz"; else falha "gera plugin-<id>-<data>.tar.gz"; fi
+  mkdir -p "$TMP/restaura" && tar -xzf "$ARQ" -C "$TMP/restaura"
+  confere "leva os arquivos" "$(cat "$TMP/restaura/vault/notas/a.md")" "# Oi"
+  confere "leva o SQLite pelo .backup" "$(sqlite3 "$TMP/restaura/hub/hub.db" 'SELECT x FROM t')" "42"
+  if [ ! -e "$TMP/restaura/hub/hub.db-shm" ]; then ok "deixa -shm/-wal de fora"; else falha "deixa -shm/-wal de fora"; fi
+else
+  echo "pulado - pastas dados dos plug-ins (sqlite3 ausente)"
+fi
 
 # ---- estado da cópia externa ----
 if command -v jq >/dev/null 2>&1; then
