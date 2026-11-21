@@ -256,6 +256,55 @@
       </div>
     }
 
+    <div class="card" id="conexoes">
+      <h2>Conexões</h2>
+      <p class="ajuda">Aplicativos (como o Claude) que você autorizou a usar o MCP dos plug-ins, e tokens fixos para quem não faz login (OAuth).
+        Revogar corta o acesso em até 1 minuto.</p>
+      @if (erroConexoes(); as e) { <p class="alerta-texto">{{ e }}</p> }
+
+      <h3>Aplicativos autorizados</h3>
+      @if (apps().length) {
+        <ul class="arquivos-backup">
+          @for (a of apps(); track a.id + a.plugin) {
+            <li>
+              <strong>{{ a.nome }}</strong> · {{ nomeDoPlugin(a.plugin) }} ·
+              {{ a.ultimo_uso ? 'usado em ' + (a.ultimo_uso | date: 'dd/MM/yyyy HH:mm') : 'nunca usado' }}
+              <button type="button" class="link-perigo" (click)="revogarApp(a)">Revogar</button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="ajuda">Nenhum aplicativo autorizado.</p>
+      }
+
+      <h3>Tokens MCP</h3>
+      @if (tokensMcp().length) {
+        <ul class="arquivos-backup">
+          @for (t of tokensMcp(); track t.id) {
+            <li>
+              {{ nomeDoPlugin(t.plugin) }} · criado em {{ t.criadoEm | date: 'dd/MM/yyyy' }} ·
+              {{ t.ultimoUso ? 'usado em ' + (t.ultimoUso | date: 'dd/MM/yyyy HH:mm') : 'nunca usado' }}
+              <button type="button" class="link-perigo" (click)="revogarToken(t)">Revogar</button>
+            </li>
+          }
+        </ul>
+      }
+      @if (tokenNovo(); as n) {
+        <p class="ajuda">Token do {{ nomeDoPlugin(n.plugin) }}. Copie agora: ele não aparece de novo.</p>
+        <p><code class="token-novo">{{ n.token }}</code> <button type="button" (click)="copiar(n.token)">Copiar</button></p>
+      }
+      @if (pluginsComMcp().length) {
+        <div class="linha-token">
+          <select [(ngModel)]="pluginDoToken" aria-label="Plug-in do token">
+            @for (p of pluginsComMcp(); track p.id) { <option [value]="p.id">{{ p.nome }}</option> }
+          </select>
+          <button type="button" (click)="gerarToken()">Gerar token</button>
+        </div>
+      } @else {
+        <p class="ajuda">Nenhum plug-in com MCP instalado.</p>
+      }
+    </div>
+
     @if (backup(); as b) {
       <div class="card" id="servidor">
         <h2>Servidor</h2>

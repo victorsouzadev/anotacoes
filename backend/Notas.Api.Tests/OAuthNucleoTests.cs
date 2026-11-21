@@ -113,6 +113,41 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
     }
 
     [Fact]
+    public async Task Rotas_legadas_do_cerebro_sao_atendidas_pelo_nucleo()
+    {
+        using (var s = _factory.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+            if (!db.PluginsEstado.Any(p => p.Id == "cerebro"))
+            {
+                db.PluginsEstado.Add(new PluginEstado { Id = "cerebro", Versao = "v1", Manifesto = """{"id":"cerebro","nome":"Segundo Cérebro","icone":"brain","rota":"/cerebro","porta":8080,"health":"/cerebro/health"}""" });
+                await db.SaveChangesAsync();
+            }
+        }
+        var c = await Logado();
+        var meta = await c.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server/cerebro");
+        Assert.EndsWith("/api/core/oauth/token", meta.GetProperty("token_endpoint").GetString());
+        var recurso = await c.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource");
+        Assert.EndsWith("/cerebro/mcp", recurso.GetProperty("resource").GetString());
+
+        var reg = await c.PostAsJsonAsync("/cerebro/oauth/register", new { client_name = "Claude", redirect_uris = new[] { Redirect } });
+        Assert.Equal(HttpStatusCode.Created, reg.StatusCode);
+        var cliente = (await reg.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("client_id").GetString();
+        var (_, ch) = Pkce();
+        // Conector antigo não manda resource: vale o Cérebro.
+        var auth = await c.GetAsync($"/cerebro/oauth/authorize?response_type=code&client_id={cliente}&redirect_uri={Uri.EscapeDataString(Redirect)}" +
+            $"&code_challenge={ch}&code_challenge_method=S256");
+        var pedido = auth.Headers.Location!.Query.Split("pedido=")[1];
+        var info = await c.GetFromJsonAsync<JsonElement>($"/api/core/oauth/pedido/{pedido}");
+        Assert.Equal("cerebro", info.GetProperty("plugin").GetString());
+        Assert.Equal("Segundo Cérebro", info.GetProperty("plugin_nome").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await c.PostAsync("/cerebro/oauth/token", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token", ["refresh_token"] = "nao-existe", ["client_id"] = cliente!,
+        }))).StatusCode);
+    }
+
+    [Fact]
     public async Task Acesso_e_jwt_com_a_audiencia_do_plugin()
     {
         var (t, _, _) = await Autorizar();

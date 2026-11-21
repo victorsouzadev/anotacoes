@@ -23,8 +23,8 @@
 - [x] T010 [US3] Portar `OAuthStore`/`OAuthEndpoints` do `cerebro` para o `Notas.Api` (tabelas `core_oauth_*`), recurso `/<id>/mcp`, token de acesso JWT com `aud=<id>`
 - [x] T011 [US3] Portar `cerebro/tests/Hub.Tests/OAuthTests.cs` para `Notas.Api.Tests`, mais teste de `aud` cruzado
 - [x] T012 [US3] `GET /api/core/revogados` e tabela `core_oauth_revogados`; limpeza dos vencidos
-- [ ] T013 [US3] Página `/autorizar` passa a mostrar o plug-in; Caddy: `/.well-known/oauth-*` e as rotas legadas `/cerebro/oauth/*` → núcleo
-- [ ] T014 [US3] Configurações → Conexões: aplicativos autorizados (por plug-in) e tokens MCP estáticos (`core_mcp_tokens`)
+- [x] T013 [US3] Página `/autorizar` passa a mostrar o plug-in; Caddy: `/.well-known/oauth-*` e as rotas legadas `/cerebro/oauth/*` → núcleo
+- [x] T014 [US3] Configurações → Conexões: aplicativos autorizados (por plug-in) e tokens MCP estáticos (`core_mcp_tokens`)
 
 ## Phase 6: Polish
 

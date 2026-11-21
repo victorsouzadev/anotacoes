@@ -33,10 +33,16 @@
         respond 404
     }
 
-    # OAuth do MCP do Cérebro (spec 028): o cliente (Claude web) procura o metadata na raiz do domínio.
-    # O plug-in serve esse metadata até o OAuth do núcleo assumir o MCP do Cérebro (spec 030, T014).
+    # OAuth dos MCPs dos plug-ins (spec 030): o cliente (Claude web) procura o metadata na raiz do domínio, e quem
+    # responde é o núcleo. /cerebro/oauth/* são as rotas dos conectores criados antes (spec 028), também do núcleo;
+    # o caminho mais longo ganha do /cerebro/* do plug-in.
     handle /.well-known/oauth-* {
-        reverse_proxy plugin-cerebro:8080 {
+        reverse_proxy api:8080 {
+            header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+        }
+    }
+    handle /cerebro/oauth/* {
+        reverse_proxy api:8080 {
             header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
         }
     }
@@ -94,6 +100,8 @@
     handle /api/* {
         reverse_proxy api:8080 {
             flush_interval -1
+            # O OAuth do núcleo (spec 030) monta os endereços com o esquema que o nginx-proxy-manager viu.
+            header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
         }
     }
 

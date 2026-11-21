@@ -3,11 +3,11 @@ import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { mensagemDeErro } from '../../core/erro-http';
 import { IconComponent } from '../../shared/icon';
-import { CerebroService, PedidoOAuth } from './cerebro.service';
+import { ConexoesService, PedidoOAuth } from '../../core/conexoes.service';
 
 /**
- * Consentimento do OAuth do MCP do Cérebro (spec 028). Fica em /autorizar, na raiz: o Caddy manda
- * todo /cerebro/* para o serviço, então a página do hub não pode morar lá.
+ * Consentimento do OAuth do núcleo (spec 030): um aplicativo (o Claude, por exemplo) pede acesso ao MCP de
+ * um plug-in. Fica em /autorizar, na raiz, porque /<plug-in>/* é do plug-in.
  */
 @Component({
   selector: 'app-autorizar-page',
@@ -17,21 +17,26 @@ import { CerebroService, PedidoOAuth } from './cerebro.service';
   template: `
     <div class="fundo">
       <main class="cartao">
-        <h1><span class="marca"><app-icon name="sticky" [size]="16" /></span> Segundo Cérebro</h1>
         @if (pedido(); as p) {
-          <p class="pergunta">Permitir que <strong>{{ p.cliente }}</strong> acesse o seu Segundo Cérebro?</p>
-          <ul>
-            <li>Buscar e ler notas, a Inbox e o diário.</li>
-            <li>Mandar capturas para a Inbox, criar notas em <code>_sistema/ai</code> e anexar ao diário.</li>
-            <li>Aprovar ou rejeitar itens da Inbox quando você pedir.</li>
-          </ul>
+          <h1><span class="marca"><app-icon name="grid" [size]="16" /></span> {{ p.plugin_nome }}</h1>
+          <p class="pergunta">Permitir que <strong>{{ p.cliente }}</strong> use o <strong>{{ p.plugin_nome }}</strong> em seu nome?</p>
+          @if (p.plugin === 'cerebro') {
+            <ul>
+              <li>Buscar e ler notas, a Inbox e o diário.</li>
+              <li>Mandar capturas para a Inbox, criar notas em <code>_sistema/ai</code> e anexar ao diário.</li>
+              <li>Aprovar ou rejeitar itens da Inbox quando você pedir.</li>
+            </ul>
+          } @else {
+            <p class="sub">O aplicativo poderá usar as ferramentas do MCP deste plug-in com a sua conta.</p>
+          }
           <p class="sub">Depois de permitir, você volta para <strong>{{ p.redirect_host }}</strong>. Conta: {{ auth.user()?.email }}.
-            Dá para revogar a qualquer hora em Segundo Cérebro → Conectar.</p>
+            Dá para revogar a qualquer hora em Configurações → Conexões.</p>
           <div class="acoes">
             <button type="button" (click)="responder(false)" [disabled]="enviando()">Recusar</button>
             <button type="button" class="primario" (click)="responder(true)" [disabled]="enviando()">Permitir</button>
           </div>
         } @else if (erro(); as e) {
+          <h1><span class="marca"><app-icon name="grid" [size]="16" /></span> Autorizar aplicativo</h1>
           <p class="erro">{{ e }}</p>
         } @else {
           <p class="sub">Carregando…</p>
@@ -55,7 +60,7 @@ import { CerebroService, PedidoOAuth } from './cerebro.service';
   `],
 })
 export class AutorizarPageComponent implements OnInit {
-  private api = inject(CerebroService);
+  private api = inject(ConexoesService);
   private route = inject(ActivatedRoute);
   readonly auth = inject(AuthService);
   readonly pedido = signal<PedidoOAuth | null>(null);
@@ -66,7 +71,7 @@ export class AutorizarPageComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.id = this.route.snapshot.queryParamMap.get('pedido') ?? '';
     try {
-      this.pedido.set(await this.api.pedidoOAuth(this.id));
+      this.pedido.set(await this.api.pedido(this.id));
     } catch (e) {
       this.erro.set(mensagemDeErro(e, 'Pedido de autorização inválido ou vencido. Volte ao aplicativo e tente de novo'));
     }
@@ -75,7 +80,7 @@ export class AutorizarPageComponent implements OnInit {
   async responder(aprovar: boolean): Promise<void> {
     this.enviando.set(true);
     try {
-      const { redirect } = await this.api.consentirOAuth(this.id, aprovar);
+      const { redirect } = await this.api.consentir(this.id, aprovar);
       location.href = redirect;
     } catch (e) {
       this.erro.set(mensagemDeErro(e, 'Não foi possível concluir. Volte ao aplicativo e tente de novo'));
