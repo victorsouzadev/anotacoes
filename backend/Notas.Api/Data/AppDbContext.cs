@@ -80,20 +80,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Note> Notes => Set<Note>();
     public DbSet<NoteShare> NoteShares => Set<NoteShare>();
-    public DbSet<Transacao> Transacoes => Set<Transacao>();
-    public DbSet<Orcamento> Orcamentos => Set<Orcamento>();
-    public DbSet<OrcamentoItem> OrcamentoItens => Set<OrcamentoItem>();
-    public DbSet<MetaReserva> MetasReserva => Set<MetaReserva>();
-    public DbSet<MetaAporte> MetaAportes => Set<MetaAporte>();
     public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
-    public DbSet<ConfiguracaoAuvp> ConfiguracoesAuvp => Set<ConfiguracaoAuvp>();
     public DbSet<Notas.Api.Services.Seguranca.SegredoRecifrado> SegredosRecifrados => Set<Notas.Api.Services.Seguranca.SegredoRecifrado>();
-    public DbSet<TransacaoExcluida> TransacoesExcluidas => Set<TransacaoExcluida>();
-    public DbSet<RegraCategoria> RegrasCategoria => Set<RegraCategoria>();
-    public DbSet<PreferenciasFinancas> PreferenciasFinancas => Set<PreferenciasFinancas>();
-    public DbSet<Divida> Dividas => Set<Divida>();
-    public DbSet<ProvisaoAnual> ProvisoesAnuais => Set<ProvisaoAnual>();
-    public DbSet<FechamentoMes> FechamentosMes => Set<FechamentoMes>();
     public DbSet<Site> Sites => Set<Site>();
     public DbSet<Deployment> Deployments => Set<Deployment>();
     public DbSet<SiteVariavel> SiteVariaveis => Set<SiteVariavel>();
@@ -104,29 +92,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // sem "Z" — inconsistência que quebra parsers estritos de ISO 8601 como o do Android
     // (java.time.Instant.parse exige "Z"/offset). Força Kind=Utc em toda leitura, pra todo
     // DateTime/DateTime? do modelo, deixando a serialização sempre consistente.
-    // Competência vazia = mês da data. Fica aqui, e não em cada lugar que cria
-    // lançamento, para nenhum caminho (texto, arquivo, banco, teste) esquecer.
-    public override int SaveChanges(bool acceptAllChangesOnSuccess)
-    {
-        PreencherCompetencia();
-        return base.SaveChanges(acceptAllChangesOnSuccess);
-    }
-
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
-    {
-        PreencherCompetencia();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-    }
-
-    private void PreencherCompetencia()
-    {
-        foreach (var entrada in ChangeTracker.Entries<Transacao>())
-        {
-            if (entrada.State is EntityState.Added or EntityState.Modified && entrada.Entity.Competencia == default)
-                entrada.Entity.Competencia = Transacao.CompetenciaDe(entrada.Entity.Data);
-        }
-    }
-
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
@@ -231,133 +196,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<Site>().WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        b.Entity<Transacao>(e =>
-        {
-            e.ToTable("financas_transacoes");
-            e.Property(t => t.Descricao).IsRequired().HasMaxLength(500);
-            e.Property(t => t.Valor).HasColumnType("decimal(10,2)");
-            e.Property(t => t.Tipo).HasConversion<string>().HasMaxLength(20);
-            e.Property(t => t.Categoria).HasConversion<string>().HasMaxLength(30);
-            e.Property(t => t.FormaPagamento).HasConversion<string>().HasMaxLength(20);
-            e.Property(t => t.Status).HasConversion<string>().HasMaxLength(30);
-            e.Property(t => t.TextoOriginal).HasMaxLength(1000);
-            e.HasIndex(t => new { t.UserId, t.Data });
-            e.Property(t => t.OrigemExterna).HasMaxLength(20);
-            e.Property(t => t.IdExterno).HasMaxLength(64);
-            // Lançamentos digitados têm origem nula e não entram na unicidade (NULLs
-            // são distintos no SQLite); os importados não podem se repetir.
-            e.HasIndex(t => new { t.UserId, t.OrigemExterna, t.IdExterno }).IsUnique();
-            e.HasIndex(t => new { t.UserId, t.Competencia });
-            e.Property(t => t.Conta).HasMaxLength(120);
-            e.Property(t => t.Tags).HasMaxLength(500);
-            e.Property(t => t.OrcamentoAuvp).HasMaxLength(40);
-            e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<TransacaoExcluida>(e =>
-        {
-            e.ToTable("financas_transacoes_excluidas");
-            e.Property(x => x.Origem).HasMaxLength(20);
-            e.Property(x => x.IdExterno).HasMaxLength(64);
-            e.HasIndex(x => new { x.UserId, x.Origem, x.IdExterno }).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<RegraCategoria>(e =>
-        {
-            e.ToTable("financas_regras_categoria");
-            e.Property(x => x.Chave).HasMaxLength(120);
-            e.Property(x => x.Categoria).HasConversion<string>().HasMaxLength(30);
-            e.HasIndex(x => new { x.UserId, x.Chave }).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<PreferenciasFinancas>(e =>
-        {
-            e.ToTable("financas_preferencias");
-            e.Property(x => x.Metodo).HasMaxLength(20);
-            e.Property(x => x.PercentualPagueSePrimeiro).HasColumnType("decimal(5,2)");
-            e.Property(x => x.PatrimonioInvestido).HasColumnType("decimal(14,2)");
-            e.Property(x => x.SaldoInicialFluxo).HasColumnType("decimal(14,2)");
-            e.HasIndex(x => x.UserId).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<Divida>(e =>
-        {
-            e.ToTable("financas_dividas");
-            e.Property(x => x.Nome).HasMaxLength(120);
-            e.Property(x => x.Saldo).HasColumnType("decimal(14,2)");
-            e.Property(x => x.JurosMensal).HasColumnType("decimal(6,3)");
-            e.Property(x => x.ParcelaMinima).HasColumnType("decimal(14,2)");
-            e.HasIndex(x => x.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ProvisaoAnual>(e =>
-        {
-            e.ToTable("financas_provisoes");
-            e.Property(x => x.Nome).HasMaxLength(120);
-            e.Property(x => x.Valor).HasColumnType("decimal(14,2)");
-            e.Property(x => x.ValorReservado).HasColumnType("decimal(14,2)");
-            e.HasIndex(x => x.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<FechamentoMes>(e =>
-        {
-            e.ToTable("financas_fechamentos");
-            e.Property(x => x.MetaPoupanca).HasColumnType("decimal(14,2)");
-            e.Property(x => x.Reflexao).HasMaxLength(2000);
-            e.Property(x => x.Compromisso).HasMaxLength(2000);
-            e.HasIndex(x => new { x.UserId, x.Ano, x.Mes }).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<Orcamento>(e =>
-        {
-            e.ToTable("financas_orcamentos");
-            e.Property(o => o.ValorTotal).HasColumnType("decimal(12,2)");
-            e.Property(o => o.Observacoes).HasMaxLength(500);
-            // No máximo um orçamento por mês por usuário — o upsert do endpoint
-            // depende disso.
-            e.HasIndex(o => new { o.UserId, o.Ano, o.Mes }).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(o => o.Itens).WithOne().HasForeignKey(i => i.OrcamentoId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<OrcamentoItem>(e =>
-        {
-            e.ToTable("financas_orcamento_itens");
-            e.Property(i => i.Categoria).HasConversion<string>().HasMaxLength(30);
-            e.Property(i => i.Percentual).HasColumnType("decimal(7,4)");
-            // Uma categoria não pode aparecer duas vezes no mesmo orçamento.
-            e.HasIndex(i => new { i.OrcamentoId, i.Categoria }).IsUnique();
-        });
-
-        b.Entity<MetaReserva>(e =>
-        {
-            e.ToTable("financas_metas");
-            e.Property(m => m.Nome).IsRequired().HasMaxLength(120);
-            e.Property(m => m.ValorAlvo).HasColumnType("decimal(12,2)");
-            e.Property(m => m.Observacoes).HasMaxLength(500);
-            e.HasIndex(m => m.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(m => m.Aportes).WithOne().HasForeignKey(a => a.MetaId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<MetaAporte>(e =>
-        {
-            e.ToTable("financas_meta_aportes");
-            e.Property(a => a.Valor).HasColumnType("decimal(12,2)");
-            e.Property(a => a.Observacoes).HasMaxLength(500);
-            e.HasIndex(a => a.MetaId);
-            // Índice único filtrado: uma transação de investimento só pode alimentar
-            // uma meta, mas vários aportes avulsos (TransacaoId nulo) convivem.
-            e.HasIndex(a => a.TransacaoId).IsUnique().HasFilter("\"TransacaoId\" IS NOT NULL");
-            e.HasOne<Transacao>().WithMany().HasForeignKey(a => a.TransacaoId).OnDelete(DeleteBehavior.SetNull);
-        });
-
         b.Entity<ConfiguracaoIa>(e =>
         {
             e.ToTable("configuracoes_ia");
@@ -366,14 +204,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.ChaveApiSufixo).HasMaxLength(8);
             e.Property(c => c.ChaveUpscaleSufixo).HasMaxLength(8);
             // Uma configuração por usuário — o upsert do endpoint depende disso.
-            e.HasIndex(c => c.UserId).IsUnique();
-            e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<ConfiguracaoAuvp>(e =>
-        {
-            e.ToTable("configuracoes_auvp");
-            e.Property(c => c.ChaveSufixo).HasMaxLength(8);
             e.HasIndex(c => c.UserId).IsUnique();
             e.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
         });

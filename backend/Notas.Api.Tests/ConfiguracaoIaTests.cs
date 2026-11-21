@@ -304,13 +304,4 @@ public class ConfiguracaoIaApiTests : IClassFixture<ConfiguracaoIaApiTests.Conte
             (await anonimo.GetAsync("/api/configuracoes/ia")).StatusCode);
     }
 
-    [Fact]
-    public async Task CapacidadesRefletemAConfiguracaoDoUsuario()
-    {
-        await Salvar("openrouter", null, "sk-or-v1-paracapacidades1");
-
-        var c = await _client.GetFromJsonAsync<JsonElement>("/api/financas/capacidades");
-        Assert.Equal("openrouter", c.GetProperty("provedor").GetString());
-        Assert.True(c.GetProperty("suportaAnexos").GetBoolean());
-    }
 }
