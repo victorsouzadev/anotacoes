@@ -30,6 +30,38 @@ public class PluginsTests
     }
 
     [Fact]
+    public void Manifesto_do_cerebro_passa()
+    {
+        // plugin.json do hub-cerebro (spec 033): a troca em produção foi recusada por /sw-cerebro.js.
+        const string json = """
+            {
+              "id": "cerebro",
+              "nome": "Segundo Cérebro",
+              "icone": "brain",
+              "descricao": "Notas, capturas e busca no vault do Obsidian",
+              "contrato": 1,
+              "rota": "/cerebro",
+              "porta": 8080,
+              "health": "/cerebro/health",
+              "mcp": "/cerebro/mcp",
+              "rotasLegadas": ["/capturar", "/sw-cerebro.js", "/cerebro-app"],
+              "tabelas": { "prefixo": "cerebro_", "legadas": [] },
+              "usaIa": true,
+              "dados": ["/data/vault", "/data/hub"]
+            }
+            """;
+        Assert.Empty(Plugins.Validar(Manifesto.Ler(json), "cerebro", []));
+    }
+
+    [Fact]
+    public void Rota_de_arquivo_vale_e_ponto_solto_nao()
+    {
+        Assert.Empty(Plugins.Validar(M(rotas: ["/sw-cerebro.js", "/cerebro-app"]), "dieta", []));
+        foreach (var r in new[] { "/a/../b", "/.env", "/a/.git", "/a.", "/a..js" })
+            Assert.Contains(Plugins.Validar(M(rotas: [r]), "dieta", []), p => p.Contains("rota inválida"));
+    }
+
+    [Fact]
     public void Manifesto_valido_passa() => Assert.Empty(Plugins.Validar(M(rotas: ["/api/dieta", "/api/mcp/dieta"]), "dieta", []));
 
     [Theory]
