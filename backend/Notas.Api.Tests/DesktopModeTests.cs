@@ -47,7 +47,7 @@ public class DesktopModeTests : IClassFixture<DesktopApiFactory>, IClassFixture<
 
         // e a sessão vale pra API normal
         c.DefaultRequestHeaders.Authorization = new("Bearer", a.GetProperty("accessToken").GetString());
-        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/imagens/projetos")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/configuracoes/ia")).StatusCode);
     }
 
     [Fact]

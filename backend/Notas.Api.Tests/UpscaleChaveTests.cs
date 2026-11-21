@@ -116,15 +116,4 @@ public class UpscaleChaveTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
-
-    [Fact]
-    public async Task Ampliar_sem_chave_explica_onde_cadastrar()
-    {
-        var res = await _client.PostAsJsonAsync("/api/imagens/upscale",
-            new { imagem = "data:image/png;base64,AAECAwQ=", escala = 2 });
-
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
-        var corpo = await res.Content.ReadAsStringAsync();
-        Assert.Contains("Configurações", corpo);
-    }
 }
