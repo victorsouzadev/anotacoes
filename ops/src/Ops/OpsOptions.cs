@@ -21,6 +21,12 @@ public sealed class OpsOptions
     /// </summary>
     public string TokenHashFile { get; set; } = "/access/ops-token.sha256";
 
+    /// <summary>
+    /// Spec 033 (T011): hashes (um por linha) dos tokens "ops" ativos em Configurações → Conexões do hub. A api
+    /// reescreve o arquivo a cada token gerado ou revogado. Vale junto com o TokenHashFile.
+    /// </summary>
+    public string TokensDoHubFile { get; set; } = "/hub-access/ops-tokens.sha256";
+
     /// <summary>Pasta do log de auditoria (audit.log, uma linha JSON por chamada).</summary>
     public string DataPath { get; set; } = "/data";
 

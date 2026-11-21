@@ -65,30 +65,38 @@ public sealed class AppsMcpAuth
         }
 
         var auth = http.RequestServices.GetRequiredService<AppsMcpAuth>();
-        if (auth.Current() is not { } expected)
-        {
-            http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-            await http.Response.WriteAsync("MCP dos apps desligado: gere o token na tela do Segundo Cérebro (Conectar).");
-            return;
-        }
-
         var header = http.Request.Headers.Authorization.FirstOrDefault();
         var token = header?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true ? header[7..].Trim() : null;
         token ??= http.Request.Query["key"].FirstOrDefault();
-        if (string.IsNullOrEmpty(token) ||
-            !CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(token)), expected.Hash))
-        {
-            http.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return;
-        }
-
         var db = http.RequestServices.GetRequiredService<AppDbContext>();
-        var email = expected.Email.ToLowerInvariant();
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email, http.RequestAborted);
+        var hash = string.IsNullOrEmpty(token) ? null : SHA256.HashData(Encoding.UTF8.GetBytes(token));
+
+        // Spec 033 (T011): token "apps" gerado em Configurações → Conexões. O arquivo da tela do Cérebro segue valendo
+        // até a tela dele parar de gerar.
+        Data.User? user = null;
+        if (hash is not null && await TokensDoNucleo.AppsPeloHash(db, http.RequestServices.GetRequiredService<Auth.ChavesDeAssinatura>(),
+                Convert.ToHexString(hash).ToLowerInvariant(), http.RequestAborted) is { } doNucleo)
+            user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == doNucleo.UsuarioId, http.RequestAborted);
+        else if (auth.Current() is { } expected)
+        {
+            if (hash is null || !CryptographicOperations.FixedTimeEquals(hash, expected.Hash))
+            {
+                http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+            var email = expected.Email.ToLowerInvariant();
+            user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email.ToLower() == email, http.RequestAborted);
+            if (user is null)
+            {
+                http.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await http.Response.WriteAsync("Nenhuma conta do hub com o e-mail do dono do Cérebro.");
+                return;
+            }
+        }
         if (user is null)
         {
-            http.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await http.Response.WriteAsync($"Nenhuma conta do hub com o e-mail do dono do Cérebro.");
+            http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await http.Response.WriteAsync("Gere um token dos MCPs dos apps em Configurações → Conexões.");
             return;
         }
 

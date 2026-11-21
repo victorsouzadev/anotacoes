@@ -24,7 +24,7 @@
 
 ## Phase 5: User Story 3 - Tokens em um só lugar (P2)
 
-- [ ] T011 [US3] Remover a geração de tokens estáticos da tela do Cérebro depois que `Notas.Api` e `ops` leem `core_mcp_tokens` (030)
+- [x] T011 [US3] Remover a geração de tokens estáticos da tela do Cérebro depois que `Notas.Api` e `ops` leem `core_mcp_tokens` (030) — a api aceita o token `apps` de Conexões em `/api/mcp/*` e grava os hashes `ops` em `data/ops-access/`, lido pelo ops; a tela do Cérebro só apaga os tokens MCP e ops antigos. O token `apps` continua na tela do Cérebro porque a rotina de apps do próprio Cérebro usa ele
 
 ## Phase 6: Polish
 

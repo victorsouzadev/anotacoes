@@ -63,6 +63,8 @@ services:
       - ./data/sites:/data/sites
       - ./data/anotacao:/anotacao
       - ./data/plugins/dados/cerebro/hub/access:/access:ro
+      # Spec 033 (T011): hashes dos tokens "ops" de Configurações → Conexões, lidos pelo ops.
+      - ./data/ops-access:/ops-access
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
@@ -209,6 +211,7 @@ services:
       # Hash do token gerado na tela do Segundo Cérebro (substitui o OPS_MCP_TOKEN quando existe).
       # Desde a spec 033 o estado do Cérebro mora na pasta de dados do plug-in.
       - ./data/plugins/dados/cerebro/hub/access:/access:ro
+      - ./data/ops-access:/hub-access:ro
     mem_limit: 128m
 
 networks:

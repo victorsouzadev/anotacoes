@@ -116,7 +116,12 @@ export class ConfiguracoesPageComponent {
       const [apps, tokens, itens] = await Promise.all([this.conexoes.autorizados(), this.conexoes.tokens(), this.registro.listar()]);
       this.apps.set(apps);
       this.tokensMcp.set(tokens);
-      const comMcp = itens.filter((i) => i.origem === 'plugin' && !!i.mcp);
+      // Spec 033 (T011): além dos plug-ins, os MCPs do próprio núcleo (apps e VPS) ganham token aqui.
+      const doNucleo = [
+        { id: 'apps', nome: 'MCPs dos apps (tarefas, finanças, criativo)' },
+        { id: 'ops', nome: 'Operação da VPS' },
+      ] as ItemDoHub[];
+      const comMcp = [...itens.filter((i) => i.origem === 'plugin' && !!i.mcp), ...doNucleo];
       this.pluginsComMcp.set(comMcp);
       if (!this.pluginDoToken && comMcp.length) this.pluginDoToken = comMcp[0].id;
     } catch (e) {
