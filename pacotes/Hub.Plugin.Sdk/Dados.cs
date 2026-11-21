@@ -15,10 +15,15 @@ public class UsuarioRef
 public static class Dados
 {
     /// <summary>
-    /// SQLite do hub com <c>__EFMigrationsHistory_&lt;id&gt;</c>, WAL e <c>busy_timeout=5000</c> em cada conexão.
+    /// SQLite do hub com <c>__EFMigrationsHistory_&lt;id&gt;</c>, WAL e <c>busy_timeout=5000</c> em cada conexão,
+    /// sem pool de conexões e com nova tentativa quando o banco responde ocupado (<see cref="RetentativaDoHub"/>).
+    /// Com a retentativa, uma transação explícita do EF (<c>BeginTransaction</c>) tem de rodar dentro de
+    /// <c>db.Database.CreateExecutionStrategy().ExecuteAsync(...)</c>.
     /// </summary>
     public static DbContextOptionsBuilder UsarBancoDoHub(this DbContextOptionsBuilder o, OpcoesDoHub hub) =>
-        o.UseSqlite($"Data Source={hub.Banco};Default Timeout=5", s => s.MigrationsHistoryTable("__EFMigrationsHistory_" + hub.Id))
+        o.UseSqlite($"Data Source={hub.Banco};Default Timeout=5;Pooling=False", s => s
+                .MigrationsHistoryTable("__EFMigrationsHistory_" + hub.Id)
+                .ExecutionStrategy(d => new RetentativaDoHub(d)))
             .AddInterceptors(new ConexaoDoHub(), new OcupadoDoHub());
 
     /// <summary>
@@ -47,6 +52,17 @@ public static class Dados
             .Where(n => !n.StartsWith(m.Tabelas.Prefixo, StringComparison.OrdinalIgnoreCase)
                         && !(m.Tabelas.Legadas ?? []).Contains(n, StringComparer.OrdinalIgnoreCase))
             .Distinct().Order().ToList();
+
+    /// <summary>
+    /// Tenta de novo (até 5 vezes, no máximo 500 ms entre elas) quando o SQLite responde <c>SQLITE_BUSY</c>/<c>LOCKED</c>
+    /// fora do alcance do <c>busy_timeout</c>, como ao abrir ou devolver a conexão. Nas Tarefas (spec 035) isso dava 500
+    /// em 1 de cada 6 aberturas da tela, que faz cinco leituras em paralelo.
+    /// </summary>
+    public sealed class RetentativaDoHub(Microsoft.EntityFrameworkCore.Storage.ExecutionStrategyDependencies d)
+        : Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy(d, maxRetryCount: 5, maxRetryDelay: TimeSpan.FromMilliseconds(500))
+    {
+        protected override bool ShouldRetryOn(Exception e) => EhOcupado(e);
+    }
 
     internal static bool EhOcupado(Exception e) =>
         e is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 5 or 6 }

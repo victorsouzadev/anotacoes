@@ -258,6 +258,33 @@ public class SdkTests : IAsyncLifetime
         Assert.Equal(5000L, cmd.ExecuteScalar());
         db.Database.CloseConnection();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        // Spec 035: sem pool e com nova tentativa quando o banco responde ocupado.
+        Assert.Contains("Pooling=False", db.Database.GetConnectionString());
+        Assert.IsType<Dados.RetentativaDoHub>(db.Database.CreateExecutionStrategy());
+    }
+
+    [Fact]
+    public void Retentativa_tenta_de_novo_quando_o_banco_esta_ocupado()
+    {
+        var banco = Path.Combine(_pasta, "notas.db");
+        var o = new DbContextOptionsBuilder<Contexto>().UsarBancoDoHub(new OpcoesDoHub { Id = "exemplo", Banco = banco });
+        using var db = new Contexto((DbContextOptions<Contexto>)o.Options);
+        var vezes = 0;
+        var r = db.Database.CreateExecutionStrategy().Execute(() =>
+        {
+            if (++vezes < 3) throw new Microsoft.Data.Sqlite.SqliteException("database is locked", 5);
+            return "ok";
+        });
+        Assert.Equal(("ok", 3), (r, vezes));
+
+        vezes = 0;
+        Assert.ThrowsAny<Exception>(() => db.Database.CreateExecutionStrategy().Execute(() =>
+        {
+            vezes++;
+            throw new Microsoft.Data.Sqlite.SqliteException("no such table", 1);
+        }));
+        Assert.Equal(1, vezes);
     }
 
     [Fact]
