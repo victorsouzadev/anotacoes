@@ -6,7 +6,7 @@ backend — mais um app Android nativo que compartilha o mesmo login/backend pra
 uma das ferramentas. Novas ferramentas entram como mais uma opção na tela
 inicial, sem exigir outro login nem outro deploy.
 
-- **Notas** — notas manuscritas: desenho livre, texto, notas adesivas, checklists,
+- **Notas** (plug-in [hub-notas](https://github.com/victorsouzadev/hub-notas), spec 035) — notas manuscritas: desenho livre, texto, notas adesivas, checklists,
   formas e setas num canvas por página, com várias páginas por nota, pastas, busca,
   exportação de imagem, sincronização entre dispositivos e uso offline.
 - **Finanças** (plug-in [hub-financas](https://github.com/victorsouzadev/hub-financas), spec 035) — lançamentos a partir de texto livre ("gastei 45 no mercado hoje")
@@ -67,7 +67,7 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 | Gráficos (Finanças, Tarefas) | Chart.js |
 | Armazenamento local (Notas) | IndexedDB via `idb` (local-first, funciona offline) |
 | App Android (Tarefas) | Kotlin + Jetpack Compose, Room (SQLite) local-first — no repositório hub-tarefas |
-| Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/notes`, `/api/folders`, `/api/core/*`; as ferramentas extraídas são plug-ins) |
+| Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/auth`, `/api/core/*`, `/api/configuracoes`, `/api/sites`; as ferramentas são plug-ins) |
 | Extração de lançamentos (Finanças) | Anthropic Claude via API, com extrator heurístico local como fallback sem chave configurada |
 | Banco | SQLite (EF Core 9), modo WAL — uma tabela por entidade, compartilhando o mesmo arquivo/contexto |
 | Autenticação | JWT (access 15min + refresh 30d com rotação/detecção de reuso), senhas com BCrypt — login único vale para todas as ferramentas, web e Android |
@@ -78,6 +78,8 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 ## Ferramentas
 
 ### Notas
+
+> Desde a spec 035 é o plug-in [hub-notas](https://github.com/victorsouzadev/hub-notas) (tela em `/notas`; `/notes` e o link público `/p/nota/{token}` redirecionam; API `/api/notes` e `/api/folders` como rotas legadas). O IndexedDB é o mesmo (mesmo domínio) e o worker da lixeira roda só no plug-in. O texto abaixo descreve o comportamento, que não mudou.
 
 ### Editor (canvas por página)
 - **Abertura em modo documento**: nota nova (ou página nova/vazia) já entra com um
@@ -644,23 +646,13 @@ notas-vps/
 │   ├── Auth/                         # TokenService (ES256 + JWKS), ChavesDeAssinatura e Selo das linhas de login (030)
 │   ├── Services/Plugins/             # registro de plug-ins, health a cada 30 s, módulos do núcleo (029)
 │   ├── Services/Auth/OAuthDoNucleo.cs # OAuth dos MCPs dos plug-ins, tokens MCP estáticos e revogados (030)
-│   └── Dtos/                         # Dtos.cs (Notas) e os das telas do núcleo
+│   └── Dtos/                         # login e as telas do núcleo
 ├── frontend/src/app/
 │   ├── core/                         # auth, theme, interceptor/guard — compartilhados por todas as ferramentas
 │   ├── shared/                       # ícones e outros componentes usados em mais de uma ferramenta
-│   ├── data/                         # models, IndexedDB, repo local-first, sync (Notas)
 │   └── features/
 │       ├── auth/                     # login, registro (compartilhado)
 │       ├── hub/                      # tela inicial "Ferramentas" — para onde o login redireciona
-│       ├── notes/                    # lista de notas, pastas, busca
-│       ├── editor/
-│       │   ├── engine/               # renderer, viewport, hit-test, geometria de
-│       │   │                         # seta, layout de sticky/checklist/texto, export
-│       │   ├── canvas-host.ts        # pointer events, ferramentas, resize/rotate
-│       │   ├── toolbar.ts            # barra de ferramentas em grupos colapsáveis
-│       │   ├── text-overlay.ts       # edição de texto/sticky (textarea sobreposto)
-│       │   ├── checklist-overlay.ts  # edição de checklist
-│       │   └── editor.page.ts        # página do editor, páginas múltiplas, autosave
 ├── pacotes/                          # pacotes dos plug-ins (032): ver pacotes/README.md
 │   ├── Hub.Plugin.Sdk/               # login pelo JWKS, MCP, IA, segredos, banco compartilhado e migração de base (031)
 │   ├── grafite-ui/                   # visual, <grafite-barra> e token do plug-in
@@ -735,14 +727,6 @@ Todas as rotas (exceto auth) exigem `Authorization: Bearer <token>` e filtram po
 | Rota | Descrição |
 |---|---|
 | `POST /api/auth/register` \| `login` \| `refresh` \| `logout` | Autenticação (compartilhada por todas as ferramentas) |
-| `GET /api/notes?since=` | Lista notas (metadados ou mudanças desde uma data) |
-| `PUT /api/notes/{id}` | Upsert idempotente (id gerado no cliente) |
-| `GET/POST /api/notes/{id}/links`, `DELETE /api/notes/{id}/links/{linkId}` | Links somente leitura da nota (criar, listar, revogar) |
-| `GET /api/notes/publico/{token}` | Nota compartilhada, sem login (só título e páginas; limite por IP) |
-| `GET /api/folders` | Lista pastas do usuário |
-| `POST /api/folders` | Cria pasta |
-| `PUT /api/folders/{id}` | Renomeia pasta |
-| `DELETE /api/folders/{id}` | Exclui pasta (notas voltam a "sem pasta") |
 | `GET/PUT/DELETE /api/imagens/biblioteca[/{id}]` | Biblioteca de artes do Editor de Imagens (a lista traz só miniaturas) |
 | `GET/PUT /api/imagens/preferencias` | Preferências da conta no Editor de Imagens (anotações de material) |
 | `POST /api/imagens/remover-fundo` | Remoção de fundo por IA (data URL entra, PNG transparente sai) |

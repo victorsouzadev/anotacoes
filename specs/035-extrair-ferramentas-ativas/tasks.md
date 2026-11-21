@@ -32,9 +32,9 @@
 ## Phase 7: User Story 5 - Notas (P3)
 
 - [x] T015 [US5] Levar o e2e de sincronização (lixeira, tags, celular) para Playwright na CI, ainda no núcleo, e deixar verde
-- [ ] T016 [US5] Criar `hub-notas`; mover endpoints de notas, pastas, links, `Services/Lixeira`, telas `notes`/`editor`, `shared/pdf.ts`, `shared/heic.ts`, testes e e2e
-- [ ] T017 [US5] `NotasDb` (`notes`, `folders`, `note_shares` como legadas, base); rotas `/api/notes`, `/api/folders`, `/notes`, `/p/nota`; worker da lixeira só no plug-in
-- [ ] T018 [US5] Ensaio com edição offline atravessando o deploy; deploy; conferência; remover do núcleo
+- [x] T016 [US5] Criar `hub-notas`; mover endpoints de notas, pastas, links, `Services/Lixeira`, telas `notes`/`editor`, `shared/pdf.ts`, `shared/heic.ts`, testes e e2e
+- [x] T017 [US5] `NotasDb` (`notes`, `folders`, `note_shares` como legadas, base); rotas `/api/notes`, `/api/folders`, `/notes`, `/p/nota`; worker da lixeira só no plug-in
+- [x] T018 [US5] Ensaio com edição offline atravessando o deploy; deploy; conferência; remover do núcleo
 
 ## Phase 8: Polish
 

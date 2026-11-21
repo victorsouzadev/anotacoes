@@ -28,44 +28,6 @@ public class RefreshToken
     public string? Selo { get; set; }
 }
 
-public class Folder
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString();
-    public string UserId { get; set; } = "";
-    public string Name { get; set; } = "";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-}
-
-public class Note
-{
-    // Id é UUID gerado no cliente — base da estratégia de sync (PUT upsert idempotente).
-    public string Id { get; set; } = "";
-    public string UserId { get; set; } = "";
-    public string? FolderId { get; set; }
-    public string Title { get; set; } = "";
-    public string Elements { get; set; } = "[]";
-    public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
-    public DateTime? DeletedAt { get; set; }
-    /// <summary>Na lixeira desde (spec 018). O conteúdo fica; depois de 30 dias vira tombstone (DeletedAt).</summary>
-    public DateTime? TrashedAt { get; set; }
-    /// <summary>Tags da nota em JSON (spec 021): minúsculas, únicas, até 20 de até 40 caracteres.</summary>
-    public string Tags { get; set; } = "[]";
-}
-
-/// <summary>Link somente leitura de uma nota (spec 023). Só o SHA-256 do token fica no banco.</summary>
-public class NoteShare
-{
-    public string Id { get; set; } = "";
-    public string NoteId { get; set; } = "";
-    public string UserId { get; set; } = "";
-    public string TokenHash { get; set; } = "";
-    public string Nome { get; set; } = "";
-    public DateTime? ExpiraEm { get; set; }
-    public DateTime? RevogadoEm { get; set; }
-    public DateTime CreatedAt { get; set; }
-}
-
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
@@ -77,9 +39,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Notas.Api.Services.Auth.OAuthToken> OAuthTokens => Set<Notas.Api.Services.Auth.OAuthToken>();
     public DbSet<Notas.Api.Services.Auth.OAuthRevogado> OAuthRevogados => Set<Notas.Api.Services.Auth.OAuthRevogado>();
     public DbSet<Notas.Api.Services.Auth.McpToken> McpTokens => Set<Notas.Api.Services.Auth.McpToken>();
-    public DbSet<Folder> Folders => Set<Folder>();
-    public DbSet<Note> Notes => Set<Note>();
-    public DbSet<NoteShare> NoteShares => Set<NoteShare>();
     public DbSet<ConfiguracaoIa> ConfiguracoesIa => Set<ConfiguracaoIa>();
     public DbSet<Notas.Api.Services.Seguranca.SegredoRecifrado> SegredosRecifrados => Set<Notas.Api.Services.Seguranca.SegredoRecifrado>();
     public DbSet<Site> Sites => Set<Site>();
@@ -133,36 +92,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.Email).UseCollation("NOCASE");
         });
 
-        b.Entity<NoteShare>(e =>
-        {
-            e.ToTable("note_shares");
-            e.HasIndex(x => x.TokenHash).IsUnique();
-            e.HasIndex(x => new { x.UserId, x.NoteId });
-            e.Property(x => x.Nome).HasMaxLength(80);
-        });
-
         b.Entity<RefreshToken>(e =>
         {
             e.ToTable("refresh_tokens");
             e.HasIndex(t => t.TokenHash).IsUnique();
             e.HasIndex(t => t.UserId);
             e.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<Folder>(e =>
-        {
-            e.ToTable("folders");
-            e.HasIndex(f => f.UserId);
-            e.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<Note>(e =>
-        {
-            e.ToTable("notes");
-            e.HasIndex(n => new { n.UserId, n.UpdatedAt });
-            e.HasIndex(n => new { n.UserId, n.FolderId });
-            e.HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<Folder>().WithMany().HasForeignKey(n => n.FolderId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<Site>(e =>

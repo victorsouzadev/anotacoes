@@ -76,7 +76,7 @@ public class LoginAssimetricoTests : IClassFixture<TasksApiFactory>
 
         // E o hub continua aceitando o token novo.
         c.DefaultRequestHeaders.Authorization = new("Bearer", token);
-        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/folders")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/configuracoes/ia")).StatusCode);
     }
 
     private static string Hs256(string sub, string email) => new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
