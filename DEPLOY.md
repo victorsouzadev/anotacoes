@@ -415,6 +415,21 @@ Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy
 mas o Caddy ainda manda `/.well-known/oauth-*` e `/cerebro/oauth/*` para o Cérebro: a virada, com a importação dos clientes
 do `hub.db`, é na extração do Cérebro (033).
 
+**Cérebro como plug-in (033).** O código mora no [hub-cerebro](https://github.com/victorsouzadev/hub-cerebro); a CI publica
+`ghcr.io/victorsouzadev/hub-cerebro:<commit>` (privada) a cada push na `main`. O plug-in serve a API, o MCP e as telas em
+`/cerebro/` e `/cerebro/capturar`; `/capturar` (PWA já instalada), `/sw-cerebro.js` e `/cerebro-app/*` vêm por `rotasLegadas`.
+Na primeira subida, a `Migracao033` copia capturas e configurações do `hub.db` para as tabelas `cerebro_*` e entrega o OAuth
+ao núcleo (`/api/core/oauth/importar`); o `hub.db` fica intacto e ganha o marcador `hub.db.migrado-033`. A IA vem do núcleo
+(`/api/core/ia`, lida quando o usuário abre a tela); sem chave lá, vale a que o Cérebro já tinha. Sem `index.db`, o índice
+é reconstruído em segundo plano e a busca avisa "indexando" (`/cerebro/health` mostra `indexando`).
+
+Troca (033, T009 e T010), sempre com confirmação:
+1. Ensaio com uma cópia da produção (`data/db/notas.db` e `data/cerebro/`) numa pasta à parte, rodando a imagem nova.
+2. PR com a linha `cerebro: ghcr.io/victorsouzadev/hub-cerebro@<commit>` no `plugins.lock` e sem o serviço `cerebro` no
+   `docker-compose.yml` (o `cerebro-webdav` fica). Montar no plug-in `data/cerebro/webdav` em `/data/vault` e `data/cerebro/hub` em `/data/hub`.
+3. Depois do deploy: `cat data/plugins/estado.json`, `curl http://127.0.0.1:8090/cerebro/health` e o smoke test
+   (`cerebro/scripts/smoke-test.sh`). Voltar é comentar a linha do lock e repor o serviço no compose.
+
 ## Migração futura para subdomínio + SSL via NPM
 
 1. Criar registro DNS A de um subdomínio (ex.: `notas.vsitefy.com.br`) para `191.252.177.244`.

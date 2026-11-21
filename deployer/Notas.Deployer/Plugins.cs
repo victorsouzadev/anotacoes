@@ -49,6 +49,7 @@ public static partial class Plugins
     [GeneratedRegex("^[a-z][a-z0-9-]{1,30}$")] private static partial Regex IdValido();
     [GeneratedRegex("^[a-z][a-z0-9]*_$")] private static partial Regex PrefixoValido();
     [GeneratedRegex("^/[a-z0-9][a-z0-9/_-]*$")] private static partial Regex RotaValida();
+    [GeneratedRegex("^/data/[a-z][a-z0-9-]{0,30}$")] private static partial Regex DadoValido();
     [GeneratedRegex(@"^(?<id>[a-z][a-z0-9-]*)\s*:\s*(?<img>[a-z0-9./_-]+)@(?<ver>[A-Za-z0-9._-]+)$")] private static partial Regex LinhaLock();
 
     public static List<EntradaLock> LerLock(string texto)
@@ -101,6 +102,10 @@ public static partial class Plugins
                 if (Sobrepoe(r, res)) p.Add($"rota {r} invade a rota reservada {res}");
             if (!RotaValida().IsMatch(r)) p.Add($"rota inválida: {r}");
         }
+
+        // Pastas próprias, uma por nome, nunca o banco nem as chaves do núcleo (spec 030).
+        foreach (var d in m.Dados ?? [])
+            if (!DadoValido().IsMatch(d) || d is "/data/db" or "/data/core") p.Add($"dados inválido: {d} (use /data/<nome>, fora de db e core)");
 
         var prefixo = m.Tabelas?.Prefixo ?? "";
         if (!PrefixoValido().IsMatch(prefixo)) p.Add("tabelas.prefixo fora do padrão (ex.: dieta_)");

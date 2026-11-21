@@ -109,6 +109,8 @@ services:
       - DEPLOYER_POSTGRES=notas-postgres
       # Plug-ins (spec 029): caminho de data/db NO HOST, montado em cada plug-in (banco compartilhado, spec 031).
       - PLUGINS_BANCO_HOST_DIR=${PLUGINS_BANCO_HOST_DIR:-/opt/notas-vps/data/db}
+      # Arquivos dos plug-ins fora do banco ("dados" do plugin.json): <dir>/<id>/<nome> → /data/<nome> (spec 033).
+      - PLUGINS_DADOS_HOST_DIR=${PLUGINS_DADOS_HOST_DIR:-/opt/notas-vps/data/plugins/dados}
       - PLUGINS_REDE=${PLUGINS_REDE:-notas-vps_default}
       - PLUGINS_CADDY=notas-caddy
     volumes:

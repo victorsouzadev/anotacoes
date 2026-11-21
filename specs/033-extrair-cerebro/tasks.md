@@ -3,7 +3,7 @@
 ## Phase 1: Setup
 
 - [x] T001 Criar o repositório `hub-cerebro` no GitHub (usuário) e `git subtree split --prefix=cerebro` para ele
-- [ ] T002 Copiar `frontend/src/app/features/cerebro/` (menos `autorizar.page.ts`) e a página `/capturar` para `hub-cerebro/web/`, com build Angular próprio
+- [x] T002 Copiar `frontend/src/app/features/cerebro/` (menos `autorizar.page.ts`) e a página `/capturar` para `hub-cerebro/web/`, com build Angular próprio — servido pelo plug-in em `/cerebro/` e `/cerebro/capturar`; `/capturar`, `/sw-cerebro.js` e `/cerebro-app` em `rotasLegadas`; a API aceita `aud=cerebro`
 
 ## Phase 2: Foundational
 
@@ -14,8 +14,8 @@
 ## Phase 3: User Story 1 - Nada muda para quem usa (P1) 🎯 MVP
 
 - [x] T006 [US1] `Migracao033` (capturas, configurações, OAuth via importar; contagens; `hub.db.pre-033`), idempotente, com testes — o `hub.db` fica intacto (acessos e WebDAV seguem nele) e ganha o marcador `hub.db.migrado-033`
-- [ ] T007 [US1] IA do núcleo no `ClaudeClassifier`/`Embeddings`, com cópia única da chave atual se o núcleo não tiver
-- [ ] T008 [US1] Reindexação em background quando o índice derivado falta; busca responde "indexando"
+- [x] T007 [US1] IA do núcleo no `ClaudeClassifier`/`Embeddings`, com cópia única da chave atual se o núcleo não tiver — `IaDoNucleo` lê `/api/core/ia` com o token do usuário (em memória, 10 min) e vale antes da do Cérebro; sem chave no núcleo, segue a atual (a cópia para o núcleo fica para quando ele tiver rota de gravação). Embeddings seguem com a chave do servidor
+- [x] T008 [US1] Reindexação em background quando o índice derivado falta; busca responde "indexando" (MCP, `X-Indexando` na tela e `indexando` no health)
 - [ ] T009 [US1] Ensaio com cópia de produção (quickstart passos 1–2)
 
 ## Phase 4: User Story 2 - Deploy pelo repositório (P1)
@@ -29,4 +29,4 @@
 ## Phase 6: Polish
 
 - [ ] T012 Depois de 7 dias no ar: remover `cerebro/`, `features/cerebro/` e o job do Cérebro da CI do núcleo
-- [ ] T013 [P] Atualizar specs 011, 026–028 (onde o código mora agora), README e `DEPLOY.md`
+- [x] T013 [P] Atualizar specs 011, 026–028 (onde o código mora agora), README e `DEPLOY.md` (com a receita da troca); o deployer passou a montar `dados` do `plugin.json` em `data/plugins/dados/<id>/<nome>`

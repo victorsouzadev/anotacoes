@@ -572,7 +572,7 @@ histórico git ficam em `data/cerebro/hub` e podem ser recriados.
   (na tela, ou com `approve: true` no frontmatter). O serviço nunca edita notas suas.
 - **MCP** em `/cerebro/mcp`: `search`, `read_note`, `list_notes`, `get_daily`, `list_inbox`, `capture`,
   `create_note`, `append_daily`, `process_inbox_item`.
-- **Serviço próprio** (`cerebro/`, .NET 10) no profile `cerebro` do compose, com o mesmo login do hub
+- **Plug-in** [hub-cerebro](https://github.com/victorsouzadev/hub-cerebro) (spec 033): API, MCP, worker e telas (`/cerebro/`, `/cerebro/capturar`) num repositório próprio, publicado como `ghcr.io/victorsouzadev/hub-cerebro:<commit>`. Até a troca em produção roda a cópia em `cerebro/`, no profile `cerebro` do compose, com o mesmo login do hub
   (JWT) e acesso só para `CEREBRO_USUARIOS`. Exige HTTPS: ver [DEPLOY.md](DEPLOY.md).
 
 ### Anotação
