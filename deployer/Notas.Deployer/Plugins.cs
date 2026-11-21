@@ -48,7 +48,8 @@ public static partial class Plugins
 
     [GeneratedRegex("^[a-z][a-z0-9-]{1,30}$")] private static partial Regex IdValido();
     [GeneratedRegex("^[a-z][a-z0-9]*_$")] private static partial Regex PrefixoValido();
-    [GeneratedRegex("^/[a-z0-9][a-z0-9/_-]*$")] private static partial Regex RotaValida();
+    // Ponto vale (arquivos como /sw-cerebro.js, spec 033), mas não ".." nem segmento começando com ponto.
+    [GeneratedRegex(@"^/[a-z0-9][a-z0-9_-]*(\.[a-z0-9_-]+)*(/[a-z0-9][a-z0-9_-]*(\.[a-z0-9_-]+)*)*$")] private static partial Regex RotaValida();
     [GeneratedRegex("^/data/[a-z][a-z0-9-]{0,30}$")] private static partial Regex DadoValido();
     [GeneratedRegex(@"^(?<id>[a-z][a-z0-9-]*)\s*:\s*(?<img>[a-z0-9./_-]+)@(?<ver>[A-Za-z0-9._-]+)$")] private static partial Regex LinhaLock();
 
