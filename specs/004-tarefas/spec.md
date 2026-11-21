@@ -1,5 +1,7 @@
 # Feature Specification: Tarefas (web, Android e MCP)
 
+> **Onde o código mora (spec 035)**: no plug-in `tarefas`, repositório [hub-tarefas](https://github.com/victorsouzadev/hub-tarefas). Os caminhos do núcleo citados abaixo (`backend/Notas.Api`, `frontend/src/app/features`) são de antes da extração.
+
 **Feature Branch**: `004-tarefas` (spec retroativa, sem branch)
 
 **Created**: 2026-11-18

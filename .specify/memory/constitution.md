@@ -6,8 +6,7 @@ Relatório de sincronização
   núcleo (spec 030) e o banco compartilhado (spec 031).
 - Restrições técnicas: linhas "Plug-ins", "Banco" e "Deploy" atualizadas; "MCP" ganha a rota do plug-in.
 - Templates: sem mudança ✅
-- Pendências: o código ainda é monólito até a 029 ser implementada; até lá, a forma antiga (pasta em
-  features/ e Endpoints no Notas.Api) continua válida.
+- Pendências: nenhuma; desde a spec 035 só o que é do núcleo mora no Notas.Api (linha "Núcleo" da tabela).
 - Histórico: 1.0.0 (2026-11-18) primeira ratificação.
 -->
 
@@ -91,6 +90,7 @@ plano com o motivo e a alternativa mais simples rejeitada.
 | Frontend | Angular 21, standalone components, signals, rotas lazy por ferramenta |
 | Backend | ASP.NET Core 9 (núcleo) ou .NET 9+ (plug-ins), Minimal APIs, EF Core + SQLite (WAL) |
 | Banco | Um `notas.db` compartilhado; cada ferramenta com prefixo de tabela e histórico de migração próprios (spec 031) |
+| Núcleo | Login, contas, hub, Configurações (IA), Publicar e o registro de plug-ins; as demais ferramentas são plug-ins desde as specs 033 a 035 |
 | Plug-ins | Repositório `hub-<id>`, imagem no GHCR, `plugin.json`, `Hub.Plugin.Sdk` e `@grafite/ui` (specs 029 e 032) |
 | Serviços à parte | .NET 10 (`cerebro/`, `ops/`), `deployer/` é o único com `docker.sock` |
 | Android | Kotlin + Jetpack Compose, Room, local-first |

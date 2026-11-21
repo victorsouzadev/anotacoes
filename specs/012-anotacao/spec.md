@@ -1,5 +1,7 @@
 # Feature Specification: Anotação (revisão das marcações de dados pessoais)
 
+> **Onde o código mora (spec 035)**: no plug-in `anotacao`, repositório [hub-anotacao](https://github.com/victorsouzadev/hub-anotacao). Os caminhos do núcleo citados abaixo (`backend/Notas.Api`, `frontend/src/app/features`) são de antes da extração.
+
 **Feature Branch**: `012-anotacao` (spec retroativa, sem branch)
 
 **Created**: 2026-11-18
