@@ -8,7 +8,6 @@ using Microsoft.EntityFrameworkCore;
 using Notas.Api.Auth;
 using Notas.Api.Data;
 using Notas.Api.Endpoints;
-using Notas.Api.Services.Dieta;
 using Notas.Api.Services.Financas;
 using Notas.Api.Services.Financas.Llm;
 using Notas.Api.Services.Financas.Chat;
@@ -143,17 +142,6 @@ public static class NotasApp
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
         builder.Services.AddScoped<ILlmExtractorFactory, LlmExtractorFactory>();
 
-        // Ferramenta "Dieta": gamificação derivada dos registros e consulta de código de barras.
-        builder.Services.AddScoped<DietaProgresso>();
-        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.FerramentasDieta>();
-        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.ChatDieta>();
-        builder.Services.AddScoped<Notas.Api.Services.Dieta.Ia.ReconhecedorDeAlimento>();
-        builder.Services.AddHttpClient<IOpenFoodFacts, OpenFoodFacts>(c =>
-        {
-            c.Timeout = TimeSpan.FromSeconds(10);
-            c.DefaultRequestHeaders.UserAgent.ParseAdd("Anotacoes-Dieta/1.0 (cerebro.vsitefy.com.br)");
-        });
-
         // Ferramenta "Anotação": aprovação das pré-anotações do Claude nos relatos do mestrado.
         // Só liga com Anotacao__RunDir apontando para uma pasta local; na VPS fica desligada.
         builder.Services.Configure<Notas.Api.Services.Anotacao.AnotacaoOptions>(
@@ -172,8 +160,8 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
-        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas, /financas e /dieta. Os de /criativo e /treino
-        // são dos plug-ins desde a spec 034 (o Caddy manda essas URLs para eles).
+        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas e /financas. Os de /criativo e /treino são dos
+        // plug-ins desde a spec 034 e o de /dieta desde a 035 (o Caddy manda essas URLs para eles).
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
@@ -181,8 +169,7 @@ public static class NotasApp
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (tarefas, finanças e dieta). Só leitura, " +
-                "exceto os registros rápidos da dieta (refeição, peso e água).")
+                "Dados das ferramentas do hub do usuário (tarefas e finanças). Só leitura.")
             .WithHttpTransport(o =>
             {
                 o.Stateless = true;
@@ -196,8 +183,7 @@ public static class NotasApp
                 };
             })
             .WithTools<Notas.Api.Mcp.TarefasMcpTools>()
-            .WithTools<Notas.Api.Mcp.FinancasMcpTools>()
-            .WithTools<Notas.Api.Mcp.DietaMcpTools>();
+            .WithTools<Notas.Api.Mcp.FinancasMcpTools>();
 
         builder.Services
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -238,17 +224,6 @@ public static class NotasApp
                     Window = TimeSpan.FromMinutes(1),
                 }));
 
-            // IA da Dieta (chat e reconhecimento de foto): por usuário, como a das Finanças.
-            o.AddPolicy("dieta-ia", ctx => RateLimitPartition.GetFixedWindowLimiter(
-                ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                    ?? ctx.User.FindFirst("sub")?.Value
-                    ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 30,
-                    Window = TimeSpan.FromMinutes(1),
-                }));
-
             // Importar arquivo custa muito mais que interpretar uma frase: uma foto de
             // cupom vale milhares de tokens e um PDF de extrato, dezenas de milhares.
             // O limite é bem mais apertado que o do lançamento por texto.
@@ -283,7 +258,6 @@ public static class NotasApp
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             db.Database.Migrate();
             db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
-            TacoSeed.Aplicar(db);
             Selo.SelarExistentes(db, chaves, pastaChaves);
         }
 
@@ -336,13 +310,11 @@ public static class NotasApp
         app.MapConfiguracaoIaEndpoints();
         app.MapTasksEndpoints();
         app.MapSitesEndpoints();
-        app.MapDietaEndpoints();
-        app.MapDietaIaEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas|dieta)$)}");
+        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

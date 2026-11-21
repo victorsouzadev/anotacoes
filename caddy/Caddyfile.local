@@ -118,7 +118,7 @@
         file_server
     }
 
-    # APK do app Dieta, gravado pelo workflow "Android (Dieta)" em /opt/notas-vps/downloads/android.
+    # APK do app Dieta, gravado pelo workflow "Android (Dieta)" do hub-dieta em /opt/notas-vps/downloads/android.
     handle /downloads/android/* {
         root * /srv-downloads
         @json path *.json

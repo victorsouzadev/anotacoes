@@ -21,11 +21,11 @@ inicial, sem exigir outro login nem outro deploy.
   app Android nativo ([`mobile/`](mobile/), Kotlin/Compose, local-first) — o app
   funciona 100% offline e, opcionalmente, sincroniza com a mesma conta do hub pra
   ver as mesmas tarefas no navegador. Ver [mobile/README.md](mobile/README.md).
-- **Dieta** — diário alimentar com a tabela TACO e código de barras (Open Food
+- **Dieta** (plug-in [hub-dieta](https://github.com/victorsouzadev/hub-dieta), spec 035) — diário alimentar com a tabela TACO e código de barras (Open Food
   Facts), metas de calorias/macros/água, peso, plano alimentar, fotos de refeição e
   de progresso, gamificação (XP, níveis, sequências, conquistas, desafio semanal) e
   links públicos de progresso com escopos. App Android nativo próprio
-  ([`mobile/dieta`](mobile/dieta/README.md)) e tela web em `/dieta` (dia, registro, água, peso,
+  (`mobile/dieta` do hub-dieta) e tela web em `/dieta` (dia, registro, água, peso,
   progresso, perfil e plano, links e assistente), API em `/api/dieta` e MCP
   `/api/mcp/dieta`, que o Segundo Cérebro sincroniza.
 - **Treino** (plug-in congelado [hub-treino](https://github.com/victorsouzadev/hub-treino), spec 034) — recebe os treinos do app Android Treino Corrida (repositório

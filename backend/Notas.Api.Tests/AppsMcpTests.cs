@@ -144,13 +144,10 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         Assert.Contains("\"financas_resumo_mes\"", financas);
         Assert.DoesNotContain("\"tarefas_", financas);
 
-        var dieta = (await Rpc("dieta", Listar)).Body;
-        Assert.Contains("\"dieta_registrar_refeicao\"", dieta);
-        Assert.DoesNotContain("\"tarefas_", dieta);
-
-        // Spec 034: criativo e treino são dos plug-ins (o Caddy manda essas URLs para eles); aqui não existem mais.
+        // Specs 034/035: criativo, treino e dieta são dos plug-ins (o Caddy manda essas URLs para eles); aqui não existem mais.
         Assert.Equal(HttpStatusCode.NotFound, (await Rpc("criativo", Listar)).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await Rpc("treino", Listar)).Status);
+        Assert.Equal(HttpStatusCode.NotFound, (await Rpc("dieta", Listar)).Status);
         Assert.Equal(HttpStatusCode.NotFound, (await Rpc("outro", Listar)).Status);
     }
 
@@ -166,9 +163,6 @@ public class AppsMcpTests : IClassFixture<TasksApiFactory>, IAsyncLifetime
         Assert.Contains("Saldo", financas);
         Assert.Contains("150,50", financas);
         Assert.Contains("| Categoria | Total |", financas);
-
-        var dieta = (await Rpc("dieta", Chamar("dieta_resumo"))).Body;
-        Assert.Contains("Meta: 2000 kcal", dieta);
     }
 
     [Fact]

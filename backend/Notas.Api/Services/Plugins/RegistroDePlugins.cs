@@ -40,7 +40,6 @@ public static class ModulosDoNucleo
         ("notas", "Notas", "pen", "/notes"),
         ("financas", "Finanças", "wallet", "/financas"),
         ("tarefas", "Tarefas", "checklist", "/tasks"),
-        ("dieta", "Dieta", "apple", "/dieta"),
     ];
 }
 
