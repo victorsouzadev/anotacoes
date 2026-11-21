@@ -36,6 +36,21 @@ public class SchemaTests
         Assert.True(Valido(Cerebro));
         Assert.True(Valido(Minimo));
         Assert.True(Valido(Trocar(Minimo, "contrato", 0)));
+        Assert.True(Valido(Trocar(Minimo, "congelado", true)));
+    }
+
+    [Fact]
+    public void Congelado_e_opcional_e_chega_ao_sdk()
+    {
+        var arq = Path.Combine(Path.GetTempPath(), "schema-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(arq, Trocar(Minimo, "congelado", true));
+        try
+        {
+            Assert.True(Manifesto.Ler(arq).Congelado);
+            File.WriteAllText(arq, Minimo);
+            Assert.False(Manifesto.Ler(arq).Congelado);
+        }
+        finally { File.Delete(arq); }
     }
 
     [Theory]

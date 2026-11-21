@@ -58,6 +58,10 @@
       "type": "string",
       "pattern": "^/[a-z][a-z0-9-]{1,30}/"
     },
+    "congelado": {
+      "type": "boolean",
+      "description": "Plug-in sem evolução (spec 034): fica no ar na versão fixada no plugins.lock, sem CI a cada mudança do núcleo."
+    },
     "rotasLegadas": {
       "type": "array",
       "uniqueItems": true,

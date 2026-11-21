@@ -30,7 +30,7 @@ public class PluginEstado
 }
 
 public record ItemDoHub(string Id, string Nome, string Icone, string Rota, string Origem, string Estado, string Versao,
-    string? Descricao = null, string? Android = null, string? UltimaFalha = null, string? Mcp = null);
+    string? Descricao = null, string? Android = null, string? UltimaFalha = null, string? Mcp = null, bool Congelado = false);
 
 /// <summary>Ferramentas que ainda são módulos do núcleo, no mesmo formato do manifesto (spec 029).</summary>
 public static class ModulosDoNucleo
@@ -53,7 +53,8 @@ public static class RegistroDePlugins
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private record Manifesto(string Id, string Nome, string Icone, string? Descricao, string Rota, int Porta, string Health, string? Android, string? Mcp = null);
+    private record Manifesto(string Id, string Nome, string Icone, string? Descricao, string Rota, int Porta, string Health, string? Android,
+        string? Mcp = null, bool Congelado = false);
     private record EstadoDeployer(string Id, string Versao, string? VersaoAnterior, JsonElement? Manifesto, bool NoAr,
         string? UltimaFalha, bool Ativo, string? SegredoServicoHash);
 
@@ -100,7 +101,7 @@ public static class RegistroDePlugins
             .Select(p => (p, m: JsonSerializer.Deserialize<Manifesto>(p.Manifesto, Json)))
             .Where(x => x.m is not null)
             .Select(x => new ItemDoHub(x.p.Id, x.m!.Nome, x.m.Icone, x.m.Rota, "plugin", x.p.NoAr ? "no-ar" : "indisponivel",
-                x.p.Versao, x.m.Descricao, x.m.Android, x.p.UltimaFalha, x.m.Mcp))
+                x.p.Versao, x.m.Descricao, x.m.Android, x.p.UltimaFalha, x.m.Mcp, x.m.Congelado))
             .ToList();
         // Um plug-in extraído substitui o módulo do núcleo com o mesmo id.
         var modulos = ModulosDoNucleo.Todos.Where(m => plugins.All(p => p.Id != m.Id))
