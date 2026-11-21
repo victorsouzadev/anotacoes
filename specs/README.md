@@ -100,7 +100,7 @@ Todas têm `checklists/requirements.md`.
 Pedido em 2026-11-19: dividir o hub em vários repositórios, com este como núcleo e as ferramentas
 conectadas como plug-ins, **todas usando o mesmo banco**. Desenho:
 [Hub e Plug-ins](https://claude.ai/artifact/T4ifWBSrGHX1ikcrpQ9Wfo). A constituição foi emendada
-para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: a base (029 a 032) está no código com pendências; a 033 (Cérebro) está em produção desde 20/11/2026 (falta T011 e T012); 034 e 035 ainda não começaram.
+para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: a base (029 a 032) está no código com pendências; a 033 (Cérebro) está em produção desde 20/11/2026 (falta T011 e T012); a 034 (Criativo e Treino congelados) está em produção desde 21/11/2026; a 035 ainda não começou.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
