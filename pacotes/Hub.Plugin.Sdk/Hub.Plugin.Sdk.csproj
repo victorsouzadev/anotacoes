@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageId>Hub.Plugin.Sdk</PackageId>
     <!-- Mudar a versão publica um pacote novo (.github/workflows/pacotes.yml). -->
-    <Version>1.4.0</Version>
-    <Description>SDK dos plug-ins do hub notas-vps: login do núcleo (JWKS), health, banco compartilhado, MCP, IA, segredos e relógio.</Description>
+    <Version>1.5.0</Version>
+    <Description>SDK dos plug-ins do hub notas-vps: login do núcleo (JWKS), health, banco compartilhado (SQLite ou Postgres), esquema pelo modelo, MCP, IA, segredos e relógio.</Description>
     <Authors>victorsouzadev</Authors>
     <RepositoryUrl>https://github.com/victorsouzadev/anotacoes</RepositoryUrl>
   </PropertyGroup>
@@ -16,6 +16,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.3" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
   </ItemGroup>
 
   <ItemGroup>
