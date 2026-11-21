@@ -160,8 +160,8 @@ public static class NotasApp
         // modelo tem folga bem maior que a extração de um lançamento.
         builder.Services.AddHttpClient(nameof(ChatModeloCliente), c => c.Timeout = TimeSpan.FromSeconds(90));
 
-        // MCPs dos apps para o Segundo Cérebro e o Claude: /api/mcp/tarefas e /financas. Os de /criativo e /treino são dos
-        // plug-ins desde a spec 034 e o de /dieta desde a 035 (o Caddy manda essas URLs para eles).
+        // MCP dos apps para o Segundo Cérebro e o Claude: /api/mcp/financas. Os de /criativo e /treino são dos plug-ins
+        // desde a spec 034 e os de /dieta e /tarefas desde a 035 (o Caddy manda essas URLs para eles).
         // Um servidor só; cada rota enxerga só as ferramentas do seu grupo (prefixo do nome).
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddSingleton<Notas.Api.Mcp.AppsMcpAuth>();
@@ -169,7 +169,7 @@ public static class NotasApp
         builder.Services.AddScoped<Notas.Api.Mcp.McpUser>();
         builder.Services
             .AddMcpServer(o => o.ServerInstructions =
-                "Dados das ferramentas do hub do usuário (tarefas e finanças). Só leitura.")
+                "Dados das ferramentas do hub do usuário (finanças). Só leitura.")
             .WithHttpTransport(o =>
             {
                 o.Stateless = true;
@@ -182,7 +182,6 @@ public static class NotasApp
                     return Task.CompletedTask;
                 };
             })
-            .WithTools<Notas.Api.Mcp.TarefasMcpTools>()
             .WithTools<Notas.Api.Mcp.FinancasMcpTools>();
 
         builder.Services
@@ -308,13 +307,12 @@ public static class NotasApp
         app.MapOrcamentoEndpoints();
         app.MapMetaEndpoints();
         app.MapConfiguracaoIaEndpoints();
-        app.MapTasksEndpoints();
         app.MapSitesEndpoints();
         app.MapAnotacaoEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
-        app.MapMcp("/api/mcp/{grupo:regex(^(tarefas|financas)$)}");
+        app.MapMcp("/api/mcp/{grupo:regex(^(financas)$)}");
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 

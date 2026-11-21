@@ -349,14 +349,19 @@ Detalhes de uso em [cerebro/README.md](cerebro/README.md).
 - Memória: os dois containers têm teto de 256 MB e 128 MB.
 - O índice e a fila (`data/cerebro/hub`) podem ser apagados com o serviço parado: são recriados a partir do vault.
 
-## MCPs dos apps do hub (Tarefas e Finanças; Criativo, Treino e Dieta nos plug-ins)
+## MCPs dos apps do hub (Finanças; Criativo, Treino, Dieta e Tarefas nos plug-ins)
 
-O `api` serve `/api/mcp/tarefas` e `/api/mcp/financas` (`/api/mcp/criativo` e `/api/mcp/treino` são dos plug-ins desde a
-spec 034 e `/api/mcp/dieta` desde a 035, nas mesmas URLs e com o mesmo token) (só leitura; no plug-in Dieta, também os
+O `api` serve `/api/mcp/financas` (`/api/mcp/criativo` e `/api/mcp/treino` são dos plug-ins desde a
+spec 034 e `/api/mcp/dieta` e `/api/mcp/tarefas` desde a 035, nas mesmas URLs e com o mesmo token) (só leitura; no plug-in Dieta, também os
 registros rápidos de refeição, peso e água), autenticados pelo
 token gerado na tela do Segundo Cérebro (`data/cerebro/hub/access/apps-token.json`, montado só leitura em
 `/access`). O Cérebro usa esses MCPs na rotina de sincronização. Detalhes em
 [cerebro/README.md](cerebro/README.md#apps-do-hub-mcps-e-rotina-de-sincronização).
+
+## App Android das Tarefas
+
+Desde a spec 035 o app Organizador mora no repositório [hub-tarefas](https://github.com/victorsouzadev/hub-tarefas)
+(`mobile/app`, Gradle próprio), que o compila e testa na CI. Ele continua falando com `/api/tasks` (rota legada do plug-in).
 
 ## App Android da Dieta
 
