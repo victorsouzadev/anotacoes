@@ -2,8 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
 using Notas.Api.Data;
 using Notas.Api.Services.Plugins;
@@ -11,7 +9,7 @@ using Xunit;
 
 namespace Notas.Api.Tests;
 
-/// <summary>Specs 029 (registro e /api/plugins), 030 (token por plug-in) e 031 (migrações do núcleo).</summary>
+/// <summary>Specs 029 (registro e /api/plugins), 030 (token por plug-in) e 031 (banco compartilhado).</summary>
 public class NucleoPluginsTests : IClassFixture<TasksApiFactory>
 {
     private readonly TasksApiFactory _factory;
@@ -110,26 +108,5 @@ public class NucleoPluginsTests : IClassFixture<TasksApiFactory>
         Assert.Equal(["exemplo"], linhas.Select(l => l.Id));
         Assert.Equal("v1", linhas[0].VersaoAnterior);
         Assert.Equal("http://plugin-exemplo:8080/exemplo/api/health", RegistroDePlugins.UrlHealth(linhas[0]));
-    }
-
-    /// <summary>
-    /// Spec 031: depois da divisão, migração do núcleo não apaga tabela que não é dele. Na extração a entidade sai
-    /// do AppDbContext com uma migração de Up vazio (o EF geraria DropTable).
-    /// </summary>
-    [Fact]
-    public void Migracoes_do_nucleo_nao_apagam_tabela_alheia()
-    {
-        var tipos = typeof(AppDbContext).Assembly.GetTypes()
-            .Where(t => t.IsSubclassOf(typeof(Migration)) && !t.IsAbstract)
-            .Select(t => (t, id: t.GetCustomAttributes(typeof(MigrationAttribute), false).Cast<MigrationAttribute>().Single().Id))
-            .Where(x => string.CompareOrdinal(x.id, "20261120") >= 0);
-        var proibidas = new List<string>();
-        foreach (var (t, id) in tipos)
-        {
-            var m = (Migration)Activator.CreateInstance(t)!;
-            foreach (var op in m.UpOperations.OfType<DropTableOperation>())
-                if (!op.Name.StartsWith("core_")) proibidas.Add($"{id}: {op.Name}");
-        }
-        Assert.Empty(proibidas);
     }
 }

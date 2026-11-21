@@ -36,7 +36,7 @@ Nos dois casos:
 
 ### II. Dados do usuário são sagrados
 - Nunca perder dado: mudanças de schema são compatíveis com o que já está gravado
-  (migração na leitura ou migração EF explícita); nada de apagar coluna ou tabela sem plano
+  (migração na leitura, coluna nova pelo esquema do núcleo (spec 037) ou migração EF no plug-in); nada de apagar coluna ou tabela sem plano
   de migração e backup.
 - Toda consulta é filtrada pelo usuário dono; nenhum endpoint devolve dado de outra conta.
 - Segredos (chaves de API, tokens) ficam cifrados no banco (`Services/Seguranca`) ou em

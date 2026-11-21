@@ -182,7 +182,7 @@ public static class NotasApp
             var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
             var dir = Path.GetDirectoryName(Path.GetFullPath(dataSource));
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            db.Database.Migrate();
+            EsquemaNucleo.Garantir(db);
             db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             Selo.SelarExistentes(db, chaves, pastaChaves);
         }

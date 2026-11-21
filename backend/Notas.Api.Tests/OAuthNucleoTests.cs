@@ -320,7 +320,9 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
                 });
             db.Users.Add(new User { Id = "u-recifrar-" + linha, Email = linha + "@recifrar.test" });
             await db.SaveChangesAsync();
-            // configuracoes_auvp é do plug-in financas desde a spec 035 (fora do modelo do núcleo): gravada direto.
+            // configuracoes_auvp é do plug-in financas desde a spec 035 (fora do modelo do núcleo) e o plug-in cria a tabela
+            // (spec 037): aqui ela é criada e gravada direto.
+            await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS configuracoes_auvp (Id TEXT NOT NULL PRIMARY KEY, UserId TEXT NOT NULL, ChaveCifrada TEXT NULL, AtualizadoEm TEXT NOT NULL)");
             await db.Database.ExecuteSqlAsync(
                 $"INSERT INTO configuracoes_auvp (Id, UserId, ChaveCifrada, AtualizadoEm) VALUES ({linha.ToString().ToUpperInvariant()}, {"u-recifrar-" + linha}, {protetor.Proteger("chave-auvp-clara")}, {DateTime.UtcNow})");
         }
