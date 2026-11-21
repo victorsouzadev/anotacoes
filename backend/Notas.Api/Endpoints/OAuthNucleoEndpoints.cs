@@ -259,6 +259,22 @@ public static class OAuthNucleoEndpoints
             });
         });
 
+        // Spec 035: texto claro de um segredo do núcleo numa tabela que agora é do plug-in, para ele recifrar com a chave
+        // dele. Uma vez por linha; o núcleo lê o valor do banco (ver Recifragem).
+        app.MapPost("/api/core/segredos/recifrar", async (Notas.Api.Services.Seguranca.PedidoRecifrar p, HttpRequest r, AppDbContext db,
+            Notas.Api.Services.Seguranca.IProtetorDeSegredos protetor, CancellationToken ct) =>
+        {
+            if (await PluginDoServico(r, db) is not { } plugin) return Results.Unauthorized();
+            var (res, claro) = await Notas.Api.Services.Seguranca.Recifragem.Executar(db, protetor, plugin, p, ct);
+            return res switch
+            {
+                Notas.Api.Services.Seguranca.Recifragem.Resultado.Entregue => Results.Ok(new { valor = claro }),
+                Notas.Api.Services.Seguranca.Recifragem.Resultado.NaoPermitida => Results.Forbid(),
+                Notas.Api.Services.Seguranca.Recifragem.Resultado.JaEntregue => Results.Conflict(new { error = "Segredo já entregue." }),
+                _ => Results.NotFound(),
+            };
+        });
+
         app.MapGet("/api/core/revogados", async (HttpRequest r, AppDbContext db, OAuthDoNucleo s, Mcp.AppsMcpAuth arquivo) =>
         {
             if (await PluginDoServico(r, db) is not { } plugin) return Results.Unauthorized();

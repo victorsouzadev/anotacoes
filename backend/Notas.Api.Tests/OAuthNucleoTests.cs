@@ -164,7 +164,7 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         var cliente = await RegistrarCliente(c);
         var (_, ch) = Pkce();
         var r = await c.GetAsync($"/api/core/oauth/authorize?response_type=code&client_id={cliente}&redirect_uri={Uri.EscapeDataString(Redirect)}" +
-            $"&code_challenge={ch}&code_challenge_method=S256&resource={Uri.EscapeDataString("http://localhost/financas/mcp")}");
+            $"&code_challenge={ch}&code_challenge_method=S256&resource={Uri.EscapeDataString("http://localhost/plugin-inexistente/mcp")}");
         Assert.Contains("error=invalid_target", r.Headers.Location!.ToString());
     }
 
@@ -291,6 +291,44 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         var r = await criativo.GetFromJsonAsync<JsonElement>("/api/core/criativo/resumo?usuario=ninguem");
         Assert.Equal("Nenhum site publicado.", r.GetProperty("sites").GetString());
         Assert.False(string.IsNullOrEmpty(r.GetProperty("servidor").GetString()));
+    }
+
+    [Fact]
+    public async Task Recifrar_entrega_o_segredo_da_auvp_uma_vez_so_para_a_financas()
+    {
+        await GarantirPlugin();
+        const string segredo = "segredo-de-servico-da-financas-com-tamanho-suficiente";
+        var linha = Guid.NewGuid();
+        using (var s = _factory.Services.CreateScope())
+        {
+            var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+            var protetor = s.ServiceProvider.GetRequiredService<Notas.Api.Services.Seguranca.IProtetorDeSegredos>();
+            if (!db.PluginsEstado.Any(p => p.Id == "financas"))
+                db.PluginsEstado.Add(new PluginEstado
+                {
+                    Id = "financas", Versao = "v1", Manifesto = """{"id":"financas","nome":"Finanças","icone":"wallet","rota":"/financas","porta":8080,"health":"/financas/api/health"}""",
+                    SegredoServicoHash = Hash(segredo),
+                });
+            db.Users.Add(new User { Id = "u-recifrar-" + linha, Email = linha + "@recifrar.test" });
+            db.ConfiguracoesAuvp.Add(new ConfiguracaoAuvp { Id = linha, UserId = "u-recifrar-" + linha, ChaveCifrada = protetor.Proteger("chave-auvp-clara") });
+            await db.SaveChangesAsync();
+        }
+        var pedido = new { tabela = "configuracoes_auvp", linha = linha.ToString() };
+
+        var outro = _factory.CreateClient();
+        outro.DefaultRequestHeaders.Authorization = new("Bearer", SegredoServico);
+        Assert.Equal(HttpStatusCode.Forbidden, (await outro.PostAsJsonAsync("/api/core/segredos/recifrar", pedido)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().PostAsJsonAsync("/api/core/segredos/recifrar", pedido)).StatusCode);
+
+        var financas = _factory.CreateClient();
+        financas.DefaultRequestHeaders.Authorization = new("Bearer", segredo);
+        Assert.Equal(HttpStatusCode.Forbidden, (await financas.PostAsJsonAsync("/api/core/segredos/recifrar", new { tabela = "configuracoes_ia", linha = "x" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await financas.PostAsJsonAsync("/api/core/segredos/recifrar", new { tabela = "configuracoes_auvp", linha = Guid.NewGuid().ToString() })).StatusCode);
+
+        var r = await financas.PostAsJsonAsync("/api/core/segredos/recifrar", pedido);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("chave-auvp-clara", (await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("valor").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, (await financas.PostAsJsonAsync("/api/core/segredos/recifrar", pedido)).StatusCode);
     }
 
     [Fact]

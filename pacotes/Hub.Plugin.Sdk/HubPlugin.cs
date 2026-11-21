@@ -97,6 +97,7 @@ public static class HubPlugin
         builder.Services.AddAuthorizationBuilder().AddPolicy(McpDoPlugin.Politica, p => p
             .RequireAuthenticatedUser().RequireAssertion(ctx => McpDoPlugin.Permite(ctx.User, m.Id)));
         builder.Services.AddSingleton(new IaDoHub(o, http));
+        builder.Services.AddSingleton(RelogioDoHub.DoAmbiente());
         builder.WebHost.UseUrls($"http://+:{m.Porta}");
         return m;
     }

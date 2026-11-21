@@ -2,9 +2,9 @@
 
 ## Phase 2: Foundational
 
-- [ ] T001 `RelogioDoHub` no SDK (032) substituindo `FinancasClock` em Dieta, Tarefas e Finanças, com testes
-- [ ] T002 `POST /api/core/segredos/recifrar` no núcleo (uma vez por linha, token de serviço), com testes
-- [ ] T003 [P] URLs base configuráveis nos apps Android (`mobile/dieta`, `mobile/app`), ainda apontando para as rotas atuais
+- [X] T001 `RelogioDoHub` no SDK (032) substituindo `FinancasClock` em Dieta, Tarefas e Finanças, com testes (SDK 1.3.0; o núcleo segue com FinancasClock até cada extração)
+- [X] T002 `POST /api/core/segredos/recifrar` no núcleo (uma vez por linha, token de serviço), com testes
+- [X] T003 [P] URLs base configuráveis nos apps Android (`mobile/dieta`, `mobile/app`), ainda apontando para as rotas atuais (já existia: endereço do servidor nas configurações dos dois apps; os plug-ins mantêm /api/dieta e /api/tasks)
 
 ## Phase 3: User Story 1 - Dieta (P1) 🎯 MVP
 
