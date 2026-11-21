@@ -164,7 +164,7 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         var cliente = await RegistrarCliente(c);
         var (_, ch) = Pkce();
         var r = await c.GetAsync($"/api/core/oauth/authorize?response_type=code&client_id={cliente}&redirect_uri={Uri.EscapeDataString(Redirect)}" +
-            $"&code_challenge={ch}&code_challenge_method=S256&resource={Uri.EscapeDataString("http://localhost/financas/mcp")}");
+            $"&code_challenge={ch}&code_challenge_method=S256&resource={Uri.EscapeDataString("http://localhost/plugin-inexistente/mcp")}");
         Assert.Contains("error=invalid_target", r.Headers.Location!.ToString());
     }
 
