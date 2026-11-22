@@ -31,7 +31,7 @@ public class TasksApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
         builder.UseSetting("JWT_SECRET", "test-secret-key-for-integration-tests-only-0123456789");
         builder.UseSetting("ConnectionStrings:Db", Conexao);
-        builder.UseSetting("Chaves:Chaves", _dbPath + ".chaves");
+        builder.UseSetting("Core:Chaves", _dbPath + ".chaves");
     }
 
     private static void ComoAdmin(string sql)

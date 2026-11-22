@@ -50,7 +50,7 @@ public static class Esquema
             .Where(c => c.Length > 0 && !c.StartsWith("--"))
             // O Npgsql só põe aspas nos nomes quando precisa; o SQLite sempre põe.
             .Select(c => System.Text.RegularExpressions.Regex.Replace(c,
-                @"^CREATE (UNIQUE INDEX|INDEX|TABLE) (?!IF NOT EXISTS)", "CREATE $1 IF NOT EXISTS "));
+                @"^CREATE (UNIQUE INDEX|INDEX|TABLE|COLLATION) (?!IF NOT EXISTS)", "CREATE $1 IF NOT EXISTS "));
 
     internal static bool EhPostgres(DbContext db) =>
         db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
