@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-19
 
-**Status**: Planejado
+**Status**: Implementada (specs 029–035); o arquivo `notas.db` foi substituído pelo banco `hub` no Postgres na spec 038
 
 **Input**: "Quero que todos utilizem o mesmo banco." Divisão em plug-ins (029).
 

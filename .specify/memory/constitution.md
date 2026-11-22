@@ -29,8 +29,9 @@ Toda ferramenta é uma opção do hub, nunca outro produto. Ela pode viver em do
 
 Nos dois casos:
 - O login é o do núcleo: só o núcleo emite tokens; o plug-in só valida (spec 030).
-- O banco é um só, o `notas.db` compartilhado; cada ferramenta é dona apenas das suas tabelas
-  e não lê nem grava as de outra (spec 031).
+- O banco é um só, o `hub` no Postgres (spec 038): o núcleo no schema `nucleo` e cada plug-in no
+  próprio schema, com papel próprio; nenhuma ferramenta lê nem grava as tabelas de outra, e o banco recusa
+  se tentar. A única ponte é `REFERENCES` em `nucleo.users`.
 - O deploy passa pelo deployer do núcleo; proibido outro domínio, outro login ou deploy por fora.
 - Serviço que não é ferramenta (`deployer/`, `ops/`) continua exigindo justificativa no plano.
 
@@ -79,8 +80,8 @@ depender da cultura do servidor.
 
 ### VIII. Simplicidade
 Comece pelo menor recurso que resolve o caso real. Sem dependência nova, camada, serviço ou
-abstração sem necessidade demonstrada no plano. SQLite compartilhado até que haja motivo
-medido para outra coisa. Complexidade extra é registrada na tabela "Complexity Tracking" do
+abstração sem necessidade demonstrada no plano. Um banco Postgres só, com um schema por
+ferramenta; servidor novo só com motivo medido. Complexidade extra é registrada na tabela "Complexity Tracking" do
 plano com o motivo e a alternativa mais simples rejeitada.
 
 ## Restrições técnicas
@@ -88,8 +89,8 @@ plano com o motivo e a alternativa mais simples rejeitada.
 | Camada | Padrão |
 |---|---|
 | Frontend | Angular 21, standalone components, signals, rotas lazy por ferramenta |
-| Backend | ASP.NET Core 9 (núcleo) ou .NET 9+ (plug-ins), Minimal APIs, EF Core + SQLite (WAL) |
-| Banco | Um `notas.db` compartilhado; cada ferramenta com prefixo de tabela e histórico de migração próprios (spec 031) |
+| Backend | ASP.NET Core 9 (núcleo) ou .NET 9+ (plug-ins), Minimal APIs, EF Core + Npgsql (SQLite só como volta da spec 038, até a limpeza) |
+| Banco | Banco `hub` no `notas-postgres`: schema `nucleo` e um schema e um papel por plug-in; cada esquema é criado pelo `Esquema.Garantir` do SDK, sem migrações (specs 037 e 038) |
 | Núcleo | Login, contas, hub, Configurações (IA), Publicar e o registro de plug-ins; as demais ferramentas são plug-ins desde as specs 033 a 035 |
 | Plug-ins | Repositório `hub-<id>`, imagem no GHCR, `plugin.json`, `Hub.Plugin.Sdk` e `@grafite/ui` (specs 029 e 032) |
 | Serviços à parte | .NET 10 (`cerebro/`, `ops/`), `deployer/` é o único com `docker.sock` |

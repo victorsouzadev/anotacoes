@@ -69,7 +69,7 @@ Produção: **https://cerebro.vsitefy.com.br** (HTTPS pelo nginx-proxy-manager, 
 | App Android (Tarefas) | Kotlin + Jetpack Compose, Room (SQLite) local-first — no repositório hub-tarefas |
 | Backend | ASP.NET Core 9 — um processo só, Minimal APIs, endpoints agrupados por ferramenta (`/api/auth`, `/api/core/*`, `/api/configuracoes`, `/api/sites`; as ferramentas são plug-ins) |
 | Extração de lançamentos (Finanças) | Anthropic Claude via API, com extrator heurístico local como fallback sem chave configurada |
-| Banco | SQLite (EF Core 9), modo WAL — uma tabela por entidade, compartilhando o mesmo arquivo/contexto |
+| Banco | PostgreSQL 17 (EF Core + Npgsql), banco `hub` com o schema `nucleo` e um schema e um papel por plug-in (spec 038). A Anotação ainda usa o `notas.db` (SQLite), que fica como volta até a limpeza |
 | Autenticação | JWT (access 15min + refresh 30d com rotação/detecção de reuso), senhas com BCrypt — login único vale para todas as ferramentas, web e Android |
 | Proxy/servidor estático | Caddy 2 (build do Angular embutido na imagem) |
 | Publicar (sites dos usuários) | ZIP → `data/sites/<slug>/`; Caddy serve `<slug>.<ip>.sslip.io`; API C# em container `aspnet` criado por um serviço `deployer` isolado — ver [docs/poc-multi-app/DISCOVERY.md](docs/poc-multi-app/DISCOVERY.md) |
@@ -669,7 +669,7 @@ notas-vps/
 ├── caddy/                            # Caddyfile + Dockerfile (build do Angular embutido)
 ├── scripts/
 │   ├── deploy.py                     # empacota e envia via SFTP
-│   ├── backup.sh                     # backup do SQLite e dos sites (cron na VPS); chama a cópia externa
+│   ├── backup.sh                     # backup do banco hub (pg_dump), do notas.db e dos sites (cron na VPS); chama a cópia externa
 │   ├── backup-externo.sh             # cópia cifrada fora da VPS com restic (spec 036)
 │   ├── backup-conferir.sh            # conferência semanal da restauração (spec 036)
 │   ├── backup-comum.sh               # limpeza, trava, configuração e estado (backup-externo.json)
@@ -715,10 +715,9 @@ emenda do tracejado — puro e testado em `decalque.spec.ts`), `decalque-tipo.ts
 ou `toppers.ts` registrado em `catalogo.ts`.
 
 Ferramenta nova é um plug-in (specs 029 a 032): um repositório próprio criado do `hub-modelo`, com o
-`Hub.Plugin.Sdk` e o `@grafite/ui`, e uma linha no `plugins.lock`. O banco continua um só (`notas.db`, spec 031):
-cada plug-in grava só nas tabelas com o prefixo dele e tem o próprio `__EFMigrationsHistory_<id>`; ao extrair uma
-ferramenta que já existe, a primeira migração do plug-in é uma `MigracaoDeBase`, conferida contra o banco antes de
-ser registrada. O núcleo (`backend/`, `frontend/`) fica com login, hub, Configurações e o que ainda não foi extraído.
+`Hub.Plugin.Sdk` e o `@grafite/ui`, e uma linha no `plugins.lock`. O banco é o `hub` no Postgres (spec 038):
+cada plug-in tem schema e papel próprios, e o `Esquema.Garantir` do SDK cria e completa as tabelas ao subir, sem
+migrações. O deployer passa a conexão em `HUB_BANCO`, lida de `data/plugins/banco/<id>`. O núcleo (`backend/`, `frontend/`) fica com login, hub, Configurações e o que ainda não foi extraído.
 
 ## API (resumo)
 

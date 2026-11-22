@@ -2,7 +2,7 @@
 
 **Feature Branch**: na branch da sessão
 **Created**: 2026-11-21
-**Status**: Draft
+**Status**: Em uso (janela feita em 2026-11-22; falta a limpeza T019)
 **Input**: "Todos podem e devem usar o postgres"
 
 ## Clarifications
