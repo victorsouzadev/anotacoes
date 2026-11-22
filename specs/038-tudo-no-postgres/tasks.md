@@ -26,9 +26,9 @@
 - [x] T015 `pg_dump` do banco `hub` em `scripts/backup.sh` e na cópia externa (036, que já leva a pasta de backups inteira)
 
 ## Fase 6: Janela na VPS (precisa de confirmação)
-- [ ] T016 Criar o banco `hub`, os schemas e os papéis, e gravar as senhas nos `.env`. O papel do núcleo precisa de `SELECT` em `financas.configuracoes_auvp` e de `financas` no `search_path` (recifragem)
-- [ ] T017 Parar o hub, copiar, conferir, trocar as conexões e subir; se a conferência falhar, voltar para o SQLite
-- [ ] T018 Conferir cada ferramenta e as permissões entre papéis
+- [x] T016 Criar o banco `hub`, os schemas e os papéis, e gravar as senhas nos `.env`. O papel do núcleo precisa de `SELECT` em `financas.configuracoes_auvp` e de `financas` no `search_path` (recifragem). Feito em 22/11: senhas em `/root/.config/notas-pg.env` (600), conexões em `data/plugins/banco/<id>` e `HUB_BANCO_NUCLEO` no `.env`
+- [x] T017 Parar o hub, copiar, conferir, trocar as conexões e subir; se a conferência falhar, voltar para o SQLite. Feito em 22/11: 52 tabelas e 5498 linhas, 415 colunas conferidas sem diferença; o `notas.db` ficou intacto (backup `notas-20261122-1436.db`)
+- [x] T018 Conferir cada ferramenta e as permissões entre papéis. Núcleo e os oito plug-ins com health ok; plug-in não lê `users` nem o schema de outro, e o núcleo lê a chave do AUVP
 
 ## Fase 7: Limpeza
 - [ ] T019 Tirar o SQLite do código do núcleo, do SDK e dos plug-ins
