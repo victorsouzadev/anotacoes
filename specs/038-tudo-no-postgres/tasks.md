@@ -20,7 +20,7 @@
 
 ## Fase 4: Cópia
 - [x] T013 `ferramentas/CopiaParaPostgres` com conversão de tipos e conferência de contagens. Papéis e permissões em `scripts/postgres-hub.sh`
-- [ ] T014 Ensaio com uma cópia do `notas.db` de produção num Postgres local (a cópia não sai da máquina). Feito com um banco sem dados: papéis, núcleo e seis plug-ins subiram no Postgres, a cópia conferiu 49 tabelas e as permissões entre papéis recusaram o que deviam. Falta repetir com a cópia de produção
+- [x] T014 Ensaio com uma cópia do `notas.db` de produção (backup de 22/11) num Postgres local; a cópia foi apagada no fim. Núcleo e plug-ins criaram os schemas, a cópia conferiu 52 tabelas em cerca de 1 s, e somas e contagens de 415 colunas bateram com o SQLite (só `core_plugins_estado` mudou, reescrita pelo núcleo do ensaio). As permissões entre papéis recusaram o que deviam
 
 ## Fase 5: Backup
 - [x] T015 `pg_dump` do banco `hub` em `scripts/backup.sh` e na cópia externa (036, que já leva a pasta de backups inteira)
