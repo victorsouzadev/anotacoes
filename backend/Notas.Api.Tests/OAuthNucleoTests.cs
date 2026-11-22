@@ -322,9 +322,9 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
             await db.SaveChangesAsync();
             // configuracoes_auvp é do plug-in financas desde a spec 035 (fora do modelo do núcleo) e o plug-in cria a tabela
             // (spec 037): aqui ela é criada e gravada direto.
-            await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS configuracoes_auvp (Id TEXT NOT NULL PRIMARY KEY, UserId TEXT NOT NULL, ChaveCifrada TEXT NULL, AtualizadoEm TEXT NOT NULL)");
+            await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS configuracoes_auvp (\"Id\" TEXT NOT NULL PRIMARY KEY, \"UserId\" TEXT NOT NULL, \"ChaveCifrada\" TEXT NULL, \"AtualizadoEm\" TEXT NOT NULL)");
             await db.Database.ExecuteSqlAsync(
-                $"INSERT INTO configuracoes_auvp (Id, UserId, ChaveCifrada, AtualizadoEm) VALUES ({linha.ToString().ToUpperInvariant()}, {"u-recifrar-" + linha}, {protetor.Proteger("chave-auvp-clara")}, {DateTime.UtcNow})");
+                $"INSERT INTO configuracoes_auvp (\"Id\", \"UserId\", \"ChaveCifrada\", \"AtualizadoEm\") VALUES ({linha.ToString().ToUpperInvariant()}, {"u-recifrar-" + linha}, {protetor.Proteger("chave-auvp-clara")}, {DateTime.UtcNow.ToString("O")})");
         }
         var pedido = new { tabela = "configuracoes_auvp", linha = linha.ToString() };
 
@@ -361,11 +361,8 @@ public class OAuthNucleoTests : IClassFixture<TasksApiFactory>
         using (var s = _factory.Services.CreateScope())
         {
             var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
-            using var con = new Microsoft.Data.Sqlite.SqliteConnection(db.Database.GetDbConnectionString());
-            con.Open();
-            using var cmd = con.CreateCommand();
-            cmd.CommandText = "INSERT INTO core_mcp_tokens (Id, Plugin, Hash, UsuarioId, Email, CriadoEm) VALUES ('f1', 'exemplo', 'abc', 'u', 'e', '2026-01-01')";
-            cmd.ExecuteNonQuery();
+            // SQL cru, por fora do EF (e do selo): vale no SQLite e no Postgres.
+            db.Database.ExecuteSqlRaw("INSERT INTO core_mcp_tokens (\"Id\", \"Plugin\", \"Hash\", \"UsuarioId\", \"Email\", \"CriadoEm\") VALUES ('f1', 'exemplo', 'abc', 'u', 'e', '2026-01-01')");
         }
         Assert.DoesNotContain((await Revogados()).GetProperty("mcp").EnumerateArray(), m => m.GetProperty("hash").GetString() == "abc");
     }

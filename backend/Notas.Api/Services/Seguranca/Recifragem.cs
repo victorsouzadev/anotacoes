@@ -25,10 +25,11 @@ public static class Recifragem
     public static readonly Dictionary<(string Plugin, string Tabela), Func<AppDbContext, string, CancellationToken, Task<string?>>> Permitidas = new()
     {
         // A tabela é do plug-in desde a spec 035 (fora do modelo do núcleo): lida direto. O EF grava o Guid em texto
-        // maiúsculo; upper() cobre linha gravada de outro jeito.
+        // maiúsculo no SQLite e o Postgres
+        // devolve o uuid em minúsculas; upper() cobre os dois. Colunas entre aspas: o Postgres não diferencia sem elas (spec 038).
         [("financas", "configuracoes_auvp")] = async (db, linha, ct) => Guid.TryParse(linha, out var id)
             ? await db.Database.SqlQuery<string?>(
-                    $"SELECT ChaveCifrada AS Value FROM configuracoes_auvp WHERE upper(Id) = {id.ToString().ToUpperInvariant()}")
+                    $"SELECT \"ChaveCifrada\" AS \"Value\" FROM configuracoes_auvp WHERE upper(CAST(\"Id\" AS text)) = {id.ToString().ToUpperInvariant()}")
                 .FirstOrDefaultAsync(ct)
             : null,
     };

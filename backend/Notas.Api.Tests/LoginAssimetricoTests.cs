@@ -118,13 +118,22 @@ public class LoginAssimetricoTests : IClassFixture<TasksApiFactory>
 
     private void Sql(string sql, params (string, object?)[] p)
     {
-        var cs = _factory.Services.GetRequiredService<IConfiguration>()["ConnectionStrings:Db"]!;
-        using var con = new SqliteConnection(cs);
-        con.Open();
+        // Pela conexão do próprio contexto: vale no SQLite e no Postgres (spec 038).
+        using var s = _factory.Services.CreateScope();
+        var db = s.ServiceProvider.GetRequiredService<AppDbContext>();
+        var con = db.Database.GetDbConnection();
+        db.Database.OpenConnection();
         using var cmd = con.CreateCommand();
         cmd.CommandText = sql;
-        foreach (var (n, v) in p) cmd.Parameters.AddWithValue(n, v ?? DBNull.Value);
+        foreach (var (n, v) in p)
+        {
+            var par = cmd.CreateParameter();
+            par.ParameterName = n;
+            par.Value = v ?? DBNull.Value;
+            cmd.Parameters.Add(par);
+        }
         cmd.ExecuteNonQuery();
+        db.Database.CloseConnection();
     }
 
     [Fact]
@@ -132,9 +141,9 @@ public class LoginAssimetricoTests : IClassFixture<TasksApiFactory>
     {
         _ = await Registrar(); // garante o banco criado
         var email = $"forjado_{Guid.NewGuid():N}@example.com";
-        Sql("INSERT INTO users (Id, Email, PasswordHash, CreatedAt) VALUES ($id, $e, $h, $d)",
-            ("$id", Guid.NewGuid().ToString()), ("$e", email), ("$h", BCrypt.Net.BCrypt.HashPassword("Sup3rSecret!", 4)),
-            ("$d", DateTime.UtcNow));
+        Sql("INSERT INTO users (\"Id\", \"Email\", \"PasswordHash\", \"CreatedAt\") VALUES (@id, @e, @h, @d)",
+            ("@id", Guid.NewGuid().ToString()), ("@e", email), ("@h", BCrypt.Net.BCrypt.HashPassword("Sup3rSecret!", 4)),
+            ("@d", DateTime.UtcNow));
         var r = await _factory.CreateClient().PostAsJsonAsync("/api/auth/login", new { email, password = "Sup3rSecret!" });
         Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
     }
@@ -145,7 +154,7 @@ public class LoginAssimetricoTests : IClassFixture<TasksApiFactory>
         var (c, corpo) = await Registrar();
         var email = corpo.GetProperty("user").GetProperty("email").GetString();
         Assert.Equal(HttpStatusCode.OK, (await c.PostAsJsonAsync("/api/auth/login", new { email, password = "Sup3rSecret!" })).StatusCode);
-        Sql("UPDATE users SET PasswordHash = $h WHERE Email = $e", ("$h", BCrypt.Net.BCrypt.HashPassword("Outra123!", 4)), ("$e", email));
+        Sql("UPDATE users SET \"PasswordHash\" = @h WHERE \"Email\" = @e", ("@h", BCrypt.Net.BCrypt.HashPassword("Outra123!", 4)), ("@e", email));
         var r = await c.PostAsJsonAsync("/api/auth/login", new { email, password = "Outra123!" });
         Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
     }
@@ -156,9 +165,9 @@ public class LoginAssimetricoTests : IClassFixture<TasksApiFactory>
         var (c, corpo) = await Registrar();
         var userId = corpo.GetProperty("user").GetProperty("id").GetString();
         var falso = TokenService.GenerateRefreshToken();
-        Sql("INSERT INTO refresh_tokens (Id, UserId, TokenHash, ExpiresAt, CreatedAt) VALUES ($id, $u, $h, $x, $d)",
-            ("$id", Guid.NewGuid().ToString()), ("$u", userId), ("$h", TokenService.HashToken(falso)),
-            ("$x", DateTime.UtcNow.AddDays(10)), ("$d", DateTime.UtcNow));
+        Sql("INSERT INTO refresh_tokens (\"Id\", \"UserId\", \"TokenHash\", \"ExpiresAt\", \"CreatedAt\") VALUES (@id, @u, @h, @x, @d)",
+            ("@id", Guid.NewGuid().ToString()), ("@u", userId), ("@h", TokenService.HashToken(falso)),
+            ("@x", DateTime.UtcNow.AddDays(10)), ("@d", DateTime.UtcNow));
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await c.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = falso })).StatusCode);
 
