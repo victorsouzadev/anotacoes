@@ -5,9 +5,9 @@
 - [x] T002 Escolha do provedor pelo `ConnectionStrings:Db` (`Host=` liga o Npgsql) e publicação de uma versão nova do SDK
 
 ## Fase 2: Núcleo
-- [ ] T003 Núcleo com Npgsql e `Esquema.Garantir` do SDK; `EsquemaNucleo` sai
-- [ ] T004 Testes do backend contra Postgres na CI (serviço `postgres:17-alpine`), também em modo invariante
-- [ ] T005 Busca sem diferenciar maiúsculas e minúsculas e datas em UTC revisadas no núcleo
+- [x] T003 Núcleo com Npgsql e `Esquema.Garantir` do SDK; `EsquemaNucleo` sai
+- [x] T004 Testes do backend contra Postgres na CI (serviço `postgres:17-alpine`), também em modo invariante. A `SitesTests` (Publicar) tem fábrica própria e segue no SQLite; vai para o Postgres na T019
+- [x] T005 Busca sem diferenciar maiúsculas e minúsculas e datas em UTC revisadas no núcleo: e-mail com colação ICU `ci` no Postgres; selos de `refresh_tokens` e `core_oauth_tokens` aceitam a data em microssegundos; SQL cru da recifragem com colunas entre aspas
 
 ## Fase 3: Plug-ins (um PR por repositório)
 - [ ] T006 hub-notas
@@ -26,7 +26,7 @@
 - [ ] T015 `pg_dump` do banco `hub` em `scripts/backup.sh` e na cópia externa (036)
 
 ## Fase 6: Janela na VPS (precisa de confirmação)
-- [ ] T016 Criar o banco `hub`, os schemas e os papéis, e gravar as senhas nos `.env`
+- [ ] T016 Criar o banco `hub`, os schemas e os papéis, e gravar as senhas nos `.env`. O papel do núcleo precisa de `SELECT` em `financas.configuracoes_auvp` e de `financas` no `search_path` (recifragem)
 - [ ] T017 Parar o hub, copiar, conferir, trocar as conexões e subir; se a conferência falhar, voltar para o SQLite
 - [ ] T018 Conferir cada ferramenta e as permissões entre papéis
 
