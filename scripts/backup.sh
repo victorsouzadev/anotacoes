@@ -10,7 +10,8 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 DATE=$(date +%Y%m%d-%H%M)
 
 mkdir -p "$BACKUPS"
-sqlite3 "$BASE/data/db/notas.db" ".backup '$BACKUPS/notas-$DATE.db'"
+# Enquanto o notas.db existir (até a limpeza da spec 038), ele continua no backup, e a volta para o SQLite fica garantida.
+[ -f "$BASE/data/db/notas.db" ] && sqlite3 "$BASE/data/db/notas.db" ".backup '$BACKUPS/notas-$DATE.db'"
 
 # Bancos dos apps publicados pela ferramenta "Publicar" (um SQLite por site).
 for db in "$BASE"/data/sites/*/data/app.db; do
@@ -19,9 +20,10 @@ for db in "$BASE"/data/sites/*/data/app.db; do
   sqlite3 "$db" ".backup '$BACKUPS/site-$slug-$DATE.db'"
 done
 
-# Bancos Postgres dos sites (um por site, site_<slug>), se o serviço estiver de pé.
+# Bancos Postgres dos sites (um por site, site_<slug>) e do hub, se o serviço estiver de pé.
 if docker ps --format '{{.Names}}' | grep -qx notas-postgres; then
-  for banco in $(docker exec notas-postgres psql -U postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'site\_%'"); do
+  # Spec 038: o banco "hub" (schema nucleo e um por plug-in) entra junto, quando existir.
+  for banco in $(docker exec notas-postgres psql -U postgres -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'site\_%' OR datname = 'hub'"); do
     docker exec notas-postgres pg_dump -U postgres -Fc "$banco" > "$BACKUPS/pg-$banco-$DATE.dump"
   done
 fi

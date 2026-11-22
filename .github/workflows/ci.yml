@@ -97,6 +97,30 @@ jobs:
       - run: npm ci && npm test
         working-directory: pacotes/grafite-ui
 
+  # Spec 038: a cópia do notas.db para o Postgres, contra um Postgres de verdade.
+  ferramentas:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: teste
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      HUB_PG_TESTE: Host=localhost;Port=5432;Username=postgres;Password=teste;Database=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - run: dotnet test ferramentas/CopiaParaPostgres.Tests --configuration Release
+      - name: Cópia em modo globalization-invariant
+        run: dotnet test ferramentas/CopiaParaPostgres.Tests --configuration Release
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
+
   # Ferramenta "Publicar": o serviço que cria os containers dos apps.
   deployer-build:
     runs-on: ubuntu-latest
