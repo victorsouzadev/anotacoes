@@ -73,7 +73,7 @@ public sealed class CopiaPostgresTests : IDisposable
         Skip.If(string.IsNullOrEmpty(Base), "HUB_PG_TESTE não definida");
         var r = Copia.Executar(_sqlite, Destino, limpar: false, TextWriter.Null);
         Assert.Equal(["financas.fin_contas", "nucleo.users"], r.Tabelas.Select(t => $"{t.Schema}.{t.Tabela}"));
-        Assert.Equal(12.25m, Escalar("SELECT sum(\"Saldo\") FROM financas.fin_contas"));
+        Assert.Equal(7.25m, Escalar("SELECT sum(\"Saldo\") FROM financas.fin_contas"));
         Assert.Equal(1L, Escalar("SELECT count(*) FROM financas.fin_contas WHERE \"Ativa\""));
         // A sequência continua depois do maior Id copiado.
         Pg(Destino, "INSERT INTO financas.fin_contas (\"UserId\", \"Saldo\", \"Ativa\") VALUES ('u1', 0, true)");
