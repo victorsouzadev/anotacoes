@@ -40,15 +40,12 @@ app.MapGet(manifesto.Rota + "/api/eu", (HttpContext c) => c.UsuarioId()).Require
 
 - **Login**: só ES256 das chaves do JWKS do núcleo, `aud` = id do plug-in. O token do hub (`aud=notas-vps`) também
   vale enquanto `HUB_ACEITAR_AUDIENCIA_LEGADA` não for `false` (apps Android antigos).
-- **Banco**: `UsarBancoDoHub` usa o `notas.db` montado em `/data/db`, histórico `__EFMigrationsHistory_<id>`, WAL e
-  `busy_timeout=5000`, sem pool de conexões e com nova tentativa quando o banco responde ocupado (1.4.0; transação explícita do EF vai dentro de `CreateExecutionStrategy().ExecuteAsync`). `ReferenciarUsuarios()` mapeia `users` só com o `Id`. Num teste,
-  `Dados.TabelasForaDoDono(db.Model, manifesto)` tem de dar vazio.
-- **Base de migração** (ferramenta extraída, tabelas que já existem): `dotnet ef migrations add Base`, troque a classe
-  base para `MigracaoDeBase` e apague o `Up`/`Down` gerados (não compilam). Chame `db.MigrarComBase()` em vez de
-  `Migrate()`: na primeira subida ele confere tabelas, colunas e tipos do modelo da base com o banco e não sobe se
-  algo não bater (o deployer mantém a versão anterior).
-- **Banco ocupado**: um `SQLITE_BUSY` que passa dos 5 s vai para o log com "SQLITE_BUSY" e soma em `Dados.Ocupado`.
-  `scripts/carga-sqlite.sh` (no núcleo) mede com 3 processos gravando juntos.
+- **Banco** (1.5.1, spec 038): `UsarBancoDoHub` usa o Npgsql quando `HUB_BANCO` tem `Host=` (banco `hub`, schema e papel
+  do id) e o SQLite do `notas.db` caso contrário (`Dados.EhPostgres`). `ReferenciarUsuarios()` mapeia `users` só com o `Id`.
+  Num teste, `Dados.TabelasForaDoDono(db.Model, manifesto)` tem de dar vazio.
+- **Esquema**: sem migrações. Ao subir, `Esquema.Garantir(db)` cria as tabelas, os índices e as colunas novas do modelo
+  (com trava para dois processos subindo juntos); não apaga nem troca tipo. `MigracaoDeBase`/`MigrarComBase` ficaram só
+  para compatibilidade e não são mais usados pelos plug-ins.
 - **MCP**: `app.MapMcp(manifesto.Mcp!).ExigirMcpDoPlugin()` aceita o OAuth do núcleo (`aud=<id>`, `jti` revogado para
   em até 60 s) e os tokens `hub_…` de Configurações → Conexões; o login do hub (`aud=notas-vps`) não abre o MCP. Sem
   login, o 401 traz o `resource_metadata` que o Claude usa para descobrir o OAuth.
