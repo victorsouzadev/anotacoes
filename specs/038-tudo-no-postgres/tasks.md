@@ -32,4 +32,4 @@
 
 ## Fase 7: Limpeza
 - [ ] T019 Tirar o SQLite do código do núcleo, do SDK e dos plug-ins
-- [ ] T020 Documentação: README, DEPLOY, constituição, specs 031 e 037
+- [x] T020 Documentação: README, DEPLOY, constituição, specs 031 e 037 (a remoção do SQLite entra junto com a T019)

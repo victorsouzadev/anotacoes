@@ -2,7 +2,7 @@
 
 **Feature Branch**: `nucleo/037-esquema-sem-migracoes`
 **Created**: 2026-11-21
-**Status**: Draft
+**Status**: Concluída; desde a spec 038 o esquema vem do `Esquema.Garantir` do SDK, no Postgres
 **Input**: "Quero só o núcleo no repositório principal, o resto fica em seu repositório próprio" e "Não quero o código das migrações no repositório".
 
 ## User Scenarios & Testing *(mandatory)*

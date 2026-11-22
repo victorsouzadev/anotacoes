@@ -408,8 +408,11 @@ curl -s -X POST -H "Authorization: Bearer $DEPLOYER_TOKEN" http://deployer:8080/
 
 Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy; as tabelas e os dados ficam.
 
-**Banco compartilhado (031).** Cada plug-in usa o mesmo `notas.db`, só nas tabelas do seu prefixo, com histórico
-`__EFMigrationsHistory_<id>`. O `scripts/backup.sh` copia o arquivo inteiro, então já cobre todos os plug-ins.
+**Banco (038).** Cada plug-in usa o banco `hub` do `notas-postgres`, no schema e com o papel do seu id. A conexão fica em
+`data/plugins/banco/<id>` (modo 600, uma linha `Host=notas-postgres;Database=hub;Username=<id>;...`) e o deployer a passa
+em `HUB_BANCO`; sem o arquivo, o plug-in recebe `/data/db/notas.db` (é o caso da Anotação). Plug-in novo: incluir o id
+em `PG_PLUGINS`, rodar `scripts/postgres-hub.sh papeis`, criar o arquivo, subir e rodar `permissoes`. O
+`scripts/backup.sh` faz o `pg_dump` do `hub` e copia o `notas.db`.
 
 **Receita de extração (031, usada nas 033 a 035).**
 1. No plug-in: copiar as entidades com os mesmos nomes de tabela e colunas; a primeira migração tem `Up` vazio (as
@@ -512,7 +515,13 @@ para Windows" assim que existe um `versao.json` lá. Usa os mesmos segredos
 
 ## Janela do Postgres (spec 038)
 
-Precisa de confirmação. A volta é o `notas.db`, que não muda durante a janela.
+Feita em 2026-11-22: 52 tabelas e 5498 linhas, conferidas coluna a coluna. O núcleo lê `HUB_BANCO_NUCLEO` do `.env`
+(o `.env` de antes está em `/root/.config/env-antes-038`, as senhas em `/root/.config/notas-pg.env`).
+
+**Volta ao SQLite** (enquanto a limpeza T019 não rodar): tirar `HUB_BANCO_NUCLEO` do `.env`, apagar os arquivos de
+`data/plugins/banco/` e recriar o núcleo e os plug-ins. Os dados gravados no Postgres depois da janela não voltam.
+
+Passos da janela, para referência (precisam de confirmação):
 
 1. Gerar uma senha por papel (`PG_SENHA_NUCLEO`, `PG_SENHA_NOTAS`, ...) e rodar `scripts/postgres-hub.sh papeis`.
 2. Parar o hub e os plug-ins. Tirar o backup (`scripts/backup.sh`).

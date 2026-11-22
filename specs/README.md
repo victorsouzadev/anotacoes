@@ -122,7 +122,7 @@ para a v2.0.0 (Princípio I: "Um hub, um login, um banco"). Status: a base (029 
 
 ### Decisões principais
 
-- **Banco**: o `notas.db` atual, montado em todos os containers. Cada plug-in é dono só das tabelas do
+- **Banco** (substituído pela 038, que pôs tudo no Postgres): o `notas.db` atual, montado em todos os containers. Cada plug-in é dono só das tabelas do
   seu prefixo e tem histórico de migração próprio; extrair uma ferramenta não copia nenhuma linha. O
   deployer copia o banco antes de cada migração e reverte se uma tabela de outro dono mudar.
 - **Login**: só o núcleo emite tokens (ES256 + JWKS); plug-ins só validam e recebem token com a
@@ -195,3 +195,14 @@ Fecha o SC-004 da 035 contando tudo. Status: **concluída**. Desenho da arquitet
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
 | 037 | [Esquema do núcleo sem migrações](037-esquema-nucleo-sem-migracoes/spec.md) | 035 | plan, tasks |
+
+## Tudo no Postgres (038)
+
+Pedido em 2026-11-21: núcleo e plug-ins saem do `notas.db` para o banco `hub` do `notas-postgres`, com o schema
+`nucleo` e um schema e um papel por plug-in. Fecha o risco aceito na 029–035 (separação só por convenção): agora o
+banco recusa o acesso às tabelas de outro dono. Janela feita em 2026-11-22, sem diferença na conferência. Status:
+**em uso; falta a limpeza** (T019 tira o SQLite, T020 docs). A Anotação ainda está no `notas.db`.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 038 | [Tudo no Postgres](038-tudo-no-postgres/spec.md) | 037 | plan, tasks |
