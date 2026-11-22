@@ -3,7 +3,9 @@
 #   docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d --build  (produção VPS, :8090)
 services:
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:

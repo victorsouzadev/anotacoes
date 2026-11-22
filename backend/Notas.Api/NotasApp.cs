@@ -52,6 +52,8 @@ public static class NotasApp
             ?? throw new InvalidOperationException("Defina a variável de ambiente JWT_SECRET.");
         var connectionString = builder.Configuration.GetConnectionString("Db")
             ?? "Data Source=../../data/db/notas.db";
+        // Spec 038: "Host=..." liga o Postgres do hub (schema nucleo pelo search_path do papel); o resto é arquivo SQLite.
+        var postgres = Hub.Plugin.Dados.EhPostgres(connectionString);
 
         // No desktop o projeto inteiro (com as fotos) vai pro disco pela API local: lá o teto é maior.
         var maxBody = builder.Configuration.GetValue<long?>("Kestrel:MaxBodyBytes") ?? 10 * 1024 * 1024;
@@ -61,12 +63,14 @@ public static class NotasApp
         var opcoesChaves = builder.Configuration.GetSection(ChavesOptions.SectionName).Get<ChavesOptions>() ?? new ChavesOptions();
         var pastaChaves = builder.Configuration[$"{ChavesOptions.SectionName}:Chaves"] is { Length: > 0 } pc
             ? pc
-            : PastaChavesPadrao(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource);
+            : postgres
+                ? PastaChavesPadrao("../../data/db/notas.db")
+                : PastaChavesPadrao(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource);
         var chaves = new ChavesDeAssinatura(pastaChaves);
         var aceitarHs256Ate = opcoesChaves.AceitarHs256Ate?.ToUniversalTime() ?? DateTime.UtcNow.AddMinutes(15);
         builder.Services.AddSingleton(chaves);
         builder.Services.AddSingleton<SeloInterceptor>();
-        builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseSqlite(connectionString)
+        builder.Services.AddDbContext<AppDbContext>((sp, o) => (postgres ? o.UseNpgsql(connectionString) : o.UseSqlite(connectionString))
             .AddInterceptors(sp.GetRequiredService<SeloInterceptor>()));
         builder.Services.AddSingleton<TokenService>();
         builder.Services.AddScoped<Notas.Api.Services.Auth.OAuthDoNucleo>(sp => new(
@@ -179,11 +183,14 @@ public static class NotasApp
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
-            var dir = Path.GetDirectoryName(Path.GetFullPath(dataSource));
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            EsquemaNucleo.Garantir(db);
-            db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+            if (!postgres)
+            {
+                var dataSource = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connectionString).DataSource;
+                var dir = Path.GetDirectoryName(Path.GetFullPath(dataSource));
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            }
+            Hub.Plugin.Esquema.Garantir(db);
+            if (!postgres) db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
             Selo.SelarExistentes(db, chaves, pastaChaves);
         }
 

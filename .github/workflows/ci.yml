@@ -43,6 +43,16 @@ jobs:
         run: dotnet test --no-build --configuration Release
         env:
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
+      # Spec 038: a mesma suíte com o núcleo no Postgres (um banco novo por fábrica de teste).
+      - name: Testes com o núcleo no Postgres
+        run: dotnet test --no-build --configuration Release
+        env:
+          HUB_PG_TESTE: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
+      - name: Testes com o núcleo no Postgres, em modo globalization-invariant
+        run: dotnet test --no-build --configuration Release
+        env:
+          HUB_PG_TESTE: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 1
 
   # Scripts do host (backup das specs 025 e 036): shellcheck e testes sem rede.
   scripts:

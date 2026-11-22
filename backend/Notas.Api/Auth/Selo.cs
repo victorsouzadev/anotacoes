@@ -17,8 +17,17 @@ public static class Selo
 
     public static bool Confere(ChavesDeAssinatura c, User u) => c.SeloConfere(u.Selo, "users", u.Id, u.Email, u.PasswordHash);
 
-    public static bool Confere(ChavesDeAssinatura c, RefreshToken t) =>
-        c.SeloConfere(t.Selo, "refresh_tokens", t.TokenHash, t.UserId, t.ExpiresAt.Ticks.ToString());
+    /// <remarks>
+    /// O Postgres guarda a data em microssegundos (10 ticks) e o selo foi feito com os ticks completos: o valor lido
+    /// pode ter perdido até 9 ticks, então confere as 10 possibilidades (spec 038). No SQLite a primeira já bate.
+    /// </remarks>
+    public static bool Confere(ChavesDeAssinatura c, RefreshToken t)
+    {
+        for (var d = 0; d < 10; d++)
+            if (c.SeloConfere(t.Selo, "refresh_tokens", t.TokenHash, t.UserId, (t.ExpiresAt.Ticks + d).ToString()))
+                return true;
+        return false;
+    }
 
     /// <summary>
     /// Sela as linhas que já existiam, uma única vez (marca <c>selado-em</c> na pasta das chaves). Depois disso

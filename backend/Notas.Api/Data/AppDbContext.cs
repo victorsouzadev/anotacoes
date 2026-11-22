@@ -85,11 +85,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.Hash).IsUnique();
         });
 
+        if (Database.IsNpgsql()) b.HasCollation("ci", locale: "und-u-ks-level2", provider: "icu", deterministic: false);
+
         b.Entity<User>(e =>
         {
             e.ToTable("users");
             e.HasIndex(u => u.Email).IsUnique();
-            e.Property(u => u.Email).UseCollation("NOCASE");
+            // E-mail sem diferenciar maiúsculas: NOCASE no SQLite, colação ICU não determinística no Postgres (spec 038).
+            e.Property(u => u.Email).UseCollation(Database.IsNpgsql() ? "ci" : "NOCASE");
         });
 
         b.Entity<RefreshToken>(e =>

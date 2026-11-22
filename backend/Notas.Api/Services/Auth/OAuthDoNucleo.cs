@@ -121,6 +121,15 @@ public sealed class OAuthDoNucleo(AppDbContext db, TokenService tokens, ChavesDe
     public static string SeloDe(ChavesDeAssinatura c, OAuthToken t) =>
         c.Selar("core_oauth_tokens", t.Hash, t.UsuarioId, t.Plugin, t.ClienteId, t.ExpiraEm.Ticks.ToString());
 
+    /// <summary>Como em <see cref="Notas.Api.Auth.Selo.Confere(ChavesDeAssinatura, Notas.Api.Data.RefreshToken)"/>: até 9 ticks perdidos no Postgres.</summary>
+    public static bool SeloConfere(ChavesDeAssinatura c, OAuthToken t)
+    {
+        for (var d = 0; d < 10; d++)
+            if (c.SeloConfere(t.Selo, "core_oauth_tokens", t.Hash, t.UsuarioId, t.Plugin, t.ClienteId, (t.ExpiraEm.Ticks + d).ToString()))
+                return true;
+        return false;
+    }
+
     public static string SeloDe(ChavesDeAssinatura c, McpToken t) => c.Selar("core_mcp_tokens", t.Hash, t.UsuarioId, t.Plugin);
 
     public async Task<OAuthCliente> Registrar(string nome, List<string> uris)
@@ -187,7 +196,7 @@ public sealed class OAuthDoNucleo(AppDbContext db, TokenService tokens, ChavesDe
     {
         var hash = Hash(refresh);
         var t = await db.OAuthTokens.FirstOrDefaultAsync(x => x.Hash == hash);
-        if (t is null || t.Selo != SeloDe(chaves, t)) return null;
+        if (t is null || !SeloConfere(chaves, t)) return null;
         if (t.UsadoEm is not null && t.RevogadoEm is null)
         {
             await RevogarFamilia(t.Familia);
