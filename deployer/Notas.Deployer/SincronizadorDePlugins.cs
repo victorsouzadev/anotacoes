@@ -37,6 +37,14 @@ public class ConfiguracaoPlugins
     /// </summary>
     public string PastaEnv => Path.Combine(Pasta, "env");
     public string ArquivoEnv(string id) => Path.Combine(PastaEnv, id + ".env");
+    /// <summary>
+    /// Spec 038: conexão do plug-in com o banco <c>hub</c> do Postgres (<c>banco/&lt;id&gt;</c>, uma linha, dono root,
+    /// modo 600). Sem o arquivo, o plug-in continua no <c>notas.db</c>; apagar o arquivo é a volta.
+    /// </summary>
+    public string ArquivoBanco(string id) => Path.Combine(Pasta, "banco", id);
+
+    public string BancoDo(string id) =>
+        File.Exists(ArquivoBanco(id)) && File.ReadAllText(ArquivoBanco(id)).Trim() is { Length: > 0 } pg ? pg : "/data/db/notas.db";
 }
 
 public record EstadoPlugin(string Id, string Imagem, string Versao, string? VersaoAnterior, Manifesto? Manifesto,
@@ -210,7 +218,7 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
             "--user", "0:0",
             "-v", $"{cfg.BancoNoHost.TrimEnd('/')}:/data/db",
             "-e", "HUB_PLUGIN_ID=" + e.Id,
-            "-e", "HUB_BANCO=/data/db/notas.db",
+            "-e", "HUB_BANCO=" + cfg.BancoDo(e.Id),
             "-e", "HUB_JWKS=" + cfg.Jwks,
             "-e", "HUB_NUCLEO=" + cfg.Nucleo,
             "-e", "VERSAO=" + e.Versao,

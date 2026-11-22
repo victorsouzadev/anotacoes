@@ -131,6 +131,23 @@ public class PluginsTests
     }
 
     [Fact]
+    public void Banco_do_plugin_vai_para_o_postgres_so_com_o_arquivo()
+    {
+        var m = M("notas");
+        var e = new EntradaLock("notas", "ghcr.io/x/hub-notas", "abc1234", true);
+        var pasta = Path.Combine(Path.GetTempPath(), "banco-" + Guid.NewGuid().ToString("N"));
+        var cfg = new ConfiguracaoPlugins { Pasta = pasta, BancoNoHost = "/opt/h/data/db" };
+        var s = new SincronizadorDePlugins(cfg, (_, _) => Task.FromResult(new Resultado(0, "", "")), new HttpClient(), NullLogger.Instance);
+
+        Assert.Contains("HUB_BANCO=/data/db/notas.db", s.ArgumentosRun(e, m, "s"));
+
+        Directory.CreateDirectory(Path.GetDirectoryName(cfg.ArquivoBanco("notas"))!);
+        File.WriteAllText(cfg.ArquivoBanco("notas"), "Host=notas-postgres;Database=hub;Username=notas;Password=x\n");
+        Assert.Contains("HUB_BANCO=Host=notas-postgres;Database=hub;Username=notas;Password=x", s.ArgumentosRun(e, m, "s"));
+        Assert.Equal("/data/db/notas.db", cfg.BancoDo("outro"));
+    }
+
+    [Fact]
     public void Contrato_anterior_ainda_vale() => Assert.Empty(Plugins.Validar(M(contrato: 0), "dieta", []));
 
     [Fact]

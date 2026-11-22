@@ -9,7 +9,8 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - ConnectionStrings__Db=Data Source=/data/db/notas.db
+      # Spec 038: HUB_BANCO_NUCLEO no .env (Host=notas-postgres;Database=hub;Username=nucleo;...) leva o núcleo ao Postgres.
+      - ConnectionStrings__Db=${HUB_BANCO_NUCLEO:-Data Source=/data/db/notas.db}
       - OpenRouter__ApiKey=${OPENROUTER_API_KEY:-}
       - Anthropic__ApiKey=${ANTHROPIC_API_KEY:-}
       # Ampliação de foto por IA no Editor de Imagens. Sem esta chave o recurso
