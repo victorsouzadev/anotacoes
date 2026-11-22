@@ -10,20 +10,20 @@
 - [x] T005 Busca sem diferenciar maiúsculas e minúsculas e datas em UTC revisadas no núcleo: e-mail com colação ICU `ci` no Postgres; selos de `refresh_tokens` e `core_oauth_tokens` aceitam a data em microssegundos; SQL cru da recifragem com colunas entre aspas
 
 ## Fase 3: Plug-ins (um PR por repositório)
-- [ ] T006 hub-notas
-- [ ] T007 hub-financas
-- [ ] T008 hub-tarefas
-- [ ] T009 hub-dieta
-- [ ] T010 hub-treino
-- [ ] T011 hub-criativo
-- [ ] T012 hub-cerebro
+- [x] T006 hub-notas (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T007 hub-financas (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T008 hub-tarefas (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T009 hub-dieta (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T010 hub-treino (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T011 hub-criativo (SDK 1.5.1 e `Esquema.Garantir`)
+- [x] T012 hub-cerebro (o `HubDb` aceita `HUB_BANCO` no formato Postgres; a migração 033 só roda no SQLite)
 
 ## Fase 4: Cópia
-- [ ] T013 `ferramentas/CopiaParaPostgres` com conversão de tipos e conferência de contagens
-- [ ] T014 Ensaio com uma cópia do `notas.db` de produção num Postgres local (a cópia não sai da máquina)
+- [x] T013 `ferramentas/CopiaParaPostgres` com conversão de tipos e conferência de contagens. Papéis e permissões em `scripts/postgres-hub.sh`
+- [ ] T014 Ensaio com uma cópia do `notas.db` de produção num Postgres local (a cópia não sai da máquina). Feito com um banco sem dados: papéis, núcleo e seis plug-ins subiram no Postgres, a cópia conferiu 49 tabelas e as permissões entre papéis recusaram o que deviam. Falta repetir com a cópia de produção
 
 ## Fase 5: Backup
-- [ ] T015 `pg_dump` do banco `hub` em `scripts/backup.sh` e na cópia externa (036)
+- [x] T015 `pg_dump` do banco `hub` em `scripts/backup.sh` e na cópia externa (036, que já leva a pasta de backups inteira)
 
 ## Fase 6: Janela na VPS (precisa de confirmação)
 - [ ] T016 Criar o banco `hub`, os schemas e os papéis, e gravar as senhas nos `.env`. O papel do núcleo precisa de `SELECT` em `financas.configuracoes_auvp` e de `financas` no `search_path` (recifragem)

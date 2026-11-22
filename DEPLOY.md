@@ -509,3 +509,14 @@ Não faz parte do deploy da main: desde a spec 034 é o workflow **Desktop (Wind
 (volume `./downloads` no `docker-compose.yml`). O site mostra o botão "Baixar
 para Windows" assim que existe um `versao.json` lá. Usa os mesmos segredos
 `VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY` do deploy. Detalhes no `desktop/README.md` do hub-criativo.
+
+## Janela do Postgres (spec 038)
+
+Precisa de confirmação. A volta é o `notas.db`, que não muda durante a janela.
+
+1. Gerar uma senha por papel (`PG_SENHA_NUCLEO`, `PG_SENHA_NOTAS`, ...) e rodar `scripts/postgres-hub.sh papeis`.
+2. Parar o hub e os plug-ins. Tirar o backup (`scripts/backup.sh`).
+3. Trocar as conexões: `ConnectionStrings__Db` do núcleo e o `HUB_BANCO` de cada plug-in, no formato `Host=notas-postgres;Database=hub;Username=<id>;Password=...`.
+4. Subir o núcleo e rodar `scripts/postgres-hub.sh permissoes`. Subir os plug-ins e rodar `permissoes` de novo.
+5. Parar tudo e copiar: `HUB_PG_DESTINO=... dotnet CopiaParaPostgres.dll --sqlite data/db/notas.db --limpar`. Se não terminar com `OK`, nada foi gravado: voltar as conexões para o `notas.db` e subir.
+6. Subir tudo e conferir cada ferramenta.
