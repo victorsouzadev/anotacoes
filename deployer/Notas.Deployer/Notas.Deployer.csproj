@@ -12,6 +12,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Regras do manifesto (spec 039): a mesma cópia do SDK. -->
+    <ProjectReference Include="..\..\pacotes\Hub.Plugin.Sdk\Hub.Plugin.Sdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Hub.Plugin" />
     <InternalsVisibleTo Include="Notas.Deployer.Tests" />
   </ItemGroup>
 

@@ -88,7 +88,9 @@ services:
   # da API (token compartilhado). Fica atrás do profile "publicar" para não subir em
   # quem não usa a ferramenta — ligue com COMPOSE_PROFILES=publicar no .env.
   deployer:
-    build: ./deployer
+    build:
+      context: .
+      dockerfile: deployer/Dockerfile
     profiles: ["publicar"]
     restart: unless-stopped
     environment:

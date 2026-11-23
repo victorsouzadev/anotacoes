@@ -20,7 +20,7 @@
 
 ## Phase 2: Foundational (bloqueia todas as histórias)
 
-- [ ] T004 Mover as regras do manifesto:
+- [x] T004 Mover as regras do manifesto:
   - `Plugins.Validar` sai de `deployer/Notas.Deployer/Plugins.cs` e vai para `pacotes/Hub.Plugin.Sdk/Manifestos/RegrasDoManifesto.cs`, que passa a ser a única cópia;
   - o deployer passa a chamar a nova classe;
   - o SDK sobe para a versão 1.6.0 em `pacotes/Hub.Plugin.Sdk/Hub.Plugin.Sdk.csproj`;

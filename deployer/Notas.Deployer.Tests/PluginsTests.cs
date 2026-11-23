@@ -11,7 +11,7 @@ public class PluginsTests
     public static Manifesto M(string id = "dieta", string? prefixo = null, List<string>? legadas = null, List<string>? rotas = null,
         int contrato = 1) =>
         new(id, "Dieta", "apple", null, contrato, "/" + id, 8080, $"/{id}/api/health", null, rotas,
-            new TabelasManifesto(prefixo ?? id + "_", legadas), false, null, null);
+            new Tabelas(prefixo ?? id + "_", legadas), false, null, null);
 
     [Fact]
     public void Lock_le_ativos_desligados_e_ignora_lixo()
@@ -50,7 +50,7 @@ public class PluginsTests
               "dados": ["/data/vault", "/data/hub"]
             }
             """;
-        Assert.Empty(Plugins.Validar(Manifesto.Ler(json), "cerebro", []));
+        Assert.Empty(Plugins.Validar(RegrasDoManifesto.LerJson(json), "cerebro", []));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class PluginsTests
     [Fact]
     public void Recusa_rota_prefixo_contrato_e_id_errados()
     {
-        var m = M() with { Rota = "/outra", Contrato = 2, Tabelas = new TabelasManifesto("core_", ["users"]) };
+        var m = M() with { Rota = "/outra", Contrato = 2, Tabelas = new Tabelas("core_", ["users"]) };
         var p = Plugins.Validar(m, "dieta", []);
         Assert.Contains(p, x => x.Contains("rota precisa ser /dieta"));
         Assert.Contains(p, x => x.Contains("contrato 2"));

@@ -156,7 +156,7 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
 
         var lido = await docker(["run", "--rm", "--network", "none", "--entrypoint", "cat", e.Referencia, "/app/plugin.json"],
             TimeSpan.FromMinutes(1));
-        var manifesto = lido.Codigo == 0 ? Manifesto.Ler(lido.Saida) : null;
+        var manifesto = lido.Codigo == 0 ? RegrasDoManifesto.LerJson(lido.Saida) : null;
         var problemas = Plugins.Validar(manifesto, e.Id, outros);
         if (problemas.Count > 0) return Falha(string.Join("; ", problemas));
 
