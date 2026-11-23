@@ -1,6 +1,6 @@
 # Contrato: ferramentas que o agente pode chamar
 
-As ferramentas internas do SDK ficam desligadas. Cada chamada vira um evento, e uma chamada fora desta lista vira um evento `recusa`.
+As ferramentas internas do Claude Code ficam proibidas; as daqui chegam como `mcp__agente__<nome>`. Cada chamada vira um evento, e uma chamada fora desta lista vira um evento `recusa`.
 
 | Ferramenta | Tipo | Em que execução |
 |---|---|---|

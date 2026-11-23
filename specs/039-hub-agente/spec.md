@@ -16,6 +16,7 @@
 - Q: Onde roda? → A: Num plug-in novo na VPS (`agente`), com container próprio e login do núcleo. As chaves ficam na configuração do plug-in na VPS.
 - Q: O que o MCP expõe? → A: Os plug-ins e o estado de cada um, o disparo e o acompanhamento do agente, e a validação de manifestos.
 - Q: Que chaves o agente usa? → A: As que já existem no hub: a IA configurada pelo dono em Configurações (a mesma que os outros plug-ins recebem do núcleo), sem chave própria do agente. O hub não guarda token do GitHub; esse é o único segredo novo.
+- Q: Gastar o mínimo com IA? → A: Usar a assinatura do Claude do dono (token de longa duração do Claude Code) no lugar da chave de API do hub, para não ter custo extra (decidido em 2026-11-23).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -98,7 +99,7 @@ uma rota reservada. O erro aparece junto com a regra que falhou.
 
 - Dois pedidos ao mesmo tempo: o segundo espera na fila, porque roda uma execução por vez, e o dono vê a posição.
 - A execução passa do limite de tempo ou de custo: ela para, guarda o que já fez e o relatório diz onde parou.
-- A IA do hub não está configurada, usa um provedor que o agente não aceita, ou o token do GitHub falta ou expirou: a tela diz o que falta, sem mostrar valores, e nada começa.
+- O token da assinatura do Claude falta, expirou ou o limite de uso da assinatura acabou, ou o token do GitHub falta ou expirou: a tela diz o que falta, sem mostrar valores, e nada começa.
 - Um texto lido num log ou num repositório tenta dar ordens ao agente: esse texto é tratado como dado, nunca como instrução.
 - O plug-in pedido no diagnóstico não existe ou está desligado no registro: o relatório diz isso, sem erro.
 - O agente tenta uma ação fora da lista permitida, como gravar na VPS, fazer merge ou mexer no registro: a ação é recusada e registrada.
@@ -127,9 +128,9 @@ uma rota reservada. O erro aparece junto com a regra que falhou.
   - o acompanhamento de uma execução, com resposta às perguntas e cancelamento.
 - **FR-014**: A validação de manifesto MUST usar as mesmas regras que o deployer usa ao subir um plug-in, e listar cada regra violada.
 - **FR-015**: Todo conteúdo lido (logs, repositórios, manifestos) MUST ser tratado como dado. Nenhuma instrução vinda dele muda o que o agente pode fazer.
-- **FR-016**: A IA do agente MUST ser a que o dono já configurou no hub, entregue pelo núcleo a cada execução, como nos outros plug-ins que usam IA. O agente não guarda chave de IA própria.
-- **FR-017**: Se a IA configurada não servir para o agente (provedor sem suporte ou sem chave), a tela MUST dizer isso e apontar Configurações, e nada começa.
-- **FR-018**: O token do GitHub, que o hub ainda não tem, MUST ficar só na configuração do plug-in na VPS. Nenhuma chave aparece no git, na tela, no relatório ou no log.
+- **FR-016**: A IA do agente MUST vir da assinatura do Claude do dono, por um token de longa duração gerado por ele, e não de chave de API paga por uso. O agente não usa a chave de IA do hub.
+- **FR-017**: Se o token da assinatura faltar, expirar ou o limite de uso acabar, a tela MUST dizer isso (e, no limite, quando volta), e nada começa ou a execução para guardando onde parou.
+- **FR-018**: O token do GitHub e o token da assinatura MUST ficar só na configuração do plug-in na VPS. Nenhuma chave aparece no git, na tela, no relatório ou no log.
 
 ### Key Entities
 
@@ -153,7 +154,7 @@ uma rota reservada. O erro aparece junto com a regra que falhou.
 
 - Só o dono do hub usa o agente. Uso por outras pessoas fica fora desta spec.
 - O agente segue a skill `plugin-hub` deste repositório, na versão que vai junto com a imagem do plug-in.
-- O custo da IA sai da chave que o dono já configurou no hub. O limite por execução é definido no plano.
+- A IA não tem custo extra: sai do limite da assinatura do dono, dividido com o uso dele. O token da assinatura é gerado pelo dono com `claude setup-token`, vale até um ano e fica em `data/plugins/env/agente.env`. O limite por execução (tempo e turnos) é definido no plano.
 - O token do GitHub é novo e mínimo (decidido em 2026-11-23). É um token de acesso granular, com validade de no máximo 90 dias, que só permite criar repositórios a partir do `hub-modelo`, gravar conteúdo e workflows, e abrir PRs. Ele não permite apagar repositórios nem mexer em configuração, segredos ou membros. Quem gera o token e grava em `data/plugins/env/agente.env` é o dono. Como o GitHub só deixa criar repositório com um token que vale para a conta toda, o próprio agente se limita: só grava no repositório que acabou de criar, e recusa e registra qualquer tentativa em outro (FR-007).
 - A expiração do token aparece no hub com 7 dias de antecedência, junto com o caminho para trocar.
 - As leituras da VPS (estado, logs, permissões) passam pelo serviço de operação (`ops`) ou pelo núcleo. O agente nunca recebe o controle do Docker, que continua só com o deployer.

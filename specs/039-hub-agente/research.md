@@ -1,16 +1,17 @@
 # Research: 039 hub-agente
 
 ## R1. Onde roda o laço do agente
-- **Decision**: o Claude Agent SDK roda em TypeScript, num processo Node filho do backend .NET. Cada execução tem o seu processo.
-- **Rationale**: o SDK já traz as skills, as ferramentas próprias (MCP no mesmo processo), os limites de turnos e de custo (`maxTurns`, `maxBudgetUsd`) e a permissão por ferramenta.
+- **Decision**: o Claude Code CLI (`claude -p`) roda como processo filho do backend .NET, um por execução, com a assinatura do dono (`CLAUDE_CODE_OAUTH_TOKEN`).
+- **Rationale**: o dono quer gastar o mínimo. O `setup-token` existe para automação pessoal com a assinatura; o CLI traz skills, MCP, `--max-turns` e permissões por ferramenta. O Agent SDK, segundo a documentação, deve usar chave de API em produtos feitos com ele.
 - **Alternatives**:
-  - O SDK em Python foi descartado porque traria mais uma linguagem.
+  - Agent SDK com chave de API: custo por uso, que o dono quer evitar.
+  - Agent SDK com o token da assinatura: fora do uso previsto.
   - Um laço próprio em .NET perde as skills.
   - Um container separado seria mais um plug-in e mais um segredo.
 
 ## R2. Ferramentas do agente
 - **Decision**:
-  - Todas as ferramentas internas do SDK (Bash, Read, Write, WebFetch) ficam desligadas.
+  - Todas as ferramentas internas do CLI (Bash, Read, Write, Edit, WebFetch, WebSearch) ficam proibidas em `--disallowedTools` e no `.claude/settings.json`; `--allowedTools` só tem `mcp__agente__*`.
   - O agente só recebe as ferramentas do contrato `ferramentas-agente.md`, que chamam o backend local.
   - No esqueleto, o agente escreve numa pasta temporária da execução. Quem envia o conteúdo ao GitHub é o backend.
 - **Rationale**: atende FR-003, FR-007 e FR-015. Quem recusa a ação fora da lista é o backend, não o prompt.
@@ -27,14 +28,14 @@
   - O `ops` foi descartado porque dá um shell de root.
   - Dar ao agente um papel de leitura no Postgres criaria mais um segredo.
 
-## R4. Chave de IA
+## R4. Fonte da IA
 - **Decision**:
-  - No início de cada execução, o backend pede `/api/core/ia` com o token do dono que disparou. O token fica só na memória, durante a execução.
-  - O manifesto declara `usaIa: true`.
-  - Provedores aceitos: `anthropic`, direto, e `openrouter`, pelo `ANTHROPIC_BASE_URL` compatível.
-  - Com qualquer outro provedor, a tela avisa, como pede o FR-017.
-- **Rationale**: atende o FR-016, e nada novo fica guardado.
-- **Alternatives**: uma chave própria no `agente.env`, que o dono recusou.
+  - Token da assinatura em `data/plugins/env/agente.env` (`Agente__Claude__Token`, `Agente__Claude__Validade`), gerado pelo dono com `claude setup-token` (vale até um ano).
+  - O manifesto não declara `usaIa`: o agente não pede `/api/core/ia`.
+  - Erro de limite da assinatura no stream-json: a execução vai para `falhou (limite)` com o horário de volta, se o CLI informar.
+  - O hub avisa a expiração do token com 7 dias de antecedência, como o do GitHub.
+- **Rationale**: FR-016 e FR-017; custo extra zero.
+- **Alternatives**: a chave de IA do hub (custo por uso); diagnóstico só com regras (fica para depois, se o limite da assinatura apertar).
 
 ## R5. Token do GitHub
 - **Decision**:
@@ -52,6 +53,8 @@
 - **Rationale**: a história 3 pede as mesmas regras que o deployer usa.
 
 ## R7. Fila e retomada
+
+O CLI roda com `HOME` numa pasta da execução, apagada no fim, para não guardar sessão nem histórico entre execuções.
 - **Decision**:
   - A fila fica na memória e é alimentada pela tabela.
   - Quando o plug-in sobe, as execuções que estavam "rodando" passam a "falhou (reinício)".
