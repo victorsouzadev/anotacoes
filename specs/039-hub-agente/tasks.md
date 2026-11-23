@@ -88,8 +88,8 @@
 
 ## Phase 6: Polish
 
-- [ ] T027 [P] Garantir que nenhum segredo aparece em logs, relatórios e eventos (SC-005), com testes que procuram os valores dos tokens falsos.
-- [ ] T028 [P] Atualizar a documentação:
+- [x] T027 [P] Garantir que nenhum segredo aparece em logs, relatórios e eventos (SC-005), com testes que procuram os valores dos tokens falsos.
+- [x] T028 [P] Atualizar a documentação:
   - `DEPLOY.md`: o agente, o `agente.env` com os dois tokens e como gerar cada um;
   - `specs/README.md`: a seção 039;
   - `README.md`.

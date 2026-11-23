@@ -34,6 +34,11 @@ inicial, sem exigir outro login nem outro deploy.
   lista) e MCP `/api/mcp/treino` (`treino_resumo`, `treino_atividades`), que o Segundo
   Cérebro sincroniza.
 
+- **Agente** (plug-in [hub-agente](https://github.com/victorsouzadev/hub-agente), spec 039) — só para os administradores:
+  diagnostica um plug-in só lendo (estado, health, logs e permissões, pelo núcleo) e cria o esqueleto de uma ferramenta
+  nova num repositório `hub-<id>`, com PR para revisar. Roda o Claude Code com a assinatura do dono; tela em `/agente/`
+  e MCP em `/agente/mcp`. Nunca faz merge nem grava na VPS.
+
 - **Editor de Imagens** — duas frentes numa ferramenta só: *print & cut* (contorno
   com margem em mm, remoção de fundo, divisão de uma folha em elementos separados
   — com prévia do que vai ser separado, vão escolhido sozinho e ajustes próprios

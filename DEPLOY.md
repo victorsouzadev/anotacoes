@@ -379,6 +379,33 @@ arquivos. Quem tem o `OPS_MCP_TOKEN` controla a VPS inteira. Fica atrás do prof
 `https://<subdomínio>/ops/mcp`, só por HTTPS. Como ligar, conectar, auditar e trocar o token:
 [ops/README.md](ops/README.md).
 
+## Agente de plug-ins (spec 039)
+
+Plug-in [hub-agente](https://github.com/victorsouzadev/hub-agente) em `/agente/`, só para os administradores: diagnostica
+um plug-in só lendo e cria o esqueleto de um plug-in novo num repositório `hub-<id>`, com PR. Ele roda o Claude Code
+(`claude -p`) dentro do container, com a **assinatura do Claude do dono**, sem chave de API. Não tem `docker.sock` nem
+shell: as leituras da VPS vêm das rotas GET `/api/core/agente/*` do núcleo. Nunca faz merge nem grava na VPS.
+
+**Configuração** em `data/plugins/env/agente.env` (root, modo 600), gravada pelo dono. Nunca no git nem no chat:
+
+| Variável | O que é |
+|---|---|
+| `Agente__Administradores` | e-mails do hub que podem abrir a ferramenta e o MCP, separados por vírgula |
+| `Agente__Claude__Token` | token da assinatura: rode `claude setup-token` na sua máquina (logado na sua conta) e copie o que ele mostrar. Vale até um ano |
+| `Agente__Claude__Validade` | data em que esse token vence (`aaaa-mm-dd`); o hub avisa 7 dias antes |
+| `Agente__GitHub__Token` | só para o esqueleto. Token *fine-grained* em GitHub → Settings → Developer settings → Fine-grained tokens, do dono `victorsouzadev`, em **All repositories** (o repositório ainda não existe quando ele é usado), com *Administration: Read and write* (criar o repositório), *Contents: Read and write*, *Pull requests: Read and write* e, para ler a CI, *Checks: Read-only* (se o `estado_da_ci` responder 403, acrescente *Actions: Read-only*; ainda não conferido com um token de verdade). Escolha a validade |
+| `Agente__GitHub__Validade` | data em que o token do GitHub vence |
+| `Agente__Diagnostico__Minutos` / `__Turnos` | limites do diagnóstico (padrão 10 e 20) |
+| `Agente__Esqueleto__Minutos` / `__Turnos` | limites do esqueleto (padrão 30 e 80) |
+
+O uso divide o limite da assinatura com o dono: quando ele acaba, a execução para como `falhou (limite)` e a tela diz quando
+volta. Sem o token do GitHub, só o diagnóstico funciona.
+
+**Pôr no ar** (cada passo com confirmação): incluir `agente` em `PG_PLUGINS`, gerar `PG_SENHA_AGENTE` e rodar
+`scripts/postgres-hub.sh papeis`; gravar `data/plugins/banco/agente` (`...;Username=agente;...;Maximum Pool Size=3`);
+gravar o `agente.env`; num PR do núcleo, a linha `agente: ghcr.io/victorsouzadev/hub-agente@<commit>` no `plugins.lock`;
+depois do deploy, `postgres-hub.sh permissoes`. Conferir pelo quickstart da spec 039.
+
 ## Núcleo e plug-ins (specs 029 a 032)
 
 **Login (030).** O núcleo assina os tokens com ES256. As chaves ficam em `data/core/chaves/` (`<kid>.pem`, `jwks.json`,
