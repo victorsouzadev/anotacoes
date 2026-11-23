@@ -211,8 +211,8 @@ banco recusa o acesso às tabelas de outro dono. Janela feita em 2026-11-22, sem
 
 Pedido em 2026-11-23: um plug-in novo, o `hub-agente`, que diagnostica um plug-in só lendo e cria o esqueleto de uma
 ferramenta nova (repositório `hub-<id>` e PR), com a skill `plugin-hub`. A IA vem da assinatura do Claude do dono
-(`claude -p` com o token do `claude setup-token`), sem chave de API. Status: **implementada localmente** (T001 a T028);
-falta a CI (T029, depende do envio ao GitHub) e pôr no ar (T030, com o dono).
+(`claude -p` com o token do `claude setup-token`), sem chave de API. Status: **implementada** (T001 a T029, CI verde nos dois repositórios, imagem `hub-agente:b1652c6`);
+falta pôr no ar (T030, com o dono).
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|

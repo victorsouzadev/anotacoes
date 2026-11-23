@@ -93,7 +93,7 @@
   - `DEPLOY.md`: o agente, o `agente.env` com os dois tokens e como gerar cada um;
   - `specs/README.md`: a seção 039;
   - `README.md`.
-- [ ] T029 CI do `hub-agente`: backend (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`) e frontend. A CI do núcleo também tem de passar inteira.
+- [x] T029 CI do `hub-agente`: backend (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`) e frontend. A CI do núcleo também tem de passar inteira.
 - [ ] T030 Pôr no ar, sempre com a confirmação do dono a cada passo:
   - `PG_PLUGINS`, a senha e `postgres-hub.sh papeis`;
   - o arquivo `data/plugins/banco/agente`;
