@@ -11,7 +11,8 @@
 
 ## R2. Ferramentas do agente
 - **Decision**:
-  - Todas as ferramentas internas do CLI (Bash, Read, Write, Edit, WebFetch, WebSearch) ficam proibidas em `--disallowedTools` e no `.claude/settings.json`; `--allowedTools` só tem `mcp__agente__*`.
+  - O CLI roda com `--tools ""`, que tira todas as ferramentas internas (conferido no 2.1.325: `tools: []`), e `--disable-slash-commands`. A lista em `--disallowedTools` e no `.claude/settings.json` fica como segunda barreira; `--allowedTools` só tem `mcp__agente__*`.
+  - Como o `Skill` também sai, o texto da skill `plugin-hub` vai em `--append-system-prompt`.
   - O agente só recebe as ferramentas do contrato `ferramentas-agente.md`, que chamam o backend local.
   - No esqueleto, o agente escreve numa pasta temporária da execução. Quem envia o conteúdo ao GitHub é o backend.
 - **Rationale**: atende FR-003, FR-007 e FR-015. Quem recusa a ação fora da lista é o backend, não o prompt.

@@ -34,19 +34,19 @@
     - com um id fora do lock: 404.
   - Depende de T005 e T006.
 - [x] T008 [P] Incluir o papel `agente` em `scripts/postgres-hub.sh` e na documentação do `DEPLOY.md`.
-- [ ] T009 Criar as entidades `Execucao` e `Evento` em `hub-agente/backend/Agente.Api/Dados/`, seguindo o `data-model.md`:
+- [x] T009 Criar as entidades `Execucao` e `Evento` em `hub-agente/backend/Agente.Api/Dados/`, seguindo o `data-model.md`:
   - `agente_execucoes`: os campos `Execucao.Tipo`, `Execucao.Estado`, `Execucao.Origem` e `Execucao.UsuarioId` (FK);
   - `agente_eventos`: o campo `Evento.Tipo`.
 
-  Ligar `UsarBancoDoHub`, `ReferenciarUsuarios()` e `BancoVazio.CriarSeNaoForDoHub` em `Program.cs`. Testar `Dados.TabelasForaDoDono`.
-- [ ] T010 Criar a máquina de estados pura da execução, conforme `Execucao.Estado` no `data-model.md`: o estado só avança e um estado final não muda mais. Arquivos: `hub-agente/backend/Agente.Api/Execucoes/MaquinaDeEstados.cs` e os testes correspondentes.
-- [ ] T011 Criar a configuração (`Agente__Claude__Token`, `Agente__Claude__Validade`, `Agente__GitHub__Token`, `Agente__GitHub__Validade` e os limites) e o endpoint `GET /agente/api/configuracao`, sem valores e com o aviso de 7 dias. Arquivo: `hub-agente/backend/Agente.Api/Configuracao/`.
-- [ ] T012 Criar a fila de uma execução por vez, que retoma no reinício (pesquisa R7), e o `RodadorClaude`:
+  Ligar `UsarBancoDoHub`, `ReferenciarUsuarios()` e `Esquema.Garantir` (spec 038, sem migrações) em `Program.cs`. Testar `Dados.TabelasForaDoDono`.
+- [x] T010 Criar a máquina de estados pura da execução, conforme `Execucao.Estado` no `data-model.md`: o estado só avança e um estado final não muda mais. Arquivos: `hub-agente/backend/Agente.Api/Execucoes/MaquinaDeEstados.cs` e os testes correspondentes.
+- [x] T011 Criar a configuração (`Agente__Claude__Token`, `Agente__Claude__Validade`, `Agente__GitHub__Token`, `Agente__GitHub__Validade` e os limites) e o endpoint `GET /agente/api/configuracao`, sem valores e com o aviso de 7 dias. Arquivo: `hub-agente/backend/Agente.Api/Configuracao/`.
+- [x] T012 Criar a fila de uma execução por vez, que retoma no reinício (pesquisa R7), e o `RodadorClaude`:
   - inicia `claude -p --output-format stream-json --max-turns`, com `HOME` temporária, o token numa variável de ambiente e um tempo limite;
   - lê os eventos e o erro de limite de uso.
 
   Arquivos: `hub-agente/backend/Agente.Api/Fila/` e `hub-agente/backend/Agente.Api/Rodador/`. Testar com um CLI falso que devolve um stream-json gravado.
-- [ ] T013 Criar o MCP local `agente`, servido em localhost com um segredo por execução:
+- [x] T013 Criar o MCP local `agente`, servido em localhost com um segredo por execução:
   - fica só com as ferramentas permitidas para o tipo da execução;
   - qualquer outra chamada vira um evento `recusa`;
   - o que vem de fora chega marcado como dado externo (FR-014).
