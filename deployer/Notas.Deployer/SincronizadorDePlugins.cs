@@ -50,6 +50,9 @@ public class ConfiguracaoPlugins
 public record EstadoPlugin(string Id, string Imagem, string Versao, string? VersaoAnterior, Manifesto? Manifesto,
     bool NoAr, string? UltimaFalha, DateTime AtualizadoEm, bool Ativo, string? SegredoServicoHash = null);
 
+/// <summary>Resposta de uma chamada ao health: o código HTTP, ou o erro quando nem respondeu.</summary>
+public record SaudeDoPlugin(string Id, int? Status, string? Erro, int Ms);
+
 /// <summary>
 /// Leva os containers ao que diz o <c>plugins.lock</c> (spec 029): sobe, atualiza, volta e desliga plug-ins,
 /// um de cada vez. Antes de trocar a versão copia o banco e retrata o esquema; se a versão nova não responde
@@ -232,6 +235,42 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
         if (cfg.MemoriaPorPlugin is { } mem) a.AddRange(["--memory", mem]);
         a.Add(e.Referencia);
         return a;
+    }
+
+    /// <summary>Estado de um plug-in que está no <c>plugins.lock</c> (ligado ou não); nulo fora do lock (spec 039).</summary>
+    public EstadoPlugin? DoLock(string id)
+    {
+        var lockTexto = File.Exists(cfg.ArquivoLock) ? File.ReadAllText(cfg.ArquivoLock) : "";
+        if (!Plugins.LerLock(lockTexto).Any(e => e.Id == id)) return null;
+        return LerEstado().GetValueOrDefault(id);
+    }
+
+    /// <summary>Últimas linhas do container do plug-in (até 200), só leitura. Nulo = fora do lock (spec 039).</summary>
+    public async Task<string?> Logs(string id, int linhas)
+    {
+        if (DoLock(id) is null) return null;
+        var r = await docker(["logs", "--tail", Math.Clamp(linhas, 1, 200).ToString(), "--timestamps", Plugins.NomeContainer(id)],
+            TimeSpan.FromSeconds(30));
+        if (r.Codigo != 0 && r.Erro.Contains("No such container")) return "(o plug-in não está rodando)";
+        return r.Saida + r.Erro;
+    }
+
+    /// <summary>Uma chamada ao health do plug-in, sem repetir. Nulo = fora do lock ou sem manifesto (spec 039).</summary>
+    public async Task<SaudeDoPlugin?> Saude(string id, CancellationToken ct)
+    {
+        if (DoLock(id)?.Manifesto is not { } m) return null;
+        var url = $"http://{Plugins.NomeContainer(m.Id)}:{m.Porta}{m.Health}";
+        var inicio = DateTime.UtcNow;
+        try
+        {
+            using var r = await http.GetAsync(url, ct);
+            return new SaudeDoPlugin(id, (int)r.StatusCode, null, (int)(DateTime.UtcNow - inicio).TotalMilliseconds);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return new SaudeDoPlugin(id, null, ex is TaskCanceledException ? "sem resposta no tempo limite" : "sem conexão",
+                (int)(DateTime.UtcNow - inicio).TotalMilliseconds);
+        }
     }
 
     private async Task<bool> EsperarHealth(Manifesto m, CancellationToken ct)

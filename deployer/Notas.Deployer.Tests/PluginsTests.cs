@@ -248,6 +248,29 @@ public class SincronizadorTests : IDisposable
     private static List<EntradaLock> Lock(string versao, bool ativo = true) =>
         [new("exemplo", "ghcr.io/victorsouzadev/hub-exemplo", versao, ativo)];
 
+    [Fact]
+    public async Task Logs_e_health_so_para_ids_do_lock()
+    {
+        var s = Criar();
+        File.WriteAllText(Path.Combine(_pasta, "plugins.lock"), "exemplo: ghcr.io/victorsouzadev/hub-exemplo@v1");
+        await s.Sincronizar(Lock("v1"), default);
+        _chamadas.Clear();
+
+        Assert.NotNull(await s.Logs("exemplo", 5000));
+        var logs = _chamadas.Single(a => a[0] == "logs");
+        Assert.Equal("200", logs[logs.IndexOf("--tail") + 1]);
+        Assert.Equal("plugin-exemplo", logs[^1]);
+
+        _health = HttpStatusCode.ServiceUnavailable;
+        var saude = await s.Saude("exemplo", default);
+        Assert.Equal(503, saude!.Status);
+
+        Assert.Null(await s.Logs("outro", 10));
+        Assert.Null(await s.Saude("outro", default));
+        Assert.Null(await s.Logs("../exemplo", 10));
+        Assert.DoesNotContain(_chamadas, a => a[0] == "logs" && a[^1] != "plugin-exemplo");
+    }
+
     private List<string> Run() => _chamadas.Last(a => a[0] == "run" && !a.Contains("cat"));
 
     [Fact]

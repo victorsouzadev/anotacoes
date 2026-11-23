@@ -55,6 +55,19 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/plugins", (IServiceProvider sp) =>
     sp.GetService<SincronizadorDePlugins>() is { } s ? Results.Ok(s.LerEstado().Values) : Results.Ok(Array.Empty<object>()));
 
+// Leituras do agente (spec 039), repassadas pelo núcleo: só ids do plugins.lock, nada muda.
+app.MapGet("/plugins/{id}/logs", async (string id, int? linhas, IServiceProvider sp) =>
+{
+    if (sp.GetService<SincronizadorDePlugins>() is not { } s) return Results.NotFound();
+    return await s.Logs(id, linhas ?? 200) is { } texto ? Results.Text(texto, "text/plain; charset=utf-8") : Results.NotFound();
+});
+
+app.MapGet("/plugins/{id}/health", async (string id, IServiceProvider sp, CancellationToken ct) =>
+{
+    if (sp.GetService<SincronizadorDePlugins>() is not { } s) return Results.NotFound();
+    return await s.Saude(id, ct) is { } saude ? Results.Ok(saude) : Results.NotFound();
+});
+
 app.MapPost("/plugins/sincronizar", async (IServiceProvider sp, CancellationToken ct) =>
 {
     if (sp.GetService<SincronizadorDePlugins>() is not { } s) return Results.Problem("plug-ins desligados (PLUGINS_BANCO_HOST_DIR)", statusCode: 503);
