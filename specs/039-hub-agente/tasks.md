@@ -59,16 +59,16 @@
 
 **Teste independente**: com um plug-in de teste com o health falhando, o relatório aponta a falha e o `estado.json` fica igual.
 
-- [ ] T014 [US1] Criar as ferramentas `ler_estado`, `ler_health`, `ler_logs`, `ler_permissoes`, `ler_lock`, `validar_manifesto`, `perguntar` e `relatar`, que chamam `/api/core/agente/*`. Arquivo: `hub-agente/backend/Agente.Api/Ferramentas/Leitura.cs`.
-- [ ] T015 [US1] Escrever o prompt do diagnóstico em `hub-agente/agente/prompts/diagnostico.md`. O relatório traz a situação, as evidências, a causa e os próximos passos (FR-004), e a tabela de sintomas vem da skill.
-- [ ] T016 [US1] Criar a API de execuções do contrato `contracts/agente-api.md`, com `POST`, `GET`, `resposta` e `cancelar`, só para administradores. Responde 409 quando falta um token. Arquivo: `hub-agente/backend/Agente.Api/Endpoints/ExecucoesEndpoints.cs`, com testes.
-- [ ] T017 [US1] Criar a tela `/agente/`:
+- [x] T014 [US1] Criar as ferramentas `ler_estado`, `ler_health`, `ler_logs`, `ler_permissoes`, `ler_lock`, `validar_manifesto`, `perguntar` e `relatar`, que chamam `/api/core/agente/*`. Arquivo: `hub-agente/backend/Agente.Api/Ferramentas/Leitura.cs`.
+- [x] T015 [US1] Escrever o prompt do diagnóstico em `hub-agente/agente/prompts/diagnostico.md`. O relatório traz a situação, as evidências, a causa e os próximos passos (FR-004), e a tabela de sintomas vem da skill.
+- [x] T016 [US1] Criar a API de execuções do contrato `contracts/agente-api.md`, com `POST`, `GET`, `resposta` e `cancelar`, só para administradores. Responde 409 quando falta um token. Arquivo: `hub-agente/backend/Agente.Api/Endpoints/ExecucoesEndpoints.cs`, com testes.
+- [x] T017 [US1] Criar a tela `/agente/`:
   - lista dos plug-ins, botão "Diagnosticar" e acompanhamento ao vivo (estado, posição na fila, eventos e perguntas);
   - relatório em markdown e histórico;
   - aviso de configuração.
 
   Usar o Grafite e a `<grafite-barra atual="agente">`. Pasta: `hub-agente/frontend/`.
-- [ ] T018 [US1] Teste de ponta a ponta com o CLI falso: um diagnóstico completo e o histórico gravado. Testar também que um texto num log pedindo para "apagar" não vira chamada de ferramenta, porque essa ação não existe na lista. Arquivo: `hub-agente/backend/Agente.Api.Tests/DiagnosticoTests.cs`.
+- [x] T018 [US1] Teste de ponta a ponta com o CLI falso: um diagnóstico completo e o histórico gravado. Testar também que um texto num log pedindo para "apagar" não vira chamada de ferramenta, porque essa ação não existe na lista. Arquivo: `hub-agente/backend/Agente.Api.Tests/DiagnosticoTests.cs`.
 
 **Checkpoint**: a US1 pode ir para o ar, com o deploy confirmado pelo dono (ver Polish).
 
