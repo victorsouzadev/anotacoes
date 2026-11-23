@@ -83,8 +83,8 @@
 
 ## Phase 5: User Story 3, MCP (P3)
 
-- [ ] T025 [US3] Criar o MCP `/agente/mcp`, com `plugins_listar`, `plugin_estado`, `manifesto_validar`, `agente_disparar`, `agente_acompanhar`, `agente_responder` e `agente_cancelar`. Ligar `ExigirMcpDoPlugin()` e permitir só administradores. Arquivo: `hub-agente/backend/Agente.Api/Mcp/`.
-- [ ] T026 [US3] Testes do MCP: um manifesto com rota reservada lista a regra violada, e uma pergunta pendente aparece em `agente_acompanhar`. Arquivo: `hub-agente/backend/Agente.Api.Tests/McpTests.cs`.
+- [x] T025 [US3] Criar o MCP `/agente/mcp`, com `plugins_listar`, `plugin_estado`, `manifesto_validar`, `agente_disparar`, `agente_acompanhar`, `agente_responder` e `agente_cancelar`. Ligar `ExigirMcpDoPlugin()` e permitir só administradores. Arquivo: `hub-agente/backend/Agente.Api/Mcp/`.
+- [x] T026 [US3] Testes do MCP: um manifesto com rota reservada lista a regra violada, e uma pergunta pendente aparece em `agente_acompanhar`. Arquivo: `hub-agente/backend/Agente.Api.Tests/McpTests.cs`.
 
 ## Phase 6: Polish
 
