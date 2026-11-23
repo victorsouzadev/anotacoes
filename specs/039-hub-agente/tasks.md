@@ -74,12 +74,12 @@
 
 ## Phase 4: User Story 2, esqueleto (P2)
 
-- [ ] T019 [US2] Criar o `GithubDoAgente` com o Octokit, em `hub-agente/backend/Agente.Api/Github/`. Ele cria o repositório a partir do template `hub-modelo`, faz push na branch `esqueleto`, abre o PR e lê a CI. Toda chamada passa por `RepositorioPermitido(execucao)`, conforme `Execucao.RepositorioCriado` no `data-model.md`. Testar a recusa com um repositório que não é o da execução.
-- [ ] T020 [US2] Criar as ferramentas `propor_plano` (pausa até a aprovação), `ler_arquivo_modelo`, `escrever_arquivo` (só na pasta temporária e só depois do plano aprovado), `criar_repositorio_e_pr` (uma vez só) e `estado_da_ci`. Arquivo: `hub-agente/backend/Agente.Api/Ferramentas/Esqueleto.cs`.
-- [ ] T021 [US2] Conferir o plano antes da aprovação: o id não pode estar no lock, nem já existir no GitHub, nem cair numa rota reservada (usar `RegrasDoManifesto`). Arquivo: `hub-agente/backend/Agente.Api/Esqueleto/ConferenciaDoPlano.cs`, com testes.
-- [ ] T022 [US2] Escrever o prompt do esqueleto em `hub-agente/agente/prompts/esqueleto.md`. Ele segue o caminho 1 da skill, faz as perguntas do FR-009 e termina com o link do PR, o estado da CI e os passos manuais (FR-008).
-- [ ] T023 [US2] Na tela, criar o formulário "Nova ferramenta", o plano para aprovar e as respostas às perguntas. Pasta: `hub-agente/frontend/`.
-- [ ] T024 [US2] Teste com o CLI falso e o GitHub simulado: o PR é aberto, o merge nunca é chamado e não há escrita fora do repositório criado. Arquivo: `hub-agente/backend/Agente.Api.Tests/EsqueletoTests.cs`.
+- [x] T019 [US2] Criar o `GithubDoAgente` com o Octokit, em `hub-agente/backend/Agente.Api/Github/`. Ele cria o repositório a partir do template `hub-modelo`, faz push na branch `esqueleto`, abre o PR e lê a CI. Toda chamada passa por `RepositorioPermitido(execucao)`, conforme `Execucao.RepositorioCriado` no `data-model.md`. Testar a recusa com um repositório que não é o da execução.
+- [x] T020 [US2] Criar as ferramentas `propor_plano` (pausa até a aprovação), `ler_arquivo_modelo`, `escrever_arquivo` (só na pasta temporária e só depois do plano aprovado), `criar_repositorio_e_pr` (uma vez só) e `estado_da_ci`. Arquivo: `hub-agente/backend/Agente.Api/Ferramentas/Esqueleto.cs`.
+- [x] T021 [US2] Conferir o plano antes da aprovação: o id não pode estar no lock, nem já existir no GitHub, nem cair numa rota reservada (usar `RegrasDoManifesto`). Arquivo: `hub-agente/backend/Agente.Api/Esqueleto/ConferenciaDoPlano.cs`, com testes.
+- [x] T022 [US2] Escrever o prompt do esqueleto em `hub-agente/agente/prompts/esqueleto.md`. Ele segue o caminho 1 da skill, faz as perguntas do FR-009 e termina com o link do PR, o estado da CI e os passos manuais (FR-008).
+- [x] T023 [US2] Na tela, criar o formulário "Nova ferramenta", o plano para aprovar e as respostas às perguntas. Pasta: `hub-agente/frontend/`.
+- [x] T024 [US2] Teste com o CLI falso e o GitHub simulado: o PR é aberto, o merge nunca é chamado e não há escrita fora do repositório criado. Arquivo: `hub-agente/backend/Agente.Api.Tests/EsqueletoTests.cs`.
 
 ## Phase 5: User Story 3, MCP (P3)
 
