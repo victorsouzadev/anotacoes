@@ -154,7 +154,8 @@ uma rota reservada. O erro aparece junto com a regra que falhou.
 - Só o dono do hub usa o agente. Uso por outras pessoas fica fora desta spec.
 - O agente segue a skill `plugin-hub` deste repositório, na versão que vai junto com a imagem do plug-in.
 - O custo da IA sai da chave que o dono já configurou no hub. O limite por execução é definido no plano.
-- O token do GitHub tem só o mínimo para criar repositórios a partir do modelo e abrir PRs na conta do dono.
+- O token do GitHub é novo e mínimo (decidido em 2026-11-23). É um token de acesso granular, com validade de no máximo 90 dias, que só permite criar repositórios a partir do `hub-modelo`, gravar conteúdo e workflows, e abrir PRs. Ele não permite apagar repositórios nem mexer em configuração, segredos ou membros. Quem gera o token e grava em `data/plugins/env/agente.env` é o dono. Como o GitHub só deixa criar repositório com um token que vale para a conta toda, o próprio agente se limita: só grava no repositório que acabou de criar, e recusa e registra qualquer tentativa em outro (FR-007).
+- A expiração do token aparece no hub com 7 dias de antecedência, junto com o caminho para trocar.
 - As leituras da VPS (estado, logs, permissões) passam pelo serviço de operação (`ops`) ou pelo núcleo. O agente nunca recebe o controle do Docker, que continua só com o deployer.
 - Uma execução por vez é suficiente.
 - Pôr o plug-in novo no ar (papel no banco, registro de plug-ins) continua manual e com confirmação, como na skill.
