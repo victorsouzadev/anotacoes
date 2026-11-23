@@ -5,16 +5,16 @@
 **Organização**: as tarefas seguem as histórias da spec. Os testes entram porque a constituição (princípio V) e a CI pedem.
 
 **Onde fica cada código**:
-- Caminhos que começam com `hub-agente/` são do repositório novo.
+- Caminhos que começam com `hub-agente/` são do repositório novo. O modelo usa `src/Plugin/` e `tests/Plugin.Tests/`: onde a tarefa diz `backend/Agente.Api/`, leia `src/Plugin/`.
 - Os outros caminhos são do núcleo.
 
 ## Phase 1: Setup
 
-- [ ] T001 Criar o repositório `hub-agente` a partir do `hub-modelo`. Exige confirmação do dono e grava no GitHub. Ajustar `hub-agente/plugin.json`:
+- [x] T001 Criar o repositório `hub-agente` a partir do `hub-modelo`. Exige confirmação do dono e grava no GitHub. Ajustar `hub-agente/plugin.json`:
   - `id: agente`, `rota: /agente`, `tabelas.prefixo: agente_`, `mcp`;
   - sem `usaIa`, conforme a pesquisa (research.md R4).
-- [ ] T002 [P] Instalar o Claude Code CLI com a versão fixada e o Node 22 na imagem, em `hub-agente/Dockerfile`.
-- [ ] T003 [P] Criar a pasta `hub-agente/agente/` com:
+- [x] T002 [P] Instalar o Claude Code CLI com a versão fixada e o Node 22 na imagem, em `hub-agente/Dockerfile`.
+- [x] T003 [P] Criar a pasta `hub-agente/agente/` com:
   - `.claude/settings.json`, que proíbe Bash, Read, Write, Edit, WebFetch e WebSearch e só permite `mcp__agente__*`;
   - uma cópia fixada de `.claude/skills/plugin-hub/SKILL.md`.
 
