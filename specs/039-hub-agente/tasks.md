@@ -25,15 +25,15 @@
   - o deployer passa a chamar a nova classe;
   - o SDK sobe para a versão 1.6.0 em `pacotes/Hub.Plugin.Sdk/Hub.Plugin.Sdk.csproj`;
   - os testes do deployer precisam continuar passando.
-- [ ] T005 [P] Criar as rotas de leitura no deployer: `GET /plugins/{id}/logs?linhas` (até 200 linhas) e `GET /plugins/{id}/health`. Elas só aceitam ids que estão no lock. Arquivos: `deployer/Notas.Deployer/Program.cs` e `deployer/Notas.Deployer.Tests/`.
-- [ ] T006 [P] Criar a função pura `LimpezaDeLog`, que tira as linhas com `Password=`, `Bearer ` ou `ApiKey`. Arquivo: `backend/Notas.Api/Services/Agente/LimpezaDeLog.cs`, com teste em `backend/Notas.Api.Tests/LimpezaDeLogTests.cs`.
-- [ ] T007 Criar as rotas `/api/core/agente/*` do contrato `contracts/nucleo-agente.md` em `backend/Notas.Api/Endpoints/AgenteNucleoEndpoints.cs`. Elas só aceitam `PluginDoServico == "agente"` e usam a consulta fixa de permissões.
+- [x] T005 [P] Criar as rotas de leitura no deployer: `GET /plugins/{id}/logs?linhas` (até 200 linhas) e `GET /plugins/{id}/health`. Elas só aceitam ids que estão no lock. Arquivos: `deployer/Notas.Deployer/Program.cs` e `deployer/Notas.Deployer.Tests/`.
+- [x] T006 [P] Criar a função pura `LimpezaDeLog`, que tira as linhas com `Password=`, `Bearer ` ou `ApiKey`. Arquivo: `backend/Notas.Api/Services/Agente/LimpezaDeLog.cs`, com teste em `backend/Notas.Api.Tests/LimpezaDeLogTests.cs`.
+- [x] T007 Criar as rotas `/api/core/agente/*` do contrato `contracts/nucleo-agente.md` em `backend/Notas.Api/Endpoints/AgenteNucleoEndpoints.cs`. Elas só aceitam `PluginDoServico == "agente"` e usam a consulta fixa de permissões.
   - Testes em `backend/Notas.Api.Tests/AgenteNucleoTests.cs`:
     - com o segredo do agente: 200;
     - com o segredo de outro plug-in: 401;
     - com um id fora do lock: 404.
   - Depende de T005 e T006.
-- [ ] T008 [P] Incluir o papel `agente` em `scripts/postgres-hub.sh` e na documentação do `DEPLOY.md`.
+- [x] T008 [P] Incluir o papel `agente` em `scripts/postgres-hub.sh` e na documentação do `DEPLOY.md`.
 - [ ] T009 Criar as entidades `Execucao` e `Evento` em `hub-agente/backend/Agente.Api/Dados/`, seguindo o `data-model.md`:
   - `agente_execucoes`: os campos `Execucao.Tipo`, `Execucao.Estado`, `Execucao.Origem` e `Execucao.UsuarioId` (FK);
   - `agente_eventos`: o campo `Evento.Tipo`.

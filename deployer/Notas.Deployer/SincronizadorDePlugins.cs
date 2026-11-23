@@ -51,7 +51,7 @@ public record EstadoPlugin(string Id, string Imagem, string Versao, string? Vers
     bool NoAr, string? UltimaFalha, DateTime AtualizadoEm, bool Ativo, string? SegredoServicoHash = null);
 
 /// <summary>Resposta de uma chamada ao health: o código HTTP, ou o erro quando nem respondeu.</summary>
-public record SaudeDoPlugin(string Id, int? Status, string? Erro, int Ms);
+public record SaudeDoPlugin(string Id, int? Status, string? Erro, int Ms, string? Corpo = null);
 
 /// <summary>
 /// Leva os containers ao que diz o <c>plugins.lock</c> (spec 029): sobe, atualiza, volta e desliga plug-ins,
@@ -264,7 +264,9 @@ public class SincronizadorDePlugins(ConfiguracaoPlugins cfg, Func<List<string>, 
         try
         {
             using var r = await http.GetAsync(url, ct);
-            return new SaudeDoPlugin(id, (int)r.StatusCode, null, (int)(DateTime.UtcNow - inicio).TotalMilliseconds);
+            var corpo = await r.Content.ReadAsStringAsync(ct);
+            return new SaudeDoPlugin(id, (int)r.StatusCode, null, (int)(DateTime.UtcNow - inicio).TotalMilliseconds,
+                corpo.Length > 2048 ? corpo[..2048] : corpo);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

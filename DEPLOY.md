@@ -414,6 +414,11 @@ em `HUB_BANCO`; sem o arquivo, o plug-in recebe `/data/db/notas.db` (é o caso d
 em `PG_PLUGINS`, rodar `scripts/postgres-hub.sh papeis`, criar o arquivo, subir e rodar `permissoes`. O
 `scripts/backup.sh` faz o `pg_dump` do `hub` e copia o `notas.db`.
 
+O `agente` (spec 039) já está na lista padrão do `postgres-hub.sh`: o `papeis` pede `PG_SENHA_AGENTE`. Enquanto o
+agente não for para o ar, rode com `PG_PLUGINS` sem ele. O agente não recebe nenhuma permissão a mais: as leituras da
+VPS (lock, estado, health, logs sem segredos e permissões) vêm das rotas GET `/api/core/agente/*`, que só aceitam o
+segredo de serviço dele e só ids do `plugins.lock`; o núcleo as repassa ao deployer (`/plugins/{id}/logs` e `/health`).
+
 **Receita de extração (031, usada nas 033 a 035).**
 1. No plug-in: copiar as entidades com os mesmos nomes de tabela e colunas; a primeira migração tem `Up` vazio (as
    tabelas já existem) e o teste `Dados.TabelasForaDoDono` dá vazio com as tabelas antigas em `tabelas.legadas`.
