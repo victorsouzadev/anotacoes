@@ -96,7 +96,7 @@ com a linha comentada. Os dados nunca são apagados.
 - **FR-011**: Desligar ou voltar MUST NOT apagar tabelas, arquivos nem conexões.
 - **FR-012**: O histórico MUST registrar quem fez, quando, qual id, a ação e o resultado, sem segredos.
 - **FR-013**: O agente de IA MUST NOT poder disparar nenhuma ação desta spec, nem pelo MCP.
-- **FR-014**: O acesso ao GitHub usado para o registro MUST servir só para abrir PR no arquivo do registro do núcleo; o hub MUST recusar qualquer outro arquivo ou repositório.
+- **FR-014**: O acesso ao GitHub MUST ter só a leitura dos repositórios e o disparo que abre o PR do registro do núcleo. Ele MUST NOT conseguir escrever código nem fazer merge, e o hub MUST recusar qualquer outro destino.
 
 ### Key Entities
 
@@ -116,8 +116,8 @@ com a linha comentada. Os dados nunca são apagados.
 ## Assumptions
 
 - O merge no GitHub segue sendo a trava final, porque dispara o deploy.
-- O painel mora no hub ou junto do Agente; o plano decide, com a regra de menor privilégio.
-- O núcleo já tem hoje acesso de administrador ao Postgres (ferramenta Publicar). O plano avalia usá-lo, em vez de dar esse acesso a outra peça.
-- O token do GitHub do agente alcança todos os repositórios; o plano avalia um token separado, só do núcleo.
+- O painel mora no núcleo (research R1).
+- O deployer prepara o banco (research R2), sem usar o acesso de administrador do núcleo.
+- O núcleo usa dois tokens próprios, sem escrita em código (research R4 e R10).
 - Fora do escopo: criar a configuração própria das ferramentas, apagar ferramenta e dados, deploy do próprio núcleo e app Android.
 - A VPS está com a memória no limite (cerca de 300 MB disponíveis e swap cheio em 2026-11-24, logo depois de um deploy): a spec avisa, mas não resolve.

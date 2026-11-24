@@ -232,8 +232,8 @@ ferramenta nova (repositório `hub-<id>` e PR), com a skill `plugin-hub`. A IA v
 ## Painel de plug-ins (040)
 
 Pedido em 2026-11-24: uma interface para pôr no ar, atualizar, voltar e desligar plug-ins, sem dar poder à IA e com o
-merge no GitHub como trava final. Status: **spec escrita**, falta o plano.
+merge no GitHub como trava final. Status: **plano escrito**, faltam as tarefas.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
-| 040 | [Painel de plug-ins](040-painel-plugins/spec.md) | 039 | spec |
+| 040 | [Painel de plug-ins](040-painel-plugins/spec.md) | 039 | spec, plano |
