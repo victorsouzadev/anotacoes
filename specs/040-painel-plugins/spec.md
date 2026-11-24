@@ -13,7 +13,7 @@
 ### Session 2026-11-24
 
 - Q: A interface dá mais poder ao agente de IA? → A: Não. Pôr no ar é uma ação da pessoa, em código comum. A regra da 039 continua: a IA nunca grava na VPS, nunca mexe no registro e nunca faz merge.
-- Q: Quem faz o merge do registro? → A: O dono, no GitHub. O botão só abre o PR (padrão recomendado, a confirmar com o dono).
+- Q: Quem faz o merge do registro? → A: O dono, no GitHub. O botão só abre o PR (confirmado pelo dono em 2026-11-24).
 
 ## User Scenarios & Testing *(mandatory)*
 

@@ -32,4 +32,4 @@
 ## Notes
 
 - Termos do hub (deployer, registro de plug-ins, schema, PR) aparecem porque são o vocabulário do dono, não uma escolha de implementação.
-- "Quem faz o merge" ficou com o padrão recomendado (o dono, no GitHub); o dono confirma antes do plano.
+- "Quem faz o merge" foi confirmado: o dono, no GitHub.
