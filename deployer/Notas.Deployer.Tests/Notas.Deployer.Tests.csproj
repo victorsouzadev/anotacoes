@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Notas.Deployer\Notas.Deployer.csproj" />
+    <Using Include="Hub.Plugin" />
   </ItemGroup>
 
 </Project>

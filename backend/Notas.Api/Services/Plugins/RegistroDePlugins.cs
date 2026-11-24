@@ -12,6 +12,9 @@ public class PluginsOptions
     /// <summary>Estado gravado pelo deployer (spec 029). Ausente = nenhum plug-in instalado.</summary>
     public string Estado { get; set; } = "../../data/plugins/estado.json";
 
+    /// <summary>O <c>plugins.lock</c> lido pelo agente (spec 039). Nulo = ao lado do estado.</summary>
+    public string? Lock { get; set; }
+
     public int IntervaloHealthSegundos { get; set; } = 30;
 }
 

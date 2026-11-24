@@ -6,7 +6,8 @@
 # Nenhuma senha é impressa. PSQL troca o cliente (padrão: docker exec no notas-postgres).
 set -eu
 
-PLUGINS="${PG_PLUGINS:-notas financas tarefas dieta treino criativo cerebro}"
+# "agente" (spec 039) só lê pelo núcleo, mas tem schema próprio para o histórico das execuções.
+PLUGINS="${PG_PLUGINS:-notas financas tarefas dieta treino criativo cerebro agente}"
 PSQL="${PSQL:-docker exec -i notas-postgres psql -U postgres -v ON_ERROR_STOP=1 -q}"
 
 senha() {

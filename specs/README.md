@@ -206,3 +206,25 @@ banco recusa o acesso às tabelas de outro dono. Janela feita em 2026-11-22, sem
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
 | 038 | [Tudo no Postgres](038-tudo-no-postgres/spec.md) | 037 | plan, tasks |
+
+## Agente de plug-ins (039)
+
+Pedido em 2026-11-23: um plug-in novo, o `hub-agente`, que diagnostica um plug-in só lendo e cria o esqueleto de uma
+ferramenta nova (repositório `hub-<id>` e PR), com a skill `plugin-hub`. A IA vem da assinatura do Claude do dono
+(`claude -p` com o token do `claude setup-token`), sem chave de API. Status: **implementada** (T001 a T029, CI verde nos dois repositórios, imagem `hub-agente:b1652c6`);
+falta pôr no ar (T030, com o dono).
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 039 | [Agente de plug-ins](039-hub-agente/spec.md) | 038 | plan, research, data-model, contracts, quickstart, tasks |
+
+### Decisões principais
+
+- **Ferramentas:** o CLI roda com `--tools ""` (nenhuma ferramenta interna) e só enxerga o MCP local do backend, em
+  `/interno/mcp/<execução>`, fora da rota pública, só de 127.0.0.1 e com um segredo por execução. Chamada fora da lista vira
+  um evento `recusa`.
+- **Leituras da VPS:** rotas GET `/api/core/agente/*` no núcleo, só com o segredo de serviço do `agente` e só ids do lock;
+  o deployer ganhou `GET /plugins/{id}/logs` e `/health`. Os logs chegam sem as linhas com segredo.
+- **Regras do manifesto:** saíram do deployer para o SDK (`RegrasDoManifesto`, 1.6.0). O agente ainda usa o SDK 1.5.1, que
+  confere o manifesto sozinho; com a 1.6.0 publicada, o `validar_manifesto` passa a conferir também os outros plug-ins.
+- **GitHub:** Octokit, sempre filtrado pelo repositório criado na própria execução; não existe merge.

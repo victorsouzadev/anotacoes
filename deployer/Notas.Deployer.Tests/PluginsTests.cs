@@ -11,7 +11,7 @@ public class PluginsTests
     public static Manifesto M(string id = "dieta", string? prefixo = null, List<string>? legadas = null, List<string>? rotas = null,
         int contrato = 1) =>
         new(id, "Dieta", "apple", null, contrato, "/" + id, 8080, $"/{id}/api/health", null, rotas,
-            new TabelasManifesto(prefixo ?? id + "_", legadas), false, null, null);
+            new Tabelas(prefixo ?? id + "_", legadas), false, null, null);
 
     [Fact]
     public void Lock_le_ativos_desligados_e_ignora_lixo()
@@ -50,7 +50,7 @@ public class PluginsTests
               "dados": ["/data/vault", "/data/hub"]
             }
             """;
-        Assert.Empty(Plugins.Validar(Manifesto.Ler(json), "cerebro", []));
+        Assert.Empty(Plugins.Validar(RegrasDoManifesto.LerJson(json), "cerebro", []));
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class PluginsTests
     [Fact]
     public void Recusa_rota_prefixo_contrato_e_id_errados()
     {
-        var m = M() with { Rota = "/outra", Contrato = 2, Tabelas = new TabelasManifesto("core_", ["users"]) };
+        var m = M() with { Rota = "/outra", Contrato = 2, Tabelas = new Tabelas("core_", ["users"]) };
         var p = Plugins.Validar(m, "dieta", []);
         Assert.Contains(p, x => x.Contains("rota precisa ser /dieta"));
         Assert.Contains(p, x => x.Contains("contrato 2"));
@@ -247,6 +247,29 @@ public class SincronizadorTests : IDisposable
 
     private static List<EntradaLock> Lock(string versao, bool ativo = true) =>
         [new("exemplo", "ghcr.io/victorsouzadev/hub-exemplo", versao, ativo)];
+
+    [Fact]
+    public async Task Logs_e_health_so_para_ids_do_lock()
+    {
+        var s = Criar();
+        File.WriteAllText(Path.Combine(_pasta, "plugins.lock"), "exemplo: ghcr.io/victorsouzadev/hub-exemplo@v1");
+        await s.Sincronizar(Lock("v1"), default);
+        _chamadas.Clear();
+
+        Assert.NotNull(await s.Logs("exemplo", 5000));
+        var logs = _chamadas.Single(a => a[0] == "logs");
+        Assert.Equal("200", logs[logs.IndexOf("--tail") + 1]);
+        Assert.Equal("plugin-exemplo", logs[^1]);
+
+        _health = HttpStatusCode.ServiceUnavailable;
+        var saude = await s.Saude("exemplo", default);
+        Assert.Equal(503, saude!.Status);
+
+        Assert.Null(await s.Logs("outro", 10));
+        Assert.Null(await s.Saude("outro", default));
+        Assert.Null(await s.Logs("../exemplo", 10));
+        Assert.DoesNotContain(_chamadas, a => a[0] == "logs" && a[^1] != "plugin-exemplo");
+    }
 
     private List<string> Run() => _chamadas.Last(a => a[0] == "run" && !a.Contains("cat"));
 

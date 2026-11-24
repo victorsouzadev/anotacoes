@@ -118,6 +118,8 @@ public static class NotasApp
         builder.Services.AddSingleton<IPostgresProvisionador, PostgresProvisionador>();
         builder.Services.AddHostedService<PublicacaoWorker>();
         builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
+        builder.Services.AddHttpClient<Notas.Api.Services.Agente.IDeployerDoAgente, Notas.Api.Services.Agente.DeployerDoAgenteHttp>(
+            c => c.Timeout = TimeSpan.FromSeconds(40));
         builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
@@ -231,6 +233,7 @@ public static class NotasApp
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
+        app.MapAgenteNucleoEndpoints();
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();
         options?.MapExtra?.Invoke(app);
 
