@@ -403,8 +403,9 @@ volta. Sem o token do GitHub, só o diagnóstico funciona.
 
 **Pôr no ar** (cada passo com confirmação): incluir `agente` em `PG_PLUGINS`, gerar `PG_SENHA_AGENTE` e rodar
 `scripts/postgres-hub.sh papeis`; gravar `data/plugins/banco/agente` (`...;Username=agente;...;Maximum Pool Size=3`);
-gravar o `agente.env`; num PR do núcleo, a linha `agente: ghcr.io/victorsouzadev/hub-agente@<commit>` no `plugins.lock`;
-depois do deploy, `postgres-hub.sh permissoes`. Conferir pelo quickstart da spec 039.
+rodar `postgres-hub.sh permissoes` (antes de ligar: as tabelas do agente apontam para `nucleo.users`); gravar o
+`agente.env`; num PR do núcleo, a linha `agente: ghcr.io/victorsouzadev/hub-agente@<commit curto>` no `plugins.lock`.
+Conferir pelo quickstart da spec 039.
 
 ## Núcleo e plug-ins (specs 029 a 032)
 
@@ -438,7 +439,7 @@ Remover a linha do lock (ou comentar) para o container e apaga o trecho do Caddy
 **Banco (038).** Cada plug-in usa o banco `hub` do `notas-postgres`, no schema e com o papel do seu id. A conexão fica em
 `data/plugins/banco/<id>` (modo 600, uma linha `Host=notas-postgres;Database=hub;Username=<id>;...`) e o deployer a passa
 em `HUB_BANCO`; sem o arquivo, o plug-in recebe `/data/db/notas.db` (é o caso da Anotação). Plug-in novo: incluir o id
-em `PG_PLUGINS`, rodar `scripts/postgres-hub.sh papeis`, criar o arquivo, subir e rodar `permissoes`. O
+em `PG_PLUGINS`, rodar `scripts/postgres-hub.sh papeis`, criar o arquivo, rodar `permissoes` e subir. O
 `scripts/backup.sh` faz o `pg_dump` do `hub` e copia o `notas.db`.
 
 O `agente` (spec 039) já está na lista padrão do `postgres-hub.sh`: o `papeis` pede `PG_SENHA_AGENTE`. Enquanto o
