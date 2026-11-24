@@ -66,6 +66,23 @@ jobs:
           path: ops/publish
           if-no-files-found: error
 
+  build-deployer:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deployer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - run: dotnet publish Notas.Deployer/Notas.Deployer.csproj -c Release -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployer-publish
+          path: deployer/publish
+          if-no-files-found: error
+
   build-frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -87,7 +104,7 @@ jobs:
           if-no-files-found: error
 
   deploy:
-    needs: [build-backend, build-frontend, build-cerebro, build-ops]
+    needs: [build-backend, build-frontend, build-cerebro, build-ops, build-deployer]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,6 +126,10 @@ jobs:
         with:
           name: ops-publish
           path: ops/publish
+      - uses: actions/download-artifact@v4
+        with:
+          name: deployer-publish
+          path: deployer/publish
 
       - name: Empacota backend + frontend + configs de deploy
         run: |

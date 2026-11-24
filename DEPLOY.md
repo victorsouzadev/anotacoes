@@ -267,6 +267,7 @@ echo "POSTGRES_SENHA=$(openssl rand -hex 32)" >> .env   # Postgres dos sites (op
 mkdir -p data/sites
 # baixa a imagem do runtime antes, para o primeiro deploy não esperar o download
 docker pull mcr.microsoft.com/dotnet/aspnet:9.0
+# só monta a imagem: o deployer/publish chega pronto no pacote do deploy (não compile na VPS)
 docker compose -f docker-compose.yml -f docker-compose.vps.yml build deployer
 docker compose -f docker-compose.yml -f docker-compose.vps.yml up -d
 ```
