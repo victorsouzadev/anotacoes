@@ -393,7 +393,7 @@ shell: as leituras da VPS vêm das rotas GET `/api/core/agente/*` do núcleo. Nu
 | `Agente__Administradores` | e-mails do hub que podem abrir a ferramenta e o MCP, separados por vírgula |
 | `Agente__Claude__Token` | token da assinatura: rode `claude setup-token` na sua máquina (logado na sua conta) e copie o que ele mostrar. Vale até um ano |
 | `Agente__Claude__Validade` | data em que esse token vence (`aaaa-mm-dd`); o hub avisa 7 dias antes |
-| `Agente__GitHub__Token` | só para o esqueleto. Token *fine-grained* em GitHub → Settings → Developer settings → Fine-grained tokens, do dono `victorsouzadev`, em **All repositories** (o repositório ainda não existe quando ele é usado), com *Administration: Read and write* (criar o repositório), *Contents: Read and write*, *Pull requests: Read and write* e, para ler a CI, *Checks: Read-only* (se o `estado_da_ci` responder 403, acrescente *Actions: Read-only*; ainda não conferido com um token de verdade). Escolha a validade |
+| `Agente__GitHub__Token` | só para o esqueleto. Token *fine-grained* em GitHub → Settings → Developer settings → Fine-grained tokens, do dono `victorsouzadev`, em **All repositories** (o repositório ainda não existe quando ele é usado), com *Administration: Read and write* (criar o repositório), *Contents: Read and write*, *Pull requests: Read and write* e, para ler a CI, *Actions: Read-only* (o token fine-grained não tem a permissão *Checks*). Escolha a validade |
 | `Agente__GitHub__Validade` | data em que o token do GitHub vence |
 | `Agente__Diagnostico__Minutos` / `__Turnos` | limites do diagnóstico (padrão 10 e 20) |
 | `Agente__Esqueleto__Minutos` / `__Turnos` | limites do esqueleto (padrão 30 e 80) |
