@@ -14,7 +14,17 @@ public static partial class RegrasDoManifesto
 
     /// <summary>Rotas do núcleo que nenhum plug-in pode ocupar, nem por cima nem por baixo.</summary>
     public static readonly string[] Reservadas =
-        ["/", "/api/auth", "/api/core", "/api/plugins", "/api/sistema", "/autorizar", "/.well-known", "/ops", "/sites"];
+        ["/", "/api/auth", "/api/core", "/api/plugins", "/api/sistema", "/autorizar", "/.well-known", "/ops", "/sites",
+            "/api/painel", "/plugins"];
+
+    /// <summary>Ids que viram nome de papel e de schema no Postgres e já são do sistema (spec 040, R5).</summary>
+    public static readonly string[] IdsReservados = ["postgres", "nucleo", "public", "hub", "information-schema"];
+
+    /// <summary>Id no padrão e fora dos reservados: a conferência antes de qualquer uso do id no banco (spec 040).</summary>
+    public static bool IdPermitido(string? id) =>
+        id is not null && IdValido().IsMatch(id) && !id.EndsWith('\n') && !IdReservado(id);
+
+    private static bool IdReservado(string id) => IdsReservados.Contains(id) || id.StartsWith("pg-", StringComparison.Ordinal);
 
     /// <summary>Tabelas do núcleo (prefixo <c>core_</c> e as de login) que plug-in nenhum declara.</summary>
     public static readonly string[] TabelasDoNucleo =
@@ -53,6 +63,7 @@ public static partial class RegrasDoManifesto
         if (m is null) return ["plugin.json ausente ou inválido"];
         if (m.Id != idEsperado) p.Add($"id do manifesto ({m.Id}) difere do plugins.lock ({idEsperado})");
         if (!IdValido().IsMatch(m.Id ?? "")) p.Add("id fora do padrão ^[a-z][a-z0-9-]{1,30}$");
+        else if (IdReservado(m.Id!)) p.Add($"o id {m.Id} é reservado do sistema");
         if (string.IsNullOrWhiteSpace(m.Nome) || string.IsNullOrWhiteSpace(m.Icone)) p.Add("nome e icone são obrigatórios");
         if (m.Contrato > ContratoAtual || m.Contrato < ContratoAtual - 1)
             p.Add($"contrato {m.Contrato} não suportado (núcleo aceita {ContratoAtual - 1} e {ContratoAtual})");

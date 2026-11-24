@@ -120,6 +120,14 @@ public static class NotasApp
         builder.Services.AddHttpClient<IDeployer, DeployerHttp>(c => c.Timeout = TimeSpan.FromMinutes(6));
         builder.Services.AddHttpClient<Notas.Api.Services.Agente.IDeployerDoAgente, Notas.Api.Services.Agente.DeployerDoAgenteHttp>(
             c => c.Timeout = TimeSpan.FromSeconds(40));
+        // Painel de plug-ins (spec 040): só leitura. Sem redirecionamento, o token não sai de api.github.com.
+        builder.Services.Configure<Notas.Api.Services.Painel.PainelOptions>(
+            builder.Configuration.GetSection(Notas.Api.Services.Painel.PainelOptions.SectionName));
+        builder.Services.AddHttpClient<Notas.Api.Services.Painel.IGithubDoPainel, Notas.Api.Services.Painel.GithubDoPainel>(
+            c => c.Timeout = TimeSpan.FromSeconds(5)).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+        builder.Services.AddHttpClient<Notas.Api.Services.Painel.IDeployerDoPainel, Notas.Api.Services.Painel.DeployerDoPainelHttp>(
+            c => c.Timeout = TimeSpan.FromSeconds(10));
+        builder.Services.AddScoped<Notas.Api.Services.Painel.ListaDoPainel>();
         builder.Services.AddHttpClient<IVerificadorSaude, VerificadorSaudeHttp>(c => c.Timeout = TimeSpan.FromSeconds(5));
 
         builder.Services.AddSingleton<IProtetorDeSegredos, ProtetorDeSegredos>();
@@ -232,6 +240,7 @@ public static class NotasApp
         app.MapSitesEndpoints();
         app.MapSistemaEndpoints();
         app.MapPluginsEndpoints();
+        app.MapPainelPluginsEndpoints();
         app.MapOAuthNucleoEndpoints();
         app.MapAgenteNucleoEndpoints();
         if (options?.Desktop == true || app.Configuration.GetValue<bool>("Desktop:Enabled")) app.MapDesktopAuthEndpoints();

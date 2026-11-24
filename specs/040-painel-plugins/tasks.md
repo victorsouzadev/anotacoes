@@ -6,28 +6,28 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Criar `PainelOptions` (administradores, tokens, validades) em `backend/Notas.Api/Services/Painel/PainelOptions.cs` e registrar em `backend/Notas.Api/NotasApp.cs`.
-- [ ] T002 [P] Declarar `HUB_ADMINISTRADORES`, `PAINEL_GITHUB_LEITURA`, `PAINEL_GITHUB_DISPARO` e as validades em `docker-compose.yml` e `.env.example`, sem valor.
+- [X] T001 Criar `PainelOptions` (administradores, tokens, validades) em `backend/Notas.Api/Services/Painel/PainelOptions.cs` e registrar em `backend/Notas.Api/NotasApp.cs`.
+- [X] T002 [P] Declarar `HUB_ADMINISTRADORES`, `PAINEL_GITHUB_LEITURA`, `PAINEL_GITHUB_DISPARO` e as validades em `docker-compose.yml` e `.env.example`, sem valor.
 
 ## Phase 2: Foundational (bloqueia todas as histórias)
 
-- [ ] T003 [P] Pôr os ids reservados (research R5) em `pacotes/Hub.Plugin.Sdk/Manifestos/RegrasDoManifesto.cs`, com teste em `pacotes/Hub.Plugin.Sdk.Tests/SdkTests.cs`; subir a versão do SDK. Conferir antes que nenhum plug-in no ar passa a ser recusado.
-- [ ] T004 Criar o filtro de administrador e `GET /permissao` em `backend/Notas.Api/Endpoints/PainelPluginsEndpoints.cs`, conforme `contracts/painel-api.md`.
-- [ ] T005 Testar 401 sem sessão, com token de MCP e com segredo de serviço, e 403 para outra conta, em `backend/Notas.Api.Tests/PainelAcessoTests.cs` (todas as rotas do grupo, inclusive as futuras).
-- [ ] T006 [P] Criar `GithubDoPainel` (só as URLs de `contracts/workflow.md`, limite de 5 s, sem token em erro) em `backend/Notas.Api/Services/Painel/GithubDoPainel.cs`, com GitHub falso em `backend/Notas.Api.Tests/GithubDoPainelTests.cs`: outra URL é recusada.
+- [X] T003 [P] Pôr os ids reservados (research R5) em `pacotes/Hub.Plugin.Sdk/Manifestos/RegrasDoManifesto.cs`, com teste em `pacotes/Hub.Plugin.Sdk.Tests/SdkTests.cs`; subir a versão do SDK. Conferir antes que nenhum plug-in no ar passa a ser recusado.
+- [X] T004 Criar o filtro de administrador e `GET /permissao` em `backend/Notas.Api/Endpoints/PainelPluginsEndpoints.cs`, conforme `contracts/painel-api.md`.
+- [X] T005 Testar 401 sem sessão, com token de MCP e com segredo de serviço, e 403 para outra conta, em `backend/Notas.Api.Tests/PainelAcessoTests.cs` (todas as rotas do grupo, inclusive as futuras).
+- [X] T006 [P] Criar `GithubDoPainel` (só as URLs de `contracts/workflow.md`, limite de 5 s, sem token em erro) em `backend/Notas.Api/Services/Painel/GithubDoPainel.cs`, com GitHub falso em `backend/Notas.Api.Tests/GithubDoPainelTests.cs`: outra URL é recusada.
 
 ## Phase 3: User Story 1 - Ver os plug-ins e o que falta (P1) 🎯 MVP
 
 **Goal**: painel só de leitura. **Independent Test**: ferramenta mesclada e sem banco aparece com "imagem publicada" e "falta: banco, registro".
 
-- [ ] T007 [P] [US1] Criar a conferência só de leitura em `deployer/Notas.Deployer/PreparoDoBanco.cs` e a rota `GET /plugins/{id}/preparo` de `contracts/deployer.md` em `deployer/Notas.Deployer/Program.cs`.
-- [ ] T008 [US1] Criar `GET /imagens/{id}/{versao}` e `GET /recursos` em `deployer/Notas.Deployer/Program.cs`, com as leituras em `deployer/Notas.Deployer/Recursos.cs` e testes em `deployer/Notas.Deployer.Tests/RecursosTests.cs`. Conferir que o `docker manifest inspect` funciona no `docker-cli` da imagem.
-- [ ] T009 [P] [US1] Criar `SituacaoDoPlugin` (função pura: etapas e situação de `data-model.md`) em `backend/Notas.Api/Services/Painel/SituacaoDoPlugin.cs`, com teste em `backend/Notas.Api.Tests/SituacaoDoPluginTests.cs`, incluindo a primeira subida que falhou com manifesto nulo.
-- [ ] T010 [P] [US1] Criar `RecursosLivres` (função pura: avisos do research R8) em `backend/Notas.Api/Services/Painel/RecursosLivres.cs`, com teste.
-- [ ] T011 [US1] Criar o cliente das leituras do deployer em `backend/Notas.Api/Services/Painel/DeployerDoPainel.cs`.
-- [ ] T012 [US1] Criar `GET /` e `GET /{id}/versoes` em `backend/Notas.Api/Endpoints/PainelPluginsEndpoints.cs`: fontes em paralelo, e fonte fora do ar vira `nao-conferida`. Teste em `backend/Notas.Api.Tests/PainelListaTests.cs` (sem GitHub, sem deployer, 10 s).
-- [ ] T013 [US1] Criar a tela `/plugins` em `frontend/src/app/features/plugins/` (lista, etapas, recursos, avisos de token; Grafite, claro e escuro, celular), a rota em `frontend/src/app/app.routes.ts` e o card do administrador em `frontend/src/app/features/hub/hub.page.ts`.
-- [ ] T014 [US1] Conferir que o Caddy (`caddy/`) entrega `/plugins` ao frontend e que nenhum plug-in pode ocupar a rota (`Reservadas` do `RegrasDoManifesto`).
+- [X] T007 [P] [US1] Criar a conferência só de leitura em `deployer/Notas.Deployer/PreparoDoBanco.cs` e a rota `GET /plugins/{id}/preparo` de `contracts/deployer.md` em `deployer/Notas.Deployer/Program.cs`.
+- [X] T008 [US1] Criar `GET /imagens/{id}/{versao}` e `GET /recursos` em `deployer/Notas.Deployer/Program.cs`, com as leituras em `deployer/Notas.Deployer/Recursos.cs` e testes em `deployer/Notas.Deployer.Tests/RecursosTests.cs`. Conferir que o `docker manifest inspect` funciona no `docker-cli` da imagem.
+- [X] T009 [P] [US1] Criar `SituacaoDoPlugin` (função pura: etapas e situação de `data-model.md`) em `backend/Notas.Api/Services/Painel/SituacaoDoPlugin.cs`, com teste em `backend/Notas.Api.Tests/SituacaoDoPluginTests.cs`, incluindo a primeira subida que falhou com manifesto nulo.
+- [X] T010 [P] [US1] Criar `RecursosLivres` (função pura: avisos do research R8) em `backend/Notas.Api/Services/Painel/RecursosLivres.cs`, com teste.
+- [X] T011 [US1] Criar o cliente das leituras do deployer em `backend/Notas.Api/Services/Painel/DeployerDoPainel.cs`.
+- [X] T012 [US1] Criar `GET /` e `GET /{id}/versoes` em `backend/Notas.Api/Endpoints/PainelPluginsEndpoints.cs`: fontes em paralelo, e fonte fora do ar vira `nao-conferida`. Teste em `backend/Notas.Api.Tests/PainelListaTests.cs` (sem GitHub, sem deployer, 10 s).
+- [X] T013 [US1] Criar a tela `/plugins` em `frontend/src/app/features/plugins/` (lista, etapas, recursos, avisos de token; Grafite, claro e escuro, celular), a rota em `frontend/src/app/app.routes.ts` e o card do administrador em `frontend/src/app/features/hub/hub.page.ts`.
+- [X] T014 [US1] Conferir que o Caddy (`caddy/`) entrega `/plugins` ao frontend e que nenhum plug-in pode ocupar a rota (`Reservadas` do `RegrasDoManifesto`).
 - [ ] T015 [US1] [dono] Entrega 1: PR da US1, token de leitura e administradores no `.env`, cenários 1, 2 e 9 do `quickstart.md`.
 
 **Checkpoint**: painel de leitura no ar; nada grava.
@@ -94,3 +94,12 @@ Três entregas, cada uma com PR próprio e parada para o dono. A entrega 1 (MVP)
 | FR-010 | T008, T010, T023 |
 | FR-011 | T028, T031 |
 | FR-012 | T021, T022, T024 |
+
+## Resultados
+
+- **2026-11-24, entrega 1 (T001–T014)**: código pronto na branch, sem PR e sem nada gravado na VPS. O que falta é o T015.
+- O estado vem do `estado.json`, não do `GET /plugins` (research R6, ajustado).
+- A busca de PR aberto do registro fica para a entrega 2, junto com as operações: hoje um PR aberto à mão não diz de que id é.
+- O teste de conexão usa Npgsql por TCP no deployer, sem pôr a senha em argumento de processo.
+- T014: o Caddy já entrega `/plugins` ao frontend pelo `handle` final; `/plugins` e `/api/painel` entraram nas rotas reservadas.
+- O SDK foi para 1.7.0: o merge publica a versão nova (`pacotes.yml`). Os plug-ins no ar não precisam mudar.

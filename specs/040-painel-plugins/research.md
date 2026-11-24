@@ -56,7 +56,7 @@ Conferido no código e no GitHub em 2026-11-24.
 | registro | `plugins.lock` da VPS e PR aberto |
 | no ar | `GET /plugins` do deployer e health |
 
-- A falha na primeira subida não entra em `core_plugins_estado` (o manifesto ainda é nulo), então o painel lê o `GET /plugins` do deployer, não a tabela.
+- A falha na primeira subida não entra em `core_plugins_estado` (o manifesto ainda é nulo), então o painel lê o `estado.json` (o mesmo conteúdo do `GET /plugins`), não a tabela; assim a lista funciona com o deployer fora do ar.
 - Uma fonte fora do ar vira "não deu para conferir"; as outras continuam.
 - O deployer confere de novo o manifesto de dentro da imagem no deploy; a conferência pelo GitHub só antecipa a recusa.
 
