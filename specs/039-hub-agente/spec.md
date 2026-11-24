@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-22
 
-**Status**: Draft
+**Status**: Implementada, no ar desde 2026-11-23 (ressalvas na T030)
 
 **Input**: "Plug-in hub-agente: um plug-in novo na VPS que roda um agente com a skill plugin-hub. Duas funções: (1) criar o esqueleto de um plug-in a partir de uma descrição feita numa tela do hub e abrir um PR para revisão, sem nada ir para a VPS ou para o plugins.lock sozinho; (2) diagnóstico só de leitura de um plug-in com relatório. Login do núcleo, chaves em data/plugins/env. Expõe um MCP com: ler plugins.lock, estado do deployer, health e última falha; disparar o agente e acompanhar; ler e validar plugin.json contra o schema e as regras do deployer."
 

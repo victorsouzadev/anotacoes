@@ -94,13 +94,30 @@
   - `specs/README.md`: a seção 039;
   - `README.md`.
 - [x] T029 CI do `hub-agente`: backend (também com `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`) e frontend. A CI do núcleo também tem de passar inteira.
-- [ ] T030 Pôr no ar, sempre com a confirmação do dono a cada passo:
+- [x] T030 Pôr no ar, sempre com a confirmação do dono a cada passo:
   - `PG_PLUGINS`, a senha e `postgres-hub.sh papeis`;
   - o arquivo `data/plugins/banco/agente`;
   - o `agente.env`, gravado pelo dono;
   - a linha no `plugins.lock`, num PR;
   - `postgres-hub.sh permissoes`;
   - os passos do quickstart.
+
+### Resultado da T030 (2026-11-24)
+
+No ar em `/agente/`, imagem `hub-agente@ae82bde`. Conferido com os tokens reais:
+
+- **Diagnóstico** do `treino`: concluído em 21 s, sem mudar nada na VPS.
+- **Esqueleto** (`hub-devocional`): repositório e PR criados. A primeira CI falhou porque a skill mandava usar `BancoVazio`, que
+  não vem no SDK; skill, `estado_da_ci` (agora espera) e textos corrigidos (hub-agente#1 e #121).
+- **MCP** num cliente real (Claude Code, OAuth do núcleo): `plugins_listar`, `plugin_estado`, `manifesto_validar` e `agente_acompanhar`.
+- **Segredos**: nenhum token nos eventos nem no log.
+
+Ressalvas, fechado assim a pedido do dono:
+
+- não testado: diagnóstico de um plug-in com falha; `agente_disparar`, `agente_responder` e `agente_cancelar` por um cliente real;
+- provado só nos testes automáticos (GitHub falso): a recusa de outro repositório e a espera da CI;
+- a memória tocou o limite de 256 MB do container nas duas execuções (o pico inclui cache), sem processo encerrado;
+- o `permissoes` vem antes de ligar o plug-in (a ordem original estava errada).
 
 ## Dependências
 
