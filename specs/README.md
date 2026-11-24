@@ -228,3 +228,12 @@ ferramenta nova (repositório `hub-<id>` e PR), com a skill `plugin-hub`. A IA v
 - **Regras do manifesto:** saíram do deployer para o SDK (`RegrasDoManifesto`, 1.6.0). O agente ainda usa o SDK 1.5.1, que
   confere o manifesto sozinho; com a 1.6.0 publicada, o `validar_manifesto` passa a conferir também os outros plug-ins.
 - **GitHub:** Octokit, sempre filtrado pelo repositório criado na própria execução; não existe merge.
+
+## Painel de plug-ins (040)
+
+Pedido em 2026-11-24: uma interface para pôr no ar, atualizar, voltar e desligar plug-ins, sem dar poder à IA e com o
+merge no GitHub como trava final. Status: **spec escrita**, falta o plano.
+
+| # | Feature | Depende de | Artefatos |
+|---|---|---|---|
+| 040 | [Painel de plug-ins](040-painel-plugins/spec.md) | 039 | spec |
