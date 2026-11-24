@@ -1,0 +1,10 @@
+# Versão da VPS: o dotnet publish roda no GitHub Actions (job build-deployer) e chega em
+# deployer/publish. Compilar na VPS travou a máquina (2026-11-24). Contexto: a pasta deployer/.
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine
+# Só o cliente: o daemon é o do host, pelo /var/run/docker.sock montado no compose.
+RUN apk add --no-cache docker-cli
+WORKDIR /app
+COPY publish/ .
+ENV ASPNETCORE_URLS=http://0.0.0.0:8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Notas.Deployer.dll"]

@@ -35,6 +35,12 @@ services:
     ports:
       - "127.0.0.1:5433:5432"
 
+  # O build do docker-compose.yml usa a raiz como contexto e compila; aqui o publish já vem do CI.
+  deployer:
+    build:
+      context: ./deployer
+      dockerfile: Dockerfile.vps
+
   ops:
     build:
       context: ./ops
