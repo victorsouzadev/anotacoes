@@ -232,7 +232,7 @@ ferramenta nova (repositório `hub-<id>` e PR), com a skill `plugin-hub`. A IA v
 ## Painel de plug-ins (040)
 
 Pedido em 2026-11-24: uma interface para pôr no ar, atualizar, voltar e desligar plug-ins, sem dar poder à IA e com o
-merge no GitHub como trava final. Status: **tarefas escritas**, falta implementar.
+merge no GitHub como trava final. Status: **entrega 1 (só leitura) pronta na branch**, sem PR; faltam a T015 e as entregas 2 e 3.
 
 | # | Feature | Depende de | Artefatos |
 |---|---|---|---|
