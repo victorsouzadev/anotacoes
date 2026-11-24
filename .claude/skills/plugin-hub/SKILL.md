@@ -34,7 +34,7 @@ essas ferramentas sem quebrar o contrato.
 - **Banco.** É um banco `hub` no `notas-postgres`, com um schema e um papel com o nome do id. O plug-in só toca nas tabelas
   com o prefixo do manifesto (`tabelas.prefixo`, ex.: `dieta_`). A única ponte com o núcleo é a chave estrangeira para
   `nucleo.users` (`ReferenciarUsuarios()`). O teste `Dados.TabelasForaDoDono(db.Model, manifesto)` tem de dar vazio.
-- **Esquema sem migrações.** Ao subir, `BancoVazio.CriarSeNaoForDoHub(db)` chama `Esquema.Garantir(db)` do SDK, que cria
+- **Esquema sem migrações.** Ao subir, `Esquema.Garantir(db)` do SDK cria
   tabelas, índices e colunas novas. Ele nunca apaga nem muda o tipo de nada. Remover, renomear ou trocar o tipo de uma
   coluna exige backup, SQL feito à mão com confirmação do usuário, e só depois o deploy.
 - **Dados do usuário são sagrados.** Nunca apague tabela ou coluna. Toda mudança precisa ser compatível com o que já está
@@ -59,7 +59,7 @@ essas ferramentas sem quebrar o contrato.
    var manifesto = builder.AdicionarPlugin();
    builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UsarBancoDoHub(sp.GetRequiredService<OpcoesDoHub>()));
    // depois do Build:
-   using (var e = app.Services.CreateScope()) BancoVazio.CriarSeNaoForDoHub(e.ServiceProvider.GetRequiredService<AppDbContext>());
+   using (var e = app.Services.CreateScope()) Esquema.Garantir(e.ServiceProvider.GetRequiredService<AppDbContext>());
    app.UseAuthentication(); app.UseAuthorization();
    app.MapHealthDoPlugin();
    ```
@@ -73,9 +73,10 @@ essas ferramentas sem quebrar o contrato.
    - inclua o id em `PG_PLUGINS` e gere `PG_SENHA_<ID>` em `/root/.config/notas-pg.env`;
    - rode `scripts/postgres-hub.sh papeis`;
    - grave `data/plugins/banco/<id>` (modo 600, `Host=notas-postgres;Database=hub;Username=<id>;Password=...;Maximum Pool Size=5`).
-     O Postgres tem `max_connections=60`: some os pools antes de pôr mais um.
-7. Num PR do núcleo, adicione a linha `<id>: ghcr.io/victorsouzadev/hub-<id>@<commit>` no `plugins.lock`. Depois do deploy:
-   rode `postgres-hub.sh permissoes` e confira (ver "Caminho 4").
+     O Postgres tem `max_connections=60`: some os pools antes de pôr mais um;
+   - rode `scripts/postgres-hub.sh permissoes` antes de ligar: as tabelas do plug-in apontam para `nucleo.users`.
+7. Num PR do núcleo, adicione a linha `<id>: ghcr.io/victorsouzadev/hub-<id>@<commit curto>` no `plugins.lock`. Depois do deploy,
+   confira (ver "Caminho 4").
 
 ## Caminho 2: mudar um plug-in que já existe
 
@@ -127,7 +128,7 @@ O que costuma dar errado:
 
 | O que aparece | Causa provável |
 |---|---|
-| `permission denied for schema nucleo` | faltou rodar `postgres-hub.sh permissoes` depois que o plug-in subiu |
+| `permission denied for schema nucleo` | faltou rodar `postgres-hub.sh permissoes` antes de ligar o plug-in |
 | `too many clients` | os pools somam mais que 60 conexões: baixe o `Maximum Pool Size` |
 | health falha e o deployer volta a versão anterior | veja o `ultimaFalha` no `estado.json` e o log do plug-in |
 | 401 em tudo | `aud` errado, JWKS fora do alcance ou `HUB_ACEITAR_AUDIENCIA_LEGADA` |
