@@ -188,7 +188,8 @@ jobs:
       - name: Verifica saúde da API
         run: |
           sleep 5
-          corpo=$(curl -sf https://cerebro.vsitefy.com.br/api/health)
+          # A API pode ainda estar subindo: tenta de novo por até 60 s.
+          corpo=$(curl -sf --max-time 10 --retry 20 --retry-delay 3 --retry-max-time 60 --retry-all-errors https://cerebro.vsitefy.com.br/api/health)
           echo "$corpo"
           # Confirma que o container em pé é o desta execução, e não um que
           # sobreviveu ao "up -d" — um deploy verde não prova substituição.

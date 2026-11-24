@@ -11,3 +11,4 @@ tarefas: ghcr.io/victorsouzadev/hub-tarefas@a59ad53
 anotacao: ghcr.io/victorsouzadev/hub-anotacao@44e5029
 financas: ghcr.io/victorsouzadev/hub-financas@eca774f
 notas: ghcr.io/victorsouzadev/hub-notas@18be694
+agente: ghcr.io/victorsouzadev/hub-agente@ffe660b
