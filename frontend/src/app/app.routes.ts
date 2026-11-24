@@ -43,5 +43,11 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./features/publicar/publicar.page').then((m) => m.PublicarPageComponent),
   },
+  {
+    // Painel de plug-ins (spec 040): a API só responde para HUB_ADMINISTRADORES.
+    path: 'plugins',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/plugins/plugins.page').then((m) => m.PluginsPageComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

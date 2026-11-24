@@ -8,6 +8,7 @@ import { PublicarService } from '../publicar/publicar.service';
 import { CerebroService } from '../cerebro/cerebro.service';
 import { AnotacaoService } from '../anotacao/anotacao.service';
 import { SistemaService, alertaBackup } from '../../core/sistema.service';
+import { PainelService } from '../plugins/painel.service';
 import { PluginsService, ItemDoHub, mesclarCards } from '../../core/plugins.service';
 
 /** Ícones que um plug-in pode pedir no manifesto; outro nome cai no ícone do card antigo ou em "grid". */
@@ -37,6 +38,14 @@ const PUBLICAR: ToolCard = {
   icon: 'globe',
   title: 'Publicar',
   description: 'Envie um ZIP com front e API C# e ganhe uma URL própria, com banco SQLite, versões e volta para a anterior.',
+};
+
+/** Só aparece para quem está em HUB_ADMINISTRADORES no servidor (spec 040). */
+const PLUGINS: ToolCard = {
+  path: '/plugins',
+  icon: 'box',
+  title: 'Plug-ins',
+  description: 'O que está no ar, a versão de cada ferramenta e o que falta para ligar as novas.',
 };
 
 /** Só aparece para quem está em CEREBRO_USUARIOS, com o serviço no ar e o hub aberto por HTTPS. */
@@ -224,6 +233,7 @@ const TOOLS: ToolCard[] = [
 })
 export class HubPageComponent {
   private readonly podePublicar = signal(false);
+  private readonly administra = signal(false);
   private readonly temCerebro = signal(false);
   private readonly temAnotacao = signal(false);
   /** Faixa de backup atrasado (spec 025), só para quem opera o servidor. */
@@ -238,6 +248,7 @@ export class HubPageComponent {
       ...fixos,
       ...(this.temCerebro() ? [CEREBRO] : []),
       ...(this.podePublicar() ? [PUBLICAR] : []),
+      ...(this.administra() ? [PLUGINS] : []),
     ], this.plugins().filter((p) => p.id !== 'criativo' && (p.id !== 'anotacao' || this.temAnotacao())), ICONES_DE_PLUGIN) as ToolCard[];
   });
 
@@ -250,8 +261,10 @@ export class HubPageComponent {
     anotacao: AnotacaoService,
     sistema: SistemaService,
     plugins: PluginsService,
+    painel: PainelService,
   ) {
     windows.check();
+    void painel.permissao().then((r) => this.administra.set(r.administrador), () => undefined);
     void plugins.listar().then((l) => this.plugins.set(l), () => undefined);
     void anotacao.estado().then((e) => this.temAnotacao.set(e.habilitado), () => undefined);
     void publicar.permissao().then((r) => {

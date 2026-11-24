@@ -88,6 +88,47 @@ public class SdkTests : IAsyncLifetime
         Assert.Contains("abc1234", r);
     }
 
+    // Spec 040 (R5): o id vira papel e schema no Postgres.
+    [Theory]
+    [InlineData("postgres", false)]
+    [InlineData("nucleo", false)]
+    [InlineData("public", false)]
+    [InlineData("hub", false)]
+    [InlineData("information-schema", false)]
+    [InlineData("pg-toast", false)]
+    [InlineData("A", false)]
+    [InlineData("a;drop", false)]
+    [InlineData("dieta\n", false)]
+    [InlineData(null, false)]
+    [InlineData("cerebro", true)]
+    [InlineData("pagina", true)]
+    [InlineData("hub2", true)]
+    public void Ids_reservados_sao_recusados(string? id, bool vale)
+    {
+        Assert.Equal(vale, RegrasDoManifesto.IdPermitido(id));
+        if (id is "postgres" or "pg-toast")
+            Assert.Contains(RegrasDoManifesto.Validar(new Manifesto(id, "X", "grid", null, 1, "/" + id, 8080, $"/{id}/h", null, null,
+                new Tabelas("x_", null), false, null, null), id, []), p => p.Contains("reservado"));
+    }
+
+    [Fact]
+    public void Nenhum_plugin_no_ar_usa_id_reservado()
+    {
+        var pasta = new DirectoryInfo(AppContext.BaseDirectory);
+        while (pasta is not null && !File.Exists(Path.Combine(pasta.FullName, "plugins.lock"))) pasta = pasta.Parent;
+        var ids = File.ReadAllLines(Path.Combine(pasta!.FullName, "plugins.lock"))
+            .Where(l => l.Contains(':') && !l.StartsWith('#')).Select(l => l.Split(':')[0].Trim()).ToList();
+        Assert.NotEmpty(ids);
+        Assert.All(ids, id => Assert.True(RegrasDoManifesto.IdPermitido(id), id));
+    }
+
+    [Theory]
+    [InlineData("/plugins")]
+    [InlineData("/api/painel/x")]
+    public void Plugin_nao_ocupa_as_rotas_do_painel(string rota) =>
+        Assert.Contains(RegrasDoManifesto.Validar(new Manifesto("x2", "X", "grid", null, 1, "/x2", 8080, "/x2/h", null, [rota],
+            new Tabelas("x_", null), false, null, null), "x2", []), p => p.Contains("reservada"));
+
     [Fact]
     public async Task Aceita_token_do_nucleo_com_a_audiencia_do_plugin_e_a_legada()
     {

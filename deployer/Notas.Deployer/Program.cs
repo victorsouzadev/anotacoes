@@ -28,6 +28,8 @@ if (builder.Configuration["PLUGINS_BANCO_HOST_DIR"] is { Length: > 0 } bancoHost
         RedeHub = builder.Configuration["PLUGINS_REDE"] ?? "notas-vps_default",
         ContainerCaddy = builder.Configuration["PLUGINS_CADDY"] ?? "notas-caddy",
     };
+    builder.Services.AddSingleton(sp => new PreparoDoBanco(cfgPlugins, cfg.ContainerPostgres,
+        (a, t) => sp.GetRequiredService<Func<List<string>, TimeSpan, Task<Resultado>>>()(a, t), PreparoDoBanco.ConectarPorTcp));
     builder.Services.AddSingleton(sp => new SincronizadorDePlugins(cfgPlugins,
         (a, t) => sp.GetRequiredService<Func<List<string>, TimeSpan, Task<Resultado>>>()(a, t),
         new HttpClient { Timeout = TimeSpan.FromSeconds(5) }, sp.GetRequiredService<ILogger<SincronizadorDePlugins>>()));
@@ -66,6 +68,32 @@ app.MapGet("/plugins/{id}/health", async (string id, IServiceProvider sp, Cancel
 {
     if (sp.GetService<SincronizadorDePlugins>() is not { } s) return Results.NotFound();
     return await s.Saude(id, ct) is { } saude ? Results.Ok(saude) : Results.NotFound();
+});
+
+// Leituras do painel (spec 040): nada aqui grava. O id passa pelas regras do manifesto antes de virar SQL ou imagem.
+app.MapGet("/plugins/{id}/preparo", async (string id, IServiceProvider sp, CancellationToken ct) =>
+{
+    if (!RegrasDoManifesto.IdPermitido(id)) return Results.BadRequest("id inválido");
+    if (sp.GetService<PreparoDoBanco>() is not { } p) return Results.NotFound();
+    return await p.Conferir(id, ct) is { } c ? Results.Ok(c) : Results.Text("o Postgres não respondeu", statusCode: 502);
+});
+
+app.MapGet("/imagens/{id}/{versao}", async (string id, string versao, IConfiguration config, CancellationToken ct) =>
+{
+    if (!RegrasDoManifesto.IdPermitido(id) || !Recursos.VersaoValida(versao)) return Results.BadRequest("id ou versão inválidos");
+    var dono = config["PLUGINS_DONO_IMAGEM"] ?? "victorsouzadev";
+    var r = await Docker(["manifest", "inspect", $"ghcr.io/{dono}/hub-{id}:{versao}"], TimeSpan.FromSeconds(8), ct);
+    return Recursos.Publicada(r) is { } publicada ? Results.Ok(new { publicada }) : Results.Text("o GHCR não confirmou", statusCode: 502);
+});
+
+app.MapGet("/recursos", async (CancellationToken ct) =>
+{
+    var stats = Docker(Recursos.ComandoStats(), TimeSpan.FromSeconds(8), ct);
+    var pg = Docker(Recursos.ComandoConexoes(cfg.ContainerPostgres), TimeSpan.FromSeconds(8), ct);
+    string mem;
+    try { mem = await File.ReadAllTextAsync("/proc/meminfo", ct); }
+    catch (IOException) { mem = ""; }
+    return Results.Ok(Recursos.Montar(mem, await stats, await pg));
 });
 
 app.MapPost("/plugins/sincronizar", async (IServiceProvider sp, CancellationToken ct) =>

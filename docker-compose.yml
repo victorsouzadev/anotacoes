@@ -31,6 +31,12 @@ services:
       - Core__Chaves=/data/core/chaves
       - Plugins__Estado=/data/plugins/estado.json
       - Sites__Publicadores=${PUBLICADORES:-}
+      # Painel de plug-ins (spec 040). Sem HUB_ADMINISTRADORES ninguém abre; os tokens são opcionais.
+      - Painel__Administradores=${HUB_ADMINISTRADORES:-}
+      - Painel__GithubLeitura=${PAINEL_GITHUB_LEITURA:-}
+      - Painel__GithubLeituraValidade=${PAINEL_GITHUB_LEITURA_VALIDADE:-}
+      - Painel__GithubDisparo=${PAINEL_GITHUB_DISPARO:-}
+      - Painel__GithubDisparoValidade=${PAINEL_GITHUB_DISPARO_VALIDADE:-}
       - Sites__DeployerToken=${DEPLOYER_TOKEN:-}
       - Sites__Dominio=${SITES_DOMINIO:-191-252-177-244.sslip.io}
       - Sites__Porta=${SITES_PORTA:-8090}
